@@ -26,7 +26,7 @@ import System.Random
 
 import Moves.BaseTypes
 import Search.AlbetaTypes
-import qualified Search.SearchMonad as SM
+-- import qualified Search.CStateMonad as SM
 import Struct.Struct
 import Hash.TransTab
 import Struct.Status

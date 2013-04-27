@@ -9,7 +9,7 @@ import System.Time
 
 import Struct.Struct
 import Struct.Status
-import Search.SearchMonad
+-- import Search.SearchMonad
 
 data InfoToGui = Info {
                     infoDepth :: Int,

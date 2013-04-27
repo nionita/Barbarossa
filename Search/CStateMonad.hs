@@ -6,24 +6,23 @@
 -- continuation passing style) can be compiled strict if you
 -- define the symbol SMSTRICT
 -- otherwise it will be compiled lazy
-module Search.SearchMonad (
+module Search.CStateMonad (
     STPlus,
     -- return, (>>=),
     -- get, put,
     gets, modify,
     -- lift,
     -- liftIO,
-    runSearch, execSearch
+    runCState, execCState
     ) where
 
 import Control.Monad
 import Control.Monad.State hiding (gets, modify)
 
 newtype STPlus r s m a = STPlus { runSTPlus :: s -> (a -> s -> m r) -> m r }
--- {-# INLINE runSTPlus #-}
 
 -- At least with GHC 7.4.1, we have:
--- the construct f a of fa -> ... is lazy, to make it strict, do
+-- the construct: case f a of fa -> ... is lazy, to make it strict, do
 -- case f a of !fa -> ...
 -- So we keep the simpler for for the lazy variant
 instance Monad (STPlus r s m) where
@@ -52,12 +51,12 @@ instance MonadIO m => MonadIO (STPlus r s m) where
     {-# INLINE liftIO #-}
     liftIO = lift . liftIO
 
-runSearch :: Monad m => STPlus (a, s) s m a -> s -> m (a, s)
-runSearch c s = runSTPlus c s $ \a s0 -> return (a, s0)
-{-# INLINE runSearch #-}
+runCState :: Monad m => STPlus (a, s) s m a -> s -> m (a, s)
+runCState c s = runSTPlus c s $ \a s0 -> return (a, s0)
+{-# INLINE runCState #-}
 
-execSearch ms s = liftM snd $ runSearch ms s
-{-# INLINE execSearch #-}
+execCState ms s = liftM snd $ runCState ms s
+{-# INLINE execCState #-}
 
 {-# INLINE gets #-}
 gets :: Monad m => (s -> a) -> STPlus r s m a

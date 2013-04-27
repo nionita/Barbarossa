@@ -24,7 +24,7 @@ import Moves.Base
 import Moves.Moves (movesInit)
 import Moves.Board (posFromFen)
 import Moves.History
-import Search.SearchMonad (execSearch)
+import Search.CStateMonad (execCState)
 import Eval.Eval (paramNames)
 import Eval.FileParams (makeEvalState)
 
@@ -256,16 +256,14 @@ doPosition fen mvs = do
     -- ctxLog DebugUci $ "Position: " ++ show fen ++ " moves " ++ show mvs
     chg <- readChanging
     if working chg
-        then ctxLog DebugUci "GUI sent Position while I'm working..."
+        then ctxLog LogWarning "GUI sent Position while I'm working..."
         else do
             hi <- liftIO newHist
             let es = evalst $ crtStatus chg
             ns <- newState fen mvs (hash . crtStatus $ chg) hi es
-            -- ns <- newState fen mvs
             modifyChanging (\c -> c { crtStatus = ns, myColor = myCol })
     where newState fpos ms c h es = foldM execMove (stateFromFen fpos c h es) ms
-          -- execMove p m = execStateT (doMove True m False) p
-          execMove p m = execSearch (doMove True m False) p
+          execMove p m = execCState (doMove True m False) p
           fenColor = movingColor fen
           myCol = if even (length mvs) then fenColor else other fenColor
 

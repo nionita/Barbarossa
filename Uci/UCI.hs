@@ -1,3 +1,4 @@
+{-# LANGUAGE RankNTypes #-}
 module Uci.UCI (
          UCIMess(..), Pos(..), GoCmds(..), ExpCommand(..),
          parseUciStr, parseMoveStr, parseExploreStr,
@@ -5,12 +6,14 @@ module Uci.UCI (
     ) where
 
 import Data.Char
-import Data.Array.Unboxed
+-- import Data.Array.Unboxed
 import qualified Text.ParserCombinators.Parsec as P
-import Text.ParserCombinators.Parsec ((<|>))
+import Text.ParserCombinators.Parsec (Parser, (<|>))
 
 import Struct.Struct
-import Moves.Base
+-- import Moves.Base
+
+-- type Parser = forall u. ParsecT String u Data.Functor.Identity.Identity
 
 data UCIMess
     = Uci
@@ -59,22 +62,29 @@ data ExpCommand = Fen String	-- new game, position from fen
              | Help		-- print some help
              | Exit		-- exit program
 
+parseUciStr :: String -> Either P.ParseError UCIMess
 parseUciStr = P.parse parseUCIMess ""
 
+parseMoveStr :: String -> Either P.ParseError Move
 parseMoveStr = P.parse parseMove ""
 
+parseExploreStr :: String -> Either P.ParseError ExpCommand
 parseExploreStr = P.parse parseExplore ""
 
-literal s = P.spaces >> P.string s
+literal :: String -> Parser ()
+literal s = P.spaces >> P.string s >> return ()
 
-untilP s = go s ""
-    where go s acc = (P.string s >> return (reverse acc))
-             `orElse` do
-                  c <- P.anyChar
-                  go s (c:acc)
+untilP :: String -> Parser String
+untilP s = go ""
+    where go acc = (P.string s >> return (reverse acc))
+                   `orElse` do
+                        c <- P.anyChar
+                        go (c:acc)
 
+orElse :: Parser a -> Parser a -> Parser a
 orElse a b = P.try a <|> b
 
+parseUCIMess :: Parser UCIMess
 parseUCIMess = P.choice $ map P.try [
         parseUciNewGame,
         parseUci,
@@ -88,25 +98,32 @@ parseUCIMess = P.choice $ map P.try [
         parseQuit
     ]
 
+parseUci :: Parser UCIMess
 parseUci = literal "uci" >> return Uci
 
+parseUciNewGame :: Parser UCIMess
 parseUciNewGame = literal "ucinewgame" >> return UciNewGame
 
+parseIsReady :: Parser UCIMess
 parseIsReady = literal "isready" >> return IsReady
 
+parseStop :: Parser UCIMess
 parseStop = literal "stop" >> return Stop
 
 -- parsePonderhit = literal "ponderhit" >> return Ponderhit
 
+parseQuit :: Parser UCIMess
 parseQuit = literal "quit" >> return Quit
 
+parseDebug :: Parser UCIMess
 parseDebug = do
     literal "debug"
-    P.spaces
-    P.char 'o'
+    _ <- P.spaces
+    _ <- P.char 'o'
     t <- P.try (P.char 'n' >> return True) <|> (P.string "ff" >> return False)
     return (Debug t)
 
+parseSetOption :: Parser UCIMess
 parseSetOption = do
     literal "setoption"
     literal "name"
@@ -121,25 +138,28 @@ parseSetOption = do
      )
     return $ SetOption o
 
+parsePosition :: Parser UCIMess
 parsePosition = do
     literal "position"
     P.spaces
     parseStartPos `orElse` parseFen
 
+parseFenPosition :: Parser String
 parseFenPosition = do
     s <- P.many1 $ P.oneOf "/12345678rnbqkpRNBQKP"
-    P.space
+    _ <- P.space
     c <- P.oneOf "wb"
-    P.space
+    _ <- P.space
     cr <- P.many1 $ P.oneOf "-QKqk"
-    P.space
+    _ <- P.space
     ep <- P.many1 (P.oneOf "-abcdefgh36")
-    P.space
+    _ <- P.space
     h <- P.many1 P.digit
-    P.space
-    P.anyChar
+    _ <- P.space
+    _ <- P.anyChar
     return $ s ++ " " ++ [c] ++ " " ++ cr ++ " " ++ ep ++ " " ++ h
 
+parseStartPos :: Parser UCIMess
 parseStartPos = do
     literal "startpos"
     P.spaces
@@ -147,6 +167,7 @@ parseStartPos = do
         `orElse` return []
     return $ Position StartPos ms
 
+parseFen :: Parser UCIMess
 parseFen = do
     literal "fen"
     P.spaces
@@ -156,8 +177,10 @@ parseFen = do
         `orElse` return []
     return $ Position (Pos fenp) ms
 
+parseMoves :: Parser [Move]
 parseMoves = P.sepBy parseMove P.spaces
 
+parseMove :: Parser Move
 parseMove = do
     sf <- parseFeld
     ef <- parseFeld
@@ -167,15 +190,18 @@ parseMove = do
         Just b  -> return $ activateTransf b m
         Nothing -> return m
 
+parseFeld :: Parser Square
 parseFeld = do
     lit <- P.oneOf ['a'..'h']
     cif <- P.oneOf ['1'..'8']
     return $ fromColRow (ord lit - ord 'a' + 1) (ord cif - ord '0')
 
+parsePromo :: Parser (Maybe Char)
 parsePromo = do
     pro <- P.oneOf "qrbn"
     return $ Just pro
 
+parseGo :: Parser UCIMess
 parseGo = do
     literal "go"
     P.spaces
@@ -183,6 +209,7 @@ parseGo = do
     gcs <- P.many parseGoCmd
     return $ Go gcs
 
+parseGoCmd :: Parser GoCmds
 parseGoCmd = P.choice $ map P.try [
         parsePonder,
         parseTime,
@@ -196,47 +223,83 @@ parseGoCmd = P.choice $ map P.try [
         parseSearchMoves
     ]
 
+parseSearchMoves :: Parser GoCmds
 parseSearchMoves = do
     literal "searchmoves"
     P.spaces
     mvs <- parseMoves
     return $ SearchMoves mvs
 
+parsePonder :: Parser GoCmds
 parsePonder = literal "ponder" >> return Ponder
 
-parseWithInt :: String -> (Int -> a) -> P.Parser a
+parseWithInt :: String -> (Int -> a) -> Parser a
 parseWithInt s con = do
     literal s
     P.spaces
     num <- P.many P.digit
     return $ con (read num)
 
+parseTime :: Parser GoCmds
 parseTime = parseWithInt "wtime" (Time White)
             `orElse` parseWithInt "btime" (Time Black)
+
+parseTInc :: Parser GoCmds
 parseTInc  = parseWithInt "winc" (TInc White)
              `orElse` parseWithInt "binc" (TInc Black)
+
+parseMovesToGo :: Parser GoCmds
 parseMovesToGo = parseWithInt "movestogo" MovesToGo
+
+parseDepth :: Parser GoCmds
 parseDepth = parseWithInt "depth" Depth
+
+parseNodes :: Parser GoCmds
 parseNodes = parseWithInt "nodes" Nodes
+
+parseMate :: Parser GoCmds
 parseMate  = parseWithInt "mate" Mate
+
+parseMoveTime :: Parser GoCmds
 parseMoveTime = parseWithInt "movetime" MoveTime
 
+parseInfinite :: Parser GoCmds
 parseInfinite = literal "infinite" >> return Infinite
 
 -- Parsing the explore commands:
+parseExplore :: Parser ExpCommand
 parseExplore = parseExpFen <|> parseExpInit <|> parseExpMoves <|> parseExpQMoves
             <|> parseExpDown <|> parseExpUp <|> parseExpHelp <|> parseExpExit
             <|> parseExpEval <|> parseExpQEval
 
+parseExpFen :: Parser ExpCommand
 parseExpFen  = P.char 'f' >> P.spaces >> parseFenPosition >>= return . Fen
+
+parseExpInit :: Parser ExpCommand
 parseExpInit = P.char 'i' >> return Init
+
+parseExpMoves :: Parser ExpCommand
 parseExpMoves = P.char 'm' >> return Moves
+
+parseExpQMoves :: Parser ExpCommand
 parseExpQMoves = P.char 'q' >> return QMoves
+
+parseExpDown :: Parser ExpCommand
 parseExpDown = P.char 'd' >> parseMove >>= return . Down
+
+parseExpUp :: Parser ExpCommand
 parseExpUp   = P.char 'u' >> return Up
+
+parseExpEval :: Parser ExpCommand
 parseExpEval = P.char 'e' >> return Eval
+
+parseExpQEval :: Parser ExpCommand
 parseExpQEval = P.char 'v' >> return QEval
+
+parseExpHelp :: Parser ExpCommand
 parseExpHelp = P.char 'h' >> return Help
+
+parseExpExit :: Parser ExpCommand
 parseExpExit = P.char 'x' >> return Exit
 
 -- Some utilities to find information in the uci go commands:

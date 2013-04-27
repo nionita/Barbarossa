@@ -18,7 +18,7 @@ import Data.Array.Base
 import Data.Array.Unboxed
 import Data.Maybe (fromMaybe)
 
-import Search.SearchMonad
+import Search.CStateMonad
 import Search.AlbetaTypes
 import Struct.Struct
 import Moves.Base
@@ -325,14 +325,14 @@ alphaBeta abc = {-# SCC "alphaBeta" #-} do
                 -- aspirWin alpha1 beta1 d lpv rmvs aspTries
                 r1@((s1, es1, _), pvsf)
                     <- {-# SCC "alphaBetaSearchReduced" #-}
-                         runSearch (searchReduced alpha1 beta1) pvs0
+                         runCState (searchReduced alpha1 beta1) pvs0
                 if abort pvsf || (s1 > alpha1 && s1 < beta1 && not (nullSeq es1))
                     then return r1
                     else {-# SCC "alphaBetaSearchFullRe" #-} if nullSeq es1
-                        then runSearch (searchFull lpv) pvs0
-                        else runSearch (searchFull es1) pvs0
-             Nothing -> {-# SCC "alphaBetaSearchFullIn" #-} runSearch (searchFull lpv) pvs0
-         else {-# SCC "alphaBetaSearchFull" #-} runSearch (searchFull lpv) pvs0
+                        then runCState (searchFull lpv) pvs0
+                        else runCState (searchFull es1) pvs0
+             Nothing -> {-# SCC "alphaBetaSearchFullIn" #-} runCState (searchFull lpv) pvs0
+         else {-# SCC "alphaBetaSearchFull" #-} runCState (searchFull lpv) pvs0
     -- when aborted, return the last found good move
     -- we have to trust that abort is never done in draft 1!
     -- if abort (snd r)
@@ -345,9 +345,9 @@ alphaBeta abc = {-# SCC "alphaBeta" #-} do
 
 {--
 aspirWin :: Node m => Int -> Int -> Int -> Seq Move -> Alt Move -> Int -> m (Int, Seq Move, Alt Move)
-aspirWin _ _ d lpv rmvs 0 = liftM fst $ runSearch (pvRootSearch alpha0 beta0 d lpv rmvs True) pvsInit
+aspirWin _ _ d lpv rmvs 0 = liftM fst $ runCState (pvRootSearch alpha0 beta0 d lpv rmvs True) pvsInit
 aspirWin a b d lpv rmvs t = do
-    r@(s, p, ms) <- liftM fst $ runSearch (pvRootSearch a b d lpv rmvs True) pvsInit
+    r@(s, p, ms) <- liftM fst $ runCState (pvRootSearch a b d lpv rmvs True) pvsInit
     if s <= a
        then aspirWin (a - incr) b d lpv rmvs (t-1)
        else if s >= b

@@ -5,18 +5,18 @@ module Uci.UciGlue (
     bestMoveCont
 ) where
 
-import Data.Array.IArray
+-- import Data.Array.IArray
 import Control.Monad.State.Lazy
 import Control.Monad.Reader
 
-import qualified Search.SearchMonad as SM
+import qualified Search.CStateMonad as SM
 import Search.AlbetaTypes
 import Search.Albeta
 import Struct.Struct
 import Struct.Status
 import Struct.Context
 import Moves.Base
-import Eval.Eval
+-- import Eval.Eval
 
 instance CtxMon CtxIO where
     tellCtx = talkToContext
@@ -29,13 +29,9 @@ instance CtxMon CtxIO where
 aspirWindow :: Int
 aspirWindow   = 24	-- initial aspiration window
 
-showEvalStats :: Bool
-showEvalStats = False	-- show eval statistics in logfile
-
 -- One iteration in the search for the best move
 bestMoveCont :: Int -> Int -> MyState -> Maybe Int -> [Move] -> [Move] -> CtxIO IterResult
 bestMoveCont tiefe sttime stati lastsc lpv rmvs = do
-    -- ctx <- ask
     informGuiDepth tiefe
     ctxLog LogInfo $ "start search for depth " ++ show tiefe
     let abc = ABC {
@@ -47,7 +43,7 @@ bestMoveCont tiefe sttime stati lastsc lpv rmvs = do
                 best      = False,
                 stoptime  = sttime
                 }
-    ((sc, path, rmvsf), statf) <- SM.runSearch (alphaBeta abc) stati
+    ((sc, path, rmvsf), statf) <- SM.runCState (alphaBeta abc) stati
     when (sc == 0) $ return ()
     let n = nodes . stats $ statf
     informGui sc tiefe n path
