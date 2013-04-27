@@ -9,7 +9,6 @@ import System.Time
 
 import Struct.Struct
 import Struct.Status
-import Config.ConfigClass
 import Search.SearchMonad
 
 data InfoToGui = Info {
@@ -34,6 +33,14 @@ data InfoToGui = Info {
 data LogLevel = DebugSearch | DebugUci | LogInfo | LogWarning | LogError | LogNever
     deriving (Eq, Ord)
 
+levToPrf :: LogLevel -> String
+levToPrf DebugSearch = "DebugS"
+levToPrf DebugUci    = "DebugU"
+levToPrf LogInfo     = "Info"
+levToPrf LogWarning  = "Warning"
+levToPrf LogError    = "Error"
+levToPrf LogNever    = "Never"
+
 -- This is the context in which the other components run
 -- it has a fix part, established at the start of the programm,
 -- and a variable part (type Changing) which is kept in an MVar
@@ -49,7 +56,6 @@ data Context = Ctx {
 
 -- This is the variable context part (global mutable context)
 data Changing = Chg {
-        config :: GConfig,              -- the configuration component
         working :: Bool,                -- are we in tree search?
         compThread :: Maybe ThreadId,   -- the search thread id
         crtStatus :: MyState,           -- current state
@@ -73,48 +79,31 @@ modifyChanging f = do
     ctx <- ask
     liftIO $ modifyMVar_ (change ctx) (return . f)
 
-getCfg :: CtxIO GConfig
-getCfg = do
-    chg <- readChanging
-    return $ config chg
-
-getIParamDef :: String -> Int -> CtxIO Int
-getIParamDef pn d = do
-    GConfig cfg <- getCfg
-    return $ getIParamDefault cfg pn d
-
 ctxLog :: LogLevel -> String -> CtxIO ()
 ctxLog lev mes = do
     ctx <- ask
-    when (lev >= loglev ctx) $ liftIO $ logging (logger ctx) prf mes
+    when (lev >= loglev ctx) $ liftIO $ logging (logger ctx) (startSecond ctx) (levToPrf lev) mes
 
-logging mlchan prf mes =
-    case mlchan of
-        Just lchan -> do
-            -- TOD s ps   <- liftIO getClockTime
-            -- let cms = fromIntegral $ s*1000 + ps `div` 1000000000
-            cms <- currMilli
-            writeChan lchan $ show cms ++ " [" ++ prf ++ "]: " ++ mes
-        Nothing    -> return ()
+startSecond :: Context -> Integer
+startSecond ctx = s
+    where TOD s _ = strttm ctx
 
-currentSecs = do
-    TOD s _ <- getClockTime
-    return s
-
-secondZero = 1365100000	-- the reference second - has to be increased by 1 mio every about 3 years
+logging lchan refs prf mes = do
+    cms <- currMilli refs
+    writeChan lchan $ show cms ++ " [" ++ prf ++ "]: " ++ mes
 
 -- Current time in ms since program start
-currMilli :: IO Int
-currMilli = do
+currMilli :: Integer -> IO Int
+currMilli ref = do
     TOD s ps   <- liftIO getClockTime
-    return $ fromIntegral $ (s-secondZero)*1000 + ps `div` 1000000000
+    return $ fromIntegral $ (s-ref)*1000 + ps `div` 1000000000
 
 -- Communicate the best path so far
 informGui :: Int -> Int -> Int -> [Move] -> CtxIO ()
 informGui sc tief nds path = do
     ctx <- ask
     chg <- readChanging
-    currt <- lift currMilli
+    currt <- lift $ currMilli $ startSecond ctx
     let gi = Info {
                 infoDepth = tief,
                 infoTime = currt - srchStrtMs chg,

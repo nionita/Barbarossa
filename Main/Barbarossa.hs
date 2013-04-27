@@ -1,11 +1,15 @@
 {-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 module Main where
+import Prelude hiding (catch)
 import Control.Monad
 import Control.Monad.Reader
+import Control.Concurrent
+import Control.Exception
 import Data.Array.Unboxed
 import Data.Maybe
-import Control.Concurrent
-import qualified Control.Exception as CE
+import Data.Typeable
+import System.Console.GetOpt
 import System.Environment (getArgs)
 import System.IO
 import System.Time
@@ -13,7 +17,6 @@ import System.Time
 import Struct.Struct
 import Struct.Status
 import Struct.Context
-import Config.ConfigClass
 import Hash.TransTab
 import Uci.UCI
 import Uci.UciGlue
@@ -42,34 +45,35 @@ defaultOptions :: Options
 defaultOptions = Options {
         optConfFile = Nothing,
         optParams   = [],
-        optLogging  = LogError
+        optLogging  = LogInfo
     }
 
 setConfFile :: String -> Options -> Options
-setConfFile cf opt = opt { optConfFile = Just sc }
+setConfFile cf opt = opt { optConfFile = Just cf }
 
 addParam :: String -> Options -> Options
 addParam pa opt = opt { optParams = pa : optParams opt }
 
-setLogging :: Int -> Options -> Options
+setLogging :: String -> Options -> Options
 setLogging lev opt = opt { optLogging = llev }
-    where llev = case lev of
+    where llev = case levi of
                    0 -> DebugSearch
                    1 -> DebugUci
                    2 -> LogInfo
                    3 -> LogWarning
                    4 -> LogError
-                   _ -> if llev < 0 then DebugSearch else LogNever
+                   _ -> if levi < 0 then DebugSearch else LogNever
+          levi = read lev :: Int
 
 options :: [OptDescr (Options -> Options)]
 options = [
-        Option ['c'] ["config"]  (ReqArg setConfFile "STRING") "Configuration file",
-        Option ['l'] ["loglev"] (ReqArg setLogging "INT")     "Logging level: 0=debug, 5=never"
-        Option ['p'] ["param"]   (ReqArg addParam "STRING")    "Eval parameters: name=value,..."
+        Option ['c'] ["config"] (ReqArg setConfFile "STRING") "Configuration file",
+        Option ['l'] ["loglev"] (ReqArg setLogging "STRING")  "Logging level from 0 (debug) to 5 (never)",
+        Option ['p'] ["param"]  (ReqArg addParam "STRING")    "Eval parameters: name=value,..."
     ]
 
 theOptions :: IO (Options, [String])
-theOptions argv = do
+theOptions = do
     args <- getArgs
     case getOpt Permute options args of
         (o, n, []) -> return (foldr ($) defaultOptions o, n)
@@ -79,15 +83,14 @@ theOptions argv = do
 initContext :: Options -> IO Context
 initContext opts = do
     clktm <- getClockTime
-    let llev = getIParamDefault cfg "logLevel" 0
-    mlchan <- newChan
+    let llev = optLogging opts
+    lchan <- newChan
     wchan  <- newChan
     ichan <- newChan
-    ha <- newCache cfg
+    ha <- newCache 1	-- it will take the minimum number of entries
     hi <- newHist
     (parc, evs) <- makeEvalState (optConfFile opts) progVersion progVerSuff
     let chg = Chg {
-            config = cf,
             working = False,
             compThread = Nothing,
             crtStatus = posToState initPos ha hi evs,
@@ -97,7 +100,7 @@ initContext opts = do
          }
     ctxVar <- newMVar chg
     let context = Ctx {
-            logger = mlchan,
+            logger = lchan,
             writer = wchan,
             inform = ichan,
             strttm = clktm,
@@ -109,15 +112,14 @@ initContext opts = do
 
 main :: IO ()
 main = do
-    opts <- theOptions
+    (opts, _) <- theOptions
     ctx <- initContext opts
     runReaderT startTheMachine ctx
 
 startTheMachine :: CtxIO ()
 startTheMachine = do
     ctx <- ask
-    let TOD crts _  = strttm ctx
-        logFileName = progLogName ++ show crtt ++ ".log"
+    let logFileName = progLogName ++ "-" ++ show (startSecond ctx) ++ ".log"
     startLogger logFileName
     startWriter
     startInformer
@@ -138,16 +140,16 @@ data LoggerState = LoggerFile String
 startLogger :: String -> CtxIO ()
 startLogger file = do
     ctx <- ask
-    _ <- liftIO $ forkIO $ CE.catch (theLogger (logger ctx) (LoggerFile file)) collectError
+    void $ liftIO $ forkIO $ catch (theLogger (logger ctx) (LoggerFile file)) collectError
     ctxLog LogInfo "Logger started"
 
 theLogger :: Chan String -> LoggerState -> IO ()
 theLogger lchan lst = do
     s <- readChan lchan
     case lst of
-        LoggerError -> theLogger lchan lst
-        LoggerFile  -> flip CE.catch collectError $ do
-            h <- openFile file AppendMode
+        LoggerError  -> theLogger lchan lst
+        LoggerFile f -> flip catch collectError $ do
+            h <- openFile f AppendMode
             hPutStrLn h s
             hFlush h
             theLogger lchan (LoggerHandle h)
@@ -161,15 +163,15 @@ theLogger lchan lst = do
 startWriter :: CtxIO ()
 startWriter = do
     ctx <- ask
-    _ <- liftIO $ forkIO $ theWriter (writer ctx) (logger ctx)
-    return ()
+    void $ liftIO $ forkIO
+         $ theWriter (writer ctx) (logger ctx) (LogInfo >= loglev ctx) (startSecond ctx)
 
-theWriter :: Chan String -> Chan String -> Bool -> IO ()
-theWriter wchan lchan log = forever $ do
+theWriter :: Chan String -> Chan String -> Bool -> Integer -> IO ()
+theWriter wchan lchan mustlog refs = forever $ do
     s <- readChan wchan
     hPutStrLn stdout s
     hFlush stdout
-    when log $ logging lchan $ "Output: " ++ s
+    when mustlog $ logging lchan refs "Output" s
 
 -- The informer is getting structured data
 -- and formats it to a string which is set to the writer
@@ -177,7 +179,7 @@ theWriter wchan lchan log = forever $ do
 startInformer :: CtxIO ()
 startInformer = do
     ctx <- ask
-    _ <- newThread (theInformer (inform ctx))
+    void $ newThread (theInformer (inform ctx))
     return ()
 
 theInformer :: Chan InfoToGui -> CtxIO ()
@@ -198,11 +200,12 @@ toGui s = case s of
 theReader :: CtxIO ()
 theReader = do
     line <- liftIO getLine
+    ctxLog DebugUci $ "Input: " ++ line
     let euci = parseUciStr line
     stop <- case euci of
         Left _    -> do
-            ctxLog DebugUci $ "Input: " ++ line
-            ctxLog DebugUci $ "Parse: " ++ show euci
+            ctxLog LogWarning $ "Input: " ++ line
+            ctxLog LogWarning $ "Parse: " ++ show euci
             return False
         Right uci -> interpret uci
     unless stop theReader
@@ -235,7 +238,9 @@ doUci = do
     answer (idName ++ " " ++ evid) >> answer idAuthor >> answer uciOk
 
 doIsReady :: CtxIO ()
-doIsReady = when (movesInit == 0) $ answer readyOk
+doIsReady = do
+    when (movesInit == 0) $ return ()
+    answer readyOk
 
 ignore :: CtxIO ()
 ignore = notImplemented "ignored"
@@ -288,8 +293,8 @@ doGo cmds = do
         else if Ponder `elem` cmds
             then ctxLog DebugUci "Just ponder: ignored"
             else do
-                md <- getIParamDef "maxDepth" 20
                 let (tim, tpm, mtg) = getTimeParams cmds lastsc $ myColor chg
+                    md = 20	-- max search depth
                     dpt = fromMaybe md (findDepth cmds)
                     lastsc = case forGui chg of
                                  Just InfoB { infoScore = sc } -> sc
@@ -344,7 +349,8 @@ newThread a = do
 
 startWorking :: Int -> Int -> Int -> Int -> CtxIO ()
 startWorking tim tpm mtg dpt = do
-    currms <- lift currMilli
+    ctx <- ask
+    currms <- lift $ currMilli (startSecond ctx)
     ctxLog DebugUci $ "Start at " ++ show currms
         ++ " to search: " ++ show tim ++ " / " ++ show tpm ++ " / " ++ show mtg
         ++ " - maximal " ++ show dpt ++ " plys"
@@ -359,9 +365,8 @@ startWorking tim tpm mtg dpt = do
 -- This is not good, then it can lead to race conditions. We should
 -- find another scheme, for example with STM
 startSearchThread :: Int -> Int -> Int -> Int -> CtxIO ()
-startSearchThread tim tpm mtg dpt = do
-    fd <- getIParamDef "firstDepth" 1
-    ctxCatch (searchTheTree fd dpt 0 tim tpm mtg Nothing [] [])
+startSearchThread tim tpm mtg dpt =
+    ctxCatch (searchTheTree 1 dpt 0 tim tpm mtg Nothing [] [])
         $ \e -> do
             chg <- readChanging
             let mes = "searchTheTree terminated by exception: " ++ show e
@@ -369,17 +374,18 @@ startSearchThread tim tpm mtg dpt = do
             case forGui chg of
                 Just ifg -> giveBestMove $ infoPv ifg
                 Nothing  -> return ()
-            ctx <- ask
-            case logger ctx of
-                Just _  -> ctxLog LogError mes
-                Nothing -> return ()
-            lift $ collectError mes
+            ctxLog LogError mes
+            lift $ collectError $ SomeException (SearchException mes)
             -- Why? liftIO $ threadDelay $ 50*1000 -- give time to send the ans
 
-ctxCatch :: CtxIO a -> (CE.SomeException -> CtxIO a) -> CtxIO a
+data SearchException = SearchException String deriving (Show, Typeable)
+
+instance Exception SearchException
+
+ctxCatch :: CtxIO a -> (SomeException -> CtxIO a) -> CtxIO a
 ctxCatch a f = do
     ctx <- ask
-    liftIO $ CE.catch (runReaderT a ctx)
+    liftIO $ catch (runReaderT a ctx)
             (\e -> runReaderT (f e) ctx)
 
 internalStop :: Int -> CtxIO ()
@@ -396,13 +402,14 @@ betterSc = 25
 -- Search with the given depth
 searchTheTree :: Int -> Int -> Int -> Int -> Int -> Int -> Maybe Int -> [Move] -> [Move] -> CtxIO ()
 searchTheTree tief mtief timx tim tpm mtg lsc lpv rmvs = do
+    ctx <- ask
     chg <- readChanging
     ctxLog LogInfo $ "Time = " ++ show tim ++ " Timx = " ++ show timx
     (path, sc, rmvsf, stfin) <- bestMoveCont tief timx (crtStatus chg) lsc lpv rmvs
     case length path of _ -> return () -- because of lazyness!
     storeBestMove path sc	-- write back in status
     modifyChanging (\c -> c { crtStatus = stfin })
-    currms <- lift currMilli
+    currms <- lift $ currMilli (startSecond ctx)
     let (ms', mx) = compTime tim tpm mtg sc
         ms  = if sc > betterSc
                  then ms' * 4 `div` 5
@@ -461,6 +468,8 @@ beforeReadLoop = do
     let evst = evalst $ crtStatus chg
     ctxLog LogInfo "Initial eval parameters:"
     forM_ (zip paramNames (esDParams evst)) $ \(n, v) -> ctxLog LogInfo $! n ++ "\t" ++ show v
+    bm <- liftIO $ hGetBuffering stdin
+    ctxLog DebugUci $ "Stdin: " ++ show bm
 
 beforeProgExit :: CtxIO ()
 beforeProgExit = return ()
@@ -490,7 +499,7 @@ answer s = do
 
 -- Name of the log file
 progLogName :: String
-progLogName = "abulafia" ++ "-" ++ progVersion
+progLogName = "barbarossa" ++ "-" ++ progVersion
                  ++ if null progVerSuff then ""
                                         else "-" ++ progVerSuff
 
@@ -582,11 +591,12 @@ infos :: String -> String
 infos s = "info string " ++ s
 
 -- Append error info to error file:
-collectError :: CE.SomeException -> IO ()
-collectError e = CE.catch (do
-    let efname = "Abulafia_collected_errors.txt"
-    tm <- currentSecs
+collectError :: SomeException -> IO ()
+collectError e = flip catch cannot $ do
+    let efname = "Barbarossa_collected_errors.txt"
+    TOD tm _ <- getClockTime
     ef <- openFile efname AppendMode
     hPutStrLn ef $ show tm ++ " " ++ idName ++ ": " ++ show e
     hClose ef
-    ) $ \_ -> return ()
+    where cannot :: IOException -> IO ()
+          cannot _ = return ()

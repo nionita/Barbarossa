@@ -21,54 +21,15 @@ Flag Profile
 Executable Barbarossa
   Main-is:	Main/Barbarossa.hs
   Build-depends: base >= 4.5, array, old-time, containers, mtl, parsec, vector,
-                 random, stream-fusion, directory, transformers
+                 random, stream-fusion, directory, transformers, QuickCheck
   GHC-Options: -O2 -Wall
                -funbox-strict-fields -threaded -rtsopts
                -fspec-constr-count=24
                -funfolding-use-threshold=32
-               -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques
-               -ddump-opt-cmm -ddump-asm
+               -- -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques
+               -- -ddump-opt-cmm -ddump-asm
   if flag(profile)
-    -- GHC-Options: -auto-all -with-rtsopts="-p -hc -smemop.txt"
+    GHC-Options: -auto-all -with-rtsopts="-p"
   else
     -- GHC-Options: -with-rtsopts=-N2 -M256m -H128m
     GHC-Options: -with-rtsopts=-N3
-
-Executable FixPlayFen
-  Main-is:	Main/MainFixPlayFen.hs
-  Build-depends: base >= 4.5, array, mtl, parsec, transformers, QuickCheck
-  GHC-Options: -O2 -Wall
-               -funbox-strict-fields -threaded -rtsopts
-               -fspec-constr-count=24
-               -funfolding-use-threshold=32
-  if flag(profile)
-    GHC-Options: -fprof-auto-top
-
-{-
-Executable BenchTransTab
-  Main-is:	Tests/TestTransTab.hs
-  Build-depends:	base >= 4, array, mtl, parsec, criterion, QuickCheck
-  GHC-Options: -O2 -Wall
-               -funbox-strict-fields
-               -fspec-constr-count=4 -funfolding-use-threshold=32
-
-Executable VizGraph
-  Main-is:       Main/VizGraph.hs
-  Build-depends: base >= 4
-  GHC-Options:   -O2
-  CPP-Options:   -DVIZTREE
-
-Executable PlotEvolve
-  Main-is:	Main/EvolveToPlot.hs
-  Build-depends:	base >= 4, filepath, regex-compat
-
-Executable Evolve
-  Main-is:	Main/MainEvolve.hs
-  Build-depends: base >= 4, process, filepath, bytestring, old-locale, async
-  GHC-Options:	-O2 -Wall -threaded -rtsopts
-
-Executable CLOPDriver
-  Main-is:       Main/MainCLOP.hs
-  Build-depends: base >= 4, process, filepath, bytestring, old-locale, async
-  GHC-Options:	-O2 -Wall
--}
