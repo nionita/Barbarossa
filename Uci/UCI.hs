@@ -1,19 +1,15 @@
 {-# LANGUAGE RankNTypes #-}
 module Uci.UCI (
-         UCIMess(..), Pos(..), GoCmds(..), ExpCommand(..),
+         UCIMess(..), Option(..), Pos(..), GoCmds(..), ExpCommand(..),
          parseUciStr, parseMoveStr, parseExploreStr,
          findDepth, findTInc, findTime, findMovesToGo
     ) where
 
 import Data.Char
--- import Data.Array.Unboxed
 import qualified Text.ParserCombinators.Parsec as P
 import Text.ParserCombinators.Parsec (Parser, (<|>))
 
 import Struct.Struct
--- import Moves.Base
-
--- type Parser = forall u. ParsecT String u Data.Functor.Identity.Identity
 
 data UCIMess
     = Uci
@@ -74,13 +70,6 @@ parseExploreStr = P.parse parseExplore ""
 literal :: String -> Parser ()
 literal s = P.spaces >> P.string s >> return ()
 
-untilP :: String -> Parser String
-untilP s = go ""
-    where go acc = (P.string s >> return (reverse acc))
-                   `orElse` do
-                        c <- P.anyChar
-                        go (c:acc)
-
 orElse :: Parser a -> Parser a -> Parser a
 orElse a b = P.try a <|> b
 
@@ -129,13 +118,16 @@ parseSetOption = do
     literal "name"
     P.spaces
     o <- (do
-        nm <- untilP "value"
-        vl <- P.many P.alphaNum
-        return (NameValue nm vl)
-     ) `orElse` (do
-        nm <- P.many P.alphaNum
-        return (Name nm)
-     )
+            nm <- P.many P.alphaNum
+            P.spaces
+            literal "value"
+            P.spaces
+            vl <- P.many P.anyToken
+            return (NameValue nm vl)
+         ) `orElse` (do
+            nm <- P.many P.alphaNum
+            return (Name nm)
+         )
     return $ SetOption o
 
 parsePosition :: Parser UCIMess

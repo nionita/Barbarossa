@@ -45,7 +45,7 @@ defaultOptions :: Options
 defaultOptions = Options {
         optConfFile = Nothing,
         optParams   = [],
-        optLogging  = LogInfo
+        optLogging  = DebugUci
     }
 
 setConfFile :: String -> Options -> Options
@@ -116,6 +116,9 @@ main = do
     ctx <- initContext opts
     runReaderT startTheMachine ctx
 
+-- The logger, writer and informer will be started only once, here,
+-- so every setting about them cannot be changed later, which mainly
+-- excludes logging level and log file name
 startTheMachine :: CtxIO ()
 startTheMachine = do
     ctx <- ask
@@ -224,6 +227,7 @@ interpret uci =
         Go cmds    -> goOn (doGo cmds)
         Stop       -> goOn $ doStop True
         Ponderhit  -> goOn doPonderhit
+        SetOption o -> goOn (doSetOption o)
         _          -> goOn ignore
 
 doQuit :: CtxIO ()
@@ -235,12 +239,42 @@ goOn action = action >> return False
 doUci :: CtxIO ()
 doUci = do
     evid <- asks evpid
-    answer (idName ++ " " ++ evid) >> answer idAuthor >> answer uciOk
+    answer $ idName ++ " " ++ evid
+    answer idAuthor
+    mapM_ sendOption guiUciOptions 
+    answer uciOk
 
 doIsReady :: CtxIO ()
 doIsReady = do
     when (movesInit == 0) $ return ()
     answer readyOk
+
+doSetOption :: Option -> CtxIO ()
+doSetOption opt = do
+    let NameValue on ov = unifyOption opt
+    chg <- readChanging
+    if working chg
+       then ctxLog LogWarning "GUI sent SetOption while I'm working..."
+       else case on of
+                "Hash" -> setOptionHash ov
+                _      -> ctxLog LogWarning
+                              $ "Unknown option from engine: " ++ on ++ " with value " ++ ov
+
+unifyOption :: Option -> Option
+unifyOption (Name on) = NameValue on "true"
+unifyOption o         = o
+
+setOptionHash :: String -> CtxIO ()
+setOptionHash sval =
+    case reads sval of
+        [(val, "")] -> do
+            chg <- readChanging
+            let st = crtStatus chg
+            ha <- liftIO $ newCache val
+            modifyChanging $ \c -> c { crtStatus = st { hash = ha }}
+            ctxLog LogInfo $ "Cache was set on " ++ sval ++ " MB"
+        _           -> ctxLog LogError $ "GUI: wrong number of MB for option Hash: " ++ sval
+    
 
 ignore :: CtxIO ()
 ignore = notImplemented "ignored"
@@ -587,6 +621,31 @@ nps n = "info nps " ++ show n
 
 infos :: String -> String
 infos s = "info string " ++ s
+
+-- These are the supported Uci options
+data UciGUIOptionType = UGOTRange String String
+                      | UGOTList [String]
+                      | UGOTNone
+
+guiUciOptions :: [(String, String, String, UciGUIOptionType)]
+guiUciOptions = [
+        ("Hash", "spin", "16", UGOTRange "16" "1024")	-- hash size in MB
+    ]
+
+sendOption :: (String, String, String, UciGUIOptionType) -> CtxIO ()
+sendOption odesc = do
+    let str = describeOption odesc
+    answer str
+
+describeOption :: (String, String, String, UciGUIOptionType) -> String
+describeOption (oname, otype, odef, ovals)
+    = "option name " ++ oname ++ " type " ++ otype
+        ++ " default " ++ odef ++ makeOptionVals ovals
+
+makeOptionVals :: UciGUIOptionType -> String
+makeOptionVals (UGOTRange mi ma) = " min " ++ mi ++ " max " ++ ma
+makeOptionVals (UGOTList li) = foldl (\a x -> a ++ " var " ++ x) "" li
+makeOptionVals UGOTNone = ""
 
 -- Append error info to error file:
 collectError :: SomeException -> IO ()

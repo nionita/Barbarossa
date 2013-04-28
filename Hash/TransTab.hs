@@ -91,11 +91,13 @@ part3Mask = 0x03 :: Mask	-- the cell has 4 entries (other option: 8)
 minEntries :: Int
 minEntries = 2 ^ 18
 
--- Create a new transposition table with a given number of entries
--- The given number will be rounded up to the next power of 2
+-- Create a new transposition table with a number of entries
+-- corresponding to the given (integral) number of MB
+-- The number of entries will be rounded up to the next power of 2
 newCache :: Int -> IO Cache
-newCache c = do
-    let nentries = max minEntries $ nextPowOf2 c
+newCache mb = do
+    let c = mb * 1024 * 1024 `div` pCacheEnSize
+        nentries = max minEntries $ nextPowOf2 c
         ncells   = nentries `div` 4	-- 4 entries per cell
         lom      = fromIntegral $ nentries - 1
         mim      = lom .&. cellMask
