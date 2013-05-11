@@ -120,9 +120,10 @@ nulActivate = True		-- activate null move reduction
 nulRedux, nulMoves :: Int
 nulRedux    = 2 -- depth reduction for null move
 nulMoves    = 2	-- how many null moves in sequence are allowed (one or two)
-nulMargin, nulSubmrg :: Int
+nulMargin, nulSubmrg, nulTrig :: Int
 nulMargin   = 1		-- margin to search the null move (over beta) (in scoreGrain units!)
 nulSubmrg   = 2		-- improved margin (in scoreGrain units!)
+nulTrig     = -25	-- static margin to beta, to trigger null move (in scoreGrain units!)
 nulSubAct :: Bool
 nulSubAct   = True
 
@@ -775,14 +776,18 @@ nullEdgeFailsHigh nst b d lastnull
          if tact
             then return False
             else do
-               lift nullEdge	-- do null move
-               nn <- newNode
-               viztreeDown0 nn
-               viztreeABD (pathScore negnmb) (pathScore negnma) d1
-               val <- liftM pnextlev $ pvSearch nst { pvcont = emptySeq } negnmb negnma d1 lastnull1
-               lift undoEdge	-- undo null move
-               viztreeUp0 nn (pathScore val)
-               return $! val >= nmb
+               v <- lift staticVal
+               if v < pathScore b + nulTrig * scoreGrain
+                  then return False
+                  else do
+                      lift nullEdge	-- do null move
+                      nn <- newNode
+                      viztreeDown0 nn
+                      viztreeABD (pathScore negnmb) (pathScore negnma) d1
+                      val <- liftM pnextlev $ pvSearch nst { pvcont = emptySeq } negnmb negnma d1 lastnull1
+                      lift undoEdge	-- undo null move
+                      viztreeUp0 nn (pathScore val)
+                      return $! val >= nmb
     where d1  = d - (1 + nulRedux)
           nmb = if nulSubAct then b -: (nulSubmrg * scoreGrain) else b
           nma = nmb -: (nulMargin * scoreGrain)
