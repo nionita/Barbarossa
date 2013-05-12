@@ -3,7 +3,7 @@ module Moves.Board (
     posFromFen, initPos,
     isCheck, inCheck,
     goPromo, hasMoves,
-    genmv, genmvT,
+    genmv, genmvT, kingMoved, castKingRookOk, castQueenRookOk,
     genMoveCapt, genMoveCast, genMoveNCapt, genMoveTransf, genMovePCapt, genMovePNCapt, genMoveFCheck,
     genMoveNCaptToCheck,
     updatePos, kingsOk, checkOk,
@@ -561,20 +561,32 @@ calcPinned p wpind bpind = wpi .|. bpi
 -- and test anyway kingmoved first (or even a more general pattern for all moved)
 genMoveCast :: MyPos -> Color -> [Move]
 genMoveCast p c
-    | inCheck p || kingmoved = []
+    | inCheck p || kingMoved p c = []
     | otherwise = kingside ++ queenside
-    where (ksq, cmidk, cmidq, opAtt) =
-             if c == White then (4,  caRMKw, caRMQw, blAttacs p)
-                           else (60, caRMKb, caRMQb, whAttacs p)
-          kingmoved = not (epcas p `testBit` ksq)
-          rookk = ksq + 3
-          rookq = ksq - 4
-          kingside  = if (epcas p `testBit` rookk) && (occup p .&. cmidk == 0) && (opAtt .&. cmidk == 0)
+    where (cmidk, cmidq, opAtt) =
+             if c == White then (caRMKw, caRMQw, blAttacs p)
+                           else (caRMKb, caRMQb, whAttacs p)
+          kingside  = if castKingRookOk  p c && (occup p .&. cmidk == 0) && (opAtt .&. cmidk == 0)
                         then [caks] else []
-          queenside = if (epcas p `testBit` rookq) && (occup p .&. cmidq == 0) && (opAtt .&. cmidq == 0)
+          queenside = if castQueenRookOk p c && (occup p .&. cmidq == 0) && (opAtt .&. cmidq == 0)
                         then [caqs] else []
           caks = makeCastleFor c True
           caqs = makeCastleFor c False
+
+{-# INLINE kingMoved #-}
+kingMoved :: MyPos -> Color -> Bool
+kingMoved p White = not (epcas p `testBit` 4)
+kingMoved p Black = not (epcas p `testBit` 60)
+
+{-# INLINE castKingRookOk #-}
+castKingRookOk :: MyPos -> Color -> Bool
+castKingRookOk p White = epcas p `testBit` 7
+castKingRookOk p Black = epcas p `testBit` 63
+
+{-# INLINE castQueenRookOk #-}
+castQueenRookOk :: MyPos -> Color -> Bool
+castQueenRookOk p White = epcas p `testBit` 0
+castQueenRookOk p Black = epcas p `testBit` 56
 
 -- Set a piece on a square of the table
 setPiece :: Square -> Color -> Piece -> MyPos -> MyPos

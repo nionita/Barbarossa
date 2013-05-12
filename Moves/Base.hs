@@ -26,7 +26,6 @@ import System.Random
 
 import Moves.BaseTypes
 import Search.AlbetaTypes
--- import qualified Search.CStateMonad as SM
 import Struct.Struct
 import Hash.TransTab
 import Struct.Status
@@ -35,6 +34,7 @@ import Moves.SEE
 import Eval.Eval
 import Moves.ShowMe
 import Moves.History
+import Moves.Notation
 
 {-# INLINE nearmate #-}
 nearmate :: Int -> Bool
@@ -73,11 +73,11 @@ debug, useHash :: Bool
 debug       = False
 useHash     = True
 
-depthForMovesSortPv, depthForMovesSort, scoreDiffEqual :: Int
+depthForMovesSortPv, depthForMovesSort, scoreDiffEqual, printEvalInt :: Int
 depthForMovesSortPv = 1	-- use history for sorting moves when pv or cut nodes
 depthForMovesSort   = 1	-- use history for sorting moves
 scoreDiffEqual      = 4 -- under this score difference moves are considered to be equal (choose random)
--- scoreDiffEqual      = 0 -- under this score difference moves are considered to be equal (choose random)
+printEvalInt        = 2 ^ 13 - 1	-- if /= 0: print eval info every so many nodes
 
 mateScore :: Int
 mateScore = 20000
@@ -236,6 +236,10 @@ doMove real m qs = do
                     --     lift $ ctxLog "Debug" $ "*** doMove: " ++ showMyPos p
                     -- remis' <- checkRepeatPv p pv
                     -- remis  <- if remis' then return True else checkRemisRules p
+                    when (printEvalInt /= 0 && nodes (stats s) .&. printEvalInt == 0) $ do
+                        logMes $ "Fen: " ++ posToFen p
+                        logMes $ "Eval info:" ++ concatMap (\(n, v) -> " " ++ n ++ "=" ++ show v)
+                                                           (("score", sts) : paramPairs feats)
                     put s { stack = p : stack s }
                     remis <- if qs then return False else checkRemisRules p'
                     if remis
