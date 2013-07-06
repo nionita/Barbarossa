@@ -272,12 +272,7 @@ instance Eq Path where
     p1 == p2 = pathScore p1 == pathScore p2
 
 instance Ord Path where
-    compare p1 p2 = ord
-        where !ord = if pathScore p1 < pathScore p2
-                       then LT
-                       else if pathScore p1 > pathScore p2
-                            then GT
-                            else EQ
+    compare = comparing pathScore
 
 instance Bounded Path where
     minBound = Path { pathScore = minBound, pathDepth = 0, pathMoves = Seq [], pathOrig = "" }
@@ -1126,6 +1121,7 @@ reduceLmr d inPv nearmatea spec exd w pvs
              return $! if tact then d else rd
     where lmrMinDRed = 2 :: Int		-- minimum reduced depth
 
+{-# INLINE reduceDepth #-}
 reduceDepth :: Int -> Int -> Bool -> Int
 reduceDepth !d !w !pvs = m0n
     where nd = d - k

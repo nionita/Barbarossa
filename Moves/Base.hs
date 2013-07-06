@@ -6,7 +6,6 @@
              #-}
 
 module Moves.Base (
-    -- CtxMon(..),
     posToState, initPos, getPos, posNewSearch,
     doMove, undoMove, genMoves, genTactMoves,
     useHash,
@@ -44,35 +43,9 @@ import Moves.Notation
 nearmate :: Int -> Bool
 nearmate i = i >= mateScore - 255 || i <= -mateScore + 255
 
--- instance Edge Move where
 special :: Move -> Bool
 {-# INLINE special #-}
 special = moveIsSpecial
-
-{--
-instance Node (Game r) where
-    staticVal = staticVal0
-    materVal  = materVal0
-    genEdges = genMoves
-    genTactEdges = genTactMoves
-    {-# INLINE tactical #-}
-    tactical = tacticalPos
-    legalEdge = isMoveLegal
-    {-# INLINE killCandEdge #-}
-    killCandEdge = isKillCand
-    inSeq  = okInSequence
-    doEdge = doMove False
-    undoEdge = undoMove
-    betaMove = betaMove0
-    nullEdge = doNullMove
-    retrieve = currDSP
-    store = storeSearch
-    {-# INLINE curNodes #-}
-    curNodes = getNodes
-    inform = lift . talkToContext
-    choose  = choose0
-    timeout = isTimeout
---}
 
 -- Some options and parameters:
 debug, useHash :: Bool
@@ -435,6 +408,7 @@ chooseMove _    pvs = case pvs of
 logMes :: String -> Game ()
 logMes s = lift $ talkToContext . LogMes $ s
 
+{-# INLINE isTimeout #-}
 isTimeout :: Int -> Game Bool
 isTimeout msx = do
     curr <- lift timeFromContext
