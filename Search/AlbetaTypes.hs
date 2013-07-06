@@ -4,7 +4,7 @@
 {-# LANGUAGE BangPatterns #-}
 
 module Search.AlbetaTypes (
-    Node(..),
+    -- Node(..),
     DoResult(..),
     Comm(..),
     ABControl(..)
@@ -24,6 +24,7 @@ data ABControl = ABC {
         stoptime  :: Int
     } deriving Show
 
+{--
 -- The node class, dependent on a game monad m
 class Monad m => Node m where
     staticVal :: m Int  -- static evaluation of a node
@@ -44,6 +45,7 @@ class Monad m => Node m where
     inform :: Comm -> m ()		-- communicate to the world (log, current and best move)
     choose :: Bool -> [(Int, [Move])] -> m (Int, [Move])
     timeout  :: Int -> m Bool	-- check if we have to abort because of time
+--}
 
 data DoResult = Exten !Int	-- return mit extension (evtl 0)
               | Final !Int	-- return with a final score (probably draw)

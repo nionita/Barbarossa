@@ -6,11 +6,13 @@
              #-}
 
 module Moves.Base (
-    CtxMon(..),
+    -- CtxMon(..),
     posToState, initPos, getPos, posNewSearch,
     doMove, undoMove, genMoves, genTactMoves,
     useHash,
-    staticVal0, mateScore,
+    staticVal, materVal, tacticalPos, isMoveLegal, isKillCand, okInSequence,
+    betaCut, doNullMove, ttRead, ttStore, curNodes, chooseMove, isTimeout, informCtx,
+    mateScore,
     showMyPos,
     nearmate, special
 ) where
@@ -21,14 +23,16 @@ import Control.Exception (assert)
 import Data.Bits
 import Data.List
 import Control.Monad.State
+import Control.Monad.Reader (ask)
 import Data.Ord (comparing)
 import System.Random
 
 import Moves.BaseTypes
 import Search.AlbetaTypes
 import Struct.Struct
-import Hash.TransTab
+import Struct.Context
 import Struct.Status
+import Hash.TransTab
 import Moves.Board
 import Moves.SEE
 import Eval.Eval
@@ -45,7 +49,8 @@ special :: Move -> Bool
 {-# INLINE special #-}
 special = moveIsSpecial
 
-instance CtxMon m => Node (Game r m) where
+{--
+instance Node (Game r) where
     staticVal = staticVal0
     materVal  = materVal0
     genEdges = genMoves
@@ -64,9 +69,10 @@ instance CtxMon m => Node (Game r m) where
     store = storeSearch
     {-# INLINE curNodes #-}
     curNodes = getNodes
-    inform = lift . tellCtx
+    inform = lift . talkToContext
     choose  = choose0
     timeout = isTimeout
+--}
 
 -- Some options and parameters:
 debug, useHash :: Bool
@@ -82,13 +88,17 @@ printEvalInt        = 2 ^ 13 - 1	-- if /= 0: print eval info every so many nodes
 mateScore :: Int
 mateScore = 20000
 
-getNodes :: CtxMon m => Game r m Int
-{-# INLINE getNodes #-}
-getNodes = gets (nodes . stats)
+curNodes :: Game Int
+{-# INLINE curNodes #-}
+curNodes = gets (nodes . stats)
 
 {-# INLINE getPos #-}
-getPos :: CtxMon m => Game r m MyPos
+getPos :: Game MyPos
 getPos = gets (head . stack)
+
+{-# INLINE informCtx #-}
+informCtx :: Comm -> Game ()
+informCtx = lift . talkToContext
 
 posToState :: MyPos -> Cache -> History -> EvalState -> MyState
 posToState p c h e = MyState {
@@ -115,7 +125,7 @@ captWLDepth = 5		-- so far 5 seems to be best (after ~100 games)
 loosingLast :: Bool
 loosingLast = False
 
-genMoves :: CtxMon m => Int -> Int -> Bool -> Game r m ([Move], [Move])
+genMoves :: Int -> Int -> Bool -> Game ([Move], [Move])
 genMoves depth absdp pv = do
     p <- getPos
     -- when debugGen $ do
@@ -147,7 +157,7 @@ onlyWinningCapts :: Bool
 onlyWinningCapts = True
 
 -- Generate only tactical moves, i.e. promotions, captures & check escapes
-genTactMoves :: CtxMon m => Game r m [Move]
+genTactMoves :: Game [Move]
 genTactMoves = do
     p <- getPos
     let !c = moving p
@@ -165,7 +175,7 @@ genTactMoves = do
              | otherwise        = l1 ++ l2
     return mvs
 
-sortMovesFromHist :: CtxMon m => Int -> [Move] -> Game r m [Move]
+sortMovesFromHist :: Int -> [Move] -> Game [Move]
 sortMovesFromHist d mvs = do
     s <- get
     -- mvsc <- liftIO $ mapM (\m -> fmap negate $ valHist (hist s) (fromSquare m) (toSquare m) d) mvs
@@ -174,13 +184,13 @@ sortMovesFromHist d mvs = do
     let (posi, zero) = partition ((/=0) . snd) $ zip mvs mvsc
     return $! map fst $ sortBy (comparing snd) posi ++ zero
 
--- massert :: CtxMon m => String -> Game r m Bool -> Game r m ()
+-- massert :: String -> Game Bool -> Game ()
 -- massert s mb = do
 --     b <- mb
 --     if b then return () else error s
 
 {-# INLINE statNodes #-}
-statNodes :: CtxMon m => Game r m ()
+statNodes :: Game ()
 statNodes = do
     s <- get
     let st = stats s
@@ -193,7 +203,7 @@ showMyPos p = showTab (black p) (slide p) (kkrq p) (diag p) ++ "================
     where mc = if moving p == White then "w" else "b"
 
 -- move from a node to a descendent
-doMove :: CtxMon m => Bool -> Move -> Bool -> Game r m DoResult
+doMove :: Bool -> Move -> Bool -> Game DoResult
 doMove real m qs = do
     -- logMes $ "** doMove " ++ show m
     statNodes   -- when counting all visited nodes
@@ -246,7 +256,7 @@ doMove real m qs = do
                        then return $ Final 0
                        else return $ Exten dext
 
-doNullMove :: CtxMon m => Game r m ()
+doNullMove :: Game ()
 doNullMove = do
     -- logMes "** doMove null"
     s <- get
@@ -257,7 +267,7 @@ doNullMove = do
         !p = p' { staticScore = sts, staticFeats = feats }
     put s { stack = p : stack s }
 
-checkRemisRules :: CtxMon m => MyPos -> Game r m Bool
+checkRemisRules :: MyPos -> Game Bool
 checkRemisRules p = do
     s <- get
     if remis50Moves p
@@ -269,7 +279,7 @@ checkRemisRules p = do
             (_:_:_)    -> return True
             _          -> return False
 
--- checkRepeatPv :: CtxMon m => MyPos -> Bool -> Game r m Bool
+-- checkRepeatPv :: MyPos -> Bool -> Game Bool
 -- checkRepeatPv _ False = return False
 -- checkRepeatPv p _ = do
 --     s <- get
@@ -281,7 +291,7 @@ checkRemisRules p = do
 --     where imagRevers t = isReversible t && not (realMove t)
 
 {-# INLINE undoMove #-}
-undoMove :: CtxMon m => Game r m ()
+undoMove :: Game ()
 undoMove = do
     -- logMes "** undoMove"
     modify $ \s -> s { stack = tail $ stack s }
@@ -289,33 +299,33 @@ undoMove = do
 -- Tactical positions will be searched complete in quiescent search
 -- Currently only when in in check
 {-# INLINE tacticalPos #-}
-tacticalPos :: CtxMon m => Game r m Bool
+tacticalPos :: Game Bool
 tacticalPos = do
     t <- getPos
     return $! check t /= 0
 
 {-# INLINE isMoveLegal #-}
-isMoveLegal :: CtxMon m => Move -> Game r m Bool
+isMoveLegal :: Move -> Game Bool
 isMoveLegal m = do
     t <- getPos
     return $! legalMove t m
 
-isKillCand :: CtxMon m => Move -> Move -> Game r m Bool
+isKillCand :: Move -> Move -> Game Bool
 isKillCand mm ym
     | toSquare mm == toSquare ym = return False
     | otherwise = do
         t <- getPos
         return $! nonCapt t ym
 
-okInSequence :: CtxMon m => Move -> Move -> Game r m Bool
+okInSequence :: Move -> Move -> Game Bool
 okInSequence m1 m2 = do
     t <- getPos
     return $! alternateMoves t m1 m2
 
 -- Static evaluation function
-{-# INLINE staticVal0 #-}
-staticVal0 :: CtxMon m => Game r m Int
-staticVal0 = do
+{-# INLINE staticVal #-}
+staticVal :: Game Int
+staticVal = do
     s <- get
     t <- getPos
     let !c = moving t
@@ -327,11 +337,11 @@ staticVal0 = do
         stSc1 | hasMoves t c  = stSc
               | check t /= 0  = -mateScore
               | otherwise     = 0
-    -- when debug $ lift $ ctxLog "Debug" $ "--> staticVal0 " ++ show stSc1
+    -- when debug $ lift $ ctxLog "Debug" $ "--> staticVal " ++ show stSc1
     return $! stSc1
 
-materVal0 :: CtxMon m => Game r m Int
-materVal0 = do
+materVal :: Game Int
+materVal = do
     t <- getPos
     let !m = mater t
     return $! case moving t of
@@ -345,10 +355,10 @@ materVal0 = do
 -- Fixme!! We have big problems with hash store/retrieval: many wrong scores (and perhaps hash moves)
 -- come from there!!
 
-{-# INLINE currDSP #-}
-currDSP :: CtxMon m => Game r m (Int, Int, Int, Move, Int)
-currDSP = if not useHash then return empRez else do
-    -- when debug $ lift $ ctxLog "Debug" $ "--> currDSP "
+{-# INLINE ttRead #-}
+ttRead :: Game (Int, Int, Int, Move, Int)
+ttRead = if not useHash then return empRez else do
+    -- when debug $ lift $ ctxLog "Debug" $ "--> ttRead "
     s <- get
     p <- getPos
     mhr <- liftIO $ readCache (hash s) (zobkey p)
@@ -361,31 +371,31 @@ currDSP = if not useHash then return empRez else do
     --     (_, _, sc, _, _) = r
     -- if (sc `mod` 4 /= 0)
     --     then do
-    --         logMes $ "*** currDSP " ++ show r ++ " zkey " ++ show (zobkey p)
+    --         logMes $ "*** ttRead " ++ show r ++ " zkey " ++ show (zobkey p)
     --         return empRez
     --     else return r
     return r
     where empRez = (-1, 0, 0, Move 0, 0)
 
-{-# INLINE storeSearch #-}
-storeSearch :: CtxMon m => Int -> Int -> Int -> Move -> Int -> Game r m ()
-storeSearch deep tp sc bestm nds = if not useHash then return () else do
+{-# INLINE ttStore #-}
+ttStore :: Int -> Int -> Int -> Move -> Int -> Game ()
+ttStore deep tp sc bestm nds = if not useHash then return () else do
     s <- get
     p <- getPos
     -- when (sc `mod` 4 /= 0 && tp == 2) $ liftIO $ do
-    --     putStrLn $ "info string In storeSearch: tp = " ++ show tp ++ " sc = " ++ show sc
+    --     putStrLn $ "info string In ttStore: tp = " ++ show tp ++ " sc = " ++ show sc
     --         ++ " best = " ++ show best ++ " nodes = " ++ show nodes
         -- putStrLn $ "info string score in position: " ++ show (staticScore p)
     -- We use the type: 0 - upper limit, 1 - lower limit, 2 - exact score
     liftIO $ writeCache (hash s) (zobkey p) deep tp sc bestm nds
-    -- when debug $ lift $ ctxLog "Debug" $ "*** storeSearch (deep/tp/sc/mv) " ++ show deep
+    -- when debug $ lift $ ctxLog "Debug" $ "*** ttStore (deep/tp/sc/mv) " ++ show deep
     --      ++ " / " ++ show tp ++ " / " ++ show sc ++ " / " ++ show best
     --      ++ " status: " ++ show st ++ " (" ++ show (zobkey p) ++ ")"
     -- return ()
 
--- History heuristic table update when beta cut move
-betaMove0 :: CtxMon m => Bool -> Int -> Int -> Move -> Game r m ()
-betaMove0 good _ absdp m = do	-- dummy: depth
+-- History heuristic table update when beta cut
+betaCut :: Bool -> Int -> Int -> Move -> Game ()
+betaCut good _ absdp m = do	-- dummy: depth
     s <- get
     t <- getPos
     -- liftIO $ toHist (hist s) good (fromSquare m) (toSquare m) absdp
@@ -394,7 +404,7 @@ betaMove0 good _ absdp m = do	-- dummy: depth
         _     -> return ()
 
 {--
-showChoose :: CtxMon m => [] -> Game m ()
+showChoose :: [] -> Game ()
 showChoose pvs = do
     mapM_ (\(i, (s, pv)) -> lift $ ctxLog "Info"
                                  $ "choose pv " ++ show i ++ " score " ++ show s ++ ": " ++ show pv)
@@ -403,9 +413,9 @@ showChoose pvs = do
 --}
 
 -- Choose between almost equal (root) moves
-choose0 :: CtxMon m => Bool -> [(Int, [Move])] -> Game r m (Int, [Move])
-choose0 True pvs = return $ if null pvs then error "Empty choose!" else head pvs
-choose0 _    pvs = case pvs of
+chooseMove :: Bool -> [(Int, [Move])] -> Game (Int, [Move])
+chooseMove True pvs = return $ if null pvs then error "Empty choose!" else head pvs
+chooseMove _    pvs = case pvs of
     p1 : [] -> return p1
     p1 : ps -> do
          let equal = p1 : takeWhile inrange ps
@@ -422,13 +432,24 @@ choose0 _    pvs = case pvs of
                return $! equal !! r
     []      -> return (0, [])	-- just for Wall
 
-logMes :: CtxMon m => String -> Game r m ()
-logMes s = lift $ tellCtx . LogMes $ s
+logMes :: String -> Game ()
+logMes s = lift $ talkToContext . LogMes $ s
 
-isTimeout :: CtxMon m => Int -> Game r m Bool
+isTimeout :: Int -> Game Bool
 isTimeout msx = do
-    curr <- lift timeCtx
+    curr <- lift timeFromContext
     return $! msx < curr
 
 showStack :: Int -> [MyPos] -> String
 showStack n = concatMap (\p -> showMyPos p) . take n
+
+talkToContext :: Comm -> CtxIO ()
+talkToContext (LogMes s)       = ctxLog LogInfo s
+talkToContext (BestMv a b c d) = informGui a b c d
+talkToContext (CurrMv a b)     = informGuiCM a b
+talkToContext (InfoStr s)      = informGuiString s
+
+timeFromContext = do
+    ctx <- ask
+    let refs = startSecond ctx
+    lift $ currMilli refs

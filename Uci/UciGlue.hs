@@ -15,15 +15,17 @@ import Search.Albeta
 import Struct.Struct
 import Struct.Status
 import Struct.Context
-import Moves.Base
+-- import Moves.Base
 -- import Eval.Eval
 
+{--
 instance CtxMon CtxIO where
     tellCtx = talkToContext
     timeCtx = do
         ctx <- ask
         let refs = startSecond ctx
         lift $ currMilli refs
+--}
 
 -- Parameter of the search at this level:
 aspirWindow :: Int
@@ -49,9 +51,3 @@ bestMoveCont tiefe sttime stati lastsc lpv rmvs = do
     informGui sc tiefe n path
     ctxLog LogInfo $ "score " ++ show sc ++ " path " ++ show path
     return (path, sc, rmvsf, statf)
-
-talkToContext :: Comm -> CtxIO ()
-talkToContext (LogMes s)       = ctxLog LogInfo s
-talkToContext (BestMv a b c d) = informGui a b c d
-talkToContext (CurrMv a b)     = informGuiCM a b
-talkToContext (InfoStr s)      = informGuiString s
