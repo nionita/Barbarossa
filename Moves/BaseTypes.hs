@@ -5,19 +5,21 @@
              #-}
 
 module Moves.BaseTypes (
-    CtxMon(..), Game
+    Game
 ) where
 
 import Control.Monad.IO.Class
 
-import qualified Search.CStateMonad as SM
-import Struct.Struct
+import Search.CStateMonad (CState)
+import Struct.Context
 import Struct.Status
 import Search.AlbetaTypes
 
 -- This is a specialized monad transformer for state
-type Game r m = SM.STPlus r MyState m
+type Game = CState MyState CtxIO
 
+{--
 class (Monad m, MonadIO m) => CtxMon m where
     tellCtx :: Comm -> m ()
     timeCtx :: m Int
+--}

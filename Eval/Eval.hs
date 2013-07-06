@@ -4,7 +4,7 @@ module Eval.Eval (
     posEval,
     maxStatsDepth, maxStatsIntvs,
     inLimits,
-    paramNames, parLims, parDim
+    paramNames, parLims, parDim, paramPairs
 ) where
 
 import Data.Array.Base (unsafeAt)
@@ -117,6 +117,9 @@ allParams = concatMap snd . foldl oneParam defevps
 paramNames :: [String]
 paramNames = concatMap pnames evalItems
     where pnames (EvIt a) = map paramName $ evalItemNDL a
+
+paramPairs :: [Int] -> [(String, Int)]
+paramPairs = zip paramNames
 
 ------------------------------------------------------------------
 -- Parameters of this module ------------

@@ -33,7 +33,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.01"
-progVerSuff = "nmskip-25"
+progVerSuff = "nmskipdir"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
