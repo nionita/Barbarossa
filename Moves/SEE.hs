@@ -3,7 +3,7 @@ module Moves.SEE
     (
     findLKA,
     myPieces, yoPieces, thePieces,
-    genMoveCaptSEE,
+    -- genMoveCaptSEE,
     genMoveCaptWL
     -- valueSEE, figAttacking, allAttackingPawns
     )
@@ -52,7 +52,7 @@ thePieces p c = if c == White then (white p, black p) else (black p, white p)
 -- The new SEE functions (swap-based)
 -- Choose the cheapest of a set of pieces
 chooseAttacker :: MyPos -> BBoard -> (BBoard, (Piece, Int))
-chooseAttacker pos frompieces = go funcPiecesAsc
+chooseAttacker pos !frompieces = go funcPiecesAsc
     where go [] = (0, (Pawn, 0))	-- should never happen
           go ((p,f):fps)
              | subset == 0 = go fps
@@ -121,7 +121,7 @@ seeMoveValue :: MyPos -> Color -> Square -> Square -> Int -> Int
 seeMoveValue pos col sqfa sqto gain0 = v
     where v = go gain0 attacs0 occup0 from0 valfrom moved0 (yopc, mypc) [gain0]
           go :: Int -> BBoard -> BBoard -> BBoard -> Int -> BBoard -> (BBoard, BBoard) -> [Int] -> Int
-          go gain attacs occ from val moved (fcolp, ocolp) acc =
+          go !gain !attacs !occ !from !val !moved (fcolp, ocolp) acc =
              let gain'    = val - gain
                  occ'     = occ    `xor` from
                  moved'   = moved   .|.  from
@@ -134,62 +134,80 @@ seeMoveValue pos col sqfa sqto gain0 = v
           (mypc, yopc) = thePieces pos col
           (from0, (_, valfrom)) = chooseAttacker pos (attacs0 .&. yopc)
           mayXRay = pawns pos .|. bishops pos .|. rooks pos .|. queens pos
-          moved0  = bit sqfa
+          !moved0  = bit sqfa
           attacs0 = newAttacs pos sqto moved0
           occup0  = occup pos `xor` moved0
 
 -- This function can produce illegal captures with the king!
 genMoveCaptWL :: MyPos -> Color -> ([(Square, Square)], [(Square, Square)])
-genMoveCaptWL pos col = (swl, sll)
-    where (wl, ll) = foldr (perCaptFieldWL pos col mypc yoAtt) ([],[]) $ bbToSquares capts
+genMoveCaptWL pos col = (wl, ll)
+    -- where (wl, ll) = foldr (perCaptFieldWL pos col mypc yoAtt) ([],[]) $ bbToSquares capts
+    where (wl, ll) = foldr (perCaptFieldWL pos col mypc yoAtt) ([],[]) $ squaresByMVV pos capts
           (mypc, yopc) = thePieces pos col
           (myAtt, yoAtt) = if col == White	-- here: for yoAtts: X-Ray is not considered!!!
                               then (whAttacs pos, blAttacs pos)
                               else (blAttacs pos, whAttacs pos)
           capts = myAtt .&. yopc
-          swl = map snd $ sortBy (comparing fst) wl
-          sll = map snd $ sortBy (comparing fst) ll
+          -- swl = map snd $ sortBy (comparing fst) wl
+          -- sll = map snd $ sortBy (comparing fst) ll
 
 perCaptFieldWL :: MyPos -> Color -> BBoard -> BBoard -> Square
-          -> ([(Int, (Square, Square))], [(Int, (Square, Square))])
-          -> ([(Int, (Square, Square))], [(Int, (Square, Square))])
+          -- -> ([(Int, (Square, Square))], [(Int, (Square, Square))])
+          -- -> ([(Int, (Square, Square))], [(Int, (Square, Square))])
+          -> ([(Square, Square)], [(Square, Square)])
+          -> ([(Square, Square)], [(Square, Square)])
 perCaptFieldWL pos col mypc advdefence sq mvlst
     = if hanging
-         then foldr (addHanging valto sq) mvlst $ bbToSquares myattacs
-         else foldr (perCaptWL pos col valto sq) mvlst $ bbToSquares myattacs
+         then foldr (addHanging sq) mvlst agrsqs
+         else foldr (perCaptWL pos col valto sq) mvlst agrsqs
     where myattacs = mypc .&. newAttacs pos sq 0
           Busy _ pcto = tabla pos sq
           valto = value pcto
           hanging = not (advdefence `testBit` sq)
+          agrsqs = squaresByLVA pos myattacs
 
 approximateEasyCapts = True
 
 perCaptWL :: MyPos -> Color -> Int -> Square -> Square
-          -> ([(Int, (Square, Square))], [(Int, (Square, Square))])
-          -> ([(Int, (Square, Square))], [(Int, (Square, Square))])
+          -- -> ([(Int, (Square, Square))], [(Int, (Square, Square))])
+          -- -> ([(Int, (Square, Square))], [(Int, (Square, Square))])
+          -> ([(Square, Square)], [(Square, Square)])
+          -> ([(Square, Square)], [(Square, Square)])
 perCaptWL pos col gain0 sq sqfa (wsqs, lsqs)
     = if approx || adv <= gain0
-         -- then (inssort ss wsqs, lsqs)
-         -- else (wsqs, inssort ss lsqs)
          then (ss:wsqs, lsqs)
          else (wsqs, ss:lsqs)
-    where ss = (-win, (sqfa, sq))
+    where ss = (sqfa, sq)
           approx = approximateEasyCapts && gain1 >= 0
-          win = if approx then gain1 else myv
           Busy _ pcfa = tabla pos sqfa
           v0 = value pcfa
           gain1 = gain0 - v0
           adv = seeMoveValue pos col sqfa sq v0
-          myv = gain0 - adv
+          -- myv = gain0 - adv
 
 -- Captures of hanging pieces are always winning
-addHanging :: Int -> Square -> Square
-          -> ([(Int, (Square, Square))], [(Int, (Square, Square))])
-          -> ([(Int, (Square, Square))], [(Int, (Square, Square))])
--- addHanging val to from (wsqs, lsqs) = (inssort (val, (from, to)) wsqs, lsqs)
-addHanging val to from (wsqs, lsqs) = ((-val, (from, to)):wsqs, lsqs)
+addHanging :: Square -> Square
+          -- -> ([(Int, (Square, Square))], [(Int, (Square, Square))])
+          -- -> ([(Int, (Square, Square))], [(Int, (Square, Square))])
+          -> ([(Square, Square)], [(Square, Square)])
+          -> ([(Square, Square)], [(Square, Square)])
+addHanging to from (wsqs, lsqs) = ((from, to):wsqs, lsqs)
 
-inssort vp [] = [vp]
-inssort vp@(v, _) vps@(vp1@(v1, _) : vp1s)
-    | v >= v1   = vp : vps
-    | otherwise = vp1 : inssort vp vp1s
+squaresByMVV :: MyPos -> BBoard -> [Square]
+squaresByMVV pos bb = map snd $ sortBy (comparing fst)
+                              $ map (mostValuableLast pos) $ bbToSquares bb
+
+squaresByLVA :: MyPos -> BBoard -> [Square]
+squaresByLVA pos bb = map snd $ sortBy (comparing fst)
+                              $ map (mostValuableFirst pos) $ bbToSquares bb
+
+-- In perCaptWL we add latter from/to squares to the head of the result lists
+-- so to get most valuable victim first, we have to sort them last
+mostValuableLast :: MyPos -> Square -> (Int, Square)
+mostValuableLast pos sq | Busy _ f <- tabla pos sq = let !v = matPiece White f in (v, sq)
+mostValuableLast _   _                             = error "mostValuableLast: Empty"
+
+-- Same here, but now we sort the agressors reverse
+mostValuableFirst :: MyPos -> Square -> (Int, Square)
+mostValuableFirst pos sq | Busy _ f <- tabla pos sq = let !v = - matPiece White f in (v, sq)
+mostValuableFirst _   _                             = error "mostValuableFirst: Empty"

@@ -110,7 +110,7 @@ posNewSearch p = p { hash = newGener (hash p) }
 -- debugGen = False
 
 captWLDepth :: Int
-captWLDepth = 5		-- so far 5 seems to be best (after ~100 games)
+captWLDepth = 1		-- so far 5 seems to be best (after ~100 games)
 
 loosingLast :: Bool
 loosingLast = False
