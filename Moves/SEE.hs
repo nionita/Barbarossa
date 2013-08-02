@@ -195,19 +195,18 @@ addHanging to from (wsqs, lsqs) = ((from, to):wsqs, lsqs)
 
 squaresByMVV :: MyPos -> BBoard -> [Square]
 squaresByMVV pos bb = map snd $ sortBy (comparing fst)
-                              $ map (mostValuableLast pos) $ bbToSquares bb
+                              $ map (mostValuableFirst pos) $ bbToSquares bb
 
 squaresByLVA :: MyPos -> BBoard -> [Square]
 squaresByLVA pos bb = map snd $ sortBy (comparing fst)
-                              $ map (mostValuableFirst pos) $ bbToSquares bb
+                              $ map (mostValuableLast pos) $ bbToSquares bb
 
--- In perCaptWL we add latter from/to squares to the head of the result lists
--- so to get most valuable victim first, we have to sort them last
+-- Sort by value in order to get the most valuable last
 mostValuableLast :: MyPos -> Square -> (Int, Square)
 mostValuableLast pos sq | Busy _ f <- tabla pos sq = let !v = matPiece White f in (v, sq)
 mostValuableLast _   _                             = error "mostValuableLast: Empty"
 
--- Same here, but now we sort the agressors reverse
+-- Sort by negative value in order to get the most valuable first
 mostValuableFirst :: MyPos -> Square -> (Int, Square)
 mostValuableFirst pos sq | Busy _ f <- tabla pos sq = let !v = - matPiece White f in (v, sq)
 mostValuableFirst _   _                             = error "mostValuableFirst: Empty"

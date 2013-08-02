@@ -110,7 +110,8 @@ posNewSearch p = p { hash = newGener (hash p) }
 -- debugGen = False
 
 captWLDepth :: Int
-captWLDepth = 1		-- so far 5 seems to be best (after ~100 games)
+captWLDepth = 1		-- now, when doing right MVVLVA, we dont know which depth is best (was 5)
+			-- but 1 seems good, although the generation is still slow
 
 loosingLast :: Bool
 loosingLast = False
