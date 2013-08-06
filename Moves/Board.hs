@@ -5,7 +5,7 @@ module Moves.Board (
     goPromo, hasMoves,
     genmv, genmvT, kingMoved, castKingRookOk, castQueenRookOk,
     genMoveCapt, genMoveCast, genMoveNCapt, genMoveTransf, genMovePCapt, genMovePNCapt, genMoveFCheck,
-    genMoveNCaptToCheck,
+    genMoveNCaptToCheck, genMoveCaptWL,
     updatePos, kingsOk, checkOk,
     legalMove, alternateMoves, nonCapt,
     doFromToMove, reverseMoving
@@ -903,8 +903,8 @@ chooseAttacker pos !frompieces
 newAttacs :: MyPos -> Square -> BBoard -> BBoard
 newAttacs pos sq moved = bAttacs occ sq .&. (b .|. q)
                      .|. rAttacs occ sq .&. (r .|. q)
-                     .|. nAttacs 0   sq .&. n
-                     .|. kAttacs 0   sq .&. k
+                     .|. nAttacs     sq .&. n
+                     .|. kAttacs     sq .&. k
                      .|. (pAttacs White sq .&. black pos .|. pAttacs Black sq .&. white pos) .&. p
     where !occ = occup pos `less` moved
           !b = bishops pos  `less` moved
