@@ -177,14 +177,14 @@ hasMoves !p c
     where hasPc = any (/= 0) $ map (pcapt . pAttacs c)
                      $ bbToSquares $ pawns p .&. myfpc
           hasPm = not . null $ pAll1Moves c (pawns p .&. mypc) (occup p)
-          hasN = any (/= 0) $ map (legmv . nAttacs) $ bbToSquares $ knights p .&. myfpc
+          hasN = any (/= 0) $ map (legmv . nAttacs 0) $ bbToSquares $ knights p .&. myfpc
           hasB = any (/= 0) $ map (legmv . bAttacs (occup p))
                      $ bbToSquares $ bishops p .&. myfpc
           hasR = any (/= 0) $ map (legmv . rAttacs (occup p))
                      $ bbToSquares $ rooks p .&. myfpc
           hasQ = any (/= 0) $ map (legmv . qAttacs (occup p))
                      $ bbToSquares $ queens p .&. myfpc
-          !hasK = 0 /= (legal . kAttacs $ firstOne $ kings p .&. mypc)
+          !hasK = 0 /= (legal . kAttacs 0 $ firstOne $ kings p .&. mypc)
           !anyMove = hasK || hasN || hasPm || hasPc || hasQ || hasR || hasB
           chk = inCheck p
           (!mypc, !yopi) = thePieces p c
@@ -201,7 +201,7 @@ genMoveCapt :: MyPos -> Color -> [(Square, Square)]
 genMoveCapt !p c = sortByMVVLVA p allp
     where !pGenC = concatMap (srcDests (pcapt . pAttacs c))
                      $ bbToSquares $ pawns p .&. myfpc `less` traR
-          !nGenC = concatMap (srcDests (capt . nAttacs)) 
+          !nGenC = concatMap (srcDests (capt . nAttacs 0)) 
                      $ bbToSquares $ knights p .&. myfpc
           !bGenC = concatMap (srcDests (capt . bAttacs (occup p)))
                      $ bbToSquares $ bishops p .&. myfpc
@@ -209,7 +209,7 @@ genMoveCapt !p c = sortByMVVLVA p allp
                      $ bbToSquares $ rooks p .&. myfpc
           !qGenC = concatMap (srcDests (capt . qAttacs (occup p)))
                      $ bbToSquares $ queens p .&. myfpc
-          !kGenC =            srcDests (capt . legal . kAttacs)
+          !kGenC =            srcDests (capt . legal . kAttacs 0)
                      $ firstOne $ kings p .&. myfpc
           allp = concat [ pGenC, nGenC, bGenC, rGenC, qGenC, kGenC ]
           (!mypc, !yopi) = thePieces p c
@@ -265,7 +265,7 @@ genMoveNCapt !p c = concat [ nGenNC, bGenNC, rGenNC, qGenNC, pGenNC1, pGenNC2, k
     --                  $ bbToSquares $ pawns p .&. mypc `less` traR
     where pGenNC1 = pAll1Moves c (pawns p .&. mypc `less` traR) (occup p)
           pGenNC2 = pAll2Moves c (pawns p .&. mypc) (occup p)
-          nGenNC = concatMap (srcDests (ncapt . nAttacs))
+          nGenNC = concatMap (srcDests (ncapt . nAttacs 0))
                       $ bbToSquares $ knights p .&. mypc
           bGenNC = concatMap (srcDests (ncapt . bAttacs (occup p)))
                       $ bbToSquares $ bishops p .&. mypc
@@ -273,7 +273,7 @@ genMoveNCapt !p c = concat [ nGenNC, bGenNC, rGenNC, qGenNC, pGenNC1, pGenNC2, k
                       $ bbToSquares $ rooks p .&. mypc
           qGenNC = concatMap (srcDests (ncapt . qAttacs (occup p)))
                       $ bbToSquares $ queens p .&. mypc
-          kGenNC =            srcDests (ncapt . legal . kAttacs)
+          kGenNC =            srcDests (ncapt . legal . kAttacs 0)
                       $ firstOne $ kings p .&. mypc
           -- mypc = myPieces p c `less` pinned p
           mypc = myPieces p c
@@ -303,7 +303,7 @@ genMovePCapt :: MyPos -> Color -> [(Square, Square)]
 genMovePCapt !p !c = concat [ pGenC, nGenC, bGenC, rGenC, qGenC ]
     where pGenC = concatMap (srcDests $ pinCapt p c (pcapt . pAttacs c))
                      $ bbToSquares $ pawns p .&. myfpc `less` traR
-          nGenC = concatMap (srcDests $ pinCapt p c (capt . nAttacs)) 
+          nGenC = concatMap (srcDests $ pinCapt p c (capt . nAttacs 0)) 
                      $ bbToSquares $ knights p .&. myfpc
           bGenC = concatMap (srcDests $ pinCapt p c (capt . bAttacs (occup p)))
                      $ bbToSquares $ bishops p .&. myfpc
@@ -324,7 +324,7 @@ genMovePNCapt :: MyPos -> Color -> [(Square, Square)]
 genMovePNCapt !p !c = concat [ pGenNC, qGenNC, rGenNC, bGenNC, nGenNC ]
     where pGenNC = concatMap (srcDests $ pinMove p c (ncapt . \s -> pMovs s c (occup p))) 
                      $ bbToSquares $ pawns p .&. mypc `less` traR
-          nGenNC = concatMap (srcDests $ pinMove p c (ncapt . nAttacs))
+          nGenNC = concatMap (srcDests $ pinMove p c (ncapt . nAttacs 0))
                       $ bbToSquares $ knights p .&. mypc
           bGenNC = concatMap (srcDests $ pinMove p c (ncapt . bAttacs (occup p)))
                       $ bbToSquares $ bishops p .&. mypc
@@ -360,7 +360,7 @@ findChecking :: MyPos -> Color -> [CheckInfo]
 findChecking !p !c = concat [ pChk, nChk, bChk, rChk, qbChk, qrChk ]
     where pChk = map (NormalCheck Pawn) $ filter ((/= 0) . kattac . pAttacs c)
                                $ bbToSquares $ pawns p .&. mypc
-          nChk = map (NormalCheck Knight) $ filter ((/= 0) . kattac . nAttacs)
+          nChk = map (NormalCheck Knight) $ filter ((/= 0) . kattac . nAttacs 0)
                                $ bbToSquares $ knights p .&. mypc
           bChk = map (NormalCheck Bishop) $ filter ((/= 0) . kattac . bAttacs (occup p))
                                $ bbToSquares $ bishops p .&. mypc
@@ -382,7 +382,7 @@ genMoveFCheck !p c
     | null $ tail chklist = r1 ++ kGen ++ r2	-- simple check
     | otherwise = kGen				-- double check, only king moves help
     where !chklist = findChecking p $ other c
-          !kGen = srcDests (legal . kAttacs) ksq
+          !kGen = srcDests (legal . kAttacs 0) ksq
           !ksq = firstOne kbb
           !kbb = kings p .&. mypc
           !ocp1 = occup p `less` kbb
@@ -405,7 +405,7 @@ genMoveFCheck !p c
 -- This part is only for queens, rooks, bishops and knights (no pawns and, of course, no kings)
 defendAt :: MyPos -> Color -> BBoard -> [(Square, Square)]
 defendAt p c bb = concat [ nGenC, bGenC, rGenC, qGenC ]
-    where nGenC = concatMap (srcDests (target . nAttacs))
+    where nGenC = concatMap (srcDests (target . nAttacs 0))
                      $ bbToSquares $ knights p .&. mypc `less` pinned p
           bGenC = concatMap (srcDests (target . bAttacs (occup p)))
                      $ bbToSquares $ bishops p .&. mypc `less` pinned p
@@ -457,7 +457,7 @@ genMoveNCaptToCheck p c = genMoveNCaptDirCheck p c ++ genMoveNCaptIndirCheck p c
 genMoveNCaptDirCheck :: MyPos -> Color -> [(Square, Square)]
 -- genMoveNCaptDirCheck p c = concat [ nGenC, bGenC, rGenC, qGenC ]
 genMoveNCaptDirCheck p c = concat [ qGenC, rGenC, bGenC, nGenC ]
-    where nGenC = concatMap (srcDests (target nTar . nAttacs))
+    where nGenC = concatMap (srcDests (target nTar . nAttacs 0))
                      $ bbToSquares $ knights p .&. mypc `less` pinned p
           bGenC = concatMap (srcDests (target bTar . bAttacs (occup p)))
                      $ bbToSquares $ bishops p .&. mypc `less` pinned p
@@ -515,23 +515,23 @@ updatePosAttacs p = p {
         whAttacs = twhAttacs, blAttacs = tblAttacs
     }
     where !twhPAtt = bbToSquaresBB (pAttacs White) $ pawns p .&. white p
-          !twhNAtt = bbToSquaresBB nAttacs $ knights p .&. white p
+          !twhNAtt = bbToSquaresBB (nAttacs 0) $ knights p .&. white p
           -- !twhBAtt = foldl' (\w s -> w .|. bAttacs s (occup p)) 0 $ bbToSquares $ bishops p .&. white p
           -- !twhRAtt = foldl' (\w s -> w .|. rAttacs s (occup p)) 0 $ bbToSquares $ rooks p .&. white p
           -- !twhQAtt = foldl' (\w s -> w .|. qAttacs s (occup p)) 0 $ bbToSquares $ queens p .&. white p
           !twhBAtt = bbToSquaresBB (bAttacs ocp) $ bishops p .&. white p
           !twhRAtt = bbToSquaresBB (rAttacs ocp) $ rooks p .&. white p
           !twhQAtt = bbToSquaresBB (qAttacs ocp) $ queens p .&. white p
-          !twhKAtt = kAttacs $ firstOne $ kings p .&. white p
+          !twhKAtt = kAttacs 0 $ firstOne $ kings p .&. white p
           !tblPAtt = bbToSquaresBB (pAttacs Black) $ pawns p .&. black p
-          !tblNAtt = bbToSquaresBB nAttacs $ knights p .&. black p
+          !tblNAtt = bbToSquaresBB (nAttacs 0) $ knights p .&. black p
           -- !tblBAtt = foldl' (\w s -> w .|. bAttacs s (occup p)) 0 $ bbToSquares $ bishops p .&. black p
           -- !tblRAtt = foldl' (\w s -> w .|. rAttacs s (occup p)) 0 $ bbToSquares $ rooks p .&. black p
           -- !tblQAtt = foldl' (\w s -> w .|. qAttacs s (occup p)) 0 $ bbToSquares $ queens p .&. black p
           !tblBAtt = bbToSquaresBB (bAttacs ocp) $ bishops p .&. black p
           !tblRAtt = bbToSquaresBB (rAttacs ocp) $ rooks p .&. black p
           !tblQAtt = bbToSquaresBB (qAttacs ocp) $ queens p .&. black p
-          !tblKAtt = kAttacs $ firstOne $ kings p .&. black p
+          !tblKAtt = kAttacs 0 $ firstOne $ kings p .&. black p
           !twhAttacs = twhPAtt .|. twhNAtt .|. twhBAtt .|. twhRAtt .|. twhQAtt .|. twhKAtt
           !tblAttacs = tblPAtt .|. tblNAtt .|. tblBAtt .|. tblRAtt .|. tblQAtt .|. tblKAtt
           ocp = occup p

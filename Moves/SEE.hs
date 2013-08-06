@@ -51,28 +51,86 @@ thePieces p c = if c == White then (white p, black p) else (black p, white p)
 
 -- The new SEE functions (swap-based)
 -- Choose the cheapest of a set of pieces
-chooseAttacker :: MyPos -> BBoard -> (BBoard, (Piece, Int))
+{--
+chooseAttacker :: MyPos -> BBoard -> (BBoard, Int)
 chooseAttacker pos !frompieces = go funcPiecesAsc
-    where go [] = (0, (Pawn, 0))	-- should never happen
+    where go [] = (0, 0)	-- should never happen
           go ((p,f):fps)
              | subset == 0 = go fps
-             | otherwise   = (lsb subset, (p, value p))
+             | otherwise   = (lsb subset, value p)
              where subset = frompieces .&. f pos
+--}
+
+chooseAttacker :: MyPos -> BBoard -> (BBoard, Int)
+chooseAttacker pos !frompieces
+    | p /= 0 = p1 `seq` (p1, value Pawn)
+    | n /= 0 = n1 `seq` (n1, value Knight)
+    | b /= 0 = b1 `seq` (b1, value Bishop)
+    | r /= 0 = r1 `seq` (r1, value Rook)
+    | q /= 0 = q1 `seq` (q1, value Queen)
+    | k /= 0 = k1 `seq` (k1, value King)
+    | otherwise = (0, 0)
+    where p = frompieces .&. pawns pos
+          n = frompieces .&. knights pos
+          b = frompieces .&. bishops pos
+          r = frompieces .&. rooks pos
+          q = frompieces .&. queens pos
+          k = frompieces .&. kings pos
+          p1 = lsb p
+          n1 = lsb n
+          b1 = lsb b
+          r1 = lsb r
+          q1 = lsb q
+          k1 = lsb k
 
 funcPiecesAsc = [ (Pawn, pawns), (Knight, knights), (Bishop, bishops),
                   (Rook, rooks), (Queen, queens), (King, kings) ]
--- funcPiecesDsc = reverse funcPiecesAsc	-- will we need this?
 
-funcPiecesSli = [ (bAttacs, bishops), (rAttacs, rooks), (qAttacs, queens) ]
+funcDirAtt = [(nAttacs, knights), (kAttacs, kings)]
+funcSliAtt = [(bAttacs, bishops), (rAttacs, rooks), (qAttacs, queens)]
+funcPiecesAtt = funcDirAtt ++ funcSliAtt
 
 allAttackingPawns :: MyPos -> Square -> BBoard -> BBoard
 allAttackingPawns pos sq moved
     = (pAttacs White sq .&. black pos .|. pAttacs Black sq .&. white pos) .&. (pawns pos `less` moved)
 
+{--
 newAttacs :: MyPos -> Square -> BBoard -> BBoard
 newAttacs pos sq moved = foldl' go (allAttackingPawns pos sq moved) $ tail funcPiecesAsc
     where go z (p, f) = z .|. (modi f .&. fAttacs sq p (occup pos `less` moved))
           modi f = f pos `less` moved
+
+newAttacs :: MyPos -> Square -> BBoard -> BBoard
+newAttacs pos sq moved = foldl' go (allAttackingPawns pos sq moved) funcPiecesAtt
+    where go z (a, f) = case f pos of
+                            0 -> z
+                            w -> let !w' = w `less` moved
+                                     !v  = a (occup pos `less` moved) sq
+                                 in z .|. (w' .&. v)
+--}
+
+newAttacs :: MyPos -> Square -> BBoard -> BBoard
+newAttacs pos sq moved = bAttacs occ sq .&. (b .|. q)
+                     .|. rAttacs occ sq .&. (r .|. q)
+                     .|. nAttacs 0   sq .&. n
+                     .|. kAttacs 0   sq .&. k
+                     .|. (pAttacs White sq .&. black pos .|. pAttacs Black sq .&. white pos) .&. p
+    where !occ = occup pos `less` moved
+          !b = bishops pos  `less` moved
+          !r = rooks pos    `less` moved
+          !q = queens pos  `less` moved
+          !n = knights pos `less` moved
+          !k = kings pos   `less` moved
+          !p = pawns pos   `less` moved
+
+slideAttacs :: Square -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard
+slideAttacs sq b r q occup = bAttacs occup sq .&. (b .|. q)
+                         .|. rAttacs occup sq .&. (r .|. q)
+
+xrayAttacs :: MyPos -> Square -> Bool
+xrayAttacs pos sq = sa1 /= sa0
+    where !sa1 = slideAttacs sq (bishops pos) (rooks pos) (queens pos) (occup pos)
+          !sa0 = slideAttacs sq (bishops pos) (rooks pos) (queens pos) 0
 
 -- unimax []     a = a
 -- unimax (g:gs) a = unimax gs (min g (-a))
@@ -81,6 +139,7 @@ unimax gs a = foldl' (\a g -> min g (-a)) a gs
 
 value = matPiece White
 
+{--
 genMoveCaptSEE :: MyPos -> Color -> [(Square, Square)]
 genMoveCaptSEE pos col = foldr (perCapt pos col mypc) [] $ bbToSquares capts
     where (mypc, yopc) = thePieces pos col
@@ -116,6 +175,7 @@ valueSEE pos col sqto pieceto = (v, firstOne initset)
           (initset, (p, valfrom)) = chooseAttacker pos (attacs0 .&. mypc)
           mayXRay = pawns pos .|. bishops pos .|. rooks pos .|. queens pos
           attacs0 = newAttacs pos sqto 0
+--}
 
 seeMoveValue :: MyPos -> Color -> Square -> Square -> Int -> Int
 seeMoveValue pos col sqfa sqto gain0 = v
@@ -125,15 +185,19 @@ seeMoveValue pos col sqfa sqto gain0 = v
              let gain'    = val - gain
                  occ'     = occ    `xor` from
                  moved'   = moved   .|.  from
-                 attacs'' = attacs `xor` from
-                 attacs'  = if from .&. mayXRay /= 0 then newAttacs pos sqto moved' else attacs''
-                 (from', (_, val')) = chooseAttacker pos (attacs'' .&. ocolp)
+                 !attacs'' = attacs `xor` from
+                 attacs'  = if posXRay && from .&. mayXRay /= 0
+                               then newAttacs pos sqto moved'
+                               else attacs''
+                 -- attacs'  = newAttacs pos sqto moved'
+                 (from', val') = chooseAttacker pos (attacs'' .&. ocolp)
              in if from' == 0
                    then unimax acc (minBound+2)
                    else go gain' attacs' occ' from' val' moved' (ocolp, fcolp) (gain':acc)
           (mypc, yopc) = thePieces pos col
-          (from0, (_, valfrom)) = chooseAttacker pos (attacs0 .&. yopc)
-          mayXRay = pawns pos .|. bishops pos .|. rooks pos .|. queens pos
+          (from0, valfrom) = chooseAttacker pos (attacs0 .&. yopc)
+          !mayXRay = pawns pos .|. bishops pos .|. rooks pos .|. queens pos
+          !posXRay = xrayAttacs pos sqto
           !moved0  = bit sqfa
           attacs0 = newAttacs pos sqto moved0
           occup0  = occup pos `xor` moved0
@@ -203,10 +267,10 @@ squaresByLVA pos bb = map snd $ sortBy (comparing fst)
 
 -- Sort by value in order to get the most valuable last
 mostValuableLast :: MyPos -> Square -> (Int, Square)
-mostValuableLast pos sq | Busy _ f <- tabla pos sq = let !v = matPiece White f in (v, sq)
+mostValuableLast pos sq | Busy _ f <- tabla pos sq = let !v = value f in (v, sq)
 mostValuableLast _   _                             = error "mostValuableLast: Empty"
 
 -- Sort by negative value in order to get the most valuable first
 mostValuableFirst :: MyPos -> Square -> (Int, Square)
-mostValuableFirst pos sq | Busy _ f <- tabla pos sq = let !v = - matPiece White f in (v, sq)
+mostValuableFirst pos sq | Busy _ f <- tabla pos sq = let !v = - value f in (v, sq)
 mostValuableFirst _   _                             = error "mostValuableFirst: Empty"

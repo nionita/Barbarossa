@@ -23,8 +23,8 @@ movesInit
     | otherwise = 1
     where r = rAttacs 0 0
           b = bAttacs 1 0
-          k = kAttacs 2
-          n = nAttacs 3
+          k = kAttacs 0 2
+          n = nAttacs 0 3
           w = r .|. b .|. k .|. n
 
 -- Move tables and hash function for sliding pieces
@@ -82,11 +82,11 @@ fmoves = unsafeAt
 {-# INLINE bAttacs #-}
 {-# INLINE qAttacs #-}
 {-# INLINE nAttacs #-}
-kAttacs = fmoves movKings
+kAttacs _ = fmoves movKings
 rAttacs = smoves rookMoves
 bAttacs = smoves bishopMoves
 qAttacs = smoves2 bishopMoves rookMoves
-nAttacs = fmoves movKnights
+nAttacs _ = fmoves movKnights
 
 -- The moves of a white pawn (no captures)
 pawnSlideW :: Square -> BBoard -> BBoard
@@ -143,9 +143,9 @@ pAll2Moves Black pawns occup = map f $ bbToSquares $ (pawns2 `unsafeShiftR` 16) 
 
 {-# INLINE fAttacs #-}
 fAttacs :: Square -> Piece -> BBoard -> BBoard  -- piece attacs except pawn
-fAttacs sq King   _  = kAttacs sq
-fAttacs sq Knight _  = nAttacs sq
-fAttacs sq Bishop oc = bAttacs oc sq
-fAttacs sq Rook   oc = rAttacs oc sq
-fAttacs sq Queen  oc = qAttacs oc sq
+fAttacs sq King   !oc = kAttacs oc sq
+fAttacs sq Knight !oc = nAttacs oc sq
+fAttacs sq Bishop !oc = bAttacs oc sq
+fAttacs sq Rook   !oc = rAttacs oc sq
+fAttacs sq Queen  !oc = qAttacs oc sq
 fAttacs _  _      _  = 0	-- this would be for pawn, which is calculated different
