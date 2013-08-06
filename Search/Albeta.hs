@@ -382,7 +382,11 @@ pvRootSearch a b d lastpath rmvs aspir = do
     nstf <- pvLoop (pvInnerRoot (pathFromScore "Beta" b) d) nsti edges
     reportStats
     let failedlow = (a, emptySeq, edges)	-- just to permit aspiration to retry
-    let sc = pathScore (cursc nstf)
+        sc = if d > 1
+                then pathScore (cursc nstf)
+                else if null (pvsl nstf)
+                        then a
+                        else pathScore $ pvPath $ head $ pvsl nstf
     -- lift $ informStr $ "pvRootSearch: cursc = " ++ show (cursc nstf) ++ ", a = " ++ show a
     -- Root is pv node, cannot fail low, except when aspiration fails!
     if sc <= a	-- failed low
