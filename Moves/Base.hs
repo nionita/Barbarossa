@@ -30,7 +30,6 @@ import Struct.Struct
 import Hash.TransTab
 import Struct.Status
 import Moves.Board
-import Moves.SEE
 import Eval.Eval
 import Moves.ShowMe
 import Moves.History
