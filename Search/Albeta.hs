@@ -1213,7 +1213,7 @@ pvQSearch !a !b c = do				   -- to avoid endless loops
     -- qindent $ "=> " ++ show a ++ ", " ++ show b
     !stp <- lift staticVal				-- until we can recognize repetition
     viztreeScore $ "Static: " ++ show stp
-    tact <- lift tactical
+    !tact <- lift tactical
     if tact
        then do
            (es1, es2) <- lift $ genEdges 0 0 False
@@ -1226,22 +1226,24 @@ pvQSearch !a !b c = do				   -- to avoid endless loops
                       then do
                           viztreeScore $ "endless check: " ++ show inEndlessCheck
                           return $! trimax a b inEndlessCheck
-                      else do
-                          -- for check extensions in case of very few moves (1 or 2):
-                          -- if 1 move: search even deeper
-                          -- if 2 moves: same depth
-                          -- if 3 or more: no extension
-                          let !esc = lenmax3 $ unalt edges
-                              !nc = c + esc - 2
-                              !a' = if stp > a then stp else a
-                          !s <- pvQLoop b nc a' edges
-                          -- qindent $ "<= " ++ show s
-                          return s
+                      else if stp >= b
+                              then return b
+                              else do
+                                  -- for check extensions in case of very few moves (1 or 2):
+                                  -- if 1 move: search even deeper
+                                  -- if 2 moves: same depth
+                                  -- if 3 or more: no extension
+                                  let !esc = lenmax3 $ unalt edges
+                                      !nc = c + esc - 2
+                                  if stp > a
+                                     then pvQLoop b nc stp edges
+                                     else pvQLoop b nc a   edges
+                                  -- qindent $ "<= " ++ show s
        else if qsBetaCut && stp >= b
                -- then qindent ("<= " ++ show b) >> return b
                then return b
                else do
-                   let delta = a - qsDelta
+                   let !delta = a - qsDelta
                    if qsDeltaCut && delta < a && stp < delta
                       -- then qindent ("<= " ++ show a) >> return a
                       then return a
@@ -1336,13 +1338,17 @@ timeToAbort = do
        then if timeNodes .&. (sNodes $ stats s) /= 0
                then return False
                else do
-                   abrt <- lift $ timeout $ abmili ro
-                   if not abrt
-                      then return False
-                      else do
-                          lift $ informStr "Albeta: search abort!"
-                          put s { abort = True }
-                          return True
+                   !abrt <- lift $ timeout $ abmili ro
+                   when abrt $ do
+                       lift $ informStr "Albeta: search abort!"
+                       put s { abort = True }
+                   return abrt
+                   -- if not abrt
+                   --    then return False
+                   --    else do
+                   --        lift $ informStr "Albeta: search abort!"
+                   --        put s { abort = True }
+                   --        return True
        else return False
     where timeNodes = 4 * 1024 - 1	-- check time every so many nodes
 
