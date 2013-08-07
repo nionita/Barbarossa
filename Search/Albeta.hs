@@ -1226,6 +1226,7 @@ pvQSearch !a !b c = do				   -- to avoid endless loops
                       then do
                           viztreeScore $ "endless check: " ++ show inEndlessCheck
                           return $! trimax a b inEndlessCheck
+                      {--
                       else if stp >= b
                               then return b
                               else do
@@ -1239,12 +1240,20 @@ pvQSearch !a !b c = do				   -- to avoid endless loops
                                      then pvQLoop b nc stp edges
                                      else pvQLoop b nc a   edges
                                   -- qindent $ "<= " ++ show s
+                      --}
+                      else do
+                          -- for check extensions in case of very few moves (1 or 2):
+                          -- if 1 move: search even deeper
+                          -- if 2 moves: same depth
+                          -- if 3 or more: no extension
+                          let !esc = lenmax3 $ unalt edges
+                              !nc = c + esc - 2
+                          pvQLoop b nc a edges
+                          -- qindent $ "<= " ++ show s
        else if qsBetaCut && stp >= b
                -- then qindent ("<= " ++ show b) >> return b
                then return b
-               else do
-                   let !delta = a - qsDelta
-                   if qsDeltaCut && delta < a && stp < delta
+               else if qsDeltaCut && stp + qsDelta < a
                       -- then qindent ("<= " ++ show a) >> return a
                       then return a
                       else do
@@ -1252,11 +1261,10 @@ pvQSearch !a !b c = do				   -- to avoid endless loops
                           if noMove edges
                              -- then qindent ("<= " ++ show stp) >> return stp
                              then return $! trimax a b stp
-                             else do
-                                 let !a' = if stp > a then stp else a
-                                 !s <- pvQLoop b c a' edges
-                                 -- qindent $ "<= " ++ show s
-                                 return s
+                             else if stp > a
+                                     then pvQLoop b c stp edges
+                                     else pvQLoop b c a   edges
+                                  -- qindent $ "<= " ++ show s
     where lenmax3 as = lenmax3' 0 as
           lenmax3' !n _ | n == 3 = 3
           lenmax3' !n []         = n
