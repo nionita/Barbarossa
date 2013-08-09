@@ -920,44 +920,48 @@ slideAttacs sq b r q occup = bAttacs occup sq .&. (b .|. q)
 
 xrayAttacs :: MyPos -> Square -> Bool
 xrayAttacs pos sq = sa1 /= sa0
-    where !sa1 = slideAttacs sq (bishops pos) (rooks pos) (queens pos) (occup pos)
-          !sa0 = slideAttacs sq (bishops pos) (rooks pos) (queens pos) 0
+    where sa1 = slideAttacs sq (bishops pos) (rooks pos) (queens pos) (occup pos)
+          sa0 = slideAttacs sq (bishops pos) (rooks pos) (queens pos) 0
 
 unimax gs a = foldl' (\a g -> min g (-a)) a gs
 
 value = matPiece White
 
+usePosXRay :: Bool
+usePosXRay = False
+
 seeMoveValue :: MyPos -> Color -> Square -> Square -> Int -> Int
 seeMoveValue pos col sqfa sqto gain0 = v
-    where v = go gain0 attacs0 occup0 from0 valfrom moved0 (yopc, mypc) [gain0]
-          go :: Int -> BBoard -> BBoard -> BBoard -> Int -> BBoard -> (BBoard, BBoard) -> [Int] -> Int
-          go !gain !attacs !occ !from !val !moved (fcolp, ocolp) acc =
-             let gain'    = val - gain
-                 occ'     = occ    `xor` from
-                 moved'   = moved   .|.  from
+    where v = go gain0 attacs0 from0 valfrom moved0 (yopc, mypc) [gain0]
+          go :: Int -> BBoard -> BBoard -> Int -> BBoard -> (BBoard, BBoard) -> [Int] -> Int
+          go !gain !attacs !from !val !moved (fcolp, ocolp) acc =
+             let !gain'    = val - gain
+                 !moved'   = moved   .|.  from
                  !attacs'' = attacs `xor` from
-                 attacs'  = if posXRay && from .&. mayXRay /= 0
-                               then newAttacs pos sqto moved'
-                               else attacs''
-                 -- attacs'  = newAttacs pos sqto moved'
-                 (from', val') = chooseAttacker pos (attacs'' .&. ocolp)
+                 (!from', !val') = chooseAttacker pos (attacs'' .&. ocolp)
+                 attacs'  = newAttacs pos sqto moved'
              in if from' == 0
                    then unimax acc (minBound+2)
-                   else go gain' attacs' occ' from' val' moved' (ocolp, fcolp) (gain':acc)
+                   else if usePosXRay
+                           then if posXRay && from .&. mayXRay /= 0
+                                   then go gain' attacs'  from' val' moved' (ocolp, fcolp) (gain':acc)
+                                   else go gain' attacs'' from' val' moved' (ocolp, fcolp) (gain':acc)
+                           else if from .&. mayXRay /= 0
+                                   then go gain' attacs'  from' val' moved' (ocolp, fcolp) (gain':acc)
+                                   else go gain' attacs'' from' val' moved' (ocolp, fcolp) (gain':acc)
           (mypc, yopc) = thePieces pos col
-          (from0, valfrom) = chooseAttacker pos (attacs0 .&. yopc)
+          (!from0, !valfrom) = chooseAttacker pos (attacs0 .&. yopc)
           !mayXRay = pawns pos .|. bishops pos .|. rooks pos .|. queens pos
-          !posXRay = xrayAttacs pos sqto
+          posXRay = xrayAttacs pos sqto
           !moved0  = bit sqfa
-          attacs0 = newAttacs pos sqto moved0
-          occup0  = occup pos `xor` moved0
+          !attacs0 = newAttacs pos sqto moved0
 
 -- This function can produce illegal captures with the king!
 genMoveCaptWL :: MyPos -> Color -> ([(Square, Square)], [(Square, Square)])
 genMoveCaptWL pos col = (wl, ll)
     where (wl, ll) = foldr (perCaptFieldWL pos col mypc yoAtt) ([],[]) $ squaresByMVV pos capts
           (mypc, yopc) = thePieces pos col
-          (myAtt, yoAtt) = if col == White	-- here: for yoAtts: X-Ray is not considered!!!
+          (myAtt, yoAtt) = if col == White
                               then (whAttacs pos, blAttacs pos)
                               else (blAttacs pos, whAttacs pos)
           capts = myAtt .&. yopc
@@ -966,9 +970,8 @@ perCaptFieldWL :: MyPos -> Color -> BBoard -> BBoard -> Square
           -> ([(Square, Square)], [(Square, Square)])
           -> ([(Square, Square)], [(Square, Square)])
 perCaptFieldWL pos col mypc advdefence sq mvlst
-    = if hanging
-         then foldr (addHanging sq) mvlst agrsqs
-         else foldr (perCaptWL pos col valto sq) mvlst agrsqs
+    | hanging   = foldr (addHanging sq) mvlst agrsqs
+    | otherwise = foldr (perCaptWL pos col valto sq) mvlst agrsqs
     where myattacs = mypc .&. newAttacs pos sq 0
           Busy _ pcto = tabla pos sq
           valto = value pcto
