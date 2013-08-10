@@ -856,6 +856,7 @@ reverseMoving p = p { basicPos = nbp, zobkey = z }
 -- the queen is very hard, so we solve it as a composition of rook and bishop
 -- and when we call findLKA we always know as which piece the queen checks
 {-# INLINE findLKA #-}
+findLKA :: Piece -> Square -> Int -> (Int, BBoard)
 findLKA Queen ksq psq
     | rAttacs bpsq ksq .&. bpsq == 0 = findLKA Bishop ksq psq
     | otherwise                      = findLKA Rook   ksq psq
@@ -868,9 +869,9 @@ findLKA pt ksq psq = (psq, kp .&. pk)
 myPieces :: MyPos -> Color -> BBoard
 myPieces !p !c = if c == White then white p else black p
 
-{-# INLINE yoPieces #-}
-yoPieces :: MyPos -> Color -> BBoard
-yoPieces !p !c = if c == White then black p else white p
+-- {-# INLINE yoPieces #-}
+-- yoPieces :: MyPos -> Color -> BBoard
+-- yoPieces !p !c = if c == White then black p else white p
 
 {-# INLINE thePieces #-}
 thePieces :: MyPos -> Color -> (BBoard, BBoard)
@@ -915,49 +916,72 @@ newAttacs pos sq moved = bAttacs occ sq .&. (b .|. q)
           !p = pawns pos   `less` moved
 
 slideAttacs :: Square -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard
-slideAttacs sq b r q occup = bAttacs occup sq .&. (b .|. q)
-                         .|. rAttacs occup sq .&. (r .|. q)
+slideAttacs sq b r q occ = bAttacs occ sq .&. (b .|. q)
+                       .|. rAttacs occ sq .&. (r .|. q)
 
 xrayAttacs :: MyPos -> Square -> Bool
 xrayAttacs pos sq = sa1 /= sa0
-    where !sa1 = slideAttacs sq (bishops pos) (rooks pos) (queens pos) (occup pos)
-          !sa0 = slideAttacs sq (bishops pos) (rooks pos) (queens pos) 0
+    where sa1 = slideAttacs sq (bishops pos) (rooks pos) (queens pos) (occup pos)
+          sa0 = slideAttacs sq (bishops pos) (rooks pos) (queens pos) 0
 
-unimax gs a = foldl' (\a g -> min g (-a)) a gs
+unimax :: Int -> [Int] -> Int
+unimax = foldl' (\a g -> min g (-a))
 
+value :: Piece -> Int
 value = matPiece White
 
+usePosXRay :: Bool
+usePosXRay = False
+
+data SEEPars = SEEPars {
+                   seeGain, seeVal :: !Int,
+                   seeAtts, seeFrom, seeMovd, seeDefn, seeAgrs :: !BBoard
+               }
+
+-- Calculate the value of a move per SEE, given the position, the color to move,
+-- the source square of the first capture, the destination of the captures
+-- and the value of the first captured piece
 seeMoveValue :: MyPos -> Color -> Square -> Square -> Int -> Int
-seeMoveValue pos col sqfa sqto gain0 = v
-    where v = go gain0 attacs0 occup0 from0 valfrom moved0 (yopc, mypc) [gain0]
-          go :: Int -> BBoard -> BBoard -> BBoard -> Int -> BBoard -> (BBoard, BBoard) -> [Int] -> Int
-          go !gain !attacs !occ !from !val !moved (fcolp, ocolp) acc =
-             let gain'    = val - gain
-                 occ'     = occ    `xor` from
-                 moved'   = moved   .|.  from
-                 !attacs'' = attacs `xor` from
-                 attacs'  = if posXRay && from .&. mayXRay /= 0
-                               then newAttacs pos sqto moved'
-                               else attacs''
-                 -- attacs'  = newAttacs pos sqto moved'
-                 (from', val') = chooseAttacker pos (attacs'' .&. ocolp)
+seeMoveValue pos col sqfirstmv sqto gain0 = v
+    where v = go sp0 [gain0]
+          go :: SEEPars -> [Int] -> Int
+          go seepars acc =
+             let !gain'   = seeVal  seepars -     seeGain seepars
+                 !moved'  = seeMovd seepars .|.   seeFrom seepars
+                 !attacs1 = seeAtts seepars `xor` seeFrom seepars
+                 (!from', !val') = chooseAttacker pos (attacs1 .&. seeAgrs seepars)
+                 attacs2  = newAttacs pos sqto moved'
+                 acc' = gain' : acc
+                 seepars1 = SEEPars { seeGain = gain', seeVal = val', seeAtts = attacs1,
+                                      seeFrom = from', seeMovd = moved', seeDefn = seeAgrs seepars,
+                                      seeAgrs = seeDefn seepars }
+                 seepars2 = SEEPars { seeGain = gain', seeVal = val', seeAtts = attacs2,
+                                      seeFrom = from', seeMovd = moved', seeDefn = seeAgrs seepars,
+                                      seeAgrs = seeDefn seepars }
              in if from' == 0
-                   then unimax acc (minBound+2)
-                   else go gain' attacs' occ' from' val' moved' (ocolp, fcolp) (gain':acc)
-          (mypc, yopc) = thePieces pos col
-          (from0, valfrom) = chooseAttacker pos (attacs0 .&. yopc)
+                   then unimax (minBound+2) acc
+                   else if usePosXRay
+                           then if posXRay && seeFrom seepars .&. mayXRay /= 0
+                                   then go seepars2 acc'
+                                   else go seepars1 acc'
+                           else if seeFrom seepars .&. mayXRay /= 0
+                                   then go seepars2 acc'
+                                   else go seepars1 acc'
           !mayXRay = pawns pos .|. bishops pos .|. rooks pos .|. queens pos
-          !posXRay = xrayAttacs pos sqto
-          !moved0  = bit sqfa
+          posXRay = xrayAttacs pos sqto
+          (mypc, yopc) = thePieces pos col
+          !moved0 = bit sqfirstmv
           attacs0 = newAttacs pos sqto moved0
-          occup0  = occup pos `xor` moved0
+          (!from0, !valfrom) = chooseAttacker pos (attacs0 .&. yopc)
+          sp0 = SEEPars { seeGain = gain0, seeVal = valfrom, seeAtts = newAttacs pos sqto moved0,
+                          seeFrom = from0, seeMovd = moved0, seeDefn = yopc, seeAgrs = mypc }
 
 -- This function can produce illegal captures with the king!
 genMoveCaptWL :: MyPos -> Color -> ([(Square, Square)], [(Square, Square)])
 genMoveCaptWL pos col = (wl, ll)
     where (wl, ll) = foldr (perCaptFieldWL pos col mypc yoAtt) ([],[]) $ squaresByMVV pos capts
           (mypc, yopc) = thePieces pos col
-          (myAtt, yoAtt) = if col == White	-- here: for yoAtts: X-Ray is not considered!!!
+          (myAtt, yoAtt) = if col == White
                               then (whAttacs pos, blAttacs pos)
                               else (blAttacs pos, whAttacs pos)
           capts = myAtt .&. yopc
@@ -966,16 +990,16 @@ perCaptFieldWL :: MyPos -> Color -> BBoard -> BBoard -> Square
           -> ([(Square, Square)], [(Square, Square)])
           -> ([(Square, Square)], [(Square, Square)])
 perCaptFieldWL pos col mypc advdefence sq mvlst
-    = if hanging
-         then foldr (addHanging sq) mvlst agrsqs
-         else foldr (perCaptWL pos col valto sq) mvlst agrsqs
+    | hanging   = foldr (addHanging sq) mvlst agrsqs
+    | otherwise = foldr (perCaptWL pos col valto sq) mvlst agrsqs
     where myattacs = mypc .&. newAttacs pos sq 0
           Busy _ pcto = tabla pos sq
           valto = value pcto
           hanging = not (advdefence `testBit` sq)
           agrsqs = squaresByLVA pos myattacs
 
-approximateEasyCapts = True
+approximateEasyCapts :: Bool
+approximateEasyCapts = True	-- when capturing a better piece: no SEE, it is always winning
 
 perCaptWL :: MyPos -> Color -> Int -> Square -> Square
           -> ([(Square, Square)], [(Square, Square)])
