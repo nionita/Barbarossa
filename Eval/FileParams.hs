@@ -30,7 +30,7 @@ filState fn ident = do
     return (ident, est)
 
 fileToState :: FilePath -> IO EvalState
-fileToState fn = fileToParams `fmap` readFile fn >>= return . initEvalState
+fileToState fn = fmap (initEvalState . fileToParams) (readFile fn)
 
 -- This produces a list of config file names depending on
 -- program version and programm version suffix

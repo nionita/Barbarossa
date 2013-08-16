@@ -160,10 +160,10 @@ matesc = 20000 - 255	-- attention, this is also defined in Base.hs!!
 posEval :: MyPos -> Color -> State EvalState (Int, [Int])
 posEval !p !c = do
     sti <- get
-    let (sc''', feat) = evalDispatch p c sti
-        !sc'  = if sc''' > matesc then matesc else if sc''' < -matesc then -matesc else sc'''
-        !sc'' = if granCoarse > 0 then (sc' + granCoarse2) .&. granCoarseM else sc'
-        !sc = if c == White then sc'' else -sc''
+    let (sce, feat) = evalDispatch p c sti
+        !scl = min matesc $ max (-matesc) sce
+        !scc = if granCoarse > 0 then (scl + granCoarse2) .&. granCoarseM else scl
+        !sc = if c == White then scc else -scc
     return $! sc `seq` (sc, feat)
 
 evalDispatch :: MyPos -> Color -> EvalState -> (Int, [Int])
@@ -221,31 +221,25 @@ winBonus :: Int
 winBonus = 200	-- when it's known win
 
 mateKBBK :: MyPos -> Bool -> Int
-mateKBBK p wwin = mater p + if wwin then sc else -sc
-    where kadv = if wwin then kb else kw
-          kw = kingSquare (kings p) (white p)
-          kb = kingSquare (kings p) (black p)
-          distk = squareDistance kw kb
-          distc = centerDistance kadv
-          sc = winBonus + distc*distc - distk*distk
+mateKBBK = mateScore centerDistance
+
+-- It seems that with 2 bishops or 1 major it's the same
+-- rule to go to mate
+mateKMajxK :: MyPos -> Bool -> Int
+mateKMajxK = mateKBBK
 
 mateKBNK :: MyPos -> Bool -> Int
-mateKBNK p wwin = mater p + if wwin then sc else -sc
-    where kadv = if wwin then kb else kw
-          kw = kingSquare (kings p) (white p)
-          kb = kingSquare (kings p) (black p)
-          distk = squareDistance kw kb
-          distc = bnMateDistance wbish kadv
-          wbish = bishops p .&. lightSquares /= 0
-          sc = winBonus + distc*distc - distk*distk
+mateKBNK p = mateScore (bnMateDistance wbish) p
+    where wbish = bishops p .&. lightSquares /= 0
 
-mateKMajxK :: MyPos -> Bool -> Int
-mateKMajxK p wwin = mater p + if wwin then sc else -sc
+{-# INLINE mateScore #-}
+mateScore :: (Square -> Int) -> MyPos -> Bool -> Int
+mateScore f p wwin = mater p + if wwin then sc else -sc
     where kadv = if wwin then kb else kw
           kw = kingSquare (kings p) (white p)
           kb = kingSquare (kings p) (black p)
           distk = squareDistance kw kb
-          distc = centerDistance kadv
+          distc = f kadv
           sc = winBonus + distc*distc - distk*distk
 
 -- This square distance should be pre calculated

@@ -265,7 +265,7 @@ parseExplore = parseExpFen <|> parseExpInit <|> parseExpMoves <|> parseExpQMoves
             <|> parseExpEval <|> parseExpQEval
 
 parseExpFen :: Parser ExpCommand
-parseExpFen  = P.char 'f' >> P.spaces >> parseFenPosition >>= return . Fen
+parseExpFen  = fmap Fen $ P.char 'f' >> P.spaces >> parseFenPosition
 
 parseExpInit :: Parser ExpCommand
 parseExpInit = P.char 'i' >> return Init
@@ -277,7 +277,7 @@ parseExpQMoves :: Parser ExpCommand
 parseExpQMoves = P.char 'q' >> return QMoves
 
 parseExpDown :: Parser ExpCommand
-parseExpDown = P.char 'd' >> parseMove >>= return . Down
+parseExpDown = fmap Down $ P.char 'd' >> parseMove
 
 parseExpUp :: Parser ExpCommand
 parseExpUp   = P.char 'u' >> return Up

@@ -97,7 +97,7 @@ fromNiceNotation p c = do
                    dst  <- parseSrcDst
                    return (Just src, capt, dst)
                else do
-                   mdst <- (parseSrcDst >>= return . Just) <|> return Nothing
+                   mdst <- fmap Just parseSrcDst <|> return Nothing
                    case mdst of
                        Just dst -> return (Just src, capt, dst)
                        Nothing  -> return (Nothing,  capt, src)
@@ -156,7 +156,7 @@ parseFigureMove p piece msrc sqdst = do
 
 parsePiece = parseFigure <|> return Pawn
 
-parseFigure = P.oneOf "KQRBN" >>= return . chToPc
+parseFigure = fmap chToPc $ P.oneOf "KQRBN"
 
 chToPc 'K' = King
 chToPc 'Q' = Queen
@@ -165,21 +165,22 @@ chToPc 'B' = Bishop
 chToPc 'N' = Knight
 
 parseSrcOrCapt = (P.char 'x' >> return (Right True))
-             <|> (parseSrcDst >>= return . Left)
+             <|> fmap Left parseSrcDst
 
 parseCapt = (P.char 'x' >> return True) <|> return False
 
 parseSrcDst = parseRow <|> parseColRow
 
-parseCol = P.oneOf "abcdefgh" >>= return . SDCol . (\c -> ord c - ord 'a')
+parseCol = fmap (SDCol . (\c -> ord c - ord 'a')) $ P.oneOf "abcdefgh"
 
-parseRow = P.oneOf "12345678" >>= return . SDRow . (\c -> ord c - ord '1')
+parseRow = fmap (SDRow . (\c -> ord c - ord '1')) $ P.oneOf "12345678"
 
 parseColRow = do
     col@(SDCol c) <- parseCol
     parseRow >>= \(SDRow r) -> return (SDColRow c r) <|> return col
 
-parseTransf = (P.oneOf "QRBNqrbn" >>= return . Just . chToPc . toUpper) <|> return Nothing
+parseTransf = fmap (Just . chToPc . toUpper) (P.oneOf "QRBNqrbn")
+              <|> return Nothing
 
 parseCheck = (P.char '+' >> return True) <|> return False
 
@@ -191,7 +192,7 @@ bbToSingleSquare b
     | otherwise  = fail "Ambiguous piece"
 
 posToFen :: MyPos -> String
-posToFen pos = concat $ intersperse " " [lines, tmv, cast, rest]
+posToFen pos = unwords [lines, tmv, cast, rest]
     where lines :: String
           lines = concat $ map (extline . foldl tra ("", 0))
                          $ map (\s -> map (tabla pos) [s..s+7]) $ reverse [0, 8 .. 56]

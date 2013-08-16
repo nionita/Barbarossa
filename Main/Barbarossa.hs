@@ -33,7 +33,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.01"
-progVerSuff = ""
+progVerSuff = "hlint"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -67,9 +67,9 @@ setLogging lev opt = opt { optLogging = llev }
 
 options :: [OptDescr (Options -> Options)]
 options = [
-        Option ['c'] ["config"] (ReqArg setConfFile "STRING") "Configuration file",
-        Option ['l'] ["loglev"] (ReqArg setLogging "STRING")  "Logging level from 0 (debug) to 5 (never)",
-        Option ['p'] ["param"]  (ReqArg addParam "STRING")    "Eval parameters: name=value,..."
+        Option "c" ["config"] (ReqArg setConfFile "STRING") "Configuration file",
+        Option "l" ["loglev"] (ReqArg setLogging "STRING")  "Logging level from 0 (debug) to 5 (never)",
+        Option "p" ["param"]  (ReqArg addParam "STRING")    "Eval parameters: name=value,..."
     ]
 
 theOptions :: IO (Options, [String])
@@ -151,7 +151,7 @@ theLogger lchan lst = do
     s <- readChan lchan
     case lst of
         LoggerError  -> theLogger lchan lst
-        LoggerFile f -> flip catch collectError $ do
+        LoggerFile f -> handle collectError $ do
             h <- openFile f AppendMode
             hPutStrLn h s
             hFlush h
@@ -172,7 +172,7 @@ startWriter = do
 theWriter :: Chan String -> Chan String -> Bool -> Integer -> IO ()
 theWriter wchan lchan mustlog refs = forever $ do
     s <- readChan wchan
-    hPutStrLn stdout s
+    putStrLn s
     hFlush stdout
     when mustlog $ logging lchan refs "Output" s
 
@@ -443,11 +443,10 @@ searchTheTree tief mtief timx tim tpm mtg lsc lpv rmvs = do
     modifyChanging (\c -> c { crtStatus = stfin })
     currms <- lift $ currMilli (startSecond ctx)
     let (ms', mx) = compTime tim tpm mtg sc
-        ms  = if sc > betterSc
-                 then ms' * 4 `div` 5
-                 else if sc < -betterSc
-                      then ms' * 6 `div` 5
-                      else ms'
+        ms
+           | sc >  betterSc = ms' * 4 `div` 5
+           | sc < -betterSc = ms' * 6 `div` 5
+           | otherwise      = ms'
         strtms = srchStrtMs chg
         delta = strtms + ms - currms
         ms2 = ms `div` 2
@@ -531,14 +530,14 @@ answer s = do
 
 -- Name of the log file
 progLogName :: String
-progLogName = "barbarossa" ++ "-" ++ progVersion
+progLogName = "barbarossa" ++ '-' : progVersion
                  ++ if null progVerSuff then ""
-                                        else "-" ++ progVerSuff
+                                        else '-' : progVerSuff
 
 -- These are the possible answers from engine to GUI:
 idName, idAuthor, uciOk, readyOk :: String
-idName = "id name " ++ progName ++ " " ++ progVersion
-             ++ if null progVerSuff then "" else " " ++ progVerSuff
+idName = "id name " ++ progName ++ ' ' : progVersion
+             ++ if null progVerSuff then "" else ' ' : progVerSuff
 idAuthor = "id author " ++ progAuthor
 uciOk = "uciok"
 readyOk = "readyok"
@@ -649,7 +648,7 @@ makeOptionVals UGOTNone = ""
 
 -- Append error info to error file:
 collectError :: SomeException -> IO ()
-collectError e = flip catch cannot $ do
+collectError e = handle cannot $ do
     let efname = "Barbarossa_collected_errors.txt"
     TOD tm _ <- getClockTime
     ef <- openFile efname AppendMode

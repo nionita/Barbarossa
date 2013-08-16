@@ -52,7 +52,7 @@ instance Storable PCacheEn where
     peek e = let q = castPtr e
              in do w1 <- peekElemOff q 0
                    w2 <- peekElemOff q 1
-                   return $ PCacheEn { lo = w1, hi = w2 }
+                   return PCacheEn { lo = w1, hi = w2 }
     {-# INLINE poke #-}
     poke e (PCacheEn { lo = w1, hi = w2 })
            = let q = castPtr e
@@ -219,11 +219,11 @@ quintToCacheEn tt zkey depth tp score (Move move) nodes = pCE
 cacheEnToQuint :: PCacheEn -> (Int, Int, Int, Move, Int)
 cacheEnToQuint (PCacheEn { hi = w1, lo = w2 }) = (de, ty, sc, Move mv, no)
     where scp = (w1 .&. 0x3FFFF) `unsafeShiftR` 2
-          ssc = (fromIntegral scp) :: Int16
+          ssc = fromIntegral scp :: Int16
           !sc = fromIntegral ssc
           !no = fromIntegral $ w2 `unsafeShiftR` 32
           -- w2low = (fromIntegral (w2 .&. 0xFFFFFFFF)) :: Word32
-          w2low = (fromIntegral w2) :: Word32	-- does it work so?
+          w2low = fromIntegral w2 :: Word32	-- does it work so?
           w21 = w2low `unsafeShiftR` 6		-- don't need the generation
           !mv = fromIntegral $ w21 .&. 0x7FFFF
           w22 = w21 `unsafeShiftR` 19

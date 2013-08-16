@@ -218,8 +218,7 @@ doMove real m qs = do
         then do
             logMes $ "Illegal move or position: move = " ++ show m
                      ++ ", il = " ++ show il ++ ", kc = " ++ show kc ++ "\n"
-            when (not kok)
-                $ logMes $ "Illegal position (after the move):\n" ++ showMyPos p'
+            unless kok $ logMes $ "Illegal position (after the move):\n" ++ showMyPos p'
             logMes $ "Stack:\n" ++ showStack 3 (stack s)
             -- After an illegal result there must be no undo!
             return Illegal
@@ -282,9 +281,7 @@ checkRemisRules p = do
 
 {-# INLINE undoMove #-}
 undoMove :: CtxMon m => Game r m ()
-undoMove = do
-    -- logMes "** undoMove"
-    modify $ \s -> s { stack = tail $ stack s }
+undoMove = modify $ \s -> s { stack = tail $ stack s }
 
 -- Tactical positions will be searched complete in quiescent search
 -- Currently only when in in check
@@ -369,7 +366,7 @@ currDSP = if not useHash then return empRez else do
 
 {-# INLINE storeSearch #-}
 storeSearch :: CtxMon m => Int -> Int -> Int -> Move -> Int -> Game r m ()
-storeSearch deep tp sc bestm nds = if not useHash then return () else do
+storeSearch deep tp sc bestm nds = when useHash $ do
     s <- get
     p <- getPos
     -- when (sc `mod` 4 /= 0 && tp == 2) $ liftIO $ do
@@ -431,4 +428,4 @@ isTimeout msx = do
     return $! msx < curr
 
 showStack :: Int -> [MyPos] -> String
-showStack n = concatMap (\p -> showMyPos p) . take n
+showStack n = concatMap showMyPos . take n

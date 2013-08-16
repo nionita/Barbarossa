@@ -1,6 +1,8 @@
-{-# LANGUAGE RankNTypes, MultiParamTypeClasses, FlexibleInstances #-}
-{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE RankNTypes, MultiParamTypeClasses, FlexibleInstances #-}
+#ifdef SMSTRICT
+{-# LANGUAGE BangPatterns #-}
+#endif
 
 -- The search monad (which is actually a state monad transformer in
 -- continuation passing style) can be compiled strict if you
@@ -20,6 +22,9 @@ import Control.Monad
 import Control.Monad.State hiding (gets, modify)
 
 newtype STPlus r s m a = STPlus { runSTPlus :: s -> (a -> s -> m r) -> m r }
+
+instance Functor (STPlus r s m) where
+    fmap f c = c >>= return . f
 
 -- At least with GHC 7.4.1, we have:
 -- the construct: case f a of fa -> ... is lazy, to make it strict, do
@@ -52,7 +57,7 @@ instance MonadIO m => MonadIO (STPlus r s m) where
     liftIO = lift . liftIO
 
 runCState :: Monad m => STPlus (a, s) s m a -> s -> m (a, s)
-runCState c s = runSTPlus c s $ \a s0 -> return (a, s0)
+runCState c s = runSTPlus c s $ curry return
 {-# INLINE runCState #-}
 
 execCState ms s = liftM snd $ runCState ms s

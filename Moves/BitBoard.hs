@@ -52,23 +52,24 @@ mbsm x = fromIntegral $ (x * bitScanMagic) `unsafeShiftR` 58
 bbToSquares :: BBoard -> [Square]
 bbToSquares bb = unfoldr f bb
     where f :: BBoard -> Maybe (Square, BBoard)
-          f 0  = Nothing
-          f b = let lsbb = lsb b
-                    !sq = bitToSquare lsbb
-                    nlsbb = complement lsbb
-                    b' = b .&. nlsbb
-                in Just (sq, b')
+          f 0 = Nothing
+          f b = Just $ extractSquare b
 
 {-# INLINE bbToSquaresBB #-}
 bbToSquaresBB :: (Square -> BBoard) -> BBoard -> BBoard
 bbToSquaresBB f bb = go bb 0
     where go 0 w = w
-          go b w = let lsbb = lsb b
-                       !sq = bitToSquare lsbb
-                       nlsbb = complement lsbb
-                       b' = b .&. nlsbb
+          go b w = let (sq, b') = extractSquare b
                        !w' = f sq .|. w
                    in go b' w'
+
+{-# INLINE extractSquare #-}
+extractSquare :: BBoard -> (Square, BBoard)
+extractSquare b = let lsbb = lsb b
+                      !sq = bitToSquare lsbb
+                      nlsbb = complement lsbb
+                      b' = b .&. nlsbb
+                  in (sq, b')
 
 -- Population count function, good for bigger populations:
 {-# INLINE popCount #-}

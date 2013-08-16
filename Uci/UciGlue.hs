@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeSynonymInstances, MultiParamTypeClasses, BangPatterns,
+{-# LANGUAGE TypeSynonymInstances, MultiParamTypeClasses,
     FlexibleInstances
   #-}
 module Uci.UciGlue (

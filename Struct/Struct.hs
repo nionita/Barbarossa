@@ -277,9 +277,12 @@ moveIsNormal (Move m) = m .&. 0xE000 == 0
 -- For which color is the move:
 -- But, as for now, we don't set the move color! (And don't use it too)
 moveColor :: Move -> Color
+moveColor (Move m) = if testBit m 12 then Black else White
+{-
 moveColor (Move m) = case testBit m 12 of
                          False -> White
                          _     -> Black
+-}
 
 -- Castles
 moveIsCastle :: Move -> Bool
@@ -403,7 +406,7 @@ toString m = col sc : row sr : col dc : row dr : transf
           ord1 = ord '1'
           col x = chr (orda + x)
           row x = chr (ord1 + x)
-          transf = if moveIsTransf m then [pcToCh (moveTransfPiece m)] else []
+          transf = [pcToCh (moveTransfPiece m) | moveIsTransf m ]
           pcToCh Queen  = 'q'
           pcToCh Rook   = 'r'
           pcToCh Bishop = 'b'

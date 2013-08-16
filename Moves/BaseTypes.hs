@@ -1,6 +1,5 @@
 {-# LANGUAGE TypeSynonymInstances,
              MultiParamTypeClasses,
-             BangPatterns,
              RankNTypes, UndecidableInstances
              #-}
 
