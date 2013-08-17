@@ -4,8 +4,8 @@ module Moves.Board (
     isCheck, inCheck,
     goPromo, hasMoves,
     genmv, genmvT, kingMoved, castKingRookOk, castQueenRookOk,
-    genMoveCapt, genMoveCast, genMoveNCapt, genMoveTransf, genMovePCapt, genMovePNCapt, genMoveFCheck,
-    genMoveNCaptToCheck, genMoveCaptWL,
+    genMoveCapt, genMoveCast, genMoveNCapt, genMoveTransf, genMoveFCheck, genMoveCaptWL,
+    genMoveNCaptToCheck,
     updatePos, kingsOk, checkOk,
     legalMove, alternateMoves, nonCapt,
     doFromToMove, reverseMoving
@@ -91,50 +91,6 @@ fenFromString fen = zipWith ($) fenfuncs fentails
           getFenHalf = headOrDefault "-"
           getFenMvNo = headOrDefault "-"
 
-{--
--- find rook-like possibly pinning pieces for a position & color
--- that is: rooks or queens, which possibly pin oponent pieces in regard to the (oponent) king
-findPKAr p c = rAttacs defksq 0 .&. rs .&. atp
-    where (atp, defp) = if c == White then (white p, black p) else (black p, white p)
-          rs = rooks p .|. queens p
-          defksq = firstOne $ defp .&. kings p
-
--- find bishop-like possibly pinning pieces for a position & color
--- that is: bishops or queens, which possibly pin oponent pieces in regard to the (oponent) king
-findPKAb p c = bAttacs defksq 0 .&. bs .&. atp
-    where (atp, defp) = if c == White then (white p, black p) else (black p, white p)
-          bs = bishops p .|. queens p
-          defksq = firstOne $ defp .&. kings p
-
--- find all possibly pining pieces and lines in a given position
--- this has to be calculated per position, and recalculated
--- only when the king or one of the pinning pieces move or is captured
-allPLKAs p = (lwr ++ lwb, lbr ++ lbb)
-    where pkaswr = findPKAr p White
-          pkaswb = findPKAb p White
-          pkasbr = findPKAr p Black
-          pkasbb = findPKAb p Black
-          kwsq = firstOne $ kings p .&. white p
-          kbsq = firstOne $ kings p .&. black p
-          lwr = filter f $ map (findLKA Rook kbsq) $ bbToSquares pkaswr
-          lwb = filter f $ map (findLKA Bishop kbsq) $ bbToSquares pkaswb
-          lbr = filter f $ map (findLKA Rook kwsq) $ bbToSquares pkasbr
-          lbb = filter f $ map (findLKA Bishop kwsq) $ bbToSquares pkasbb
-          f = (/= 0) . snd
---}
-
--- For pinned pieces the move generation is restricted to the pinned line
--- so the same attacs .&. direction
-pinningDir :: MyPos -> Color -> Square -> BBoard
-pinningDir p c sq = let ds = filter (exactOne . (.&. bit sq)) $ map snd
-                                $ if c == White then bpindirs p else wpindirs p
-                    in if null ds then error "pinningDir" else head ds
-
-pinningCapt :: MyPos -> Color -> Square -> BBoard
-pinningCapt p c sq = let ds = filter (exactOne . (.&. bit sq) . snd)
-                                  $ if c == White then bpindirs p else wpindirs p
-                     in if null ds then error "pinningCapt" else bit . fst . head $ ds
-
 -- Is color c in check in position p?
 isCheck :: MyPos -> Color -> Bool
 isCheck p c = (ckp /= 0) && (ckp .&. colp /= 0)
@@ -147,12 +103,13 @@ inCheck = (/= 0) . check
 
 goPromo :: MyPos -> Move -> Bool
 goPromo p m
-    | moveIsTransf m = True
-    | otherwise      = case tabla p t of
-                           Busy White Pawn -> ppw
-                           Busy Black Pawn -> ppb
-                           _               -> False
-    where t = toSquare m
+    | moveIsTransf m   = True
+    | not (ppw || ppb) = False
+    | otherwise = case tabla p t of
+                      Busy White Pawn -> ppw
+                      Busy Black Pawn -> ppb
+                      _               -> False
+    where !t = toSquare m
           ppw = t >= 48	-- 40
           ppb = t < 16		-- 24
 
@@ -297,6 +254,7 @@ genMoveTransf !p c = pGenC ++ pGenNC
           pcapt x = x .&. yopiep
           !traR = if c == White then 0x00FF000000000000 else 0xFF00
 
+{--
 -- Generate the captures with pinned pieces
 genMovePCapt :: MyPos -> Color -> [(Square, Square)]
 genMovePCapt !p !c = concat [ pGenC, nGenC, bGenC, rGenC, qGenC ]
@@ -344,7 +302,20 @@ pinMove p c f sq = f sq .&. pinningDir p c sq
 pinCapt :: MyPos -> Color -> (Square -> BBoard) -> Square -> BBoard
 pinCapt p c f sq = f sq .&. pinningCapt p c sq
 
--- {-# INLINE srcDests #-}
+-- For pinned pieces the move generation is restricted to the pinned line
+-- so the same attacs .&. direction
+pinningDir :: MyPos -> Color -> Square -> BBoard
+pinningDir p c sq = let ds = filter (exactOne . (.&. bit sq)) $ map snd
+                                $ if c == White then bpindirs p else wpindirs p
+                    in if null ds then error "pinningDir" else head ds
+
+pinningCapt :: MyPos -> Color -> Square -> BBoard
+pinningCapt p c sq = let ds = filter (exactOne . (.&. bit sq) . snd)
+                                  $ if c == White then bpindirs p else wpindirs p
+                     in if null ds then error "pinningCapt" else bit . fst . head $ ds
+--}
+
+{-# INLINE srcDests #-}
 srcDests :: (Square -> BBoard) -> Square -> [(Square, Square)]
 srcDests f !s = zip (repeat s) $ bbToSquares $ f s
 
@@ -403,7 +374,7 @@ genMoveFCheck !p c
 -- Generate moves ending on a given square (used to defend a check by capture or blocking)
 -- This part is only for queens, rooks, bishops and knights (no pawns and, of course, no kings)
 defendAt :: MyPos -> Color -> BBoard -> [(Square, Square)]
-defendAt p c bb = concat [ nGenC, bGenC, rGenC, qGenC ]
+defendAt p c !bb = concat [ nGenC, bGenC, rGenC, qGenC ]
     where nGenC = concatMap (srcDests (target . nAttacs))
                      $ bbToSquares $ knights p .&. mypc `less` pinned p
           bGenC = concatMap (srcDests (target . bAttacs (occup p)))
@@ -412,33 +383,31 @@ defendAt p c bb = concat [ nGenC, bGenC, rGenC, qGenC ]
                      $ bbToSquares $ rooks p .&. mypc `less` pinned p
           qGenC = concatMap (srcDests (target . qAttacs (occup p)))
                      $ bbToSquares $ queens p .&. mypc `less` pinned p
-          target x = x .&. bb
+          target = (.&. bb)
           mypc = myPieces p c
 
 -- Generate capture pawn moves ending on a given square (used to defend a check by capture)
 -- TODO: Here: the promotion is not correct (does not promote!)
 pawnBeatAt :: MyPos -> Color -> BBoard -> [(Square, Square)]
-pawnBeatAt p c bb = concatMap (srcDests (pcapt . pAttacs c))
+pawnBeatAt !p c bb = concatMap (srcDests (pcapt . pAttacs c))
                            $ bbToSquares $ pawns p .&. mypc `less` pinned p
-    where -- yopi  = yoPieces p c
-          yopiep = bb .&. (yopi .|. (epcas p .&. epMask))
-          pcapt x = x .&. yopiep
-          -- mypc = myPieces p c
+    where !yopiep = bb .&. (yopi .|. (epcas p .&. epMask))
+          pcapt   = (.&. yopiep)
           (mypc, yopi) = thePieces p c
 
 -- Generate blocking pawn moves ending on given squares (used to defend a check by blocking)
 -- TODO: Here: the promotion is not correct (does not promote!)
 pawnBlockAt :: MyPos -> Color -> BBoard -> [(Square, Square)]
-pawnBlockAt p c bb = concatMap (srcDests (block . \s -> pMovs s c (occup p))) 
+pawnBlockAt p c !bb = concatMap (srcDests (block . \s -> pMovs s c (occup p))) 
                             $ bbToSquares $ pawns p .&. mypc `less` pinned p
-    where block x = x .&. bb
+    where block = (.&. bb)
           mypc = myPieces p c
 
 beatAt :: MyPos -> Color -> BBoard -> [(Square, Square)]
-beatAt p c bb = pawnBeatAt p c bb ++ defendAt p c bb
+beatAt p c !bb = pawnBeatAt p c bb ++ defendAt p c bb
 
 blockAt :: MyPos -> Color -> BBoard -> [(Square, Square)]
-blockAt p c bb = pawnBlockAt p c bb ++ defendAt p c bb
+blockAt p c !bb = pawnBlockAt p c bb ++ defendAt p c bb
 
 -- Defend a check from a sliding piece: beat it or block it
 beatOrBlock :: Piece -> MyPos -> Color -> Square -> ([(Square, Square)], [(Square, Square)])
@@ -446,11 +415,8 @@ beatOrBlock f p c sq = (beat, block)
     where !beat = beatAt p c $ bit sq
           atp = if c == White then white p else black p
           aksq = firstOne $ atp .&. kings p
-          (_, line) = findLKA f aksq sq
+          line = findLKA f aksq sq
           !block = blockAt p c line
-
-genMoveNCaptToCheck :: MyPos -> Color -> [(Square, Square)]
-genMoveNCaptToCheck p c = genMoveNCaptDirCheck p c ++ genMoveNCaptIndirCheck p c
 
 -- Todo: check with pawns (should be also without transformations)
 genMoveNCaptDirCheck :: MyPos -> Color -> [(Square, Square)]
@@ -471,6 +437,9 @@ genMoveNCaptDirCheck p c = concat [ qGenC, rGenC, bGenC, nGenC ]
           bTar = fAttacs ksq Bishop (occup p) `less` yopc
           rTar = fAttacs ksq Rook   (occup p) `less` yopc
           qTar = bTar .|. rTar
+
+genMoveNCaptToCheck :: MyPos -> Color -> [(Square, Square)]
+genMoveNCaptToCheck p c = genMoveNCaptDirCheck p c ++ genMoveNCaptIndirCheck p c
 
 -- TODO: indirect non capture checking moves
 genMoveNCaptIndirCheck :: MyPos -> Color -> [(Square, Square)]
@@ -856,14 +825,22 @@ reverseMoving p = p { basicPos = nbp, zobkey = z }
 -- the queen is very hard, so we solve it as a composition of rook and bishop
 -- and when we call findLKA we always know as which piece the queen checks
 {-# INLINE findLKA #-}
-findLKA :: Piece -> Square -> Int -> (Int, BBoard)
+findLKA :: Piece -> Square -> Int -> BBoard
 findLKA Queen ksq psq
-    | rAttacs bpsq ksq .&. bpsq == 0 = findLKA Bishop ksq psq
-    | otherwise                      = findLKA Rook   ksq psq
+    | rAttacs bpsq ksq .&. bpsq == 0 = findLKA0 Bishop ksq psq
+    | otherwise                      = findLKA0 Rook   ksq psq
     where bpsq = bit psq
-findLKA pt ksq psq = (psq, kp .&. pk)
-    where kp = fAttacs ksq pt $ bit psq
-          pk = fAttacs psq pt $ bit ksq
+findLKA pt ksq psq = findLKA0 pt ksq psq
+
+findLKA0 :: Piece -> Square -> Int -> BBoard
+findLKA0 pt ksq psq
+    | pt == Bishop = go bAttacs
+    | pt == Rook   = go rAttacs
+    | otherwise    = 0	-- it will not be called with other pieces
+    where go f = bb
+              where !kp = f (bit psq) ksq
+                    !pk = f (bit ksq) psq
+                    !bb = kp .&. pk
 
 {-# INLINE myPieces #-}
 myPieces :: MyPos -> Color -> BBoard
