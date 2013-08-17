@@ -15,9 +15,9 @@ module Moves.Base (
     nearmate, special
 ) where
 
-import Data.Array.IArray
-import Debug.Trace
-import Control.Exception (assert)
+-- import Data.Array.IArray
+-- import Debug.Trace
+-- import Control.Exception (assert)
 import Data.Bits
 import Data.List
 import Control.Monad.State
@@ -76,7 +76,7 @@ depthForMovesSortPv, depthForMovesSort, scoreDiffEqual, printEvalInt :: Int
 depthForMovesSortPv = 1	-- use history for sorting moves when pv or cut nodes
 depthForMovesSort   = 1	-- use history for sorting moves
 scoreDiffEqual      = 4 -- under this score difference moves are considered to be equal (choose random)
-printEvalInt        = 2 ^ 13 - 1	-- if /= 0: print eval info every so many nodes
+printEvalInt        = 2 `shiftL` 13 - 1	-- if /= 0: print eval info every so many nodes
 
 mateScore :: Int
 mateScore = 20000
@@ -226,10 +226,9 @@ doMove real m qs = do
                 then return Illegal
                 else do
                     let !c = moving p'
-                        (!sts, feats) = if real
-                                           then (0, [])
-                                           else evalState (posEval p' c) (evalst s)
-                        !p = p' { staticScore = sts, staticFeats = feats }
+                        (!sts, feats) | real      = (0, [])
+                                      | otherwise = evalState (posEval p' c) (evalst s)
+                        !p = p' { staticScore = sts }
                         dext = if inCheck p || goPromo p m1 then 1 else 0
                     -- when debug $
                     --     lift $ ctxLog "Debug" $ "*** doMove: " ++ showMyPos p
@@ -252,8 +251,8 @@ doNullMove = do
     let !p0 = if null (stack s) then error "doNullMove" else head $ stack s
         !p' = reverseMoving p0
         !c = moving p'
-        (!sts, feats) = evalState (posEval p' c) (evalst s)
-        !p = p' { staticScore = sts, staticFeats = feats }
+        (!sts, _) = evalState (posEval p' c) (evalst s)
+        !p = p' { staticScore = sts }
     put s { stack = p : stack s }
 
 checkRemisRules :: CtxMon m => MyPos -> Game r m Bool

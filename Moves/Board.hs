@@ -131,21 +131,19 @@ hasMoves !p c
     | chk       = not . null $ genMoveFCheck p c
     | otherwise = anyMove
     where hasPc = any (/= 0) $ map (pcapt . pAttacs c)
-                     $ bbToSquares $ pawns p .&. myfpc
+                     $ bbToSquares $ pawns p .&. mypc
           hasPm = not . null $ pAll1Moves c (pawns p .&. mypc) (occup p)
-          hasN = any (/= 0) $ map (legmv . nAttacs) $ bbToSquares $ knights p .&. myfpc
+          hasN = any (/= 0) $ map (legmv . nAttacs) $ bbToSquares $ knights p .&. mypc
           hasB = any (/= 0) $ map (legmv . bAttacs (occup p))
-                     $ bbToSquares $ bishops p .&. myfpc
+                     $ bbToSquares $ bishops p .&. mypc
           hasR = any (/= 0) $ map (legmv . rAttacs (occup p))
-                     $ bbToSquares $ rooks p .&. myfpc
+                     $ bbToSquares $ rooks p .&. mypc
           hasQ = any (/= 0) $ map (legmv . qAttacs (occup p))
-                     $ bbToSquares $ queens p .&. myfpc
+                     $ bbToSquares $ queens p .&. mypc
           !hasK = 0 /= (legal . kAttacs $ firstOne $ kings p .&. mypc)
           !anyMove = hasK || hasN || hasPm || hasPc || hasQ || hasR || hasB
           chk = inCheck p
           (!mypc, !yopi) = thePieces p c
-          -- myfpc = mypc `less` pinned p
-          myfpc = mypc
           !yopiep = yopi .|. (epcas p .&. epMask)
           legmv x = x `less` mypc
           pcapt x = x .&. yopiep
@@ -156,22 +154,19 @@ hasMoves !p c
 genMoveCapt :: MyPos -> Color -> [(Square, Square)]
 genMoveCapt !p c = sortByMVVLVA p allp
     where !pGenC = concatMap (srcDests (pcapt . pAttacs c))
-                     $ bbToSquares $ pawns p .&. myfpc `less` traR
+                     $ bbToSquares $ pawns p .&. mypc `less` traR
           !nGenC = concatMap (srcDests (capt . nAttacs)) 
-                     $ bbToSquares $ knights p .&. myfpc
+                     $ bbToSquares $ knights p .&. mypc
           !bGenC = concatMap (srcDests (capt . bAttacs (occup p)))
-                     $ bbToSquares $ bishops p .&. myfpc
+                     $ bbToSquares $ bishops p .&. mypc
           !rGenC = concatMap (srcDests (capt . rAttacs (occup p)))
-                     $ bbToSquares $ rooks p .&. myfpc
+                     $ bbToSquares $ rooks p .&. mypc
           !qGenC = concatMap (srcDests (capt . qAttacs (occup p)))
-                     $ bbToSquares $ queens p .&. myfpc
+                     $ bbToSquares $ queens p .&. mypc
           !kGenC =            srcDests (capt . legal . kAttacs)
-                     $ firstOne $ kings p .&. myfpc
+                     $ firstOne $ kings p .&. mypc
           allp = concat [ pGenC, nGenC, bGenC, rGenC, qGenC, kGenC ]
           (!mypc, !yopi) = thePieces p c
-          -- myfpc = mypc `less` pinned p
-          myfpc = mypc
-          -- yopi  = yoPieces p c
           !yopiep = yopi .|. (epcas p .&. epMask)
           capt x = x .&. yopi
           pcapt x = x .&. yopiep
@@ -179,46 +174,10 @@ genMoveCapt !p c = sortByMVVLVA p allp
           !oppAt = if c == White then blAttacs p else whAttacs p
           !traR = if c == White then 0x00FF000000000000 else 0xFF00
 
--- For quiescent search we generate only winning captures
--- This is just an approximation
-{-
-genMoveWCapt :: MyPos -> Color -> [(Square, Square)]
-genMoveWCapt !p !c = concat [ pGenC, nGenC, bGenC, rGenC, qGenC, kGenC ]
-    where pGenC = concatMap (srcDests (pcapt . pAttacs c))
-                     $ bbToSquares $ pawns p .&. mypc `less` traR
-          nGenC = concatMap (srcDests (wcapt yopfornb . nAttacs)) 
-                     $ bbToSquares $ knights p .&. mypc
-          bGenC = concatMap (srcDests (wcapt yopfornb . bAttacs (occup p)))
-                     $ bbToSquares $ bishops p .&. mypc
-          rGenC = concatMap (srcDests (wcapt yopforr . rAttacs (occup p)))
-                     $ bbToSquares $ rooks p .&. mypc
-          qGenC = concatMap (srcDests (wcapt yopforq . qAttacs (occup p)))
-                     $ bbToSquares $ queens p .&. mypc
-          kGenC =            srcDests (capt . legal . kAttacs)
-                     $ firstOne $ kings p .&. mypc
-          mypc = myPieces p c `less` pinned p
-          yopi  = yoPieces p c
-          yopiep = yopi .|. (epcas p .&. epMask)
-          capt x = x .&. yopi
-          wcapt y x = x .&. y
-          pcapt x = x .&. yopiep
-          legal x = x `less` oppAt
-          oppAt = if c == White then blAttacs p else whAttacs p
-          traR = if c == White then 0x00FF000000000000 else 0xFF00
-          hanging  = yopi `less` oppAt
-          yopfornb = hanging .|. (yopi `less` pawns p)
-          yopforr  = hanging .|. (yopfornb `less` knights p `less` bishops p)
-          yopforq  = hanging .|. (yopi .&. queens p)
--}
-
 genMoveNCapt :: MyPos -> Color -> [(Square, Square)]
 -- genMoveNCapt p c = concat [ pGenNC2, qGenNC, rGenNC, bGenNC, nGenNC, pGenNC1, kGenNC ]
 -- genMoveNCapt p c = concat [ pGenNC1, nGenNC, bGenNC, rGenNC, qGenNC, pGenNC2, kGenNC ]
 genMoveNCapt !p c = concat [ nGenNC, bGenNC, rGenNC, qGenNC, pGenNC1, pGenNC2, kGenNC ]
-    -- where pGenNCT = concatMap (srcDests True (ncapt . \s -> pMovs s c ocp)) 
-    --                  $ bbToSquares $ pawns p .&. mypc .&. traR
-    --       pGenNC = concatMap (srcDests False (ncapt . \s -> pMovs s c ocp)) 
-    --                  $ bbToSquares $ pawns p .&. mypc `less` traR
     where pGenNC1 = pAll1Moves c (pawns p .&. mypc `less` traR) (occup p)
           pGenNC2 = pAll2Moves c (pawns p .&. mypc) (occup p)
           nGenNC = concatMap (srcDests (ncapt . nAttacs))
@@ -231,13 +190,11 @@ genMoveNCapt !p c = concat [ nGenNC, bGenNC, rGenNC, qGenNC, pGenNC1, pGenNC2, k
                       $ bbToSquares $ queens p .&. mypc
           kGenNC =            srcDests (ncapt . legal . kAttacs)
                       $ firstOne $ kings p .&. mypc
-          -- mypc = myPieces p c `less` pinned p
           mypc = myPieces p c
           ncapt x = x `less` occup p
           legal x = x `less` oppAt
           oppAt = if c == White then blAttacs p else whAttacs p
           traR = if c == White then 0x00FF000000000000 else 0xFF00
-          -- mypawns = pawns p .&. mypc
 
 -- Generate only transformations (now only to queen) - captures and non captures
 genMoveTransf :: MyPos -> Color -> [(Square, Square)]
@@ -248,72 +205,10 @@ genMoveTransf !p c = pGenC ++ pGenNC
     --                  $ bbToSquares $ pawns p .&. myfpc .&. traR
           pGenNC = pAll1Moves c (pawns p .&. myfpc) (occup p)
           (!mypc, !yopi) = thePieces p c
-          -- myfpc = mypc .&. traR `less` pinned p
           !myfpc = mypc .&. traR
           !yopiep = yopi .|. (epcas p .&. epMask)
           pcapt x = x .&. yopiep
           !traR = if c == White then 0x00FF000000000000 else 0xFF00
-
-{--
--- Generate the captures with pinned pieces
-genMovePCapt :: MyPos -> Color -> [(Square, Square)]
-genMovePCapt !p !c = concat [ pGenC, nGenC, bGenC, rGenC, qGenC ]
-    where pGenC = concatMap (srcDests $ pinCapt p c (pcapt . pAttacs c))
-                     $ bbToSquares $ pawns p .&. myfpc `less` traR
-          nGenC = concatMap (srcDests $ pinCapt p c (capt . nAttacs)) 
-                     $ bbToSquares $ knights p .&. myfpc
-          bGenC = concatMap (srcDests $ pinCapt p c (capt . bAttacs (occup p)))
-                     $ bbToSquares $ bishops p .&. myfpc
-          rGenC = concatMap (srcDests $ pinCapt p c (capt . rAttacs (occup p)))
-                     $ bbToSquares $ rooks p .&. myfpc
-          qGenC = concatMap (srcDests $ pinCapt p c (capt . qAttacs (occup p)))
-                     $ bbToSquares $ queens p .&. myfpc
-          (mypc, yopi) = thePieces p c
-          myfpc = mypc .&. pinned p
-          -- yopi  = yoPieces p c
-          yopiep = yopi .|. (epcas p .&. epMask)
-          capt x = x .&. yopi
-          pcapt x = x .&. yopiep
-          traR = if c == White then 0x00FF000000000000 else 0xFF00
-
--- Generate the non-captures with pinned pieces
-genMovePNCapt :: MyPos -> Color -> [(Square, Square)]
-genMovePNCapt !p !c = concat [ pGenNC, qGenNC, rGenNC, bGenNC, nGenNC ]
-    where pGenNC = concatMap (srcDests $ pinMove p c (ncapt . \s -> pMovs s c (occup p))) 
-                     $ bbToSquares $ pawns p .&. mypc `less` traR
-          nGenNC = concatMap (srcDests $ pinMove p c (ncapt . nAttacs))
-                      $ bbToSquares $ knights p .&. mypc
-          bGenNC = concatMap (srcDests $ pinMove p c (ncapt . bAttacs (occup p)))
-                      $ bbToSquares $ bishops p .&. mypc
-          rGenNC = concatMap (srcDests $ pinMove p c (ncapt . rAttacs (occup p)))
-                      $ bbToSquares $ rooks p .&. mypc
-          qGenNC = concatMap (srcDests $ pinMove p c (ncapt . qAttacs (occup p)))
-                      $ bbToSquares $ queens p .&. mypc
-          mypc = myPieces p c .&. pinned p
-          ncapt x = x `less` occup p
-          traR = if c == White then 0x00FF000000000000 else 0xFF00
-          -- mypawns = pawns p .&. mypc
-
--- {-# INLINE pinMove #-}
-pinMove :: MyPos -> Color -> (Square -> BBoard) -> Square -> BBoard
-pinMove p c f sq = f sq .&. pinningDir p c sq
-
--- {-# INLINE pinCapt #-}
-pinCapt :: MyPos -> Color -> (Square -> BBoard) -> Square -> BBoard
-pinCapt p c f sq = f sq .&. pinningCapt p c sq
-
--- For pinned pieces the move generation is restricted to the pinned line
--- so the same attacs .&. direction
-pinningDir :: MyPos -> Color -> Square -> BBoard
-pinningDir p c sq = let ds = filter (exactOne . (.&. bit sq)) $ map snd
-                                $ if c == White then bpindirs p else wpindirs p
-                    in if null ds then error "pinningDir" else head ds
-
-pinningCapt :: MyPos -> Color -> Square -> BBoard
-pinningCapt p c sq = let ds = filter (exactOne . (.&. bit sq) . snd)
-                                  $ if c == White then bpindirs p else wpindirs p
-                     in if null ds then error "pinningCapt" else bit . fst . head $ ds
---}
 
 {-# INLINE srcDests #-}
 srcDests :: (Square -> BBoard) -> Square -> [(Square, Square)]
@@ -376,13 +271,13 @@ genMoveFCheck !p c
 defendAt :: MyPos -> Color -> BBoard -> [(Square, Square)]
 defendAt p c !bb = concat [ nGenC, bGenC, rGenC, qGenC ]
     where nGenC = concatMap (srcDests (target . nAttacs))
-                     $ bbToSquares $ knights p .&. mypc `less` pinned p
+                     $ bbToSquares $ knights p .&. mypc
           bGenC = concatMap (srcDests (target . bAttacs (occup p)))
-                     $ bbToSquares $ bishops p .&. mypc `less` pinned p
+                     $ bbToSquares $ bishops p .&. mypc
           rGenC = concatMap (srcDests (target . rAttacs (occup p)))
-                     $ bbToSquares $ rooks p .&. mypc `less` pinned p
+                     $ bbToSquares $ rooks p .&. mypc
           qGenC = concatMap (srcDests (target . qAttacs (occup p)))
-                     $ bbToSquares $ queens p .&. mypc `less` pinned p
+                     $ bbToSquares $ queens p .&. mypc
           target = (.&. bb)
           mypc = myPieces p c
 
@@ -390,7 +285,7 @@ defendAt p c !bb = concat [ nGenC, bGenC, rGenC, qGenC ]
 -- TODO: Here: the promotion is not correct (does not promote!)
 pawnBeatAt :: MyPos -> Color -> BBoard -> [(Square, Square)]
 pawnBeatAt !p c bb = concatMap (srcDests (pcapt . pAttacs c))
-                           $ bbToSquares $ pawns p .&. mypc `less` pinned p
+                           $ bbToSquares $ pawns p .&. mypc
     where !yopiep = bb .&. (yopi .|. (epcas p .&. epMask))
           pcapt   = (.&. yopiep)
           (mypc, yopi) = thePieces p c
@@ -399,7 +294,7 @@ pawnBeatAt !p c bb = concatMap (srcDests (pcapt . pAttacs c))
 -- TODO: Here: the promotion is not correct (does not promote!)
 pawnBlockAt :: MyPos -> Color -> BBoard -> [(Square, Square)]
 pawnBlockAt p c !bb = concatMap (srcDests (block . \s -> pMovs s c (occup p))) 
-                            $ bbToSquares $ pawns p .&. mypc `less` pinned p
+                            $ bbToSquares $ pawns p .&. mypc
     where block = (.&. bb)
           mypc = myPieces p c
 
@@ -423,13 +318,13 @@ genMoveNCaptDirCheck :: MyPos -> Color -> [(Square, Square)]
 -- genMoveNCaptDirCheck p c = concat [ nGenC, bGenC, rGenC, qGenC ]
 genMoveNCaptDirCheck p c = concat [ qGenC, rGenC, bGenC, nGenC ]
     where nGenC = concatMap (srcDests (target nTar . nAttacs))
-                     $ bbToSquares $ knights p .&. mypc `less` pinned p
+                     $ bbToSquares $ knights p .&. mypc
           bGenC = concatMap (srcDests (target bTar . bAttacs (occup p)))
-                     $ bbToSquares $ bishops p .&. mypc `less` pinned p
+                     $ bbToSquares $ bishops p .&. mypc
           rGenC = concatMap (srcDests (target rTar . rAttacs (occup p)))
-                     $ bbToSquares $ rooks p .&. mypc `less` pinned p
+                     $ bbToSquares $ rooks p .&. mypc
           qGenC = concatMap (srcDests (target qTar . qAttacs (occup p)))
-                     $ bbToSquares $ queens p .&. mypc `less` pinned p
+                     $ bbToSquares $ queens p .&. mypc
           target b x = x .&. b
           (mypc, yopc) = thePieces p c
           ksq  = firstOne $ yopc .&. kings p
@@ -505,24 +400,10 @@ updatePosAttacs p = p {
           ocp = occup p
 
 updatePosCheck :: MyPos -> MyPos
-updatePosCheck p = p {
-                  check = tcheck
-                  -- pinned = calcPinned p wpind bpind,
-                  -- wpindirs = wpind, bpindirs = bpind
-               }
+updatePosCheck p = p { check = tcheck }
     where !whcheck = white p .&. kings p .&. blAttacs p
           !blcheck = black p .&. kings p .&. whAttacs p
           !tcheck = blcheck .|. whcheck
-
--- compute the actually pinned pieces based on pining directions and occupancy
--- {-# INLINE calcPinned #-}
-{-
-calcPinned p wpind bpind = wpi .|. bpi
-    where wpi = foldl' (.|.) 0 $ filter ((/= 0) . (.&. white p))
-                    $ filter exactOne $ map ((.&. occup p) . snd) bpind
-          bpi = foldl' (.|.) 0 $ filter ((/= 0) . (.&. black p))
-                    $ filter exactOne $ map ((.&. occup p) . snd) wpind
--}
 
 -- Generate the castle moves
 -- Here we could optimize a bit by defining constants separately for White and Black

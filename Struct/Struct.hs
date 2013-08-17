@@ -79,11 +79,7 @@ data MyPos = MyPos {
     whAttacs, blAttacs, check :: BBoard,		-- white & black attacs
     whPAttacs, whNAttacs, whBAttacs, whRAttacs, whQAttacs, whKAttacs :: BBoard,
     blPAttacs, blNAttacs, blBAttacs, blRAttacs, blQAttacs, blKAttacs :: BBoard,
-    pinned :: !BBoard,
-    wpindirs :: [(Square, BBoard)],	-- white pining directions
-    bpindirs :: [(Square, BBoard)],	-- black pining directions
     staticScore :: Int,		-- this is not really ok, then the score must not be int!
-    staticFeats :: [Int],
     realMove :: !Bool
     }
     deriving (Eq, Show)
@@ -168,10 +164,10 @@ emptyPos = MyPos {
         basicPos = emptyBPos, zobkey = 0, mater = 0,
         white = 0, occup = 0, kings = 0, pawns = 0,
         queens = 0, rooks = 0, bishops = 0, knights = 0,
-        pinned = 0, whAttacs = 0, blAttacs = 0, check = 0,
+        whAttacs = 0, blAttacs = 0, check = 0,
         whPAttacs = 0, whNAttacs = 0, whBAttacs = 0, whRAttacs = 0, whQAttacs = 0, whKAttacs = 0,
         blPAttacs = 0, blNAttacs = 0, blBAttacs = 0, blRAttacs = 0, blQAttacs = 0, blKAttacs = 0,
-        wpindirs = [], bpindirs = [], staticScore = 0, staticFeats = [], realMove = False
+        staticScore = 0, realMove = False
     }
 
 -- Stuff related to 50 moves rule
