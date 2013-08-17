@@ -7,9 +7,11 @@ module Eval.Eval (
     paramNames, parLims, parDim, paramPairs
 ) where
 
+import Prelude hiding ((++), head, foldl, map, concat, filter, takeWhile, iterate, sum,
+                       zip, zipWith, concatMap, length, replicate, lookup)
 import Data.Array.Base (unsafeAt)
 import Data.Bits hiding (popCount)
-import Data.List
+import Data.List.Stream
 import Control.Monad.State.Lazy
 import Data.Array.Unboxed
 
@@ -19,7 +21,7 @@ import Moves.Moves
 import Moves.BitBoard
 import Moves.Muster
 -- import Eval.Gradient
-import Eval.BasicEval
+-- import Eval.BasicEval
 
 -- Criteria (x2, once for every player):
 -- + number of every piece (except king) (5 times)
@@ -87,8 +89,8 @@ parLims :: [(Double, Double)]
 parLims = concatMap evalLims evalItems
     where evalLims (EvIt a) = map paramLimits $ evalItemNDL a
 
-zeroParam :: DParams
-zeroParam = replicate parDim 0	-- theese are doubles
+-- zeroParam :: DParams
+-- zeroParam = replicate parDim 0	-- theese are doubles
 
 zeroFeats :: [Int]
 zeroFeats = replicate parDim 0	-- theese are ints
@@ -123,7 +125,7 @@ paramPairs = zip paramNames
 
 ------------------------------------------------------------------
 -- Parameters of this module ------------
-granCoarse, granCoarse2, granCoarseM, maxStatsDepth, maxStatsIntvs :: Int
+granCoarse, granCoarse2, granCoarseM, maxStatsDepth, maxStatsIntvs, shift2Cp :: Int
 granCoarse    = 4	-- coarse granularity
 granCoarse2   = granCoarse `div` 2
 granCoarseM   = complement (granCoarse - 1)
@@ -132,11 +134,11 @@ maxStatsDepth = 12	-- for error statistics of the eval function - maximum depth
 maxStatsIntvs = 20	-- number of difference interval
 -- statsIntv     = 25	-- difference interval length
 
-subOptimal :: Double
-subOptimal    = 2	-- optimal step is so many times smaller
+-- subOptimal :: Double
+-- subOptimal    = 2	-- optimal step is so many times smaller
 
-samplesPerChange :: Int
-samplesPerChange = 10	-- number of samples before a parameter change occurs
+-- samplesPerChange :: Int
+-- samplesPerChange = 10	-- number of samples before a parameter change occurs
 -----------------------------------------------
 
 initEvalState :: [(String, Double)] -> EvalState
@@ -283,10 +285,10 @@ instance EvalItem KingSafe where
 -- Rewrite of king safety taking into account number and quality
 -- of pieces attacking king neighbour squares
 kingSafe :: MyPos -> Color -> [Int]
-kingSafe p _ = [ksafe]
+kingSafe !p _ = [ksafe]
     where !ksafe = wattacs - battacs
-          freew = popCount1 $ whKAttacs p .&. blAttacs p `less` white p
-          freeb = popCount1 $ blKAttacs p .&. whAttacs p `less` black p
+          !freew = popCount1 $ whKAttacs p .&. blAttacs p `less` white p
+          !freeb = popCount1 $ blKAttacs p .&. whAttacs p `less` black p
           flag k a = if k .&. a /= 0 then 1 else 0
           qual k a = popCount1 $ k .&. a
           flagBlack = flag (whKAttacs p)
@@ -295,16 +297,25 @@ kingSafe p _ = [ksafe]
           qualWhite = qual (blKAttacs p)
           ($:) = flip ($)
           attsw = map (p $:) [ whPAttacs, whNAttacs, whBAttacs, whRAttacs, whQAttacs, whKAttacs ]
-          fw = sum $ map flagWhite attsw
-          cw = sum $ zipWith (*) qualWeights $ map qualWhite attsw
-          ixw = max 0 $ min 63 $ fw * cw - freeb
+          -- fw = sum $ map flagWhite attsw
+          -- cw = sum $ zipWith (*) qualWeights $ map qualWhite attsw
+          !ixw = max 0 $ min 63 $ fw * cw - freeb
           attsb = map (p $:) [ blPAttacs, blNAttacs, blBAttacs, blRAttacs, blQAttacs, blKAttacs ]
-          fb = sum $ map flagBlack attsb
-          cb = sum $ zipWith (*) qualWeights $ map qualBlack attsb
-          ixb = max 0 $ min 63 $ fb * cb - freew
-          wattacs = attCoef `unsafeAt` ixw
-          battacs = attCoef `unsafeAt` ixb
+          -- fb = sum $ map flagBlack attsb
+          -- cb = sum $ zipWith (*) qualWeights $ map qualBlack attsb
+          !ixb = max 0 $ min 63 $ fb * cb - freew
+          !wattacs = attCoef `unsafeAt` ixw
+          !battacs = attCoef `unsafeAt` ixb
           qualWeights = [1, 1, 1, 2, 3, 1]
+          !(Flc fw cw) = sumCount flagWhite qualWhite $ zip attsw qualWeights
+          !(Flc fb cb) = sumCount flagBlack qualBlack $ zip attsb qualWeights
+
+-- To make the sum and count in one pass
+data Flc = Flc !Int !Int
+
+{-# INLINE sumCount #-}
+sumCount :: (BBoard -> Int) -> (BBoard -> Int) -> [(BBoard, Int)] -> Flc
+sumCount flag qual = foldl' (\(Flc f c) (b, i) -> Flc (f + flag b) (c + i * qual b)) (Flc 0 0)
 
 attCoef :: UArray Int Int
 attCoef = listArray (0, 63) [ f x | x <- [0..63] ]
