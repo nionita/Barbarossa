@@ -12,8 +12,10 @@ module Moves.Board (
     ) where
 
 import Prelude hiding ((++), foldl, filter, map, concatMap, concat, head, tail, repeat, zip,
-                       zipWith, null, words, foldr, elem, lookup, any)
+                       zipWith, null, words, foldr, elem, lookup, any, takeWhile, iterate)
 -- import Control.Exception (assert)
+import Data.Array.Base (unsafeAt)
+import Data.Array.Unboxed
 import Data.Bits
 import Data.List.Stream
 import Data.Char
@@ -23,6 +25,7 @@ import Data.Ord (comparing)
 import Struct.Struct
 import Moves.Moves
 import Moves.BitBoard
+import Moves.Muster
 import Moves.ShowMe
 import Eval.BasicEval
 import Hash.Zobrist
@@ -348,15 +351,34 @@ sortByMVVLVA p = map snd . sortBy (comparing fst) . map va
                          in ((vic, agr), ft)
           va _ = error "sortByMVVLVA: not a capture"
 
--- {-# INLINE updatePos #-}
+whitePassPBBs, blackPassPBBs :: UArray Square BBoard
+whitePassPBBs = array (0, 63) [(sq, wPassPBB sq) | sq <- [0 .. 63]]
+blackPassPBBs = array (0, 63) [(sq, bPassPBB sq) | sq <- [0 .. 63]]
+
+wPassPBB :: Square -> BBoard
+wPassPBB sq = foldl' (.|.) 0 $ takeWhile (/= 0) $ iterate (`shiftL` 8) bsqs
+    where bsq = bit sq
+          bsq8 = bsq `shiftL` 8
+          bsq7 = if bsq .&. fileA /= 0 then 0 else bsq `shiftL` 7
+          bsq9 = if bsq .&. fileH /= 0 then 0 else bsq `shiftL` 9
+          bsqs = bsq7 .|. bsq8 .|. bsq9
+
+bPassPBB :: Square -> BBoard
+bPassPBB sq = foldl' (.|.) 0 $ takeWhile (/= 0) $ iterate (`shiftR` 8) bsqs
+    where bsq = bit sq
+          bsq8 = bsq `shiftR` 8
+          bsq7 = if bsq .&. fileH /= 0 then 0 else bsq `shiftR` 7
+          bsq9 = if bsq .&. fileA /= 0 then 0 else bsq `shiftR` 9
+          bsqs = bsq7 .|. bsq8 .|. bsq9
+
 updatePos :: MyPos -> MyPos
 updatePos = updatePosCheck . updatePosAttacs . updatePosOccup
 
 updatePosOccup :: MyPos -> MyPos
 updatePosOccup p = p {
-                  occup = toccup, white = twhite, kings   = tkings,
-                  pawns   = tpawns, knights = tknights, queens  = tqueens,
-                  rooks   = trooks, bishops = tbishops
+                  occup = toccup, white = twhite, kings = tkings,
+                  pawns = tpawns, knights = tknights, queens = tqueens,
+                  rooks = trooks, bishops = tbishops, passed = tpassed
                }
     where !toccup = kkrq p .|. diag p
           !tkings = kkrq p .&. diag p `less` slide p
@@ -366,31 +388,40 @@ updatePosOccup p = p {
           !tqueens  = slide p .&. kkrq p .&. diag p
           !trooks   = slide p .&. kkrq p `less` diag p
           !tbishops = slide p .&. diag p `less` kkrq p
+          !twpawns = tpawns .&. twhite
+          !tbpawns = tpawns .&. black p
+          !wfpbb = foldr (.|.) 0 $ map ubit $ filter wpIsPass $ bbToSquares twpawns1
+          !bfpbb = foldr (.|.) 0 $ map ubit $ filter bpIsPass $ bbToSquares tbpawns1
+          !tpassed = wfpbb .|. bfpbb
+          wpIsPass = (== 0) . (.&. tbpawns) . (unsafeAt whitePassPBBs)
+          bpIsPass = (== 0) . (.&. twpawns) . (unsafeAt blackPassPBBs)
+          ubit = unsafeShiftL 1
+          -- we make an approximation for the passed pawns: when more than 10 pawns
+          -- we consider only such in the opponent side (rows 5 to 8)
+          -- to speed up the calculation in the opening and middle game
+          passedApprox = 10
+          np = popCount1 tpawns
+          !twpawns1 | np < passedApprox = twpawns
+                    | otherwise         = twpawns .&. 0xFFFFFFFF00000000
+          !tbpawns1 | np < passedApprox = tbpawns
+                    | otherwise         = tbpawns .&. 0x00000000FFFFFFFF
 
 updatePosAttacs :: MyPos -> MyPos
 updatePosAttacs p = p {
         whPAttacs = twhPAtt, whNAttacs = twhNAtt, whBAttacs = twhBAtt,
         whRAttacs = twhRAtt, whQAttacs = twhQAtt, whKAttacs = twhKAtt,
-        -- whAttacs = twhPAtt .|. twhNAtt .|. twhBAtt .|. twhRAtt .|. twhQAtt .|. twhKAtt,
         blPAttacs = tblPAtt, blNAttacs = tblNAtt, blBAttacs = tblBAtt,
         blRAttacs = tblRAtt, blQAttacs = tblQAtt, blKAttacs = tblKAtt,
-        -- blAttacs = tblPAtt .|. tblNAtt .|. tblBAtt .|. tblRAtt .|. tblQAtt .|. tblKAtt
         whAttacs = twhAttacs, blAttacs = tblAttacs
     }
     where !twhPAtt = bbToSquaresBB (pAttacs White) $ pawns p .&. white p
           !twhNAtt = bbToSquaresBB nAttacs $ knights p .&. white p
-          -- !twhBAtt = foldl' (\w s -> w .|. bAttacs s (occup p)) 0 $ bbToSquares $ bishops p .&. white p
-          -- !twhRAtt = foldl' (\w s -> w .|. rAttacs s (occup p)) 0 $ bbToSquares $ rooks p .&. white p
-          -- !twhQAtt = foldl' (\w s -> w .|. qAttacs s (occup p)) 0 $ bbToSquares $ queens p .&. white p
           !twhBAtt = bbToSquaresBB (bAttacs ocp) $ bishops p .&. white p
           !twhRAtt = bbToSquaresBB (rAttacs ocp) $ rooks p .&. white p
           !twhQAtt = bbToSquaresBB (qAttacs ocp) $ queens p .&. white p
           !twhKAtt = kAttacs $ firstOne $ kings p .&. white p
           !tblPAtt = bbToSquaresBB (pAttacs Black) $ pawns p .&. black p
           !tblNAtt = bbToSquaresBB nAttacs $ knights p .&. black p
-          -- !tblBAtt = foldl' (\w s -> w .|. bAttacs s (occup p)) 0 $ bbToSquares $ bishops p .&. black p
-          -- !tblRAtt = foldl' (\w s -> w .|. rAttacs s (occup p)) 0 $ bbToSquares $ rooks p .&. black p
-          -- !tblQAtt = foldl' (\w s -> w .|. qAttacs s (occup p)) 0 $ bbToSquares $ queens p .&. black p
           !tblBAtt = bbToSquaresBB (bAttacs ocp) $ bishops p .&. black p
           !tblRAtt = bbToSquaresBB (rAttacs ocp) $ rooks p .&. black p
           !tblQAtt = bbToSquaresBB (qAttacs ocp) $ queens p .&. black p

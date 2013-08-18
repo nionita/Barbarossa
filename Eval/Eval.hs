@@ -566,26 +566,6 @@ evalRookPawn p _ = [rps]
 ------ Pass pawns ------
 data PassPawns = PassPawns
 
-whitePassPBBs, blackPassPBBs :: UArray Square BBoard
-whitePassPBBs = array (0, 63) [(sq, wPassPBB sq) | sq <- [0 .. 63]]
-blackPassPBBs = array (0, 63) [(sq, bPassPBB sq) | sq <- [0 .. 63]]
-
-wPassPBB :: Square -> BBoard
-wPassPBB sq = foldl' (.|.) 0 $ takeWhile (/= 0) $ iterate (`shiftL` 8) bsqs
-    where bsq = bit sq
-          bsq8 = bsq `shiftL` 8
-          bsq7 = if bsq .&. fileA /= 0 then 0 else bsq `shiftL` 7
-          bsq9 = if bsq .&. fileH /= 0 then 0 else bsq `shiftL` 9
-          bsqs = bsq7 .|. bsq8 .|. bsq9
-
-bPassPBB :: Square -> BBoard
-bPassPBB sq = foldl' (.|.) 0 $ takeWhile (/= 0) $ iterate (`shiftR` 8) bsqs
-    where bsq = bit sq
-          bsq8 = bsq `shiftR` 8
-          bsq7 = if bsq .&. fileH /= 0 then 0 else bsq `shiftR` 7
-          bsq9 = if bsq .&. fileA /= 0 then 0 else bsq `shiftR` 9
-          bsqs = bsq7 .|. bsq8 .|. bsq9
-
 instance EvalItem PassPawns where
     evalItem p c _ = passPawns p c
     evalItemNDL _  = [("passPawnBonus", (104, (  0, 160))),
@@ -596,8 +576,8 @@ instance EvalItem PassPawns where
 
 passPawns :: MyPos -> Color -> IParams
 passPawns p _ = [dfp, dfp4, dfp5, dfp6, dfp7]
-    where !wfpbb = foldr (.|.) 0 $ map ubit $ filter wpIsPass $ bbToSquares wpawns
-          !bfpbb = foldr (.|.) 0 $ map ubit $ filter bpIsPass $ bbToSquares bpawns
+    where !wfpbb = passed p .&. white p
+          !bfpbb = passed p .&. black p
           !wfp = popCount1 wfpbb
           !wfp4 = popCount1 $ wfpbb .&. row4
           !wfp5 = popCount1 $ wfpbb .&. row5
@@ -615,7 +595,4 @@ passPawns p _ = [dfp, dfp4, dfp5, dfp6, dfp7]
           !dfp5 = wfp5 - bfp5
           !dfp6 = wfp6 - bfp6
           !dfp7 = wfp7 - bfp7
-          wpIsPass = (== 0) . (.&. pawns p) . (unsafeAt whitePassPBBs)
-          bpIsPass = (== 0) . (.&. pawns p) . (unsafeAt blackPassPBBs)
-          ubit = unsafeShiftL 1
 --------------------------------------
