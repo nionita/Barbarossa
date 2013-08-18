@@ -60,10 +60,10 @@ initPos = posFromFen startFen
 
 -- TODO: en passant
 posFromFen :: String -> MyPos
-posFromFen fen = p { basicPos = bp, zobkey = zk }
+posFromFen fen = p { epcas = x, zobkey = zk }
     where fen1:fen2:fen3:_:fen5:_ = fenFromString fen
           p  = fenToTable fen1
-          bp = (basicPos p) { bpepcas = x }
+          -- bp = (basicPos p) { bpepcas = x }
           x  = fyInit . castInit . epInit $ epcas0
           (epcas0, z) = case fen2 of
               'w':_ -> (0, 0)
@@ -92,10 +92,10 @@ fenFromString fen = zipWith ($) fenfuncs fentails
           getFenMvNo = headOrDefault "-"
 
 -- Is color c in check in position p?
+{-# INLINE isCheck #-}
 isCheck :: MyPos -> Color -> Bool
-isCheck p c = (ckp /= 0) && (ckp .&. colp /= 0)
-    where colp = if c == White then white p else black p
-          ckp = check p
+isCheck p White = white p .&. kings p .&. blAttacs p /= 0
+isCheck p Black = black p .&. kings p .&. whAttacs p /= 0
 
 {-# INLINE inCheck #-}
 inCheck :: MyPos -> Bool
@@ -439,14 +439,13 @@ castQueenRookOk p Black = epcas p `testBit` 56
 
 -- Set a piece on a square of the table
 setPiece :: Square -> Color -> Piece -> MyPos -> MyPos
-setPiece sq c f p = p { basicPos = nbp, zobkey = nzob, mater = nmat }
+setPiece sq c f p
+    = p { black = setCond (c == Black) $ black p,
+          slide = setCond (isSlide f)  $ slide p,
+          kkrq  = setCond (isKkrq f)   $ kkrq p,
+          diag  = setCond (isDiag f)   $ diag p,
+          zobkey = nzob, mater = nmat }
     where setCond cond = if cond then (.|. bsq) else (.&. nbsq)
-          nbp = (basicPos p) {
-                    bpblack = setCond (c == Black) $ black p,
-                    bpslide = setCond (isSlide f)  $ slide p,
-                    bpkkrq  = setCond (isKkrq f)   $ kkrq p,
-                    bpdiag  = setCond (isDiag f)   $ diag p
-                }
           nzob = zobkey p `xor` zold `xor` znew
           nmat = mater p - mold + mnew
           (!zold, !mold) = case tabla p sq of
@@ -577,14 +576,12 @@ mvBit !src !dst !w	-- = w `xor` ((w `xor` (shifted .&. nbsrc)) .&. mask)
 -- Copy one square to another and clear the source square
 -- doFromToMove :: Square -> Square -> MyPos -> Maybe MyPos
 doFromToMove :: Move -> MyPos -> MyPos
-doFromToMove m p | moveIsNormal m = updatePos p {
-                                        basicPos = nbp, zobkey = tzobkey, mater = tmater
-                                    }
-    where nbp = BPos {
-              bpblack = tblack, bpslide = tslide, bpkkrq  = tkkrq,  bpdiag  = tdiag,
-              bpepcas = tepcas
-          }
-          src = fromSquare m
+doFromToMove m p | moveIsNormal m
+    = updatePos p {
+          black = tblack, slide = tslide, kkrq  = tkkrq,  diag  = tdiag,
+          epcas = tepcas, zobkey = tzobkey, mater = tmater
+      }
+    where src = fromSquare m
           dst = toSquare m
           tblack = mvBit src dst $ black p
           tslide = mvBit src dst $ slide p
@@ -610,14 +607,12 @@ doFromToMove m p | moveIsNormal m = updatePos p {
                                  ++ showTab (black p) (slide p) (kkrq p) (diag p)
                                  ++ "resulting pos:\n"
                                  ++ showTab tblack tslide tkkrq tdiag
-doFromToMove m p | moveIsEnPas m = updatePos p {
-                                       basicPos = nbp, zobkey = tzobkey, mater = tmater
-                                   }
-    where nbp = BPos {
-              bpblack = tblack, bpslide = tslide, bpkkrq  = tkkrq,  bpdiag  = tdiag,
-              bpepcas = tepcas
-          }
-          src = fromSquare m
+doFromToMove m p | moveIsEnPas m
+    = updatePos p {
+          black = tblack, slide = tslide, kkrq  = tkkrq,  diag  = tdiag,
+          epcas = tepcas, zobkey = tzobkey, mater = tmater
+      }
+    where src = fromSquare m
           dst = toSquare m
           del = moveEnPasDel m
           bdel = 1 `unsafeShiftL` del
@@ -635,14 +630,12 @@ doFromToMove m p | moveIsEnPas m = updatePos p {
                                 accumSetPiece dst col fig p,
                                 accumMoving p
                             ]
-doFromToMove m p | moveIsTransf m = updatePos p0 {
-                                        basicPos = nbp, zobkey = tzobkey, mater = tmater
-                                    }
-    where nbp = BPos {
-              bpblack = tblack, bpslide = tslide, bpkkrq = tkkrq, bpdiag = tdiag,
-              bpepcas = tepcas
-          }
-          src = fromSquare m
+doFromToMove m p | moveIsTransf m
+    = updatePos p0 {
+          black = tblack, slide = tslide, kkrq = tkkrq, diag = tdiag,
+          epcas = tepcas, zobkey = tzobkey, mater = tmater
+      }
+    where src = fromSquare m
           dst = toSquare m
           Busy col Pawn = tabla p src	-- identify the moving color (piece must be pawn)
           pie = moveTransfPiece m
@@ -657,14 +650,12 @@ doFromToMove m p | moveIsTransf m = updatePos p0 {
                                 accumSetPiece dst col pie p0,
                                 accumMoving p0
                             ]
-doFromToMove m p | moveIsCastle m = updatePos p {
-                                        basicPos = nbp, zobkey = tzobkey, mater = tmater
-                                    }
-    where nbp = BPos {
-              bpblack = tblack, bpslide = tslide, bpkkrq  = tkkrq,  bpdiag  = tdiag,
-              bpepcas = tepcas
-          }
-          src = fromSquare m
+doFromToMove m p | moveIsCastle m
+    = updatePos p {
+          black = tblack, slide = tslide, kkrq  = tkkrq,  diag  = tdiag,
+          epcas = tepcas, zobkey = tzobkey, mater = tmater
+      }
+    where src = fromSquare m
           dst = toSquare m
           (csr, cds) = case src of
               4  -> case dst of
@@ -694,9 +685,8 @@ doFromToMove m p | moveIsCastle m = updatePos p {
 doFromToMove _ _ = error "doFromToMove: wrong move type"
 
 reverseMoving :: MyPos -> MyPos
-reverseMoving p = p { basicPos = nbp, zobkey = z }
-    where nbp = (basicPos p) { bpepcas = tepcas }
-          tepcas = epcas p `xor` mvMask
+reverseMoving p = p { epcas = tepcas, zobkey = z }
+    where tepcas = epcas p `xor` mvMask
           CA z _ = chainAccum (CA (zobkey p) (mater p)) [
                        accumMoving p
                    ]

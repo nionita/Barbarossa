@@ -209,7 +209,7 @@ doMove real m qs = do
         kc = case tabla pc (toSquare m1) of
                  Busy _ King -> True
                  _           -> False
-        p' = doFromToMove m1 pc { realMove = real }
+        p' = doFromToMove m1 pc
         kok = kingsOk p'
         cok = checkOk p'
     -- If the move is real and one of those conditions occur,

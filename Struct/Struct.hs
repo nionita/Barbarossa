@@ -1,7 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 module Struct.Struct (
          BBoard, Square, ZKey, ShArray, MaArray, DbArray, Move(..),
-         Piece(..), Color(..), BasicPos(..), TabCont(..), MyPos(..),
+         Piece(..), Color(..), TabCont(..), MyPos(..),
          black, slide, kkrq, diag, epcas, other, moving,
          epMask, fyMask, fyIncr, fyZero, mvMask, caRiMa,
          caRKiw, caRQuw, caRMKw, caRMQw, caRKib, caRQub, caRMKb, caRMQb,
@@ -37,64 +37,22 @@ data Piece = Pawn | Knight | Bishop | Rook | Queen | King
 
 data Color = White | Black deriving (Eq, Show, Ord, Enum, Ix)
 
--- This is the complete representation of a position, no redundant fields
-data BasicPos = BPos {
-    bpblack, bpslide, bpkkrq, bpdiag, bpepcas :: !BBoard
-    }
-    deriving (Eq, Show)
-
--- Storable is needed for the hash (transposition) table
-instance Storable BasicPos where
-    sizeOf _ = 5 * sizeOf (undefined :: BBoard)
-    alignment _ = alignment (undefined :: BBoard)
-
-    {-# INLINE peek #-}
-    peek p = let q = castPtr p
-             in do b <- peekElemOff q 0
-                   s <- peekElemOff q 1
-                   k <- peekElemOff q 2
-                   d <- peekElemOff q 3
-                   e <- peekElemOff q 4
-                   return $ BPos b s k d e
-
-    {-# INLINE poke #-}
-    poke p (BPos b s k d e)
-            = let q = castPtr p
-              in do pokeElemOff q 0 b
-                    pokeElemOff q 1 s
-                    pokeElemOff q 2 k
-                    pokeElemOff q 3 d
-                    pokeElemOff q 4 e
-
 data TabCont = Empty
              | Busy !Color !Piece
              deriving (Eq, Show)
 
 data MyPos = MyPos {
-    basicPos :: !BasicPos,	-- should not be strict here
+    black, slide, kkrq, diag, epcas :: !BBoard, -- These fields completely represents of a position
     zobkey :: !ZKey,	-- hash key
     mater :: !Int,	-- material balance
     white, occup, kings, pawns :: !BBoard,	-- further heavy used bitboards computed for efficiency
     queens, rooks, bishops, knights :: !BBoard,
-    whAttacs, blAttacs, check :: BBoard,		-- white & black attacs
+    whAttacs, blAttacs, check, passed :: BBoard,	-- white & black attacs, check & passed
     whPAttacs, whNAttacs, whBAttacs, whRAttacs, whQAttacs, whKAttacs :: BBoard,
     blPAttacs, blNAttacs, blBAttacs, blRAttacs, blQAttacs, blKAttacs :: BBoard,
-    staticScore :: Int,		-- this is not really ok, then the score must not be int!
-    realMove :: !Bool
+    staticScore :: Int
     }
     deriving (Eq, Show)
-
--- These functions are defined for convenience and of course inlined:
-{-# INLINE black #-}
-black = bpblack . basicPos
-{-# INLINE slide #-}
-slide = bpslide . basicPos
-{-# INLINE kkrq #-}
-kkrq = bpkkrq . basicPos
-{-# INLINE diag #-}
-diag = bpdiag . basicPos
-{-# INLINE epcas #-}
-epcas = bpepcas . basicPos
 
 {-
 Piece coding in MyPos (vertical over slide, kkrq and diag):
@@ -157,27 +115,25 @@ caRQub = 0x1100000000000000	-- black: king & rook position for queenside castle
 caRMKb = 0x6000000000000000	-- black: empty fields for kingside castle
 caRMQb = 0x0E00000000000000	-- black: empty fields for queenside castle
 
-emptyBPos = BPos {
-        bpblack = 0, bpslide = 0, bpkkrq = 0, bpdiag = 0, bpepcas = 0
-    }
 emptyPos = MyPos {
-        basicPos = emptyBPos, zobkey = 0, mater = 0,
+        black = 0, slide = 0, kkrq = 0, diag = 0, epcas = 0,
+        zobkey = 0, mater = 0,
         white = 0, occup = 0, kings = 0, pawns = 0,
         queens = 0, rooks = 0, bishops = 0, knights = 0,
         whAttacs = 0, blAttacs = 0, check = 0,
         whPAttacs = 0, whNAttacs = 0, whBAttacs = 0, whRAttacs = 0, whQAttacs = 0, whKAttacs = 0,
         blPAttacs = 0, blNAttacs = 0, blBAttacs = 0, blRAttacs = 0, blQAttacs = 0, blKAttacs = 0,
-        staticScore = 0, realMove = False
+        staticScore = 0, passed = 0
     }
 
 -- Stuff related to 50 moves rule
 {-# INLINE isReversible #-}
 isReversible :: MyPos -> Bool
-isReversible p = fyMask .&. bpepcas (basicPos p) /= 0
+isReversible p = fyMask .&. epcas p /= 0
 
 {-# INLINE remis50Moves #-}
 remis50Moves :: MyPos -> Bool
-remis50Moves p = bpepcas (basicPos p) .&. fyMask >= fyMaxi
+remis50Moves p = epcas p .&. fyMask >= fyMaxi
 
 {-# INLINE reset50Moves #-}
 reset50Moves :: BBoard -> BBoard
