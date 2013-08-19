@@ -392,6 +392,17 @@ instance EvalItem KingPlace where
     evalItem p c _ = kingPlace p c
     evalItemNDL _  = [ ("kingPlace", (4, (0, 400))) ]
 
+-- Parameters of the king placement
+materRook, materQueen, materFree :: Int
+materRook  = 2
+materQueen = 5
+materFree  = 3
+materBonusScale, pawnBonusScale :: Int
+materBonusScale = 4
+pawnBonusScale  = 5
+-- Variants for scales mater/pawn:
+-- orig: 4/5
+
 -- Depending on which pieces are on the booard we have some preferences
 -- where the king should be placed. For example, in the opening and middle game it should
 -- be in some corner, in endgame it should be near some (passed) pawn(s)
@@ -402,8 +413,8 @@ kingPlace p _ = [ kcd ]
           !kcd = wkc - bkc
           !wks = kingSquare (kings p) $ white p
           !bks = kingSquare (kings p) $ black p
-          !wkm = bminor + 2 * brooks + 5 * bqueens - 3
-          !bkm = wminor + 2 * wrooks + 5 * wqueens - 3
+          !wkm = bminor + materRook * brooks + materQueen * bqueens - materFree
+          !bkm = wminor + materRook * wrooks + materQueen * wqueens - materFree
           !wpl = kingMaterBonus wkm wks wmida wmidh 0
           !bpl = kingMaterBonus bkm bks bmida bmidh 7
           !wpi | passed p /= 0            = kingPawnsBonus wks (passed p) wpassed bpassed
@@ -424,9 +435,6 @@ kingPlace p _ = [ kcd ]
           bpawns  = pawns p .&. black p
           wpassed = passed p .&. white p
           bpassed = passed p .&. black p
-          zeroZero x y
-              | x == 0    = 0
-              | otherwise = y
 
 -- We give bonus also for pawn promotion squares, if the pawn is near enough to promote
 -- Give as parameter bitboards for all pawns, white pawns and black pawns for performance
@@ -441,15 +449,13 @@ kingPawnsBonus !ksq !alp !wbb !bbb = bonus
               ++ map promoB (bbToSquares (bbb .&. wHalf))
           !bosum = sum $ map (proxyBonus . squareDistance ksq) $ psqs ++ qsqs
           !bonus = bosum `unsafeShiftR` pawnBonusScale
-          pawnBonusScale = 5
 
 kingMaterBonus :: Int -> Square -> Square -> Square -> Int -> Int
 kingMaterBonus mat ksq sq1 sq2 line = bonus
     where !bonus = (mat * (proxyBonus (squareDistance ksq sq1)
-                         + proxyBonus (squareDistance ksq sq1)
+                         + proxyBonus (squareDistance ksq sq2)
                          + proxyLine line ksq)
                    ) `unsafeShiftR` materBonusScale
-          materBonusScale = 4
 
 proxyBonusArr :: UArray Int Int
 proxyBonusArr = listArray (-7, 7) [1, 2, 4, 8, 16, 32, 64, 64, 64, 32, 16, 8, 4, 2, 1]
