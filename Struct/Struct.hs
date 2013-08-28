@@ -74,11 +74,11 @@ data MyPos = MyPos {
     basicPos :: !BasicPos,	-- should not be strict here
     zobkey :: !ZKey,	-- hash key
     mater :: !Int,	-- material balance
-    white, occup, kings, pawns :: !BBoard,	-- further heavy used bitboards computed for efficiency
+    me, yo, occup, kings, pawns :: !BBoard,	-- further heavy used bitboards computed for efficiency
     queens, rooks, bishops, knights :: !BBoard,
-    whAttacs, blAttacs, check :: BBoard,		-- white & black attacs
-    whPAttacs, whNAttacs, whBAttacs, whRAttacs, whQAttacs, whKAttacs :: BBoard,
-    blPAttacs, blNAttacs, blBAttacs, blRAttacs, blQAttacs, blKAttacs :: BBoard,
+    myAttacs, yoAttacs, check :: BBoard,		-- my & yours attacs
+    myPAttacs, myNAttacs, myBAttacs, myRAttacs, myQAttacs, myKAttacs :: BBoard,
+    yoPAttacs, yoNAttacs, yoBAttacs, yoRAttacs, yoQAttacs, yoKAttacs :: BBoard,
     pinned :: !BBoard,
     wpindirs :: [(Square, BBoard)],	-- white pining directions
     bpindirs :: [(Square, BBoard)],	-- black pining directions
@@ -131,7 +131,7 @@ tabla :: MyPos -> Square -> TabCont
 tabla p sq
     | occup p .&. bsq == 0 = Empty
     | otherwise            = Busy c f
-    where c = if white p .&. bsq /= 0 then White else Black
+    where c = if black p .&. bsq /= 0 then Black else White
           f = pieceAt p bsq
           bsq = 1 `unsafeShiftL` sq
 
@@ -166,11 +166,11 @@ emptyBPos = BPos {
     }
 emptyPos = MyPos {
         basicPos = emptyBPos, zobkey = 0, mater = 0,
-        white = 0, occup = 0, kings = 0, pawns = 0,
+        me = 0, yo = 0, occup = 0, kings = 0, pawns = 0,
         queens = 0, rooks = 0, bishops = 0, knights = 0,
-        pinned = 0, whAttacs = 0, blAttacs = 0, check = 0,
-        whPAttacs = 0, whNAttacs = 0, whBAttacs = 0, whRAttacs = 0, whQAttacs = 0, whKAttacs = 0,
-        blPAttacs = 0, blNAttacs = 0, blBAttacs = 0, blRAttacs = 0, blQAttacs = 0, blKAttacs = 0,
+        pinned = 0, myAttacs = 0, yoAttacs = 0, check = 0,
+        myPAttacs = 0, myNAttacs = 0, myBAttacs = 0, myRAttacs = 0, myQAttacs = 0, myKAttacs = 0,
+        yoPAttacs = 0, yoNAttacs = 0, yoBAttacs = 0, yoRAttacs = 0, yoQAttacs = 0, yoKAttacs = 0,
         wpindirs = [], bpindirs = [], staticScore = 0, staticFeats = [], realMove = False
     }
 

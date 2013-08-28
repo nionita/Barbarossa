@@ -51,7 +51,6 @@ toNiceNotation p m
                  | otherwise             = False
           capt = if iscapt then "x" else ""
           att = fAttacs d fig (occup p)
-          our = if fcol == White then white p else black p
           src | fig == Pawn = if iscapt then col sc : "" else ""
               | fig == King = ""
               | fig == Knight = desamb (knights p)
@@ -71,7 +70,7 @@ toNiceNotation p m
               | popCount1 (b0 .&. colBB sc) == 1 = col sc : ""
               | popCount1 (b0 .&. rowBB sr) == 1 = row sr : ""
               | otherwise         = col sc : row sr : ""
-              where b0 = b .&. att .&. our
+              where b0 = b .&. att .&. me p
 
 pcToCh :: Bool -> Piece -> String
 pcToCh _ King   = "K"
@@ -122,8 +121,7 @@ fromNiceNotation p c = do
 -- Todo here: promotion and en passant!
 parsePawnCapt p x sqdst mtra = do
     let fcol = moving p
-        our = if fcol == White then white p else black p
-        target = our .&. pawns p
+        target = me p .&. pawns p
         att  = pAttacs (other fcol) sqdst
     sqsrc <- bbToSingleSquare (target .&. att .&. colBB x)
     return $ moveFromTo sqsrc sqdst
@@ -131,20 +129,17 @@ parsePawnCapt p x sqdst mtra = do
 -- Todo here: promotion and en passant!
 parsePawnMove p x sqdst mtra = do
     let fcol = moving p
-        our = if fcol == White then white p else black p
-        target = our .&. pawns p
+        target = me p .&. pawns p
         att  = pAttacs (other fcol) sqdst
     sqsrc <- bbToSingleSquare (target .&. att .&. colBB x)
     return $ moveFromTo sqsrc sqdst
 
 parseFigureMove p piece msrc sqdst = do
-    let fcol = moving p
-        our = if fcol == White then white p else black p
-        target | piece == King = our .&. kings p
-               | piece == Queen = our .&. queens p
-               | piece == Rook = our .&. rooks p
-               | piece == Bishop = our .&. bishops p
-               | piece == Knight = our .&. knights p
+    let target | piece == King = me p .&. kings p
+               | piece == Queen = me p .&. queens p
+               | piece == Rook = me p .&. rooks p
+               | piece == Bishop = me p .&. bishops p
+               | piece == Knight = me p .&. knights p
         att = fAttacs sqdst piece (occup p)
     sqsrc <- case msrc of
                  Just (SDCol x) -> bbToSingleSquare (target .&. att .&. colBB x) 
