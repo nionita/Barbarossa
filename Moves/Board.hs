@@ -315,7 +315,7 @@ data CheckInfo = NormalCheck Piece !Square
 -- Finds pieces which check
 findChecking :: MyPos -> [CheckInfo]
 findChecking !p = concat [ pChk, nChk, bChk, rChk, qbChk, qrChk ]
-    where pChk = map (NormalCheck Pawn) $ filter ((/= 0) . kattac . pAttacs (moving p))
+    where pChk = map (NormalCheck Pawn) $ filter ((/= 0) . kattac . pAttacs (other $ moving p))
                                $ bbToSquares $ pawns p .&. yo p
           nChk = map (NormalCheck Knight) $ filter ((/= 0) . kattac . nAttacs)
                                $ bbToSquares $ knights p .&. yo p
@@ -418,9 +418,6 @@ genMoveNCaptDirCheck p = concat [ qGenC, rGenC, bGenC, nGenC ]
           bTar = fAttacs ksq Bishop (occup p) `less` yo p
           rTar = fAttacs ksq Rook   (occup p) `less` yo p
           qTar = bTar .|. rTar
-
-genMoveNCaptToCheck :: MyPos -> Color -> [(Square, Square)]
-genMoveNCaptToCheck p c = genMoveNCaptDirCheck p c ++ genMoveNCaptIndirCheck p c
 
 -- TODO: indirect non capture checking moves
 genMoveNCaptIndirCheck :: MyPos -> [(Square, Square)]
@@ -793,7 +790,7 @@ doFromToMove m p | moveIsCastle m = updatePos p {
 doFromToMove _ _ = error "doFromToMove: wrong move type"
 
 reverseMoving :: MyPos -> MyPos
-reverseMoving p = p { basicPos = nbp, zobkey = z }
+reverseMoving p = updatePos p { basicPos = nbp, zobkey = z }
     where nbp = (basicPos p) { bpepcas = tepcas }
           tepcas = epcas p `xor` mvMask
           CA z _ = chainAccum (CA (zobkey p) (mater p)) [
