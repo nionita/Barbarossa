@@ -1222,11 +1222,14 @@ pvQSearch !a !b c = do				   -- to avoid endless loops
            let edges = Alt $ es1 ++ es2
            if noMove edges
               -- then qindent ("<= " ++ show stp) >> return stp
-              then return $! trimax a b stp
+              then do
+                  lift $ finEdge "MATE"
+                  return $! trimax a b stp
               else if c >= qsMaxChess
                       -- then qindent ("<= -1") >> return inEndlessCheck
                       then do
                           viztreeScore $ "endless check: " ++ show inEndlessCheck
+                          lift $ finEdge "ENDL"
                           return $! trimax a b inEndlessCheck
                       {--
                       else if stp >= b
@@ -1254,15 +1257,21 @@ pvQSearch !a !b c = do				   -- to avoid endless loops
                           -- qindent $ "<= " ++ show s
        else if qsBetaCut && stp >= b
                -- then qindent ("<= " ++ show b) >> return b
-               then return b
+               then do
+                   lift $ finEdge "BETA"
+                   return b
                else if qsDeltaCut && stp + qsDelta < a
                       -- then qindent ("<= " ++ show a) >> return a
-                      then return a
+                      then do
+                          lift $ finEdge "DELT"
+                          return a
                       else do
                           edges <- liftM Alt $ lift genTactEdges
                           if noMove edges
                              -- then qindent ("<= " ++ show stp) >> return stp
-                             then return $! trimax a b stp
+                             then do
+                                 lift $ finEdge "NOCA"
+                                 return $! trimax a b stp
                              else if stp > a
                                      then pvQLoop b c stp edges
                                      else pvQLoop b c a   edges

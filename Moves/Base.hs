@@ -66,6 +66,7 @@ instance CtxMon m => Node (Game r m) where
     inform = lift . tellCtx
     choose  = choose0
     timeout = isTimeout
+    finEdge = ifFinal
 
 -- Some options and parameters:
 debug, useHash :: Bool
@@ -76,7 +77,8 @@ depthForMovesSortPv, depthForMovesSort, scoreDiffEqual, printEvalInt :: Int
 depthForMovesSortPv = 1	-- use history for sorting moves when pv or cut nodes
 depthForMovesSort   = 1	-- use history for sorting moves
 scoreDiffEqual      = 4 -- under this score difference moves are considered to be equal (choose random)
-printEvalInt        = 2 ^ 13 - 1	-- if /= 0: print eval info every so many nodes
+-- printEvalInt        = 2 ^ 13 - 1	-- if /= 0: print eval info every so many nodes
+printEvalInt        = 2 `shiftL` 12 - 1	-- if /= 0: print eval info every so many nodes
 
 mateScore :: Int
 mateScore = 20000
@@ -225,20 +227,19 @@ doMove real m qs = do
         else if not cok
                 then return Illegal
                 else do
-                    let !c = moving p'
-                        (!sts, feats) = if real
+                    let (!sts, feats) = if real
                                            then (0, [])
-                                           else evalState (posEval p' c) (evalst s)
+                                           else evalState (posEval p') (evalst s)
                         !p = p' { staticScore = sts, staticFeats = feats }
                         dext = if inCheck p || goPromo p m1 then 1 else 0
                     -- when debug $
                     --     lift $ ctxLog "Debug" $ "*** doMove: " ++ showMyPos p
                     -- remis' <- checkRepeatPv p pv
                     -- remis  <- if remis' then return True else checkRemisRules p
-                    when (printEvalInt /= 0 && nodes (stats s) .&. printEvalInt == 0) $ do
-                        logMes $ "Fen: " ++ posToFen p
-                        logMes $ "Eval info:" ++ concatMap (\(n, v) -> " " ++ n ++ "=" ++ show v)
-                                                           (("score", sts) : paramPairs feats)
+                    -- when (printEvalInt /= 0 && nodes (stats s) .&. printEvalInt == 0) $ do
+                    --     logMes $ "Fen: " ++ posToFen p
+                    --     logMes $ "Eval info:" ++ concatMap (\(n, v) -> " " ++ n ++ "=" ++ show v)
+                    --                                        (("score", sts) : paramPairs feats)
                     put s { stack = p : stack s }
                     remis <- if qs then return False else checkRemisRules p'
                     if remis
@@ -251,8 +252,7 @@ doNullMove = do
     s <- get
     let !p0 = if null (stack s) then error "doNullMove" else head $ stack s
         !p' = reverseMoving p0
-        !c = moving p'
-        (!sts, feats) = evalState (posEval p' c) (evalst s)
+        (!sts, feats) = evalState (posEval p') (evalst s)
         !p = p' { staticScore = sts, staticFeats = feats }
     put s { stack = p : stack s }
 
@@ -326,6 +326,19 @@ staticVal0 = do
               | otherwise     = 0
     -- when debug $ lift $ ctxLog "Debug" $ "--> staticVal0 " ++ show stSc1
     return $! stSc1
+
+{-# INLINE ifFinal #-}
+ifFinal :: CtxMon m => String -> Game r m ()
+ifFinal str = do
+    s <- get
+    when (printEvalInt /= 0 && nodes (stats s) .&. printEvalInt == 0) $ do
+        let (p:_) = stack s	-- we never saw an empty stack error until now
+            fen = posToFen p
+            mv = head . tail $ words fen
+        logMes $ str ++ " Fen: " ++ fen
+        logMes $ "Eval info " ++ mv ++ ":"
+                      ++ concatMap (\(n, v) -> " " ++ n ++ "=" ++ show v)
+                                   (("score", staticScore p) : paramPairs (staticFeats p))
 
 materVal0 :: CtxMon m => Game r m Int
 materVal0 = do
