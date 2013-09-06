@@ -93,10 +93,11 @@ fenFromString fen = zipWith ($) fenfuncs fentails
 
 -- Is color c in check in position p?
 isCheck :: MyPos -> Color -> Bool
-isCheck p c = (ckp /= 0) && (ckp .&. colp /= 0)
-    where colp = if c == White then white else black p
-          ckp = check p
-          white = occup p `less` black p
+isCheck p White | check p .&. white == 0 = False
+                | otherwise              = True
+    where !white = occup p `less` black p
+isCheck p Black | check p .&. black p == 0 = False
+                | otherwise                = True
 
 {-# INLINE inCheck #-}
 inCheck :: MyPos -> Bool
@@ -226,7 +227,7 @@ genMoveNCapt !p = concat [ nGenNC, bGenNC, rGenNC, qGenNC, pGenNC1, pGenNC2, kGe
           ncapt = (`less` occup p)
           legal = (`less` yoAttacs p)
           traR = if c == White then 0x00FF000000000000 else 0xFF00
-          c = moving p
+          !c = moving p
 
 -- Generate only transformations (now only to queen) - captures and non captures
 genMoveTransf :: MyPos -> [(Square, Square)]
@@ -238,7 +239,7 @@ genMoveTransf !p = pGenC ++ pGenNC
           !yopiep = yo p .|. (epcas p .&. epMask)
           pcapt = (.&. yopiep)
           !traR = if c == White then 0x00FF000000000000 else 0xFF00
-          c = moving p
+          !c = moving p
 
 {--
 -- Generate the captures with pinned pieces
@@ -391,10 +392,10 @@ blockAt p !bb = pawnBlockAt p bb ++ defendAt p bb
 
 -- Defend a check from a sliding piece: beat it or block it
 beatOrBlock :: Piece -> MyPos -> Square -> ([(Square, Square)], [(Square, Square)])
-beatOrBlock f p sq = (beat, block)
+beatOrBlock f !p sq = (beat, block)
     where !beat = beatAt p $ bit sq
-          aksq = firstOne $ me p .&. kings p
-          line = findLKA f aksq sq
+          !aksq = firstOne $ me p .&. kings p
+          !line = findLKA f aksq sq
           !block = blockAt p line
 
 genMoveNCaptToCheck :: MyPos -> [(Square, Square)]
@@ -413,11 +414,11 @@ genMoveNCaptDirCheck p = concat [ qGenC, rGenC, bGenC, nGenC ]
           qGenC = concatMap (srcDests (target qTar . qAttacs (occup p)))
                      $ bbToSquares $ queens p .&. me p `less` pinned p
           target b = (.&. b)
-          ksq  = firstOne $ yo p .&. kings p
-          nTar = fAttacs ksq Knight (occup p) `less` yo p
-          bTar = fAttacs ksq Bishop (occup p) `less` yo p
-          rTar = fAttacs ksq Rook   (occup p) `less` yo p
-          qTar = bTar .|. rTar
+          !ksq  = firstOne $ yo p .&. kings p
+          !nTar = fAttacs ksq Knight (occup p) `less` yo p
+          !bTar = fAttacs ksq Bishop (occup p) `less` yo p
+          !rTar = fAttacs ksq Rook   (occup p) `less` yo p
+          !qTar = bTar .|. rTar
 
 -- TODO: indirect non capture checking moves
 genMoveNCaptIndirCheck :: MyPos -> [(Square, Square)]
@@ -436,7 +437,7 @@ updatePos :: MyPos -> MyPos
 updatePos = updatePosCheck . updatePosAttacs . updatePosOccup
 
 updatePosOccup :: MyPos -> MyPos
-updatePosOccup p = p {
+updatePosOccup !p = p {
                   occup = toccup, me = tme, yo = tyo, kings   = tkings,
                   pawns = tpawns, knights = tknights, queens  = tqueens,
                   rooks = trooks, bishops = tbishops
@@ -453,7 +454,7 @@ updatePosOccup p = p {
           !tbishops = slide p .&. diag p `less` kkrq p
 
 updatePosAttacs :: MyPos -> MyPos
-updatePosAttacs p
+updatePosAttacs !p
     | moving p == White = p {
                       myPAttacs = twhPAtt, myNAttacs = twhNAtt, myBAttacs = twhBAtt,
                       myRAttacs = twhRAtt, myQAttacs = twhQAtt, myKAttacs = twhKAtt,
@@ -519,26 +520,26 @@ genMoveCast p
                         then [caqs] else []
           caks = makeCastleFor c True
           caqs = makeCastleFor c False
-          c = moving p
+          !c = moving p
 
 {-# INLINE kingMoved #-}
 kingMoved :: MyPos -> Color -> Bool
-kingMoved p White = not (epcas p `testBit` 4)
-kingMoved p Black = not (epcas p `testBit` 60)
+kingMoved !p White = not (epcas p `testBit` 4)
+kingMoved !p Black = not (epcas p `testBit` 60)
 
 {-# INLINE castKingRookOk #-}
 castKingRookOk :: MyPos -> Color -> Bool
-castKingRookOk p White = epcas p `testBit` 7
-castKingRookOk p Black = epcas p `testBit` 63
+castKingRookOk !p White = epcas p `testBit` 7
+castKingRookOk !p Black = epcas p `testBit` 63
 
 {-# INLINE castQueenRookOk #-}
 castQueenRookOk :: MyPos -> Color -> Bool
-castQueenRookOk p White = epcas p `testBit` 0
-castQueenRookOk p Black = epcas p `testBit` 56
+castQueenRookOk !p White = epcas p `testBit` 0
+castQueenRookOk !p Black = epcas p `testBit` 56
 
 -- Set a piece on a square of the table
 setPiece :: Square -> Color -> Piece -> MyPos -> MyPos
-setPiece sq c f p = p { basicPos = nbp, zobkey = nzob, mater = nmat }
+setPiece sq c f !p = p { basicPos = nbp, zobkey = nzob, mater = nmat }
     where setCond cond = if cond then (.|. bsq) else (.&. nbsq)
           nbp = (basicPos p) {
                     bpblack = setCond (c == Black) $ black p,
@@ -567,7 +568,7 @@ data ChangeAccum = CA !ZKey !Int
 
 -- Accumulate a set of changes in MyPos (except BBoards) due to setting a piece on a square
 accumSetPiece :: Square -> Color -> Piece -> MyPos -> ChangeAccum -> ChangeAccum
-accumSetPiece sq c f p (CA z m)
+accumSetPiece sq c f !p (CA z m)
     = case tabla p sq of
         Empty      -> CA znew mnew
         Busy co fo -> accumCapt sq co fo znew mnew
@@ -582,7 +583,7 @@ accumClearSq sq p i@(CA z m)
         Busy co fo -> accumCapt sq co fo z m
 
 accumCapt :: Square -> Color -> Piece -> ZKey -> Int -> ChangeAccum
-accumCapt sq co fo z m = CA (z `xor` zco) (m - mco)
+accumCapt sq !co !fo !z !m = CA (z `xor` zco) (m - mco)
     where !zco = zobPiece co fo sq
           !mco = matPiece co fo
 
@@ -673,7 +674,7 @@ mvBit !src !dst !w	-- = w `xor` ((w `xor` (shifted .&. nbsrc)) .&. mask)
 -- Copy one square to another and clear the source square
 -- doFromToMove :: Square -> Square -> MyPos -> Maybe MyPos
 doFromToMove :: Move -> MyPos -> MyPos
-doFromToMove m p | moveIsNormal m = updatePos p {
+doFromToMove m !p | moveIsNormal m = updatePos p {
                                         basicPos = nbp, zobkey = tzobkey, mater = tmater
                                     }
     where nbp = BPos {
@@ -706,7 +707,7 @@ doFromToMove m p | moveIsNormal m = updatePos p {
                                  ++ showTab (black p) (slide p) (kkrq p) (diag p)
                                  ++ "resulting pos:\n"
                                  ++ showTab tblack tslide tkkrq tdiag
-doFromToMove m p | moveIsEnPas m = updatePos p {
+doFromToMove m !p | moveIsEnPas m = updatePos p {
                                        basicPos = nbp, zobkey = tzobkey, mater = tmater
                                    }
     where nbp = BPos {
@@ -731,7 +732,7 @@ doFromToMove m p | moveIsEnPas m = updatePos p {
                                 accumSetPiece dst col fig p,
                                 accumMoving p
                             ]
-doFromToMove m p | moveIsTransf m = updatePos p0 {
+doFromToMove m !p | moveIsTransf m = updatePos p0 {
                                         basicPos = nbp, zobkey = tzobkey, mater = tmater
                                     }
     where nbp = BPos {
@@ -741,7 +742,7 @@ doFromToMove m p | moveIsTransf m = updatePos p0 {
           src = fromSquare m
           dst = toSquare m
           Busy col Pawn = tabla p src	-- identify the moving color (piece must be pawn)
-          pie = moveTransfPiece m
+          !pie = moveTransfPiece m
           p0 = setPiece src (moving p) pie p
           tblack = mvBit src dst $ black p0
           tslide = mvBit src dst $ slide p0
@@ -753,7 +754,7 @@ doFromToMove m p | moveIsTransf m = updatePos p0 {
                                 accumSetPiece dst col pie p0,
                                 accumMoving p0
                             ]
-doFromToMove m p | moveIsCastle m = updatePos p {
+doFromToMove m !p | moveIsCastle m = updatePos p {
                                         basicPos = nbp, zobkey = tzobkey, mater = tmater
                                     }
     where nbp = BPos {
@@ -803,11 +804,11 @@ reverseMoving p = updatePos p { basicPos = nbp, zobkey = z }
 -- and when we call findLKA we always know as which piece the queen checks
 {-# INLINE findLKA #-}
 findLKA :: Piece -> Square -> Int -> BBoard
-findLKA Queen ksq psq
+findLKA Queen !ksq !psq
     | rAttacs bpsq ksq .&. bpsq == 0 = findLKA0 Bishop ksq psq
     | otherwise                      = findLKA0 Rook   ksq psq
-    where bpsq = bit psq
-findLKA pt ksq psq = findLKA0 pt ksq psq
+    where !bpsq = bit psq
+findLKA pt !ksq !psq = findLKA0 pt ksq psq
 
 findLKA0 :: Piece -> Square -> Int -> BBoard
 findLKA0 pt ksq psq
@@ -920,9 +921,9 @@ seeMoveValue pos sqfirstmv sqto gain0 = v
 
 -- This function can produce illegal captures with the king!
 genMoveCaptWL :: MyPos -> ([(Square, Square)], [(Square, Square)])
-genMoveCaptWL pos = (wl, ll)
-    where (wl, ll) = foldr (perCaptFieldWL pos (me pos) (yoAttacs pos)) ([],[]) $ squaresByMVV pos capts
-          capts = myAttacs pos .&. yo pos
+genMoveCaptWL !pos
+    = foldr (perCaptFieldWL pos (me pos) (yoAttacs pos)) ([],[]) $ squaresByMVV pos capts
+    where capts = myAttacs pos .&. yo pos
 
 perCaptFieldWL :: MyPos -> BBoard -> BBoard -> Square
           -> ([(Square, Square)], [(Square, Square)])
