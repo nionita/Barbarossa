@@ -45,12 +45,13 @@ data MyPos = MyPos {
     black, slide, kkrq, diag, epcas :: !BBoard, -- These fields completely represents of a position
     zobkey :: !ZKey,	-- hash key
     mater :: !Int,	-- material balance
-    white, occup, kings, pawns :: !BBoard,	-- further heavy used bitboards computed for efficiency
+    me, yo, occup, kings, pawns :: !BBoard,	-- further heavy used bitboards computed for efficiency
     queens, rooks, bishops, knights :: !BBoard,
-    whAttacs, blAttacs, check, passed :: BBoard,	-- white & black attacs, check & passed
-    whPAttacs, whNAttacs, whBAttacs, whRAttacs, whQAttacs, whKAttacs :: BBoard,
-    blPAttacs, blNAttacs, blBAttacs, blRAttacs, blQAttacs, blKAttacs :: BBoard,
-    staticScore :: Int
+    myAttacs, yoAttacs, check, passed :: BBoard,		-- my & yours attacs, check & passed
+    myPAttacs, myNAttacs, myBAttacs, myRAttacs, myQAttacs, myKAttacs :: BBoard,
+    yoPAttacs, yoNAttacs, yoBAttacs, yoRAttacs, yoQAttacs, yoKAttacs :: BBoard,
+    staticScore :: Int,
+    staticFeats :: [Int]
     }
     deriving (Eq, Show)
 
@@ -85,7 +86,7 @@ tabla :: MyPos -> Square -> TabCont
 tabla p sq
     | occup p .&. bsq == 0 = Empty
     | otherwise            = Busy c f
-    where c = if white p .&. bsq /= 0 then White else Black
+    where c = if black p .&. bsq /= 0 then Black else White
           f = pieceAt p bsq
           bsq = 1 `unsafeShiftL` sq
 
@@ -118,12 +119,13 @@ caRMQb = 0x0E00000000000000	-- black: empty fields for queenside castle
 emptyPos = MyPos {
         black = 0, slide = 0, kkrq = 0, diag = 0, epcas = 0,
         zobkey = 0, mater = 0,
-        white = 0, occup = 0, kings = 0, pawns = 0,
+        me = 0, yo = 0, occup = 0, kings = 0, pawns = 0,
         queens = 0, rooks = 0, bishops = 0, knights = 0,
-        whAttacs = 0, blAttacs = 0, check = 0,
-        whPAttacs = 0, whNAttacs = 0, whBAttacs = 0, whRAttacs = 0, whQAttacs = 0, whKAttacs = 0,
-        blPAttacs = 0, blNAttacs = 0, blBAttacs = 0, blRAttacs = 0, blQAttacs = 0, blKAttacs = 0,
-        staticScore = 0, passed = 0
+        myAttacs = 0, yoAttacs = 0, check = 0,
+        myPAttacs = 0, myNAttacs = 0, myBAttacs = 0, myRAttacs = 0, myQAttacs = 0, myKAttacs = 0,
+        yoPAttacs = 0, yoNAttacs = 0, yoBAttacs = 0, yoRAttacs = 0, yoQAttacs = 0, yoKAttacs = 0,
+        staticScore = 0, passed = 0,
+        staticFeats = []
     }
 
 -- Stuff related to 50 moves rule

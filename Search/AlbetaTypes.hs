@@ -42,6 +42,7 @@ class Monad m => Node m where
     inform :: Comm -> m ()		-- communicate to the world (log, current and best move)
     choose :: Bool -> [(Int, [Move])] -> m (Int, [Move])
     timeout  :: Int -> m Bool	-- check if we have to abort because of time
+    finEdge  :: String -> m ()	-- called when in a final node
 
 data DoResult = Exten !Int	-- return mit extension (evtl 0)
               | Final !Int	-- return with a final score (probably draw)
