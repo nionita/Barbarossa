@@ -394,7 +394,10 @@ data KingPlace = KingPlace
 
 instance EvalItem KingPlace where
     evalItem p _  = kingPlace p
-    evalItemNDL _ = [ ("kingPlace", (4, (0, 400))) ]
+    evalItemNDL _ = [
+                      ("kingPlaceCent", (4, (0, 400))),
+                      ("kingPlacePwns", (4, (0, 400)))
+                    ]
 
 -- Parameters of the king placement
 materRook, materQueen, materFree :: Int
@@ -411,8 +414,9 @@ pawnBonusScale  = 4
 -- where the king should be placed. For example, in the opening and middle game it should
 -- be in some corner, in endgame it should be near some (passed) pawn(s)
 kingPlace :: MyPos -> IParams
-kingPlace p = [ kcd ]
-    where !kcd = mkc - ykc
+kingPlace p = [ kcd, kpd ]
+    where !kcd = mpl - ypl
+          !kpd = mpi - ypi
           !mks = kingSquare (kings p) $ me p
           !yks = kingSquare (kings p) $ yo p
           !mkm = yminor + materRook * yrooks + materQueen * yqueens - materFree
@@ -425,8 +429,6 @@ kingPlace p = [ kcd ]
           !ypi | passed p /= 0            = kingPawnsBonus c yks (passed p) mpassed ypassed
                | ykm <= 0 && pawns p /= 0 = kingPawnsBonus c yks (pawns  p) mpawns  ypawns
                | otherwise                = 0
-          !mkc = mpl + mpi
-          !ykc = ypl + ypi
           !mrooks  = popCount1 $ rooks p .&. me p
           !mqueens = popCount1 $ queens p .&. me p
           !mminor  = popCount1 $ (bishops p .|. knights p) .&. me p
