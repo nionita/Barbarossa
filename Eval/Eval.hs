@@ -405,7 +405,7 @@ materRook  = 2
 materQueen = 5
 materFree  = 3
 materBonusScale, pawnBonusScale :: Int
-materBonusScale = 4
+materBonusScale = 3
 pawnBonusScale  = 4
 -- Variants for scales mater/pawn:
 -- orig: 4/5
@@ -421,8 +421,8 @@ kingPlace p = [ kcd, kpd ]
           !yks = kingSquare (kings p) $ yo p
           !mkm = yminor + materRook * yrooks + materQueen * yqueens - materFree
           !ykm = mminor + materRook * mrooks + materQueen * mqueens - materFree
-          !mpl = kingMaterBonus mkm mks
-          !ypl = kingMaterBonus ykm yks
+          !mpl = kingMaterBonus mpawns mkm mks
+          !ypl = kingMaterBonus ypawns ykm yks
           !mpi | passed p /= 0            = kingPawnsBonus c mks (passed p) mpassed ypassed
                | mkm <= 0 && pawns p /= 0 = kingPawnsBonus c mks (pawns  p) mpawns  ypawns
                | otherwise                = 0
@@ -465,17 +465,18 @@ kingPawnsBonus' !ksq !alp !wHalf !bHalf = bonus
                        $ map promoW (bbToSquares bHalf) ++ map promoB (bbToSquares wHalf)
           !bonus = (bpsqs + bqsqs) `unsafeShiftR` pawnBonusScale
 
-kingMaterBonus :: Int -> Square -> Int
-kingMaterBonus mat ksq = bonus
+kingMaterBonus :: BBoard -> Int -> Square -> Int
+kingMaterBonus myp mat ksq = bonus
     where !bonus = (mat * prx) `unsafeShiftR` materBonusScale
-          !prx = proxyBonus (squareDistance ksq wa)
-               + proxyBonus (squareDistance ksq wh)
-               + proxyBonus (squareDistance ksq ba)
-               + proxyBonus (squareDistance ksq bh)
+          !prx = proxyBonus (squareDistance ksq wa) * opawns wa
+               + proxyBonus (squareDistance ksq wh) * opawns wh
+               + proxyBonus (squareDistance ksq ba) * opawns ba
+               + proxyBonus (squareDistance ksq bh) * opawns bh
                -- + proxyLine 0 ksq
                -- + proxyLine 7 ksq
-          [wa, wh] = bbToSquares $ row1 .&. (fileA .|. fileH)
-          [ba, bh] = bbToSquares $ row8 .&. (fileA .|. fileH)
+          opawns s = popCount1 $ kAttacs s .&. myp
+          [wa, wh] = bbToSquares $ row1 .&. (fileB .|. fileG)
+          [ba, bh] = bbToSquares $ row8 .&. (fileB .|. fileG)
 
 -- Make it longer, for artificially increased distances
 proxyBonusArr :: UArray Int Int -- 0   1   2   3  4  5  6  7
