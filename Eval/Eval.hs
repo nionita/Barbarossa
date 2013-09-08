@@ -8,7 +8,7 @@ module Eval.Eval (
 ) where
 
 import Prelude hiding ((++), head, foldl, map, concat, filter, takeWhile, iterate, sum,
-                       zip, zipWith, foldr, concatMap, length, replicate, lookup)
+                       zip, zipWith, foldr, concatMap, length, replicate, lookup, repeat)
 import Data.Array.Base (unsafeAt)
 import Data.Bits hiding (popCount)
 import Data.List.Stream
@@ -403,7 +403,7 @@ materQueen = 5
 materFree  = 3
 materBonusScale, pawnBonusScale :: Int
 materBonusScale = 4
-pawnBonusScale  = 5
+pawnBonusScale  = 4
 -- Variants for scales mater/pawn:
 -- orig: 4/5
 
@@ -412,20 +412,18 @@ pawnBonusScale  = 5
 -- be in some corner, in endgame it should be near some (passed) pawn(s)
 kingPlace :: MyPos -> IParams
 kingPlace p = [ kcd ]
-    where [mmida, mmidh] = bbToSquares $ row1 .&. (fileA .|. fileH)
-          [ymida, ymidh] = bbToSquares $ row8 .&. (fileA .|. fileH)
-          !kcd = mkc - ykc
+    where !kcd = mkc - ykc
           !mks = kingSquare (kings p) $ me p
           !yks = kingSquare (kings p) $ yo p
           !mkm = yminor + materRook * yrooks + materQueen * yqueens - materFree
           !ykm = mminor + materRook * mrooks + materQueen * mqueens - materFree
-          !mpl = kingMaterBonus mkm mks mmida mmidh 0
-          !ypl = kingMaterBonus ykm yks ymida ymidh 7
-          !mpi | passed p /= 0            = kingPawnsBonus mks (passed p) mpassed ypassed
-               | mkm <= 0 && pawns p /= 0 = kingPawnsBonus mks (pawns  p) mpawns  ypawns
+          !mpl = kingMaterBonus mkm mks
+          !ypl = kingMaterBonus ykm yks
+          !mpi | passed p /= 0            = kingPawnsBonus c mks (passed p) mpassed ypassed
+               | mkm <= 0 && pawns p /= 0 = kingPawnsBonus c mks (pawns  p) mpawns  ypawns
                | otherwise                = 0
-          !ypi | passed p /= 0            = kingPawnsBonus yks (passed p) mpassed ypassed
-               | ykm <= 0 && pawns p /= 0 = kingPawnsBonus yks (pawns  p) mpawns  ypawns
+          !ypi | passed p /= 0            = kingPawnsBonus c yks (passed p) mpassed ypassed
+               | ykm <= 0 && pawns p /= 0 = kingPawnsBonus c yks (pawns  p) mpawns  ypawns
                | otherwise                = 0
           !mkc = mpl + mpi
           !ykc = ypl + ypi
@@ -435,40 +433,60 @@ kingPlace p = [ kcd ]
           !yrooks  = popCount1 $ rooks p .&. yo p
           !yqueens = popCount1 $ queens p .&. yo p
           !yminor  = popCount1 $ (bishops p .|. knights p) .&. yo p
-          mpawns  = pawns p .&. me p
-          ypawns  = pawns p .&. yo p
-          mpassed = passed p .&. me p
-          ypassed = passed p .&. yo p
+          !mpawns  = pawns p .&. me p
+          !ypawns  = pawns p .&. yo p
+          !mpassed = passed p .&. me p
+          !ypassed = passed p .&. yo p
+          !c = moving p
 
 -- We give bonus also for pawn promotion squares, if the pawn is near enough to promote
 -- Give as parameter bitboards for all pawns, white pawns and black pawns for performance
-kingPawnsBonus :: Square -> BBoard -> BBoard -> BBoard -> Int
-kingPawnsBonus !ksq !alp !wbb !bbb = bonus
-    where promoW s = 56 + s `unsafeShiftR` 3
-          promoB s =      s `unsafeShiftR` 3
-          wHalf = 0x00000000FFFFFFFF
-          bHalf = 0xFFFFFFFF00000000
-          psqs = bbToSquares alp
-          qsqs = map promoW (bbToSquares (wbb .&. bHalf))
-              ++ map promoB (bbToSquares (bbb .&. wHalf))
-          !bosum = sum $ map (proxyBonus . squareDistance ksq) $ psqs ++ qsqs
-          !bonus = bosum `unsafeShiftR` pawnBonusScale
+kingPawnsBonus :: Color -> Square -> BBoard -> BBoard -> BBoard -> Int
+kingPawnsBonus White !ksq !alp !mbb !ybb = kingPawnsBonus' ksq alp wHalf bHalf
+    where !wHalf = 0x00000000FFFFFFFF .&. ybb
+          !bHalf = 0xFFFFFFFF00000000 .&. mbb
+kingPawnsBonus Black !ksq !alp !mbb !ybb = kingPawnsBonus' ksq alp wHalf bHalf
+    where !wHalf = 0x00000000FFFFFFFF .&. mbb
+          !bHalf = 0xFFFFFFFF00000000 .&. ybb
 
-kingMaterBonus :: Int -> Square -> Square -> Square -> Int -> Int
-kingMaterBonus mat ksq sq1 sq2 line = bonus
-    where !bonus = (mat * (proxyBonus (squareDistance ksq sq1)
-                         + proxyBonus (squareDistance ksq sq2)
-                         + proxyLine line ksq)
-                   ) `unsafeShiftR` materBonusScale
+promoW, promoB :: Square -> Square
+promoW s = 56 + (s .&. 7)
+promoB s =       s .&. 7
 
-proxyBonusArr :: UArray Int Int
-proxyBonusArr = listArray (-7, 7) [1, 2, 4, 8, 16, 32, 64, 64, 64, 32, 16, 8, 4, 2, 1]
+promoFieldDistIncr :: Int -> Int
+promoFieldDistIncr = \d -> d + 1
+
+kingPawnsBonus' :: Square -> BBoard -> BBoard -> BBoard -> Int
+kingPawnsBonus' !ksq !alp !wHalf !bHalf = bonus
+    where !bpsqs = sum $ map (proxyBonus . squareDistance ksq) $ bbToSquares alp
+          !bqsqs = sum $ map (proxyBonus . promoFieldDistIncr . squareDistance ksq)
+                       $ map promoW (bbToSquares bHalf) ++ map promoB (bbToSquares wHalf)
+          !bonus = (bpsqs + bqsqs) `unsafeShiftR` pawnBonusScale
+
+kingMaterBonus :: Int -> Square -> Int
+kingMaterBonus mat ksq = bonus
+    where !bonus = (mat * prx) `unsafeShiftR` materBonusScale
+          !prx = proxyBonus (squareDistance ksq wa)
+               + proxyBonus (squareDistance ksq wh)
+               + proxyBonus (squareDistance ksq ba)
+               + proxyBonus (squareDistance ksq bh)
+               -- + proxyLine 0 ksq
+               -- + proxyLine 7 ksq
+          [wa, wh] = bbToSquares $ row1 .&. (fileA .|. fileH)
+          [ba, bh] = bbToSquares $ row8 .&. (fileA .|. fileH)
+
+-- Make it longer, for artificially increased distances
+proxyBonusArr :: UArray Int Int -- 0   1   2   3  4  5  6  7
+proxyBonusArr = listArray (0, 15) $ [75, 25, 10, 5, 3, 2, 1] ++ repeat 0
+
+proxyLineArr :: UArray Int Int -- 7  6  5  4  3  2   1   0   1   2   3  4  5  6  7
+proxyLineArr = listArray (-7, 7) [0, 1, 2, 3, 5, 10, 25, 75, 25, 10, 5, 3, 2, 1, 0]
 
 proxyBonus :: Int -> Int
-proxyBonus = (proxyBonusArr!)
+proxyBonus = unsafeAt proxyBonusArr
 
 proxyLine :: Int -> Square -> Int
-proxyLine line sq = proxyBonusArr ! (unsafeShiftR sq 3 - line)
+proxyLine line sq = proxyBonusArr `unsafeAt` (unsafeShiftR sq 3 - line)
 
 ------ Mobility ------
 data Mobility = Mobility	-- "safe" moves
@@ -654,28 +672,31 @@ data PassPawns = PassPawns
 instance EvalItem PassPawns where
     evalItem p _  = passPawns p
     evalItemNDL _ = [("passPawnBonus", (104, (  0, 160))),
-                      ("passPawn4",     (424, (400, 480))),
-                      ("passPawn5",     (520, (520, 640))),
-                      ("passPawn6",     (1132, (1100, 1200))),
-                      ("passPawn7",     (1920, (1600, 2300))) ]
+                     ("passPawn4",     (424, (400, 480))),
+                     ("passPawn5",     (520, (520, 640))),
+                     ("passPawn6",     (1132, (1100, 1200))),
+                     ("passPawn7",     (1920, (1600, 2300))) ]
 
 passPawns :: MyPos -> IParams
 passPawns p = [dfp, dfp4, dfp5, dfp6, dfp7]
     where !wfpbb = passed p .&. me p
           !bfpbb = passed p .&. yo p
           !wfp  = popCount1   wfpbb
-          !wfp4 = popCount1 $ wfpbb .&. row4
-          !wfp5 = popCount1 $ wfpbb .&. row5
-          !wfp6 = popCount1 $ wfpbb .&. row6
-          !wfp7 = popCount1 $ wfpbb .&. row7
+          !wfp4 = popCount1 $ wfpbb .&. row4m
+          !wfp5 = popCount1 $ wfpbb .&. row5m
+          !wfp6 = popCount1 $ wfpbb .&. row6m
+          !wfp7 = popCount1 $ wfpbb .&. row7m
           !bfp  = popCount1   bfpbb
-          !bfp4 = popCount1 $ bfpbb .&. row5
-          !bfp5 = popCount1 $ bfpbb .&. row4
-          !bfp6 = popCount1 $ bfpbb .&. row3
-          !bfp7 = popCount1 $ bfpbb .&. row2
+          !bfp4 = popCount1 $ bfpbb .&. row4y
+          !bfp5 = popCount1 $ bfpbb .&. row5y
+          !bfp6 = popCount1 $ bfpbb .&. row6y
+          !bfp7 = popCount1 $ bfpbb .&. row7y
           !dfp  = wfp  - bfp
           !dfp4 = wfp4 - bfp4
           !dfp5 = wfp5 - bfp5
           !dfp6 = wfp6 - bfp6
           !dfp7 = wfp7 - bfp7
+          (!row4m, !row5m, !row6m, !row7m, !row4y, !row5y, !row6y, !row7y)
+              | moving p == White = (row4, row5, row6, row7, row5, row4, row3, row2)
+              | otherwise         = (row5, row4, row3, row2, row4, row5, row6, row7)
 --------------------------------------
