@@ -159,8 +159,8 @@ data Pvsl = Pvsl {
         pvGood  :: !Bool	-- beta cut or alpha improvement
     } deriving Show
 
-data Killer = NoKiller | OneKiller Move Int | TwoKillers Move Int Move Int
-                         deriving Show
+data Killer = NoKiller | OneKiller !Move | TwoKillers !Move !Move
+                  deriving Show
 
 -- Read only parameters of the search, so that we can change them programatically
 data PVReadOnly
@@ -1073,8 +1073,8 @@ checkFailOrPVLoopZ xstats b d e s nst = do
 newKiller :: Int -> Path -> NodeState -> Search Killer
 newKiller d s nst
     | d >= 2, (mm:km:_) <- unseq $ pathMoves s = do
-        iskm <- lift $ isKillCand mm km
-        if iskm then return $! pushKiller km (- pathScore s) (killer nst)
+        !iskm <- lift $ isKillCand mm km
+        if iskm then return $! pushKiller km (killer nst)
                 else return $ killer nst
     | otherwise = return $ killer nst
 
@@ -1451,20 +1451,19 @@ bestFirst path kl (es1, es2)
     where delall = foldr delete
           (e:_)  = path
 
-pushKiller :: Move -> Int -> Killer -> Killer
-pushKiller !e s NoKiller = OneKiller e s
-pushKiller !e s ok@(OneKiller e1 s1)
-    = if e == e1
-         then ok
-         else TwoKillers e s e1 s1
-pushKiller !e s tk@(TwoKillers e1 s1 e2 _)
+pushKiller :: Move -> Killer -> Killer
+pushKiller !e NoKiller = OneKiller e
+pushKiller !e ok@(OneKiller e1)
+    | e == e1   = ok
+    | otherwise = TwoKillers e e1
+pushKiller !e tk@(TwoKillers e1 e2)
     | e == e1 || e == e2 = tk
-    | otherwise          = TwoKillers e s e1 s1
+    | otherwise          = TwoKillers e e1
 
 killerToList :: Killer -> [Move]
-killerToList NoKiller = []
-killerToList (OneKiller e _) = [e]
-killerToList (TwoKillers e1 _ e2 _) = [e1, e2]
+killerToList  NoKiller          = []
+killerToList (OneKiller e)      = [e]
+killerToList (TwoKillers e1 e2) = [e1, e2]
 
 --- Communication to the outside - some convenience functions ---
 
