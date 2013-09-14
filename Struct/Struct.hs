@@ -46,8 +46,8 @@ data MyPos = MyPos {
     zobkey :: !ZKey,	-- hash key
     mater :: !Int,	-- material balance
     me, yo, occup, kings, pawns :: !BBoard,	-- further heavy used bitboards computed for efficiency
-    queens, rooks, bishops, knights :: !BBoard,
-    myAttacs, yoAttacs, check, passed :: BBoard,		-- my & yours attacs, check & passed
+    queens, rooks, bishops, knights, passed :: !BBoard,
+    myAttacs, yoAttacs, check :: BBoard,		-- my & yours attacs, check
     myPAttacs, myNAttacs, myBAttacs, myRAttacs, myQAttacs, myKAttacs :: BBoard,
     yoPAttacs, yoNAttacs, yoBAttacs, yoRAttacs, yoQAttacs, yoKAttacs :: BBoard,
     staticScore :: Int,

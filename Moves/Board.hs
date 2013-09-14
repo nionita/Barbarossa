@@ -342,6 +342,45 @@ sortByMVVLVA p = map snd . sortBy (comparing fst) . map va
                          in ((vic, agr), ft)
           va _ = error "sortByMVVLVA: not a capture"
 
+-- Small optimisation: .&. instead `less` below
+-- This one should be done in Muster.hs and used elsewhere too
+notFileA, notFileH :: BBoard
+notFileA = 0xFEFEFEFEFEFEFEFE
+notFileH = 0x7F7F7F7F7F7F7F7F
+
+-- Passed pawns: only with bitboard operations
+whitePassed :: BBoard -> BBoard -> BBoard
+whitePassed !wp !bp = wpa
+    where !wp3 = shadowDown wp	-- shadow back of the own pawns for back doubles
+          !bpL = (bp `unsafeShiftR` 9) .&. notFileA	-- left down
+          !bpR = (bp `unsafeShiftR` 7) .&. notFileH	-- and right down
+          !bp0 = bpL .|. bp .|. bpR
+          !bp3 = shadowDown bp0	-- erase same and neighbours files
+          !wpa = wp `less` (wp3 .|. bp3)
+
+blackPassed :: BBoard -> BBoard -> BBoard
+blackPassed !wp !bp = bpa
+    where !bp3 = shadowUp bp	-- shadow back of the own pawns for back doubles
+          !wpL = (wp `unsafeShiftL` 7) .&. notFileA	-- left up
+          !wpR = (wp `unsafeShiftL` 9) .&. notFileH	-- and right up
+          !wp0 = wpL .|. wp .|. wpR
+          !wp3 = shadowUp wp0	-- erase same and neighbours files
+          !bpa = bp `less` (bp3 .|. wp3)
+
+{-# INLINE shadowDown #-}
+shadowDown :: BBoard -> BBoard
+shadowDown !wp = wp3
+    where !wp1 = wp  .|. (wp  `unsafeShiftR`  8)
+          !wp2 = wp1 .|. (wp1 `unsafeShiftR` 16)
+          !wp3 = wp2 .|. (wp2 `unsafeShiftR` 32)
+
+{-# INLINE shadowUp #-}
+shadowUp :: BBoard -> BBoard
+shadowUp !wp = wp3
+    where !wp1 = wp  .|. (wp  `unsafeShiftL`  8)
+          !wp2 = wp1 .|. (wp1 `unsafeShiftL` 16)
+          !wp3 = wp2 .|. (wp2 `unsafeShiftL` 32)
+
 whitePassPBBs, blackPassPBBs :: UArray Square BBoard
 whitePassPBBs = array (0, 63) [(sq, wPassPBB sq) | sq <- [0 .. 63]]
 blackPassPBBs = array (0, 63) [(sq, bPassPBB sq) | sq <- [0 .. 63]]
@@ -383,21 +422,27 @@ updatePosOccup !p = p {
           !tbishops = slide p .&. diag p `less` kkrq p
           !twpawns = tpawns .&. twhite
           !tbpawns = tpawns .&. black p
-          !wfpbb = foldr (.|.) 0 $ map ubit $ filter wpIsPass $ bbToSquares twpawns1
-          !bfpbb = foldr (.|.) 0 $ map ubit $ filter bpIsPass $ bbToSquares tbpawns1
-          !tpassed = wfpbb .|. bfpbb
-          wpIsPass = (== 0) . (.&. tbpawns) . (unsafeAt whitePassPBBs)
-          bpIsPass = (== 0) . (.&. twpawns) . (unsafeAt blackPassPBBs)
-          ubit = unsafeShiftL 1
+          !tpassed = whitePassed twpawns tbpawns .|. blackPassed twpawns tbpawns
+          -- Further ideas:
+          -- 1. The old method could be faster for afew pawns! Tests!!
+          -- 2. This is necessary only after a pawn move, otherwise passed remains the same
+          -- 3. Unify updatePos: one function with basic fields as parameter and eventually
+          --    the old position, then everything in one go - should avoid copying
+          -- !wfpbb = foldr (.|.) 0 $ map ubit $ filter wpIsPass $ bbToSquares twpawns1
+          -- !bfpbb = foldr (.|.) 0 $ map ubit $ filter bpIsPass $ bbToSquares tbpawns1
+          -- !tpassed = wfpbb .|. bfpbb
+          -- wpIsPass = (== 0) . (.&. tbpawns) . (unsafeAt whitePassPBBs)
+          -- bpIsPass = (== 0) . (.&. twpawns) . (unsafeAt blackPassPBBs)
+          -- ubit = unsafeShiftL 1
           -- we make an approximation for the passed pawns: when more than 10 pawns
           -- we consider only such in the opponent side (rows 5 to 8)
           -- to speed up the calculation in the opening and middle game
-          passedApprox = 10
-          np = popCount1 tpawns
-          !twpawns1 | np < passedApprox = twpawns
-                    | otherwise         = twpawns .&. 0xFFFFFFFF00000000
-          !tbpawns1 | np < passedApprox = tbpawns
-                    | otherwise         = tbpawns .&. 0x00000000FFFFFFFF
+          -- passedApprox = 10
+          -- np = popCount1 tpawns
+          -- !twpawns1 | np < passedApprox = twpawns
+          --           | otherwise         = twpawns .&. 0xFFFFFFFF00000000
+          -- !tbpawns1 | np < passedApprox = tbpawns
+          --           | otherwise         = tbpawns .&. 0x00000000FFFFFFFF
 
 updatePosAttacs :: MyPos -> MyPos
 updatePosAttacs !p
