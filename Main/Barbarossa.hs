@@ -33,7 +33,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.01"
-progVerSuff = "next55"
+progVerSuff = "next55tim"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -343,7 +343,7 @@ getTimeParams cs _ c	-- unused: lastsc
           mtg = fromMaybe 0 $ findMovesToGo cs
 
 timeReserved :: Int
-timeReserved   = 20	-- milliseconds reserved for move communication
+timeReserved   = 50	-- milliseconds reserved for move communication
 
 remTimeFracIni, remTimeFracFin, remTimeFracDev :: Double
 remTimeFracIni = 0.01	-- fraction of remaining time which we can consume at once - initial value
@@ -354,7 +354,7 @@ compTime :: Int -> Int -> Int -> Int -> (Int, Int)
 compTime tim tpm fixmtg lastsc
     = if tpm == 0 && tim == 0 then (0, 0) else (ctm, tmx)
     where ctn = tpm + tim `div` mtg
-          ctm = if tim > 0 && tim < 8000 || tim == 0 && tpm < 1500 then 200 else ctn
+          ctm = if tim > 0 && tim < 2000 || tim == 0 && tpm < 1500 then 300 else ctn
           mtg = if fixmtg > 0 then fixmtg else estimateMovesToGo lastsc
           frtim = fromIntegral $ max 0 $ tim - ctm	-- rest time after this move
           fctm  = fromIntegral ctm :: Double
