@@ -25,7 +25,7 @@ import Moves.Moves (movesInit)
 import Moves.Board (posFromFen)
 import Moves.History
 import Search.CStateMonad (execCState)
-import Eval.Eval (paramNames)
+import Eval.Eval (weightNames)
 import Eval.FileParams (makeEvalState)
 
 -- Name, authos, version and suffix:
@@ -497,8 +497,9 @@ beforeReadLoop :: CtxIO ()
 beforeReadLoop = do
     chg <- readChanging
     let evst = evalst $ crtStatus chg
-    ctxLog LogInfo "Initial eval parameters:"
-    forM_ (zip paramNames (esDParams evst)) $ \(n, v) -> ctxLog LogInfo $! n ++ "\t" ++ show v
+    ctxLog LogInfo "Eval parameters and weights:"
+    ctxLog LogInfo $ show (esEParams evst)
+    forM_ (zip weightNames (esDWeights evst)) $ \(n, v) -> ctxLog LogInfo $! n ++ "\t" ++ show v
     bm <- liftIO $ hGetBuffering stdin
     ctxLog DebugUci $ "Stdin: " ++ show bm
 

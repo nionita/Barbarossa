@@ -323,7 +323,7 @@ finNode str = do
         logMes $ str ++ " Fen: " ++ fen
         logMes $ "Eval info " ++ mv ++ ":"
                       ++ concatMap (\(n, v) -> " " ++ n ++ "=" ++ show v)
-                                   (("score", staticScore p) : paramPairs (staticFeats p))
+                                   (("score", staticScore p) : weightPairs (staticFeats p))
 
 materVal :: Game Int
 materVal = do

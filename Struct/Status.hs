@@ -1,7 +1,8 @@
 module Struct.Status (
     Stats(..),
     MyState(..),
-    EvalState(..)
+    EvalState(..),
+    EvalParams(..)
 ) where
 
 import Data.Array.Unboxed
@@ -25,6 +26,19 @@ data MyState = MyState {
     }
 
 data EvalState = EvalState {
-        esDParams :: [Double],
-        esIParams :: [Int]
+        esDWeights :: [Double],
+        esIWeights :: [Int],
+        esEParams  :: EvalParams
     } deriving Show
+
+-- This is the parameter record for characteristics evaluation
+data EvalParams
+    = EvalParams {
+          -- Parameters of the king placement
+          epMaterMinor :: !Int,	-- = 1
+          epMaterRook  :: !Int,	-- = 2
+          epMaterQueen :: !Int,	-- = 5
+          epMaterScale :: !Int,	-- = 0
+          epMaterBonusScale :: Int,	-- 4
+          epPawnBonusScale  :: !Int	-- 4
+      } deriving Show
