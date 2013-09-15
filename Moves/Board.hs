@@ -2,7 +2,7 @@
 module Moves.Board (
     posFromFen, initPos,
     isCheck, inCheck,
-    goPromo, hasMoves,
+    goPromo, movePassed, hasMoves,
     genmv, genmvT, kingMoved, castKingRookOk, castQueenRookOk,
     genMoveCapt, genMoveCast, genMoveNCapt, genMoveTransf, genMoveFCheck, genMoveCaptWL,
     genMoveNCaptToCheck,
@@ -118,6 +118,9 @@ goPromo p m
     where !t = toSquare m
           ppw = t >= 48	-- 40
           ppb = t < 16		-- 24
+
+movePassed :: MyPos -> Move -> Bool
+movePassed p m = passed p .&. (unsafeShiftL 1 $ fromSquare m) /= 0
 
 -- {-# INLINE genmv #-}
 genmv :: Bool -> MyPos -> (Square, Square) -> Move

@@ -212,7 +212,9 @@ doMove real m qs = do
                     let (!sts, feats) | real      = (0, [])
                                       | otherwise = evalState (posEval p') (evalst s)
                         !p = p' { staticScore = sts, staticFeats = feats }
-                        dext = if inCheck p || goPromo p m1 then 1 else 0
+                        dext = if inCheck p || goPromo p m1 || movePassed p m1
+                                  then 1
+                                  else 0
                     -- when debug $
                     --     lift $ ctxLog "Debug" $ "*** doMove: " ++ showMyPos p
                     -- remis' <- checkRepeatPv p pv

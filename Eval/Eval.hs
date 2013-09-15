@@ -403,9 +403,9 @@ instance EvalItem KingPlace where
 materRook, materQueen, materFree :: Int
 materRook  = 2
 materQueen = 5
-materFree  = 3
+materFree  = 4
 materBonusScale, pawnBonusScale :: Int
-materBonusScale = 3
+materBonusScale = 4
 pawnBonusScale  = 4
 -- Variants for scales mater/pawn:
 -- orig: 4/5
@@ -416,19 +416,21 @@ pawnBonusScale  = 4
 kingPlace :: MyPos -> IParams
 kingPlace p = [ kcd, kpd ]
     where !kcd = mpl - ypl
-          !kpd = mpi - ypi
+          !kpd = 0	-- mpi - ypi
           !mks = kingSquare (kings p) $ me p
           !yks = kingSquare (kings p) $ yo p
-          !mkm = yminor + materRook * yrooks + materQueen * yqueens - materFree
-          !ykm = mminor + materRook * mrooks + materQueen * mqueens - materFree
-          !mpl = kingMaterBonus mpawns mkm mks
-          !ypl = kingMaterBonus ypawns ykm yks
+          !mkm = yminor + materRook * yrooks + materQueen * yqueens	-- - materFree
+          !ykm = mminor + materRook * mrooks + materQueen * mqueens	-- - materFree
+          !mpl = kingMaterBonus mpawns (rooks p .&. me p) mkm mks
+          !ypl = kingMaterBonus ypawns (rooks p .&. yo p) ykm yks
+          {--
           !mpi | passed p /= 0            = kingPawnsBonus c mks (passed p) mpassed ypassed
                | mkm <= 0 && pawns p /= 0 = kingPawnsBonus c mks (pawns  p) mpawns  ypawns
                | otherwise                = 0
           !ypi | passed p /= 0            = kingPawnsBonus c yks (passed p) mpassed ypassed
                | ykm <= 0 && pawns p /= 0 = kingPawnsBonus c yks (pawns  p) mpawns  ypawns
                | otherwise                = 0
+          --}
           !mrooks  = popCount1 $ rooks p .&. me p
           !mqueens = popCount1 $ queens p .&. me p
           !mminor  = popCount1 $ (bishops p .|. knights p) .&. me p
@@ -465,22 +467,52 @@ kingPawnsBonus' !ksq !alp !wHalf !bHalf = bonus
                        $ map promoW (bbToSquares bHalf) ++ map promoB (bbToSquares wHalf)
           !bonus = (bpsqs + bqsqs) `unsafeShiftR` pawnBonusScale
 
-kingMaterBonus :: BBoard -> Int -> Square -> Int
-kingMaterBonus myp mat ksq = bonus
-    where !bonus = (mat * prx) `unsafeShiftR` materBonusScale
-          !prx = proxyBonus (squareDistance ksq wa) * opawns wa
-               + proxyBonus (squareDistance ksq wh) * opawns wh
-               + proxyBonus (squareDistance ksq ba) * opawns ba
-               + proxyBonus (squareDistance ksq bh) * opawns bh
-               -- + proxyLine 0 ksq
-               -- + proxyLine 7 ksq
-          opawns s = popCount1 $ kAttacs s .&. myp
-          [wa, wh] = bbToSquares $ row1 .&. (fileB .|. fileG)
-          [ba, bh] = bbToSquares $ row8 .&. (fileB .|. fileG)
+-- This is a bonus for the king beeing near one corner
+-- It's bigger when the enemy has more material (only pieces)
+-- and when that corner has a pawn shelter
+kingMaterBonus :: BBoard -> BBoard -> Int -> Square -> Int
+kingMaterBonus !myp !myrooks !mat !ksq = bonus
+    where !bonus = (matFactor mat * prx) `unsafeShiftR` materBonusScale
+          !prx = prxWA + prxWH + prxBA + prxBH
+          !prxWA = (unsafeShiftL (opawns shWA2) 1 + opawns shWA3 - roMWA) * (prxBo wa + prxBo wb)
+          !prxWH = (unsafeShiftL (opawns shWH2) 1 + opawns shWH3 - roMWH) * (prxBo wg + prxBo wh)
+          !prxBA = (unsafeShiftL (opawns shBA7) 1 + opawns shBA6 - roMBA) * (prxBo ba + prxBo bb)
+          !prxBH = (unsafeShiftL (opawns shBH7) 1 + opawns shBH6 - roMBH) * (prxBo bg + prxBo bh)
+          !roMWA = flip unsafeShiftL 2 $ popCount1 $ myrooks .&. roWA
+          !roMWH = flip unsafeShiftL 2 $ popCount1 $ myrooks .&. roWH
+          !roMBA = flip unsafeShiftL 2 $ popCount1 $ myrooks .&. roBA
+          !roMBH = flip unsafeShiftL 2 $ popCount1 $ myrooks .&. roBH
+          opawns = popCount1 . (.&. myp)
+          prxBo  = proxyBonus . squareDistance ksq
+          matFactor = unsafeAt matKCArr
+          -- The interesting squares and bitboards about king placement
+          wa = 0
+          wb = 1
+          wg = 6
+          wh = 7
+          ba = 56
+          bb = 57
+          bg = 62
+          bh = 63
+          roWA = row1 .&. (fileA .|. fileB .|. fileC)
+          roWH = row1 .&. (fileG .|. fileH)
+          roBA = row8 .&. (fileA .|. fileB .|. fileC)
+          roBH = row8 .&. (fileG .|. fileH)
+          shWA2 = row2 .&. (fileA .|. fileB .|. fileC)
+          shWA3 = row3 .&. (fileA .|. fileB .|. fileC)
+          shWH2 = row2 .&. (fileF .|. fileG .|. fileH)
+          shWH3 = row3 .&. (fileF .|. fileG .|. fileH)
+          shBA6 = row6 .&. (fileA .|. fileB .|. fileC)
+          shBA7 = row7 .&. (fileA .|. fileB .|. fileC)
+          shBH6 = row6 .&. (fileF .|. fileG .|. fileH)
+          shBH7 = row7 .&. (fileF .|. fileG .|. fileH)
 
 -- Make it longer, for artificially increased distances
 proxyBonusArr :: UArray Int Int -- 0   1   2   3  4  5  6  7
 proxyBonusArr = listArray (0, 15) $ [55, 20, 8, 4, 3, 2, 1] ++ repeat 0
+
+matKCArr :: UArray Int Int -- 0              5             10
+matKCArr = listArray (0, 63) $ [0, 0, 0, 1, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12] ++ repeat 12
 
 proxyLineArr :: UArray Int Int -- 7  6  5  4  3  2   1   0   1   2   3  4  5  6  7
 proxyLineArr = listArray (-7, 7) [0, 1, 2, 3, 5, 10, 25, 75, 25, 10, 5, 3, 2, 1, 0]
