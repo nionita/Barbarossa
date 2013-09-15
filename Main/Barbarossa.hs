@@ -7,6 +7,7 @@ import Control.Monad.Reader
 import Control.Concurrent
 import Control.Exception
 import Data.Array.Unboxed
+import Data.List (intersperse)
 import Data.Maybe
 import Data.Typeable
 import System.Console.GetOpt
@@ -89,7 +90,9 @@ initContext opts = do
     ichan <- newChan
     ha <- newCache 1	-- it will take the minimum number of entries
     hi <- newHist
-    (parc, evs) <- makeEvalState (optConfFile opts) progVersion progVerSuff
+    (parc, evs) <- makeEvalState (optConfFile opts)
+                                 (concat $ intersperse "," $ optParams opts)
+                                 progVersion progVerSuff
     let chg = Chg {
             working = False,
             compThread = Nothing,
