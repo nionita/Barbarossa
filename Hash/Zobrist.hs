@@ -21,25 +21,24 @@ import Control.Exception (assert)
 
 import Struct.Struct
 
-genInit = 118863
+genInit = 118863 :: ZKey
 zLen = 781
 
 zobrist :: UArray Int ZKey
-zobrist = array (0, zLen-1) $ take zLen $ zip [0..] randomW64s
+zobrist = listArray (0, zLen-1) $ take zLen $ randoms (mkStdGen genInit)
 
-w32Tow64 :: [Word64] -> [Word64]
-w32Tow64 (x:y:ws) = w : w32Tow64 ws
-    where w = (x `shift` 32) .|. y
-
-randomInts :: [Int]
-randomInts = randoms (mkStdGen genInit)
-
+{--
 randomW64s :: [ZKey]
 randomW64s = toW64 $ map fromIntegral randomInts
     where isize = sizeOf (undefined :: Word)
           toW64 = case isize of
                     64 -> id
                     _  -> w32Tow64
+
+w32Tow64 :: [Word64] -> [Word64]
+w32Tow64 (x:y:ws) = w : w32Tow64 ws
+    where w = (x `shift` 32) .|. y
+--}
 
 -- When black is moving: xor with that number
 zobMove :: ZKey
