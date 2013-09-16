@@ -28,11 +28,11 @@ type Limits = [(Double, Double)]
 
 epDefault :: EvalParams
 epDefault = EvalParams {
-                epMaterMinor = 2,
-                epMaterRook  = 4,
+                epMaterMinor = 1,
+                epMaterRook  = 3,
                 epMaterQueen = 10,
-                epMaterScale = 1,
-                epMaterBonusScale = 4,
+                epMaterScale = 2,
+                epMaterBonusScale = 3,
                 epPawnBonusScale  = 4
             }
 

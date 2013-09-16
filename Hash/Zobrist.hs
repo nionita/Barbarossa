@@ -21,7 +21,7 @@ import Control.Exception (assert)
 
 import Struct.Struct
 
-genInit = 118863 :: ZKey
+genInit = 118863 :: Int
 zLen = 781
 
 zobrist :: UArray Int ZKey

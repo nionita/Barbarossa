@@ -586,13 +586,28 @@ changePining p src dst = kings p `testBit` src	-- king is moving
 -}
 
 {-# INLINE clearCast #-}
-clearCast :: Square -> BBoard -> BBoard
-clearCast sq bb
-    = case caRiMa .&. bsq of
-        0 -> bb
-        _ -> bb .&. nbsq
-    where bsq = 1 `unsafeShiftL` sq
-          nbsq = complement bsq
+clearCast :: BBoard -> BBoard -> BBoard
+clearCast sqbb cas = xor (caRiMa .&. cas .&. sqbb) cas
+
+{-# INLINE isClearingCast #-}
+isClearingCast :: BBoard -> BBoard -> Bool
+isClearingCast sqbb cas = (caRiMa .&. cas .&. sqbb) /= 0
+
+-- When we know we have a move which clears some castling rights
+-- we call this function to compute a start zobrist key from
+-- the one of the current position, xoring the Zobrist keys
+-- for the rights which are lost
+-- These ones are precalculated in an array with most elements =0,
+-- except for rooks and kings start places - see next array
+clearCastZob :: BBoard -> Square -> Square -> BBoard
+clearCastZob !zob !src !dst
+    = zob `xor` (castZobArray `unsafeAt` src) `xor` (castZobArray `unsafeAt` dst)
+
+castZobArray :: UArray Square ZKey
+castZobArray = listArray (0, 63) (repeat 0) // [
+        ( 0, zobCastQw), ( 4, zobCastQw `xor` zobCastKw), ( 7, zobCastKw),
+        (56, zobCastQb), (60, zobCastQb `xor` zobCastKb), (63, zobCastKb)
+    ]
 
 -- Just for a dumb debug: a quick check if two consecutive moves
 -- can be part of a move sequence
@@ -668,18 +683,19 @@ doFromToMove m !p | moveIsNormal m
           tslide = mvBit src dst $ slide p
           tkkrq  = mvBit src dst $ kkrq p
           tdiag  = mvBit src dst $ diag p
-          pawnmoving = case tabla p src of
-                       Busy _ fig -> fig == Pawn
-                       _          -> False	-- actually this is an error!
-          iscapture  = case tabla p dst of
-                       Empty -> False
-                       _     -> True
-          irevers = pawnmoving || iscapture
-          -- Here: we have to xor with the zobrist keys for casts! Only when rights change!
-          tepcas' = clearCast src $ clearCast dst $ epcas p `xor` mvMask	-- to do: ep
-          tepcas  = if irevers then reset50Moves tepcas' else addHalfMove tepcas'
+          !srcbb = 1 `unsafeShiftL` src
+          !dstbb = 1 `unsafeShiftL` dst
+          pawnmoving = pawns p .&. srcbb /= 0	-- the correct color is
+          iscapture  = occup p .&. dstbb /= 0	-- checked somewhere else
+          !isclc = isClearingCast srcbb (epcas p) || isClearingCast dstbb (epcas p)
+          irevers = pawnmoving || iscapture || isclc
+          tepcas' = clearCast srcbb $ clearCast dstbb $ epcas p `xor` mvMask	-- to do: ep
+          !tepcas  = if irevers then reset50Moves tepcas' else addHalfMove tepcas'
+          -- !zob = if isclc then clearCastZob (zobkey p) src dst else zobkey p
+          -- What is faster? Alwas, or only when isclc?
+          !zob = clearCastZob (zobkey p) src dst
           CA tzobkey tmater = case tabla p src of	-- identify the moving piece
-               Busy col fig -> chainAccum (CA (zobkey p) (mater p)) [
+               Busy col fig -> chainAccum (CA zob (mater p)) [
                                    accumClearSq src p,
                                    accumSetPiece dst col fig p,
                                    accumMoving p
@@ -752,11 +768,12 @@ doFromToMove m !p | moveIsCastle m
           tslide = mvBit csr cds $ mvBit src dst $ slide p
           tkkrq  = mvBit csr cds $ mvBit src dst $ kkrq p
           tdiag  = mvBit csr cds $ mvBit src dst $ diag p
-          -- Here: we have to xor with the zobrist keys for casts! Only when rights change!
-          tepcas = reset50Moves $ clearCast src $ epcas p `xor` mvMask	-- to do: ep
+          srcbb = 1 `unsafeShiftL` src
+          tepcas = reset50Moves $ clearCast srcbb $ epcas p `xor` mvMask	-- to do: ep
           Busy col King = tabla p src	-- identify the moving piece (king)
           Busy co1 Rook = tabla p csr	-- identify the moving rook
-          CA tzobkey tmater = chainAccum (CA (zobkey p) (mater p)) [
+          !zob = clearCastZob (zobkey p) src dst
+          CA tzobkey tmater = chainAccum (CA zob (mater p)) [
                                 accumClearSq src p,
                                 accumSetPiece dst col King p,
                                 accumClearSq csr p,
