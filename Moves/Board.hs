@@ -373,36 +373,18 @@ blackPassed !wp !bp = bpa
 {-# INLINE shadowDown #-}
 shadowDown :: BBoard -> BBoard
 shadowDown !wp = wp3
-    where !wp1 = wp  .|. (wp  `unsafeShiftR`  8)
+    where !wp0 =          wp  `unsafeShiftR`  8
+          !wp1 = wp0 .|. (wp0 `unsafeShiftR`  8)
           !wp2 = wp1 .|. (wp1 `unsafeShiftR` 16)
           !wp3 = wp2 .|. (wp2 `unsafeShiftR` 32)
 
 {-# INLINE shadowUp #-}
 shadowUp :: BBoard -> BBoard
 shadowUp !wp = wp3
-    where !wp1 = wp  .|. (wp  `unsafeShiftL`  8)
+    where !wp0 =          wp  `unsafeShiftL`  8
+          !wp1 = wp0 .|. (wp0 `unsafeShiftL`  8)
           !wp2 = wp1 .|. (wp1 `unsafeShiftL` 16)
           !wp3 = wp2 .|. (wp2 `unsafeShiftL` 32)
-
-whitePassPBBs, blackPassPBBs :: UArray Square BBoard
-whitePassPBBs = array (0, 63) [(sq, wPassPBB sq) | sq <- [0 .. 63]]
-blackPassPBBs = array (0, 63) [(sq, bPassPBB sq) | sq <- [0 .. 63]]
-
-wPassPBB :: Square -> BBoard
-wPassPBB sq = foldl' (.|.) 0 $ takeWhile (/= 0) $ iterate (`shiftL` 8) bsqs
-    where bsq = bit sq
-          bsq8 = bsq `shiftL` 8
-          bsq7 = if bsq .&. fileA /= 0 then 0 else bsq `shiftL` 7
-          bsq9 = if bsq .&. fileH /= 0 then 0 else bsq `shiftL` 9
-          bsqs = bsq7 .|. bsq8 .|. bsq9
-
-bPassPBB :: Square -> BBoard
-bPassPBB sq = foldl' (.|.) 0 $ takeWhile (/= 0) $ iterate (`shiftR` 8) bsqs
-    where bsq = bit sq
-          bsq8 = bsq `shiftR` 8
-          bsq7 = if bsq .&. fileH /= 0 then 0 else bsq `shiftR` 7
-          bsq9 = if bsq .&. fileA /= 0 then 0 else bsq `shiftR` 9
-          bsqs = bsq7 .|. bsq8 .|. bsq9
 
 updatePos :: MyPos -> MyPos
 updatePos = updatePosCheck . updatePosAttacs . updatePosOccup
@@ -431,21 +413,6 @@ updatePosOccup !p = p {
           -- 2. This is necessary only after a pawn move, otherwise passed remains the same
           -- 3. Unify updatePos: one function with basic fields as parameter and eventually
           --    the old position, then everything in one go - should avoid copying
-          -- !wfpbb = foldr (.|.) 0 $ map ubit $ filter wpIsPass $ bbToSquares twpawns1
-          -- !bfpbb = foldr (.|.) 0 $ map ubit $ filter bpIsPass $ bbToSquares tbpawns1
-          -- !tpassed = wfpbb .|. bfpbb
-          -- wpIsPass = (== 0) . (.&. tbpawns) . (unsafeAt whitePassPBBs)
-          -- bpIsPass = (== 0) . (.&. twpawns) . (unsafeAt blackPassPBBs)
-          -- ubit = unsafeShiftL 1
-          -- we make an approximation for the passed pawns: when more than 10 pawns
-          -- we consider only such in the opponent side (rows 5 to 8)
-          -- to speed up the calculation in the opening and middle game
-          -- passedApprox = 10
-          -- np = popCount1 tpawns
-          -- !twpawns1 | np < passedApprox = twpawns
-          --           | otherwise         = twpawns .&. 0xFFFFFFFF00000000
-          -- !tbpawns1 | np < passedApprox = tbpawns
-          --           | otherwise         = tbpawns .&. 0x00000000FFFFFFFF
 
 updatePosAttacs :: MyPos -> MyPos
 updatePosAttacs !p
@@ -495,9 +462,8 @@ genMoveCast :: MyPos -> [Move]
 genMoveCast p
     | inCheck p || kingMoved p c = []
     | otherwise = kingside ++ queenside
-    where (cmidk, cmidq, opAtt) =
-             if c == White then (caRMKw, caRMQw, yoAttacs p)
-                           else (caRMKb, caRMQb, myAttacs p)
+    where (cmidk, cmidq) = if c == White then (caRMKw, caRMQw)
+                                         else (caRMKb, caRMQb)
           kingside  = if castKingRookOk  p c && (occup p .&. cmidk == 0) && (yoAttacs p .&. cmidk == 0)
                         then [caks] else []
           queenside = if castQueenRookOk p c && (occup p .&. cmidq == 0) && (yoAttacs p .&. cmidq == 0)
