@@ -30,9 +30,9 @@ epDefault :: EvalParams
 epDefault = EvalParams {
                 epMaterMinor = 1,
                 epMaterRook  = 3,
-                epMaterQueen = 10,
-                epMaterScale = 2,
-                epMaterBonusScale = 3,
+                epMaterQueen = 11,
+                epMaterScale = 1,
+                epMaterBonusScale = 4,
                 epPawnBonusScale  = 4
             }
 
