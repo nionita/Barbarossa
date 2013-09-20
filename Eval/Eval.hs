@@ -7,8 +7,8 @@ module Eval.Eval (
     weightNames, weightLims, parDim, weightPairs
 ) where
 
-import Prelude hiding ((++), head, foldl, map, concat, filter, takeWhile, iterate, sum,
-                       zip, zipWith, foldr, concatMap, length, replicate, lookup, repeat)
+import Prelude hiding ((++), head, foldl, map, concat, filter, takeWhile, iterate, sum, minimum,
+                       zip, zipWith, foldr, concatMap, length, replicate, lookup, repeat, null)
 import Data.Array.Base (unsafeAt)
 import Data.Bits hiding (popCount)
 import Data.List.Stream
@@ -441,6 +441,10 @@ kingPlace ep p = [ kcd, kpd ]
           materFun m r q = (m * epMaterMinor ep + r * epMaterRook ep + q * epMaterQueen ep)
                                `unsafeShiftR` epMaterScale ep
 
+promoW, promoB :: Square -> Square
+promoW s = 56 + (s .&. 7)
+promoB s =       s .&. 7
+
 {--
 -- We give bonus also for pawn promotion squares, if the pawn is near enough to promote
 -- Give as parameter bitboards for all pawns, white pawns and black pawns for performance
@@ -451,10 +455,6 @@ kingPawnsBonus White !ksq !alp !mbb !ybb = kingPawnsBonus' ksq alp wHalf bHalf
 kingPawnsBonus Black !ksq !alp !mbb !ybb = kingPawnsBonus' ksq alp wHalf bHalf
     where !wHalf = 0x00000000FFFFFFFF .&. mbb
           !bHalf = 0xFFFFFFFF00000000 .&. ybb
-
-promoW, promoB :: Square -> Square
-promoW s = 56 + (s .&. 7)
-promoB s =       s .&. 7
 
 promoFieldDistIncr :: Int -> Int
 promoFieldDistIncr = \d -> d + 1
@@ -708,32 +708,93 @@ data PassPawns = PassPawns
 
 instance EvalItem PassPawns where
     evalItem _ p _ = passPawns p
-    evalItemNDL _  = [("passPawnBonus", (104, (  0, 160))),
-                      ("passPawn4",     (424, (400, 480))),
-                      ("passPawn5",     (520, (520, 640))),
+    evalItemNDL _  = [("passPawnBonus", (104,  (   0,  160))),
+                      ("passPawn4",     (424,  ( 400,  480))),
+                      ("passPawn5",     (520,  ( 520,  640))),
                       ("passPawn6",     (1132, (1100, 1200))),
-                      ("passPawn7",     (1920, (1600, 2300))) ]
-
+                      ("passPawn7",     (1920, (1600, 2300))),
+                      ("passPromo",     (1, (1, 1))),
+                      ("pawnRace",      (1, (1, 1)))
+                     ]
+ 
+-- We consider escaped passed pawns in 2 situations:
+-- pawn race: when both colors have at least one escaped pp
+-- winning promotion: when only one side has it
+-- Both are only valid in pawn endings
+-- The pawn race is tricky when equal:
+-- 1. What if the first promoting part gives check (or even mate)? Or what if after both promotions,
+-- the first one can check and evntually capture the opposite queen? We just hope this situations are
+-- 2. What about the rest of pawns? Here we make a trick: we shift the passed
+-- pawns virtually one row back, which gives less points for the possibly remaining
+-- passed pawns - now with queens)
 passPawns :: MyPos -> IWeights
-passPawns p = [dfp, dfp4, dfp5, dfp6, dfp7]
-    where !wfpbb = passed p .&. me p
-          !bfpbb = passed p .&. yo p
-          !wfp  = popCount1   wfpbb
-          !wfp4 = popCount1 $ wfpbb .&. row4m
-          !wfp5 = popCount1 $ wfpbb .&. row5m
-          !wfp6 = popCount1 $ wfpbb .&. row6m
-          !wfp7 = popCount1 $ wfpbb .&. row7m
-          !bfp  = popCount1   bfpbb
-          !bfp4 = popCount1 $ bfpbb .&. row4y
-          !bfp5 = popCount1 $ bfpbb .&. row5y
-          !bfp6 = popCount1 $ bfpbb .&. row6y
-          !bfp7 = popCount1 $ bfpbb .&. row7y
-          !dfp  = wfp  - bfp
-          !dfp4 = wfp4 - bfp4
-          !dfp5 = wfp5 - bfp5
-          !dfp6 = wfp6 - bfp6
-          !dfp7 = wfp7 - bfp7
-          (!row4m, !row5m, !row6m, !row7m, !row4y, !row5y, !row6y, !row7y)
-              | moving p == White = (row4, row5, row6, row7, row5, row4, row3, row2)
-              | otherwise         = (row5, row4, row3, row2, row4, row5, row6, row7)
+passPawns p
+    | prace     = [dfp, dfp5, dfp6, dfp7,    0,   0, dpr]       -- the order here is very important
+    | promo     = [  0,    0,    0,    0,    0, dpp,   0]       -- see definition of promo!
+    | otherwise = [dfp, dfp4, dfp5, dfp6, dfp7,   0,   0]
+    where !mfpbb = passed p .&. me p
+          !yfpbb = passed p .&. yo p
+          !mfp  = popCount1   mfpbb
+          !mfp4 = popCount1 $ mfpbb .&. row4m
+          !mfp5 = popCount1 $ mfpbb .&. row5m
+          !mfp6 = popCount1 $ mfpbb .&. row6m
+          !mfp7 = popCount1 $ mfpbb .&. row7m
+          !yfp  = popCount1   yfpbb
+          !yfp4 = popCount1 $ yfpbb .&. row4y
+          !yfp5 = popCount1 $ yfpbb .&. row5y
+          !yfp6 = popCount1 $ yfpbb .&. row6y
+          !yfp7 = popCount1 $ yfpbb .&. row7y
+          !dfp  = mfp  - yfp
+          !dfp4 = mfp4 - yfp4
+          !dfp5 = mfp5 - yfp5
+          !dfp6 = mfp6 - yfp6
+          !dfp7 = mfp7 - yfp7
+          (!row4m, !row5m, !row6m, !row7m, !row4y, !row5y, !row6y, !row7y, escMe, escYo)
+              | moving p == White = (row4, row5, row6, row7, row5, row4, row3, row2, escMeWhite, escYoBlack)
+              | otherwise         = (row5, row4, row3, row2, row4, row5, row6, row7, escMeBlack, escYoWhite)
+          !pend = kings p .|. pawns p == occup p
+          !myking = kingSquare (kings p) (me p)
+          !yoking = kingSquare (kings p) (yo p)
+          mescds = map snd $ filter fst $ map (escMe myking) $ bbToSquares mfpbb
+          yescds = map snd $ filter fst $ map (escYo yoking) $ bbToSquares yfpbb
+          !mesc = not . null $ mescds
+          !yesc = not . null $ yescds
+          !prace = pend && mesc && yesc
+          promo = pend && (mesc || yesc)       -- this woks only because we know prace == False
+          dpp | mesc      =  promoBonus - distMalus mim        -- only because we know promo == True
+              | otherwise = -promoBonus + distMalus miy
+              where mim = minimum mescds      -- who is promoting first?
+                    miy = minimum yescds
+          dpr | mim < miy     =  promoBonus - distMalus mim
+              | mim > miy + 1 = -promoBonus + distMalus miy
+              | otherwise     =  0     -- Here: this is more complex, e.g. if check while promoting
+                                       -- or direct after promotion + queen capture?
+              where mim = minimum mescds      -- who is promoting first?
+                    miy = minimum yescds
+          promoBonus = 8000     -- i.e. almost a queen (remember: the unit is 1/800 cp)
+          distMalus x = unsafeShiftL x 6        -- to bring at least 8 cp per move until promotion
+ 
+escMeWhite :: Square -> Square -> (Bool, Int)
+escMeWhite !ksq !psq = (esc, dis)
+    where !tsq = promoW psq
+          !dis = squareDistance psq tsq
+          !esc = dis < squareDistance ksq tsq
+ 
+escYoWhite :: Square -> Square -> (Bool, Int)
+escYoWhite !ksq !psq = (esc, dis)
+    where !tsq = promoW psq
+          !dis = squareDistance psq tsq
+          !esc = dis < squareDistance ksq tsq - 1       -- because we move
+ 
+escMeBlack :: Square -> Square -> (Bool, Int)
+escMeBlack !ksq !psq = (esc, dis)
+    where !tsq = promoB psq
+          !dis = squareDistance psq tsq
+          !esc = dis < squareDistance ksq tsq
+ 
+escYoBlack :: Square -> Square -> (Bool, Int)
+escYoBlack !ksq !psq = (esc, dis)
+    where !tsq = promoB psq
+          !dis = squareDistance psq tsq
+          !esc = dis < squareDistance ksq tsq - 1       -- because we move
 --------------------------------------
