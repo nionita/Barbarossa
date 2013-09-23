@@ -7,7 +7,7 @@ import Control.Monad.Reader
 import Control.Concurrent
 import Control.Exception
 import Data.Array.Unboxed
-import Data.List (intersperse)
+import Data.List (intersperse, delete)
 import Data.Maybe
 import Data.Typeable
 import System.Console.GetOpt
@@ -34,7 +34,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.01"
-progVerSuff = "next55ptk"
+progVerSuff = "intime"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -99,7 +99,8 @@ initContext opts = do
             crtStatus = posToState initPos ha hi evs,
             forGui = Nothing,
             srchStrtMs = 0,
-            myColor = White
+            myColor = White,
+            prvMvInfo = Nothing
          }
     ctxVar <- newMVar chg
     let context = Ctx {
@@ -345,26 +346,36 @@ getTimeParams cs _ c	-- unused: lastsc
           tim = fromMaybe 0 $ findTime c cs
           mtg = fromMaybe 0 $ findMovesToGo cs
 
-timeReserved :: Int
-timeReserved   = 50	-- milliseconds reserved for move communication
 
+-- These parameters should be optimised (i.e.: first made options)
 remTimeFracIni, remTimeFracFin, remTimeFracDev :: Double
-remTimeFracIni = 0.01	-- fraction of remaining time which we can consume at once - initial value
+remTimeFracIni = 0.15	-- fraction of remaining time which we can consume at once - initial value
 remTimeFracFin = 0.5	-- same at final (when remaining time is near zero)
 remTimeFracDev = remTimeFracFin - remTimeFracIni
 
-compTime :: Int -> Int -> Int -> Int -> (Int, Int)
+timeReserved :: Int
+timeReserved   = 50	-- milliseconds reserved for move communication
+
+-- This function calculates the normal time for the next search loop,
+-- the maximum of that (whch cannot be exceeded)
+-- and if we are in time troubles or not
+compTime :: Int -> Int -> Int -> Int -> (Int, Int, Bool)
 compTime tim tpm fixmtg lastsc
-    = if tpm == 0 && tim == 0 then (0, 0) else (ctm, tmx)
-    where ctn = tpm + tim `div` mtg
-          ctm = if tim > 0 && tim < 2000 || tim == 0 && tpm < 1500 then 300 else ctn
-          mtg = if fixmtg > 0 then fixmtg else estimateMovesToGo lastsc
+    | tim == 0 && tpm == 0 = (  0,   0,  False)
+    | otherwise            = (ctm, tmx, ttroub)
+    where mtg = if fixmtg > 0 then fixmtg else estimateMovesToGo lastsc
+          ctn = tpm + tim `div` mtg
+          (ctm, short) = if tim > 0 && tim < 2000 || tim == 0 && tpm < 500
+                            then (300, True)
+                            else (ctn, False)
           frtim = fromIntegral $ max 0 $ tim - ctm	-- rest time after this move
           fctm  = fromIntegral ctm :: Double
           rtimprc = fctm / max frtim fctm
           rtimfrc = remTimeFracIni + remTimeFracDev * rtimprc
           tmxt = round $ fctm + rtimfrc * frtim
-          tmx  = min (tim - timeReserved) tmxt
+          maxx = max 0 $ tim - timeReserved
+          (tmx, over) = if maxx < tmxt then (maxx, True) else (tmxt, False)
+          ttroub = short || over
 
 estMvsToGo :: Array Int Int
 estMvsToGo = listArray (0, 8) [30, 28, 24, 18, 12, 10, 8, 6, 3]
@@ -390,6 +401,7 @@ startWorking tim tpm mtg dpt = do
         ++ " to search: " ++ show tim ++ " / " ++ show tpm ++ " / " ++ show mtg
         ++ " - maximal " ++ show dpt ++ " plys"
     modifyChanging $ \c -> c { working = True, srchStrtMs = currms,
+                               prvMvInfo = Nothing,
                                crtStatus = posNewSearch (crtStatus c) }
     tid <- newThread (startSearchThread tim tpm mtg dpt)
     modifyChanging (\c -> c { compThread = Just tid })
@@ -445,33 +457,21 @@ searchTheTree tief mtief timx tim tpm mtg lsc lpv rmvs = do
     storeBestMove path sc	-- write back in status
     modifyChanging (\c -> c { crtStatus = stfin })
     currms <- lift $ currMilli (startSecond ctx)
-    let (ms', mx) = compTime tim tpm mtg sc
-        ms
-           | sc >  betterSc = ms' * 4 `div` 5
-           | sc < -betterSc = ms' * 6 `div` 5
-           | otherwise      = ms'
-        strtms = srchStrtMs chg
+    let (ms', mx, urg) = compTime tim tpm mtg sc
+    ms <- if urg then return ms' else correctTime tief ms' sc path
+    let strtms = srchStrtMs chg
         delta = strtms + ms - currms
         ms2 = ms `div` 2
         onlyone = ms > 0 && length rmvsf == 1 && tief >= 4	-- only in normal play
-        timeover = ms > 0 && delta <= ms2  -- time is half over
+        halfover = ms > 0 && delta <= ms2  -- time is half over
         depthmax = tief >= mtief	--  or maximal depth
         mes = "Depth " ++ show tief ++ " Score " ++ show sc ++ " in ms "
                 ++ show currms ++ " remaining " ++ show delta
                 ++ " path " ++ show path
-    -- answer $ infos $ "currms = " ++ show currms
-    -- answer $ infos $ "ms     = " ++ show ms
-    -- answer $ infos $ "mx     = " ++ show mx
-    -- answer $ infos $ "cr+mx  = " ++ show (currms + mx)
     ctxLog LogInfo mes
     ctxLog LogInfo $ "compTime: " ++ show ms' ++ " / " ++ show mx
-    -- if ms > 0 && (delta <= 0 || tief >= mtief)  -- time is over or maximal depth
-    if depthmax || timeover || onlyone
+    if depthmax || halfover || onlyone
         then do
-            -- answer $ infos $ "End of search"
-            -- answer $ infos $ "depthmax = " ++ show depthmax
-            -- answer $ infos $ "timeover = " ++ show timeover
-            -- answer $ infos $ "onlyone = " ++ show onlyone
             when depthmax $ ctxLog LogInfo "in searchTheTree: max depth reached"
             giveBestMove path
         else do
@@ -481,6 +481,59 @@ searchTheTree tief mtief timx tim tpm mtg lsc lpv rmvs = do
                 else do
                     ctxLog DebugUci "in searchTheTree: not working"
                     giveBestMove path -- was stopped
+
+-- We assume here that we always have at least the first move of the PV (our best)
+-- If not (which is a fatal error) we will get an exception (head of empty list)
+-- which will be catched somewhere else and reported
+correctTime :: Int -> Int -> Int -> [Move] -> CtxIO Int
+correctTime draft ms sc path = do
+    chg <- readChanging
+    (ti, func) <- case prvMvInfo chg of
+        Nothing  -> do
+            -- We are obviously in the first draft - just insert the first infos, use normal time
+            let pmi = PrevMvInfo { pmiBestSc = sc, pmiChanged = 0, pmiBMSoFar = [bm] }
+                bm = head path
+                func = \c -> c { prvMvInfo = Just pmi }
+            return (ms, func)
+        Just (PrevMvInfo { pmiBestSc = osc, pmiChanged = ok, pmiBMSoFar = obsf }) -> do
+            -- We have previous moves, update and calculate time factor
+            let pmi = PrevMvInfo { pmiBestSc = sc, pmiChanged = k, pmiBMSoFar = bsf }
+                bm = head path
+                (k, bsf) = if bm == head obsf	-- same best move?
+                              then (ok, obsf)
+                              else (ok + 1, bm : delete bm obsf)
+                func = \c -> c { prvMvInfo = Just pmi }
+                ms'  = timeFactor draft ms osc sc k bsf
+            return (ms', func)
+    modifyChanging func
+    return ti
+
+-- These are time factor parameters
+tfIniFact, tfMaxFact, tfDrScale, tfScScale, tfChScale, tfDiScale, tfScale :: Double
+tfIniFact = 0.70	-- initial factor (if all other is 1)
+tfMaxFact = 10		-- to limit the time factor
+tfDrScale = 2		-- to scale the draft
+tfScScale = 80		-- to scale score differences
+tfChScale = 2		-- to scale best move changes
+tfDiScale = 3		-- to scale distinc best moves so far
+
+tfScale = 1 / (tfDrScale * tfScScale * tfChScale * tfDiScale)
+
+tfDraft, tfChanges, tfDistMvs :: Int
+tfDraft   = 4	-- so many drafts are free
+tfChanges = 2	-- so many changes are free
+tfDistMvs = 3	-- so many distinc moves are free
+
+-- For example: score drops in draft 6 by 50 cp, we have 4 changes with 4 different best moves
+-- then we have factor: 0.70 + 3 * 50 * 4 * 2 / (2 * 80 * 2 * 3) = 0.70 + 1.20 = 1.90
+
+timeFactor :: Int -> Int -> Int -> Int -> Int -> [Move] -> Int
+timeFactor draft tim osc sc chgs mvs = round $ fromIntegral tim * min tfMaxFact finf
+    where finf = tfIniFact + drf * scf * chf * dmf * tfScale
+          drf = fromIntegral $ max 1 $ draft - tfDraft + 1	-- draft factor
+          scf = fromIntegral $ max 1 $ abs $ osc - sc		-- score factor: if score drops
+          chf = fromIntegral $ max 1 $ chgs - tfChanges + 1	-- changes factor
+          dmf = fromIntegral $ max 1 $ length mvs - tfDistMvs + 1	-- distinct best moves factor
 
 storeBestMove :: [Move] -> Int -> CtxIO ()
 storeBestMove mvs sc = do
