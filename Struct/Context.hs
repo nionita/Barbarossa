@@ -54,14 +54,23 @@ data Context = Ctx {
         change :: MVar Changing         -- the changing context
     }
 
+-- Information about previuos best move and changes
+-- to be used in time management
+data PrevMvInfo = PrevMvInfo {
+        pmiBestSc  :: Int,	-- score of best move
+        pmiChanged :: Int,	-- number of changes in best move
+        pmiBMSoFar :: [Move]	-- all best moves seen so far
+    }
+
 -- This is the variable context part (global mutable context)
 data Changing = Chg {
-        working :: Bool,                -- are we in tree search?
+        working    :: Bool,             -- are we in tree search?
         compThread :: Maybe ThreadId,   -- the search thread id
-        crtStatus :: MyState,           -- current state
-        forGui :: Maybe InfoToGui,      -- info for gui
+        crtStatus  :: MyState,          -- current state
+        forGui     :: Maybe InfoToGui,  -- info for gui
         srchStrtMs :: Int,              -- search start time (milliseconds)
-        myColor :: Color                -- our play color
+        myColor    :: Color,            -- our play color
+        prvMvInfo  :: Maybe PrevMvInfo	-- not in the first draft
     }
 
 type CtxIO = ReaderT Context IO

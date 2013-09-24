@@ -355,8 +355,8 @@ notFileH = 0x7F7F7F7F7F7F7F7F
 whitePassed :: BBoard -> BBoard -> BBoard
 whitePassed !wp !bp = wpa
     where !wp3 = shadowDown wp	-- shadow back of the own pawns for back doubles
-          !bpL = (bp `unsafeShiftR` 9) .&. notFileA	-- left down
-          !bpR = (bp `unsafeShiftR` 7) .&. notFileH	-- and right down
+          !bpL = (bp .&. notFileA) `unsafeShiftR` 9	-- left down
+          !bpR = (bp .&. notFileH) `unsafeShiftR` 7	-- and right down
           !bp0 = bpL .|. bp .|. bpR
           !bp3 = shadowDown bp0	-- erase same and neighbours files
           !wpa = wp `less` (wp3 .|. bp3)
@@ -364,8 +364,8 @@ whitePassed !wp !bp = wpa
 blackPassed :: BBoard -> BBoard -> BBoard
 blackPassed !wp !bp = bpa
     where !bp3 = shadowUp bp	-- shadow back of the own pawns for back doubles
-          !wpL = (wp `unsafeShiftL` 7) .&. notFileA	-- left up
-          !wpR = (wp `unsafeShiftL` 9) .&. notFileH	-- and right up
+          !wpL = (wp .&. notFileA) `unsafeShiftL` 7	-- left up
+          !wpR = (wp .&. notFileH) `unsafeShiftL` 9	-- and right up
           !wp0 = wpL .|. wp .|. wpR
           !wp3 = shadowUp wp0	-- erase same and neighbours files
           !bpa = bp `less` (bp3 .|. wp3)
