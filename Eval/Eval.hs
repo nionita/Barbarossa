@@ -14,6 +14,7 @@ import Data.Bits hiding (popCount)
 import Data.List.Stream
 import Control.Monad.State.Lazy
 import Data.Array.Unboxed
+import Data.Ord (comparing)
 
 import Struct.Struct
 import Struct.Status
@@ -178,6 +179,7 @@ evalDispatch p sti
     | pawns p == 0 = evalNoPawns p sti
     | pawns p .&. me p == 0 ||
       pawns p .&. yo p == 0 = evalSideNoPawns p sti
+    | kings p .|. pawns p == occup p = pawnEndGame p
     | otherwise    = normalEval p sti
 
 itemEval :: EvalParams -> MyPos -> AnyEvalItem -> [Int]
@@ -712,26 +714,11 @@ instance EvalItem PassPawns where
                       ("passPawn4",     (424,  ( 400,  480))),
                       ("passPawn5",     (520,  ( 520,  640))),
                       ("passPawn6",     (1132, (1100, 1200))),
-                      ("passPawn7",     (1920, (1600, 2300))),
-                      ("passPromo",     (1, (1, 1))),
-                      ("pawnRace",      (1, (1, 1)))
+                      ("passPawn7",     (1920, (1600, 2300)))
                      ]
  
--- We consider escaped passed pawns in 2 situations:
--- pawn race: when both colors have at least one escaped pp
--- winning promotion: when only one side has it
--- Both are only valid in pawn endings
--- The pawn race is tricky when equal:
--- 1. What if the first promoting part gives check (or even mate)? Or what if after both promotions,
--- the first one can check and evntually capture the opposite queen? We just hope this situations are
--- 2. What about the rest of pawns? Here we make a trick: we shift the passed
--- pawns virtually one row back, which gives less points for the possibly remaining
--- passed pawns - now with queens)
 passPawns :: MyPos -> IWeights
-passPawns p
-    | prace     = [dfp, dfp5, dfp6, dfp7,    0,   0, dpr]       -- the order here is very important
-    | promo     = [  0,    0,    0,    0,    0, dpp,   0]       -- see definition of promo!
-    | otherwise = [dfp, dfp4, dfp5, dfp6, dfp7,   0,   0]
+passPawns p = [dfp, dfp4, dfp5, dfp6, dfp7]
     where !mfpbb = passed p .&. me p
           !yfpbb = passed p .&. yo p
           !mfp  = popCount1   mfpbb
@@ -749,52 +736,120 @@ passPawns p
           !dfp5 = mfp5 - yfp5
           !dfp6 = mfp6 - yfp6
           !dfp7 = mfp7 - yfp7
-          (!row4m, !row5m, !row6m, !row7m, !row4y, !row5y, !row6y, !row7y, escMe, escYo)
-              | moving p == White = (row4, row5, row6, row7, row5, row4, row3, row2, escMeWhite, escYoBlack)
-              | otherwise         = (row5, row4, row3, row2, row4, row5, row6, row7, escMeBlack, escYoWhite)
-          !pend = kings p .|. pawns p == occup p
+          (!row4m, !row5m, !row6m, !row7m, !row4y, !row5y, !row6y, !row7y)
+              | moving p == White = (row4, row5, row6, row7, row5, row4, row3, row2)
+              | otherwise         = (row5, row4, row3, row2, row4, row5, row6, row7)
+
+-- Pawn end games are treated specially
+-- We consider escaped passed pawns in 2 situations:
+-- pawn race: when both colors have at least one escaped pp
+-- winning promotion: when only one side has it
+-- Both are only valid in pawn endings
+-- The pawn race is tricky when equal:
+-- 1. What if the first promoting part gives check (or even mate)? Or what if after both promotions,
+-- the first one can check and evntually capture the opposite queen? We just hope this situations are
+-- 2. What about the rest of pawns? Here we make a trick: we shift the passed
+-- pawns virtually one row back, which gives less points for the possibly remaining
+-- passed pawns - now with queens)
+pawnEndGame :: MyPos -> (Int, [Int])
+pawnEndGame p
+    | prace     = (dpr, [dpr])
+    | promo     = (dpp, [dpr])
+    -- | -- here we will consider what is with 2 passed pawns which are far enough from each other
+    | otherwise = (speg, [speg])
+    where !mfpbb = passed p .&. me p
+          !yfpbb = passed p .&. yo p
           !myking = kingSquare (kings p) (me p)
           !yoking = kingSquare (kings p) (yo p)
-          mescds = map snd $ filter fst $ map (escMe myking) $ bbToSquares mfpbb
-          yescds = map snd $ filter fst $ map (escYo yoking) $ bbToSquares yfpbb
+          (escMe, escYo, maDiff)
+              | moving p == White = (escMeWhite myking, escYoBlack yoking,   mater p)
+              | otherwise         = (escMeBlack myking, escYoWhite yoking, - mater p)
+          mpsqs  = map escMe $ bbToSquares mfpbb	-- my pp squares & distances to promotion
+          mescds = map snd $ filter fst mpsqs		-- my escaped passed pawns
+          ypsqs  = map escYo $ bbToSquares yfpbb	-- your pp squares & distances to promotion
+          yescds = map snd $ filter fst ypsqs		-- your escaped passed pawns
           !mesc = not . null $ mescds
           !yesc = not . null $ yescds
-          !prace = pend && mesc && yesc
-          promo = pend && (mesc || yesc)       -- this woks only because we know prace == False
+          !prace = mesc && yesc
+          promo = mesc || yesc       -- this woks only because we know prace == False
           dpp | mesc      =  promoBonus - distMalus mim        -- only because we know promo == True
               | otherwise = -promoBonus + distMalus miy
-              where mim = minimum mescds      -- who is promoting first?
-                    miy = minimum yescds
+              where (mim, _) = minimumBy (comparing snd) mescds      -- who is promoting first?
+                    (miy, _) = minimumBy (comparing snd) yescds
           dpr | mim < miy     =  promoBonus - distMalus mim
               | mim > miy + 1 = -promoBonus + distMalus miy
-              | otherwise     =  0     -- Here: this is more complex, e.g. if check while promoting
+              | otherwise     =  withQueens     -- Here: this is more complex, e.g. if check while promoting
                                        -- or direct after promotion + queen capture?
-              where mim = minimum mescds      -- who is promoting first?
-                    miy = minimum yescds
-          promoBonus = 8000     -- i.e. almost a queen (remember: the unit is 1/800 cp)
-          distMalus x = unsafeShiftL x 6        -- to bring at least 8 cp per move until promotion
+              where (mim, msq) = minimumBy (comparing snd) mescds      -- who is promoting first?
+                    (miy, ysq) = minimumBy (comparing snd) yescds
+          promoBonus = 1000     -- i.e. almost a queen (here the unit is 1 cp)
+          distMalus x = unsafeShiftL x 3        -- to bring at least 8 cp per move until promotion
+          -- We try to estimate static what will be after promotions of both queens
+          -- This will be another specialized evaluation function...
+          -- But now we consider only the material difference (which consists only of pawns)
+          withQueens = maDiff
+          -- This one is for prunning: so match we can win at most
+          -- yoPawnCount = popCount1 $ pawns p .&. yo p
+          speg = simplePawnEndGame p	-- just to see how it works...
  
-escMeWhite :: Square -> Square -> (Bool, Int)
-escMeWhite !ksq !psq = (esc, dis)
+escMeWhite :: Square -> Square -> (Bool, (Square, Int))
+escMeWhite !ksq !psq = (esc, (psq, dis))
     where !tsq = promoW psq
           !dis = squareDistance psq tsq
           !esc = dis < squareDistance ksq tsq
  
-escYoWhite :: Square -> Square -> (Bool, Int)
-escYoWhite !ksq !psq = (esc, dis)
+escYoWhite :: Square -> Square -> (Bool, (Square, Int))
+escYoWhite !ksq !psq = (esc, (psq, dis))
     where !tsq = promoW psq
           !dis = squareDistance psq tsq
           !esc = dis < squareDistance ksq tsq - 1       -- because we move
  
-escMeBlack :: Square -> Square -> (Bool, Int)
-escMeBlack !ksq !psq = (esc, dis)
+escMeBlack :: Square -> Square -> (Bool, (Square, Int))
+escMeBlack !ksq !psq = (esc, (psq, dis))
     where !tsq = promoB psq
           !dis = squareDistance psq tsq
           !esc = dis < squareDistance ksq tsq
  
-escYoBlack :: Square -> Square -> (Bool, Int)
-escYoBlack !ksq !psq = (esc, dis)
+escYoBlack :: Square -> Square -> (Bool, (Square, Int))
+escYoBlack !ksq !psq = (esc, (psq, dis))
     where !tsq = promoB psq
           !dis = squareDistance psq tsq
           !esc = dis < squareDistance ksq tsq - 1       -- because we move
+
+simplePawnEndGame :: MyPos -> Int
+simplePawnEndGame p = d
+    where !d = mepv - yopv
+          !mepv = simplePvMe $ me p .&. pawns p
+          !yopv = simplePvYo $ yo p .&. pawns p
+          (simplePvMe, simplePvYo) | moving p == White = (simplePvWhite, simplePvBlack)
+                                   | otherwise         = (simplePvBlack, simplePvWhite)
+
+-- Just a simple weighted count
+simplePvWhite :: BBoard -> Int
+simplePvWhite !bb = pv
+    where !pv = 100 * pc
+          !pc0 = popCount1 $ bb  .&. band
+          !bb1 = bb  `unsafeShiftL` 16
+          !pc1 = popCount1 $ bb1 .&. band
+          !bb2 = bb1 `unsafeShiftL` 16
+          !pc2 = popCount1 $ bb2 .&. band
+          !pc  = (pc0 `unsafeShiftL` 2) + (pc1 `unsafeShiftL` 1) + pc2
+          band = 0x00FFFF0000000000	-- row 6 and 7
+
+simplePvBlack :: BBoard -> Int
+simplePvBlack !bb = pv
+    where !pv = 100 * pc
+          !pc0 = popCount1 $ bb  .&. band
+          !bb1 = bb  `unsafeShiftR` 16
+          !pc1 = popCount1 $ bb1 .&. band
+          !bb2 = bb1 `unsafeShiftR` 16
+          !pc2 = popCount1 $ bb2 .&. band
+          !pc  = (pc0 `unsafeShiftL` 2) + (pc1 `unsafeShiftL` 1) + pc2
+          band = 0x0000000000FFFF00	-- row 2 and 3
+
+halfPawnMax :: Int -> Int -> Int
+halfPawnMax mx d
+    | steps > mx = 100 * mx
+    | otherwise  = 100 * steps
+    where steps = (d + 1) `unsafeShiftR` 1
 --------------------------------------
