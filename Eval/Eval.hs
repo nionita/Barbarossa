@@ -753,10 +753,11 @@ passPawns p = [dfp, dfp4, dfp5, dfp6, dfp7]
 -- passed pawns - now with queens)
 pawnEndGame :: MyPos -> (Int, [Int])
 pawnEndGame p
-    | prace     = (dpr, [dpr])
-    | promo     = (dpp, [dpr])
+    | null mescds && null yescds             = (speg, [speg])
+    | not (null mescds) && not (null yescds) = (dpr, [dpr])
+    | not (null mescds)                      = (myrace, [myrace])
+    | not (null yescds)                      = (yorace, [yorace])
     -- | -- here we will consider what is with 2 passed pawns which are far enough from each other
-    | otherwise = (speg, [speg])
     where !mfpbb = passed p .&. me p
           !yfpbb = passed p .&. yo p
           !myking = kingSquare (kings p) (me p)
@@ -765,23 +766,25 @@ pawnEndGame p
               | moving p == White = (escMeWhite myking, escYoBlack yoking,   mater p)
               | otherwise         = (escMeBlack myking, escYoWhite yoking, - mater p)
           mpsqs  = map escMe $ bbToSquares mfpbb	-- my pp squares & distances to promotion
-          mescds = map snd $ filter fst mpsqs		-- my escaped passed pawns
+          !mescds = map snd $ filter fst mpsqs		-- my escaped passed pawns
           ypsqs  = map escYo $ bbToSquares yfpbb	-- your pp squares & distances to promotion
-          yescds = map snd $ filter fst ypsqs		-- your escaped passed pawns
-          !mesc = not . null $ mescds
-          !yesc = not . null $ yescds
-          !prace = mesc && yesc
-          promo = mesc || yesc       -- this woks only because we know prace == False
-          dpp | mesc      =  promoBonus - distMalus mim        -- only because we know promo == True
-              | otherwise = -promoBonus + distMalus miy
-              where (mim, _) = minimumBy (comparing snd) mescds      -- who is promoting first?
-                    (miy, _) = minimumBy (comparing snd) yescds
+          !yescds = map snd $ filter fst ypsqs		-- your escaped passed pawns
+          mesc = not . null $ mescds
+          yesc = not . null $ yescds
           dpr | mim < miy     =  promoBonus - distMalus mim
               | mim > miy + 1 = -promoBonus + distMalus miy
               | otherwise     =  withQueens     -- Here: this is more complex, e.g. if check while promoting
                                        -- or direct after promotion + queen capture?
-              where (mim, msq) = minimumBy (comparing snd) mescds      -- who is promoting first?
-                    (miy, ysq) = minimumBy (comparing snd) yescds
+          (mim, msq) = minimumBy (comparing snd) mescds      -- who is promoting first?
+          (miy, ysq) = minimumBy (comparing snd) yescds
+          myrace =  promoBonus - distMalus mim
+          yorace = -promoBonus + distMalus miy
+          {--
+          dpp | mesc      =  promoBonus - distMalus mim        -- only because we know promo == True
+              | otherwise = -promoBonus + distMalus miy
+              where (mim, _) = minimumBy (comparing snd) mescds      -- who is promoting first?
+                    (miy, _) = minimumBy (comparing snd) yescds
+          --}
           promoBonus = 1000     -- i.e. almost a queen (here the unit is 1 cp)
           distMalus x = unsafeShiftL x 3        -- to bring at least 8 cp per move until promotion
           -- We try to estimate static what will be after promotions of both queens

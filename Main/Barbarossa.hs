@@ -354,7 +354,7 @@ remTimeFracFin = 0.5	-- same at final (when remaining time is near zero)
 remTimeFracDev = remTimeFracFin - remTimeFracIni
 
 timeReserved :: Int
-timeReserved   = 50	-- milliseconds reserved for move communication
+timeReserved   = 70	-- milliseconds reserved for move communication
 
 -- This function calculates the normal time for the next search loop,
 -- the maximum of that (whch cannot be exceeded)
@@ -365,7 +365,7 @@ compTime tim tpm fixmtg lastsc
     | otherwise            = (ctm, tmx, ttroub)
     where mtg = if fixmtg > 0 then fixmtg else estimateMovesToGo lastsc
           ctn = tpm + tim `div` mtg
-          (ctm, short) = if tim > 0 && tim < 2000 || tim == 0 && tpm < 500
+          (ctm, short) = if tim > 0 && tim < 2000 || tim == 0 && tpm < 700
                             then (300, True)
                             else (ctn, False)
           frtim = fromIntegral $ max 0 $ tim - ctm	-- rest time after this move
