@@ -51,6 +51,7 @@ data Context = Ctx {
         strttm :: ClockTime,            -- the program start time
         loglev :: LogLevel,             -- loglevel, only higher messages will be logged
         evpid  :: String,		-- identifier for the eval parameter config
+        tipars :: TimeParams,		-- time management parameters
         change :: MVar Changing         -- the changing context
     }
 
@@ -61,6 +62,12 @@ data PrevMvInfo = PrevMvInfo {
         pmiChanged :: Int,	-- number of changes in best move
         pmiBMSoFar :: [Move]	-- all best moves seen so far
     }
+
+-- Time management parameters
+data TimeParams = TimeParams {
+                      tpIniFact, tpMaxFact, tpScale :: !Double,
+                      tpDraft, tpChanges, tpDistMvs :: !Int
+                  }
 
 -- This is the variable context part (global mutable context)
 data Changing = Chg {

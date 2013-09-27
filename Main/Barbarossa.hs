@@ -1,5 +1,8 @@
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE RecordWildCards #-}
+
 module Main where
 import Prelude hiding (catch)
 import Control.Monad
@@ -18,6 +21,7 @@ import System.Time
 import Struct.Struct
 import Struct.Status
 import Struct.Context
+import Struct.Config
 import Hash.TransTab
 import Uci.UCI
 import Uci.UciGlue
@@ -34,7 +38,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.01"
-progVerSuff = "intpp2"
+progVerSuff = "intpp3"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -70,7 +74,7 @@ options :: [OptDescr (Options -> Options)]
 options = [
         Option "c" ["config"] (ReqArg setConfFile "STRING") "Configuration file",
         Option "l" ["loglev"] (ReqArg setLogging "STRING")  "Logging level from 0 (debug) to 5 (never)",
-        Option "p" ["param"]  (ReqArg addParam "STRING")    "Eval parameters: name=value,..."
+        Option "p" ["param"]  (ReqArg addParam "STRING")    "Eval/search/time parameters: name=value,..."
     ]
 
 theOptions :: IO (Options, [String])
@@ -90,9 +94,8 @@ initContext opts = do
     ichan <- newChan
     ha <- newCache 1	-- it will take the minimum number of entries
     hi <- newHist
-    (parc, evs) <- makeEvalState (optConfFile opts)
-                                 (concat $ intersperse "," $ optParams opts)
-                                 progVersion progVerSuff
+    let paramList = stringToParams $ concat $ intersperse "," $ optParams opts
+    (parc, evs) <- makeEvalState (optConfFile opts) paramList progVersion progVerSuff
     let chg = Chg {
             working = False,
             compThread = Nothing,
@@ -110,7 +113,8 @@ initContext opts = do
             strttm = clktm,
             change = ctxVar,
             loglev = llev,
-            evpid  = parc
+            evpid  = parc,
+            tipars = npSetParm (colParams paramList :: CollectTimeParams)
          }
     return context
 
@@ -487,6 +491,7 @@ searchTheTree tief mtief timx tim tpm mtg lsc lpv rmvs = do
 -- which will be catched somewhere else and reported
 correctTime :: Int -> Int -> Int -> [Move] -> CtxIO Int
 correctTime draft ms sc path = do
+    tp <- asks tipars
     chg <- readChanging
     (ti, func) <- case prvMvInfo chg of
         Nothing  -> do
@@ -503,37 +508,75 @@ correctTime draft ms sc path = do
                               then (ok, obsf)
                               else (ok + 1, bm : delete bm obsf)
                 func = \c -> c { prvMvInfo = Just pmi }
-                ms'  = timeFactor draft ms osc sc k bsf
+                ms'  = timeFactor tp draft ms osc sc k bsf
             return (ms', func)
     modifyChanging func
     return ti
 
--- These are time factor parameters
-tfIniFact, tfMaxFact, tfDrScale, tfScScale, tfChScale, tfDiScale, tfScale :: Double
-tfIniFact = 0.70	-- initial factor (if all other is 1)
-tfMaxFact = 10		-- to limit the time factor
-tfDrScale = 2		-- to scale the draft
-tfScScale = 80		-- to scale score differences
-tfChScale = 2		-- to scale best move changes
-tfDiScale = 3		-- to scale distinc best moves so far
+data CollectTimeParams = CollectTimeParams {
+         ctpIniFact, ctpMaxFact, ctpDrScale, ctpScScale, ctpChScale, ctpDiScale :: !Double,
+         ctpDraft, ctpChanges, ctpDistMvs :: !Int
+     }
 
-tfScale = 1 / (tfDrScale * tfScScale * tfChScale * tfDiScale)
+instance CollectParams CollectTimeParams where
+    type CollectFor CollectTimeParams = TimeParams
+    npColInit = CollectTimeParams {
+                    ctpIniFact = 0.70,	-- initial factor (if all other is 1)
+                    ctpMaxFact = 10,		-- to limit the time factor
+                    ctpDrScale = 2,		-- to scale the draft
+                    ctpScScale = 80,		-- to scale score differences
+                    ctpChScale = 2,		-- to scale best move changes
+                    ctpDiScale = 3,		-- to scale distinc best moves so far
+                    ctpDraft   = 4,	-- so many drafts are free
+                    ctpChanges = 2,	-- so many changes are free
+                    ctpDistMvs = 3	-- so many distinc moves are free
+                }
+    npColParm = collectTimeParams
+    npSetParm = setTimeParams
 
-tfDraft, tfChanges, tfDistMvs :: Int
-tfDraft   = 4	-- so many drafts are free
-tfChanges = 2	-- so many changes are free
-tfDistMvs = 3	-- so many distinc moves are free
+
+collectTimeParams :: (String, Double) -> CollectTimeParams -> CollectTimeParams
+collectTimeParams (s, v) ctp = lookApply s v ctp [
+        ("tpIniFact", setTpIniFact),
+        ("tpMaxFact", setTpMaxFact),
+        ("tpDrScale", setTpDrScale),
+        ("tpScScale", setTpScScale),
+        ("tpChScale", setTpChScale),
+        ("tpDiScale", setTpDiScale),
+        ("tpDraft",   setTpDraft),
+        ("tpChanges", setTpChanges),
+        ("tpDistMvs", setTpDistMvs)
+    ]
+    where setTpIniFact v ctp = ctp { ctpIniFact =       v }
+          setTpMaxFact v ctp = ctp { ctpMaxFact =       v }
+          setTpDrScale v ctp = ctp { ctpDrScale =       v }
+          setTpScScale v ctp = ctp { ctpScScale =       v }
+          setTpChScale v ctp = ctp { ctpChScale =       v }
+          setTpDiScale v ctp = ctp { ctpDiScale =       v }
+          setTpDraft   v ctp = ctp { ctpDraft   = round v }
+          setTpChanges v ctp = ctp { ctpChanges = round v }
+          setTpDistMvs v ctp = ctp { ctpDistMvs = round v }
+
+setTimeParams :: CollectTimeParams -> TimeParams
+setTimeParams (CollectTimeParams {..}) = TimeParams {
+        tpIniFact = ctpIniFact,
+        tpMaxFact = ctpMaxFact,
+        tpScale   = 1 / (ctpDrScale * ctpScScale * ctpChScale * ctpDiScale),
+        tpDraft   = ctpDraft,
+        tpChanges = ctpChanges,
+        tpDistMvs = ctpDistMvs
+    }
 
 -- For example: score drops in draft 6 by 50 cp, we have 4 changes with 4 different best moves
 -- then we have factor: 0.70 + 3 * 50 * 4 * 2 / (2 * 80 * 2 * 3) = 0.70 + 1.20 = 1.90
 
-timeFactor :: Int -> Int -> Int -> Int -> Int -> [Move] -> Int
-timeFactor draft tim osc sc chgs mvs = round $ fromIntegral tim * min tfMaxFact finf
-    where finf = tfIniFact + drf * scf * chf * dmf * tfScale
-          drf = fromIntegral $ max 1 $ draft - tfDraft + 1	-- draft factor
+timeFactor :: TimeParams -> Int -> Int -> Int -> Int -> Int -> [Move] -> Int
+timeFactor tp draft tim osc sc chgs mvs = round $ fromIntegral tim * min (tpMaxFact tp) finf
+    where finf = (tpIniFact tp) + drf * scf * chf * dmf * (tpScale tp)
+          drf = fromIntegral $ max 1 $ draft - (tpDraft tp) + 1	-- draft factor
           scf = fromIntegral $ max 1 $ abs $ osc - sc		-- score factor: if score drops
-          chf = fromIntegral $ max 1 $ chgs - tfChanges + 1	-- changes factor
-          dmf = fromIntegral $ max 1 $ length mvs - tfDistMvs + 1	-- distinct best moves factor
+          chf = fromIntegral $ max 1 $ chgs - (tpChanges tp) + 1	-- changes factor
+          dmf = fromIntegral $ max 1 $ length mvs - (tpDistMvs tp) + 1	-- distinct best moves factor
 
 storeBestMove :: [Move] -> Int -> CtxIO ()
 storeBestMove mvs sc = do

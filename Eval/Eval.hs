@@ -1,4 +1,8 @@
-{-# LANGUAGE BangPatterns, PatternGuards, ExistentialQuantification #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE TypeFamilies #-}
+
 module Eval.Eval (
     initEvalState,
     posEval,
@@ -18,6 +22,7 @@ import Data.Ord (comparing)
 
 import Struct.Struct
 import Struct.Status
+import Struct.Config
 import Moves.Moves
 import Moves.BitBoard
 import Moves.Muster
@@ -27,32 +32,34 @@ type IWeights = [Int]
 type DWeights = [Double]
 type Limits = [(Double, Double)]
 
-epDefault :: EvalParams
-epDefault = EvalParams {
-                epMaterMinor = 1,
-                epMaterRook  = 3,
-                epMaterQueen = 11,
-                epMaterScale = 1,
-                epMaterBonusScale = 4,
-                epPawnBonusScale  = 4
-            }
+instance CollectParams EvalParams where
+    type CollectFor EvalParams = EvalParams
+    npColInit = EvalParams {
+                    epMaterMinor = 1,
+                    epMaterRook  = 3,
+                    epMaterQueen = 11,
+                    epMaterScale = 1,
+                    epMaterBonusScale = 4,
+                    epPawnBonusScale  = 4
+                }
+    npColParm = collectEvalParams
+    npSetParm = id
 
-paramsWithDefaults :: [(String, Double)] -> EvalParams
-paramsWithDefaults sds = foldr look epDefault [
-                             ("epMaterMinor",      setEpMaterMinor),
-                             ("epMaterRook",       setEpMaterRook),
-                             ("epMaterQueen",      setEpMaterQueen),
-                             ("epMaterScale",      setEpMaterScale),
-                             ("epMaterBonusScale", setEpMaterBonusScale),
-                             ("epPawnBonusScale",  setEpPawnBonusScale)
-                             ]
-    where setEpMaterMinor ep v = ep { epMaterMinor = round v }
-          setEpMaterRook  ep v = ep { epMaterRook  = round v }
-          setEpMaterQueen ep v = ep { epMaterQueen = round v }
-          setEpMaterScale ep v = ep { epMaterScale = round v }
-          setEpMaterBonusScale ep v = ep { epMaterBonusScale = round v }
-          setEpPawnBonusScale ep v = ep { epPawnBonusScale = round v }
-          look (str, fun) def = maybe def (fun def) $ lookup str sds
+collectEvalParams :: (String, Double) -> EvalParams -> EvalParams
+collectEvalParams (s, v) ep = lookApply s v ep [
+        ("epMaterMinor",      setEpMaterMinor),
+        ("epMaterRook",       setEpMaterRook),
+        ("epMaterQueen",      setEpMaterQueen),
+        ("epMaterScale",      setEpMaterScale),
+        ("epMaterBonusScale", setEpMaterBonusScale),
+        ("epPawnBonusScale",  setEpPawnBonusScale)
+    ]
+    where setEpMaterMinor      v ep = ep { epMaterMinor      = round v }
+          setEpMaterRook       v ep = ep { epMaterRook       = round v }
+          setEpMaterQueen      v ep = ep { epMaterQueen      = round v }
+          setEpMaterScale      v ep = ep { epMaterScale      = round v }
+          setEpMaterBonusScale v ep = ep { epMaterBonusScale = round v }
+          setEpPawnBonusScale  v ep = ep { epPawnBonusScale  = round v }
 
 class EvalItem a where
     evalItem    :: EvalParams -> MyPos -> a -> IWeights
@@ -150,7 +157,7 @@ initEvalState :: [(String, Double)] -> EvalState
 initEvalState sds = EvalState {
         esDWeights = weights,
         esIWeights = map round weights,
-        esEParams  = paramsWithDefaults sds
+        esEParams  = npSetParm (colParams sds :: CollectFor EvalParams)
     }
     where weights = inLimits weightLims $ allWeights sds
 
