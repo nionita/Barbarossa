@@ -594,6 +594,9 @@ giveBestMove mvs = do
 
 beforeReadLoop :: CtxIO ()
 beforeReadLoop = do
+    ctxLog LogInfo "Time parameters:"
+    tp <- asks tipars
+    ctxLog LogInfo $ show tp
     chg <- readChanging
     let evst = evalst $ crtStatus chg
     ctxLog LogInfo "Eval parameters and weights:"
