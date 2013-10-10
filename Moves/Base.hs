@@ -92,10 +92,6 @@ posNewSearch p = p { hash = newGener (hash p) }
 -- debugGen :: Bool
 -- debugGen = False
 
-captWLDepth :: Int
-captWLDepth = 1		-- now, when doing right MVVLVA, we dont know which depth is best (was 5)
-			-- but 1 seems good, although the generation is still slow
-
 loosingLast :: Bool
 loosingLast = False
 
@@ -105,48 +101,47 @@ genMoves depth absdp pv = do
     -- when debugGen $ do
     --     lift $ ctxLog "Debug" $ "--> genMoves:\n" ++ showTab (black p) (slide p) (kkrq p) (diag p)
     let !c = moving p
-        lc = map (genmv True p) $ genMoveFCheck p
+        -- lc = map (genmv True p) $ genMoveFCheck p
+        lc = genMoveFCheck p
     if isCheck p c
        then return (lc, [])
        else do
             let l0 = genMoveCast p
-                l1 = map (genmvT p) $ genMoveTransf p
-                l2 = map (genmv True p) $ genMoveCapt p
-                (pl2w, pl2l) = genMoveCaptWL p
-                l2w = map (genmv True p) pl2w
-                l2l = map (genmv True p) pl2l
-                l3'= map (genmv False p) $ genMoveNCapt p
+                -- l1 = map (genmvT p) $ genMoveTransf p
+                l1 = genMoveTransf p
+                -- l2 = map (genmv True p) $ genMoveCapt p
+                (l2w, l2l) = genMoveCaptWL p
+                -- l2w = map (genmv True p) pl2w
+                -- l2l = map (genmv True p) pl2l
+                l3'= genMoveNCapt p
+                -- l3'= map (genmv False p) $ genMoveNCapt p
             l3 <- if pv && depth >= depthForMovesSortPv
                      || not pv && depth >= depthForMovesSort
                      -- then sortMovesFromHash l3'
                      then sortMovesFromHist absdp l3'
                      else return l3'
-            return $! if pv || depth >= captWLDepth
-                        then if loosingLast
-                                then (l1 ++ l2w, l0 ++ l3 ++ l2l)
-                                else (l1 ++ l2w ++ l2l, l0 ++ l3)
-                        else (l1 ++ l2, l0 ++ l3)
-
-onlyWinningCapts :: Bool
-onlyWinningCapts = True
+            return $! if loosingLast
+                         then (l1 ++ l2w, l0 ++ l3 ++ l2l)
+                         else (l1 ++ l2w ++ l2l, l0 ++ l3)
 
 -- Generate only tactical moves, i.e. promotions, captures & check escapes
 genTactMoves :: Game [Move]
 genTactMoves = do
     p <- getPos
     let !c = moving p
-        l1 = map (genmvT p) $ genMoveTransf p
-        l2 = map (genmv True p) $ genMoveCapt p
+        -- l1 = map (genmvT p) $ genMoveTransf p
+        l1 = genMoveTransf p
+        -- l2 = map (genmv True p) $ genMoveCapt p
         -- lnc = map (genmv True p) $ genMoveNCaptToCheck p c
-        (pl2, _) = genMoveCaptWL p
-        l2w = map (genmv True p) pl2
+        (l2w, _) = genMoveCaptWL p
+        -- l2w = map (genmv True p) pl2
         -- l2w = map (genmv True p) $ genMoveCaptSEE p c
-        lc = map (genmv True p) $ genMoveFCheck p
+        -- lc = map (genmv True p) $ genMoveFCheck p
+        lc = genMoveFCheck p
         -- the non capturing check moves have to be at the end (tested!)
         -- else if onlyWinningCapts then l1 ++ l2w ++ lnc else l1 ++ l2 ++ lnc
-        !mvs | isCheck p c      = lc
-             | onlyWinningCapts = l1 ++ l2w
-             | otherwise        = l1 ++ l2
+        !mvs | isCheck p c = lc
+             | otherwise   = l1 ++ l2w
     return mvs
 
 sortMovesFromHist :: Int -> [Move] -> Game [Move]
