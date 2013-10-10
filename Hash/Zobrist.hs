@@ -66,4 +66,4 @@ zobCastKb = zobrist `unsafeAt` (zobCastBegin + 2)
 zobCastQb = zobrist `unsafeAt` (zobCastBegin + 3)
 
 zobEP :: Int -> ZKey
-zobEP x = assert (x >= 1 && x <= 8) $ zobrist `unsafeAt` (zobCastBegin + 3 + x)
+zobEP x = assert (x >= 0 && x <= 7) $ zobrist `unsafeAt` (zobCastBegin + 4 + x)

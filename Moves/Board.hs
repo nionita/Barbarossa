@@ -1,4 +1,5 @@
 {-# LANGUAGE TypeSynonymInstances, MultiParamTypeClasses, PatternGuards, BangPatterns #-}
+{-# LANGUAGE CPP #-}
 module Moves.Board (
     posFromFen, initPos,
     isCheck, inCheck,
@@ -25,7 +26,7 @@ import Data.Ord (comparing)
 import Struct.Struct
 import Moves.Moves
 import Moves.BitBoard
-import Moves.Muster
+-- import Moves.Muster
 import Moves.ShowMe
 import Eval.BasicEval
 import Hash.Zobrist
@@ -61,10 +62,9 @@ letterToPiece = [('P', Pawn), ('R', Rook), ('N', Knight), ('B', Bishop),
 initPos :: MyPos
 initPos = posFromFen startFen
 
--- TODO: en passant
 posFromFen :: String -> MyPos
 posFromFen fen = p { epcas = x, zobkey = zk }
-    where fen1:fen2:fen3:_:fen5:_ = fenFromString fen
+    where fen1:fen2:fen3:fen4:fen5:_ = fenFromString fen
           p  = fenToTable fen1
           -- bp = (basicPos p) { bpepcas = x }
           x  = fyInit . castInit . epInit $ epcas0
@@ -77,9 +77,18 @@ posFromFen fen = p { epcas = x, zobkey = zk }
           (ck, z3) = if 'k' `elem` fen3 then ((.|. caRKib), zobCastKb) else (id, 0)
           (cq, z4) = if 'q' `elem` fen3 then ((.|. caRQub), zobCastQb) else (id, 0)
           castInit = cQ . cK . cq . ck
-          epInit   = id					-- TODO: ep field
+          (epInit, ze) = case fen4 of
+              f:r:_ | f `elem` "abcdefgh" && r `elem` "36"
+                    -> let fn  = ord f - ord 'a'
+                           ms' = case r of
+                                     '3' -> 0x10000
+                                     _   -> 0x10000000000
+                           ms = ms' `shiftL` fn
+                           zz = zobEP fn
+                       in ((.|.) ms, zz)
+              _     -> (id, 0)
           fyInit = set50Moves $ read fen5
-          zk = zobkey p `xor` z `xor` z1 `xor` z2 `xor` z3 `xor` z4		-- also for ep
+          zk = zobkey p `xor` z `xor` z1 `xor` z2 `xor` z3 `xor` z4 `xor` ze
 
 -- A primitive decomposition of the fen string
 fenFromString :: String -> [String]
@@ -204,15 +213,15 @@ genMoveNCapt !p = concat [ nGenNC, bGenNC, rGenNC, qGenNC, pGenNC1, pGenNC2, kGe
           traR = if c == White then 0x00FF000000000000 else 0xFF00
           !c = moving p
 
--- Generate only transformations (now only to queen) - captures and non captures
+-- Generate only promotions (now only to queen) - captures and non captures
 genMoveTransf :: MyPos -> [(Square, Square)]
 genMoveTransf !p = pGenC ++ pGenNC
     where pGenC = concatMap (srcDests (pcapt . pAttacs c))
                      $ bbToSquares $ pawns p .&. myfpc
           pGenNC = pAll1Moves c (pawns p .&. myfpc) (occup p)
           !myfpc = me p .&. traR
-          !yopiep = yo p .|. (epcas p .&. epMask)
-          pcapt = (.&. yopiep)
+          -- !yopiep = yo p .|. (epcas p .&. epMask)	-- e.p. cannot promote
+          pcapt = (.&. yo p)
           !traR = if c == White then 0x00FF000000000000 else 0xFF00
           !c = moving p
 
@@ -283,11 +292,12 @@ defendAt p !bb = concat [ nGenC, bGenC, rGenC, qGenC ]
           target = (.&. bb)
 
 -- Generate capture pawn moves ending on a given square (used to defend a check by capture)
+-- Because of pawn check when pawn can be captured e.p. we have to generate always the e.p. capture
 -- TODO: Here: the promotion is not correct (does not promote!)
 pawnBeatAt :: MyPos -> BBoard -> [(Square, Square)]
 pawnBeatAt !p bb = concatMap (srcDests (pcapt . pAttacs (moving p)))
                            $ bbToSquares $ pawns p .&. me p
-    where !yopiep = bb .&. (yo p .|. (epcas p .&. epMask))
+    where !yopiep = (epcas p .&. epMask) .|. (bb .&. yo p)	-- e.p. always
           pcapt = (.&. yopiep)
 
 -- Generate blocking pawn moves ending on given squares (used to defend a check by blocking)
@@ -635,6 +645,30 @@ mvBit !src !dst !w	-- = w `xor` ((w `xor` (shifted .&. nbsrc)) .&. mask)
           nbsrc = complement bsrc
           nbdst = complement bdst
 
+{-# INLINE moveAndClearEp #-}
+moveAndClearEp :: BBoard -> BBoard
+moveAndClearEp bb = bb `xor` (bb .&. epMask) `xor` mvMask
+
+{-# INLINE epToFile #-}
+epToFile :: BBoard -> BBoard
+epToFile bb = 0xFF .&. (bb `unsafeShiftR` 16 .|. bb `unsafeShiftR` 32)
+
+{-# INLINE epClrZob #-}
+epClrZob :: BBoard -> BBoard
+epClrZob bb
+    | epLastBB' == 0 = 0
+    | otherwise      = zobEP epLastSq
+    where !epLastBB  = bb .&. epMask
+          !epLastBB' = epToFile epLastBB
+          epLastSq   = head $ bbToSquares epLastBB'
+
+genEP :: Bool
+#ifdef GENEP
+genEP = True
+#else
+genEP = False
+#endif
+
 -- Copy one square to another and clear the source square
 -- doFromToMove :: Square -> Square -> MyPos -> Maybe MyPos
 doFromToMove :: Move -> MyPos -> MyPos
@@ -651,15 +685,23 @@ doFromToMove m !p | moveIsNormal m
           tdiag  = mvBit src dst $ diag p
           !srcbb = 1 `unsafeShiftL` src
           !dstbb = 1 `unsafeShiftL` dst
-          pawnmoving = pawns p .&. srcbb /= 0	-- the correct color is
-          iscapture  = occup p .&. dstbb /= 0	-- checked somewhere else
+          !pawnmoving = pawns p .&. srcbb /= 0	-- the correct color is
+          !iscapture  = occup p .&. dstbb /= 0	-- checked somewhere else
           !isclc = isClearingCast srcbb (epcas p) || isClearingCast dstbb (epcas p)
-          irevers = pawnmoving || iscapture || isclc
-          tepcas' = clearCast srcbb $ clearCast dstbb $ epcas p `xor` mvMask	-- to do: ep
-          !tepcas  = if irevers then reset50Moves tepcas' else addHalfMove tepcas'
+          !irevers = pawnmoving || iscapture || isclc
+          !tepcas' = clearCast srcbb $ clearCast dstbb $ moveAndClearEp $ epcas p
+          !tepcas  = setEp $! if irevers then reset50Moves tepcas' else addHalfMove tepcas'
+          -- For e.p. zob key:
+          !epcl = epClrZob $ epcas p
+          (setEp, !epSetZob)
+              | genEP && pawnmoving && (src - dst == 16 || dst - src == 16)
+                  = let epFld = (src + dst) `unsafeShiftR` 1
+                        epBit = 1 `unsafeShiftL` epFld
+                    in ((.|.) epBit, zobEP epFld)
+              | otherwise = (id, 0)
           -- !zob = if isclc then clearCastZob (zobkey p) src dst else zobkey p
           -- What is faster? Alwas, or only when isclc?
-          !zob = clearCastZob (zobkey p) src dst
+          !zob = clearCastZob (zobkey p `xor` epcl `xor` epSetZob) src dst
           CA tzobkey tmater = case tabla p src of	-- identify the moving piece
                Busy col fig -> chainAccum (CA zob (mater p)) [
                                    accumClearSq src p,
@@ -684,10 +726,12 @@ doFromToMove m !p | moveIsEnPas m
           tslide = mvBit src dst (slide p) .&. nbdel
           tkkrq  = mvBit src dst (kkrq p) .&. nbdel
           tdiag  = mvBit src dst (diag p) .&. nbdel
-          tepcas = reset50Moves $ epcas p `xor` mvMask	-- to do: ep
+          tepcas = reset50Moves $ moveAndClearEp $ epcas p
           Busy col fig  = tabla p src	-- identify the moving piece
           Busy _   Pawn = tabla p del	-- identify the captured piece (pawn)
-          CA tzobkey tmater = chainAccum (CA (zobkey p) (mater p)) [
+          !epcl = epClrZob $ epcas p
+          !zk = zobkey p `xor` epcl
+          CA tzobkey tmater = chainAccum (CA zk (mater p)) [
                                 accumClearSq src p,
                                 accumClearSq del p,
                                 accumSetPiece dst col fig p,
@@ -707,8 +751,10 @@ doFromToMove m !p | moveIsTransf m
           tslide = mvBit src dst $ slide p0
           tkkrq  = mvBit src dst $ kkrq p0
           tdiag  = mvBit src dst $ diag p0
-          tepcas = reset50Moves $ epcas p `xor` mvMask	-- to do: ep
-          CA tzobkey tmater = chainAccum (CA (zobkey p0) (mater p0)) [
+          tepcas = reset50Moves $ moveAndClearEp $ epcas p
+          !epcl = epClrZob $ epcas p0
+          !zk = zobkey p0 `xor` epcl
+          CA tzobkey tmater = chainAccum (CA zk (mater p0)) [
                                 accumClearSq src p0,
                                 accumSetPiece dst col pie p0,
                                 accumMoving p0
@@ -735,10 +781,11 @@ doFromToMove m !p | moveIsCastle m
           tkkrq  = mvBit csr cds $ mvBit src dst $ kkrq p
           tdiag  = mvBit csr cds $ mvBit src dst $ diag p
           srcbb = 1 `unsafeShiftL` src
-          tepcas = reset50Moves $ clearCast srcbb $ epcas p `xor` mvMask	-- to do: ep
+          tepcas = reset50Moves $ clearCast srcbb $ moveAndClearEp $ epcas p
           Busy col King = tabla p src	-- identify the moving piece (king)
           Busy co1 Rook = tabla p csr	-- identify the moving rook
-          !zob = clearCastZob (zobkey p) src dst
+          !epcl = epClrZob $ epcas p
+          !zob = clearCastZob (zobkey p `xor` epcl) src dst
           CA tzobkey tmater = chainAccum (CA zob (mater p)) [
                                 accumClearSq src p,
                                 accumSetPiece dst col King p,
@@ -750,11 +797,12 @@ doFromToMove _ _ = error "doFromToMove: wrong move type"
 
 reverseMoving :: MyPos -> MyPos
 reverseMoving p = updatePos p { epcas = tepcas, zobkey = z }
-    where tepcas = epcas p `xor` mvMask
-          CA z _ = chainAccum (CA (zobkey p) (mater p)) [
+    where tepcas = moveAndClearEp $ epcas p
+          !epcl = epClrZob $ epcas p
+          !zk = zobkey p `xor` epcl
+          CA z _ = chainAccum (CA zk (mater p)) [
                        accumMoving p
                    ]
--- Here is not clear what to do with castle and en passant...
 
 -- find pinning lines for a piece type, given the king & piece squares
 -- the queen is very hard, so we solve it as a composition of rook and bishop
@@ -879,8 +927,17 @@ seeMoveValue pos sqfirstmv sqto gain0 = v
 -- This function can produce illegal captures with the king!
 genMoveCaptWL :: MyPos -> ([(Square, Square)], [(Square, Square)])
 genMoveCaptWL !pos
-    = foldr (perCaptFieldWL pos (me pos) (yoAttacs pos)) ([],[]) $ squaresByMVV pos capts
+    = foldr (perCaptFieldWL pos (me pos) (yoAttacs pos)) (epcs,[]) $ squaresByMVV pos capts
     where capts = myAttacs pos .&. yo pos
+          epcs  = genEPCapts pos
+
+genEPCapts :: MyPos -> [(Square, Square)]
+genEPCapts !pos
+    | epBB == 0 = []
+    | otherwise = map (flip (,) dst) $ bbToSquares srcBB
+    where !epBB = epcas pos .&. epMask
+          dst = head $ bbToSquares epBB
+          srcBB = pAttacs (other $ moving pos) dst .&. me pos .&. pawns pos
 
 perCaptFieldWL :: MyPos -> BBoard -> BBoard -> Square
           -> ([(Square, Square)], [(Square, Square)])
