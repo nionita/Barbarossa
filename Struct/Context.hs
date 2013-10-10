@@ -65,8 +65,8 @@ data PrevMvInfo = PrevMvInfo {
 
 -- Time management parameters
 data TimeParams = TimeParams {
-                      tpIniFact, tpMaxFact, tpScale :: !Double,
-                      tpDraft, tpChanges, tpDistMvs :: !Int
+                      tpIniFact, tpMaxFact,
+                      tpDrScale, tpScScale, tpChScale :: !Double
                   } deriving Show
 
 -- This is the variable context part (global mutable context)
