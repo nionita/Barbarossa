@@ -14,7 +14,7 @@ module Moves.Base (
     mateScore,
     finNode,
     showMyPos,
-    nearmate, special
+    nearmate	-- , special
 ) where
 
 -- import Data.Array.IArray
@@ -42,10 +42,6 @@ import Moves.Notation
 {-# INLINE nearmate #-}
 nearmate :: Int -> Bool
 nearmate i = i >= mateScore - 255 || i <= -mateScore + 255
-
-special :: Move -> Bool
-{-# INLINE special #-}
-special = moveIsSpecial
 
 -- Some options and parameters:
 debug, useHash :: Bool
@@ -171,6 +167,14 @@ showMyPos :: MyPos -> String
 showMyPos p = showTab (black p) (slide p) (kkrq p) (diag p) ++ "================ " ++ mc ++ "\n"
     where mc = if moving p == White then "w" else "b"
 
+{-# INLINE uBitSet #-}
+uBitSet :: BBoard -> Int -> Bool
+uBitSet bb sq = bb .&. (1 `unsafeShiftL` sq) /= 0
+
+{-# INLINE uBitClear #-}
+uBitClear :: BBoard -> Int -> Bool
+uBitClear bb sq = bb .&. (1 `unsafeShiftL` sq) == 0
+
 -- move from a node to a descendent
 doMove :: Bool -> Move -> Bool -> Game DoResult
 doMove real m qs = do
@@ -181,15 +185,11 @@ doMove real m qs = do
     let (pc:_) = stack s	-- we never saw an empty stack error until now
         !m1 = if real then checkCastle (checkEnPas m pc) pc else m
         -- Moving a non-existent piece?
-        il = case tabla pc (fromSquare m1) of
-                 Busy _ _ -> False
-                 _        -> True
+        il = occup pc `uBitClear` fromSquare m1
         -- Capturing one king?
-        kc = case tabla pc (toSquare m1) of
-                 Busy _ King -> True
-                 _           -> False
+        kc = kings pc `uBitSet` toSquare m1
         p' = doFromToMove m1 pc
-        kok = kingsOk p'
+        kok = kingsOk p'	-- actually not needed if kc is always checkd...
         cok = checkOk p'
     -- If the move is real and one of those conditions occur,
     -- then we are really in trouble...
@@ -207,22 +207,14 @@ doMove real m qs = do
                     let (!sts, feats) | real      = (0, [])
                                       | otherwise = evalState (posEval p') (evalst s)
                         !p = p' { staticScore = sts, staticFeats = feats }
-                        dext = if inCheck p || goPromo p m1	-- || movePassed p m1
-                                  then 1
-                                  else 0
-                    -- when debug $
-                    --     lift $ ctxLog "Debug" $ "*** doMove: " ++ showMyPos p
-                    -- remis' <- checkRepeatPv p pv
-                    -- remis  <- if remis' then return True else checkRemisRules p
-                    -- when (printEvalInt /= 0 && nodes (stats s) .&. printEvalInt == 0) $ do
-                    --     logMes $ "Fen: " ++ posToFen p
-                    --     logMes $ "Eval info:" ++ concatMap (\(n, v) -> " " ++ n ++ "=" ++ show v)
-                    --                                        (("score", sts) : paramPairs feats)
                     put s { stack = p : stack s }
                     remis <- if qs then return False else checkRemisRules p'
                     if remis
                        then return $ Final 0
-                       else return $ Exten dext
+                       else do
+                           -- let dext = if inCheck p || goPromo p m1 || movePassed p m1 then 1 else 0
+                           let dext = if inCheck p || goPromo pc m1 then 1 else 0
+                           return $ Exten dext $ moveIsSpecial pc m1
 
 doNullMove :: Game ()
 doNullMove = do
@@ -277,12 +269,13 @@ isMoveLegal m = do
     t <- getPos
     return $! legalMove t m
 
+-- Should be: not $ moveIsSpecial ...
 isKillCand :: Move -> Move -> Game Bool
 isKillCand mm ym
     | toSquare mm == toSquare ym = return False
     | otherwise = do
         t <- getPos
-        return $! nonCapt t ym
+        return $! not $ moveIsCapture t ym
 
 okInSequence :: Move -> Move -> Game Bool
 okInSequence m1 m2 = do
@@ -382,6 +375,11 @@ betaCut good _ absdp m = do	-- dummy: depth
     case tabla t (toSquare m) of
         Empty -> liftIO $ toHist (hist s) good (fromSquare m) (toSquare m) absdp
         _     -> return ()
+
+moveIsSpecial :: MyPos -> Move -> Bool
+moveIsSpecial p m
+    | moveIsTransf m || moveIsEnPas m = True
+    | otherwise                       = moveIsCapture p m
 
 {--
 showChoose :: [] -> Game ()

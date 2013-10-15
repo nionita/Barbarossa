@@ -9,7 +9,7 @@ module Struct.Struct (
          fromSquare, toSquare, isSlide, isDiag, isKkrq,
          moveIsNormal, moveIsCastle, moveIsTransf, moveIsEnPas,
          moveColor, moveTransfPiece, moveEnPasDel, makeEnPas,
-         makeCastleFor, makeTransf, makeSpecial, moveIsSpecial, moveFromTo,
+         makeCastleFor, makeTransf, moveFromTo,
          activateTransf, fromColRow, checkCastle, checkEnPas, toString
          -- isPawnMoving, isKingMoving
     ) where
@@ -304,12 +304,6 @@ movetype t w = fromIntegral (t `shiftL` 12) .|. w
 
 -- code :: Word32 -> Word32 -> Word32
 -- code c w = (c `shiftL` 14) .|. w
-
-makeSpecial :: Move -> Move
-makeSpecial (Move m) = Move $ m `setBit` 18
-
-moveIsSpecial :: Move -> Bool
-moveIsSpecial (Move m) = m `testBit` 18
 
 fromSquare :: Move -> Square
 fromSquare (Move m) = fromIntegral (m `shiftR` 6) .&. 0x3F

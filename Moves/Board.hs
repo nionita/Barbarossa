@@ -3,13 +3,13 @@
 module Moves.Board (
     posFromFen, initPos,
     isCheck, inCheck,
-    goPromo, movePassed, hasMoves,
-    genmv, genmvT, kingMoved, castKingRookOk, castQueenRookOk,
+    goPromo, movePassed, hasMoves, moveIsCapture,
+    kingMoved, castKingRookOk, castQueenRookOk,
     -- genMoveCapt,
     genMoveCast, genMoveNCapt, genMoveTransf, genMoveFCheck, genMoveCaptWL,
     genMoveNCaptToCheck,
     updatePos, kingsOk, checkOk,
-    legalMove, alternateMoves, nonCapt,
+    legalMove, alternateMoves,
     doFromToMove, reverseMoving
     ) where
 
@@ -119,27 +119,16 @@ inCheck = (/= 0) . check
 
 goPromo :: MyPos -> Move -> Bool
 goPromo p m
-    | moveIsTransf m   = True
-    | not (ppw || ppb) = False
-    | otherwise = case tabla p t of
-                      Busy White Pawn -> ppw
-                      Busy Black Pawn -> ppb
-                      _               -> False
-    where !t = toSquare m
-          ppw = t >= 48	-- 40
-          ppb = t < 16		-- 24
+    | moveIsTransf m = True
+    | movePassed p m = True
+    | otherwise      = False
+    -- where !t = toSquare m
+    --       ppw = t >= 48	-- 40
+    --       ppb = t < 16		-- 24
+    --       pawnmoving = pawns p .&. uBit (fromSquare m) /= 0	-- the correct color is
 
 movePassed :: MyPos -> Move -> Bool
-movePassed p m = passed p .&. (unsafeShiftL 1 $ fromSquare m) /= 0
-
--- {-# INLINE genmv #-}
-genmv :: Bool -> MyPos -> (Square, Square) -> Move
-genmv spec _ (f, t) = if spec then makeSpecial m else m
-    where !m = moveFromTo f t
-
--- Used only with transformation pawns
-genmvT :: MyPos -> (Square, Square) -> Move
-genmvT _ (f, t) = makeTransf Queen f t
+movePassed p m = passed p .&. (uBit $ fromSquare m) /= 0
 
 -- Here it seems we have a problem when we are not in check but could move
 -- only a pinned piece: then we are stale mate but don't know (yet)
@@ -531,6 +520,10 @@ castQueenRookOk :: MyPos -> Color -> Bool
 castQueenRookOk !p White = epcas p `testBit` 0
 castQueenRookOk !p Black = epcas p `testBit` 56
 
+{-# INLINE uBit #-}
+uBit :: Square -> BBoard
+uBit = unsafeShiftL 1
+
 -- Set a piece on a square of the table
 setPiece :: Square -> Color -> Piece -> MyPos -> MyPos
 setPiece sq c f !p
@@ -547,7 +540,7 @@ setPiece sq c f !p
                              Busy co fo -> (zobPiece co fo sq, matPiece co fo)
           !znew = zobPiece c f sq
           !mnew = matPiece c f
-          bsq = 1 `unsafeShiftL` sq
+          bsq = uBit sq
           !nbsq = complement bsq
 
 kingsOk, checkOk :: MyPos -> Bool
@@ -655,6 +648,10 @@ nonCapt p m
     | Busy _ _ <- tabla p (toSquare m) = False
     | otherwise                        = True
 
+{-# INLINE moveIsCapture #-}
+moveIsCapture :: MyPos -> Move -> Bool
+moveIsCapture p m = occup p .&. (uBit (toSquare m)) /= 0
+
 canMove :: Piece -> MyPos -> Square -> Square -> Bool
 canMove Pawn p src dst
     | (src - dst) .&. 0x7 == 0 = elem dst $
@@ -672,8 +669,8 @@ mvBit !src !dst !w	-- = w `xor` ((w `xor` (shifted .&. nbsrc)) .&. mask)
     | otherwise = case wdst of
                       0 -> w .&. nbsrc .|. bdst
                       _ -> w .&. nbsrc
-    where bsrc = 1 `unsafeShiftL` src
-          !bdst = 1 `unsafeShiftL` dst
+    where bsrc = uBit src
+          !bdst = uBit dst
           wsrc = w .&. bsrc
           wdst = w .&. bdst
           nbsrc = complement bsrc
@@ -717,8 +714,8 @@ doFromToMove m !p | moveIsNormal m
           tslide = mvBit src dst $ slide p
           tkkrq  = mvBit src dst $ kkrq p
           tdiag  = mvBit src dst $ diag p
-          !srcbb = 1 `unsafeShiftL` src
-          !dstbb = 1 `unsafeShiftL` dst
+          !srcbb = uBit src
+          !dstbb = uBit dst
           !pawnmoving = pawns p .&. srcbb /= 0	-- the correct color is
           !iscapture  = occup p .&. dstbb /= 0	-- checked somewhere else
           !isclc = isClearingCast srcbb (epcas p) || isClearingCast dstbb (epcas p)
@@ -730,7 +727,7 @@ doFromToMove m !p | moveIsNormal m
           (setEp, !epSetZob)
               | genEP && pawnmoving && (src - dst == 16 || dst - src == 16)
                   = let epFld = (src + dst) `unsafeShiftR` 1
-                        epBit = 1 `unsafeShiftL` epFld
+                        epBit = uBit epFld
                     in ((.|.) epBit, zobEP epFld)
               | otherwise = (id, 0)
           -- !zob = if isclc then clearCastZob (zobkey p) src dst else zobkey p
@@ -754,7 +751,7 @@ doFromToMove m !p | moveIsEnPas m
     where src = fromSquare m
           dst = toSquare m
           del = moveEnPasDel m
-          bdel = 1 `unsafeShiftL` del
+          bdel = uBit del
           nbdel = complement bdel
           tblack = mvBit src dst (black p) .&. nbdel
           tslide = mvBit src dst (slide p) .&. nbdel
@@ -814,7 +811,7 @@ doFromToMove m !p | moveIsCastle m
           tslide = mvBit csr cds $ mvBit src dst $ slide p
           tkkrq  = mvBit csr cds $ mvBit src dst $ kkrq p
           tdiag  = mvBit csr cds $ mvBit src dst $ diag p
-          srcbb = 1 `unsafeShiftL` src
+          srcbb = uBit src
           tepcas = reset50Moves $ clearCast srcbb $ moveAndClearEp $ epcas p
           Busy col King = tabla p src	-- identify the moving piece (king)
           Busy co1 Rook = tabla p csr	-- identify the moving rook

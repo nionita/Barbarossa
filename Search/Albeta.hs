@@ -454,8 +454,8 @@ pvInnerRoot b d nst e = do
                 viztreeDown nn e
                 modify $ \s -> s { absdp = absdp s + 1 }
                 s <- case exd of
-                         Exten exd' -> pvInnerRootExten b d (special e) exd' nst
-                         Final sco  -> do
+                         Exten exd' spc -> pvInnerRootExten b d spc exd' nst
+                         Final sco      -> do
                              viztreeScore $ "Final: " ++ show sco
                              return $! pathFromScore "Final" (-sco)
                 -- undo the move
@@ -828,12 +828,11 @@ pvInnerLoop b d prune nst e = do
                 viztreeDown nn e
                 modify $ \s -> s { absdp = absdp s + 1 }
                 s <- case exd of
-                         Exten exd' -> do
-                           let speci = special e
-                           if prune && exd' == 0 && not speci -- don't prune special or extended
+                         Exten exd' spc -> do
+                           if prune && exd' == 0 && not spc -- don't prune special or extended
                               then return $! onlyScore $! cursc nst	-- prune, return a
-                              else pvInnerLoopExten b d speci exd' nst
-                         Final sco  -> do
+                              else pvInnerLoopExten b d spc exd' nst
+                         Final sco -> do
                              viztreeScore $ "Final: " ++ show sco
                              return $! pathFromScore "Final" (-sco)
                 lift undoMove	-- undo the move
@@ -865,12 +864,11 @@ pvInnerLoopZ b d prune nst e = do
                 viztreeDown nn e
                 modify $ \s -> s { absdp = absdp s + 1 }
                 s <- case exd of
-                         Exten exd' -> do
-                           let speci = special e
-                           if prune && exd' == 0 && not speci -- don't prune special or extended
+                         Exten exd' spc -> do
+                           if prune && exd' == 0 && not spc -- don't prune special or extended
                               then return $! onlyScore $! cursc nst	-- prune, return a
-                              else pvInnerLoopExtenZ b d speci exd' nst
-                         Final sco  -> do
+                              else pvInnerLoopExtenZ b d spc exd' nst
+                         Final sco -> do
                              viztreeScore $ "Final: " ++ show sco
                              return $! pathFromScore "Final" (-sco)
                 lift undoMove	-- undo the move
