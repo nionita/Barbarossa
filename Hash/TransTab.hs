@@ -174,35 +174,47 @@ writeCache tt zkey depth tp score move nodes = do
     let (bas, idx) = zKeyToCellIndex tt zkey
         gen = gener tt
         pCE = quintToCacheEn tt zkey depth tp score move nodes
-    store gen pCE idx bas bas (4::Int)
+    store gen pCE idx bas bas minBound (4::Int)
     where store gen pCE idx = go
-              where go !crt0 !rep0 !tries0 = do
+              where go !crt0 !rep0 !sco0 !tries0 = do
                        cpCE <- peek crt0
                        if isSameEntry tt zkey idx cpCE
                           then poke crt0 pCE	 -- here we found the same entry: just update
-                          else if tries0 <= 1
-                              then poke rep0 pCE -- replace the weakest entry with the current one
-                              else do	-- search further
-                                  rep1 <- chooseReplaceEntry gen crt0 rep0
-                                  let crt1 = crt0 `plusPtr` pCacheEnSize
-                                      tries1 = tries0 - 1
-                                  go crt1 rep1 tries1
+                          else do
+                              let (rep1, sco1) = scoreReplaceEntry gen cpCE crt0 rep0 sco0
+                              if tries0 <= 1
+                                 then poke rep1 pCE -- replace the weakest entry so far
+                                 else do	-- search further
+                                     let crt1 = crt0 `plusPtr` pCacheEnSize
+                                         tries1 = tries0 - 1
+                                     go crt1 rep1 sco1 tries1
 
 -- Here we implement the logic which decides which entry is weaker
--- If the current entry has the current generation then we consider the old replacement to be weaker
--- without to consider other criteria in case it has itself the current generation
-chooseReplaceEntry :: Word64 -> Ptr PCacheEn -> Ptr PCacheEn -> IO (Ptr PCacheEn)
-chooseReplaceEntry gen crt rep = if rep == crt then return rep else do
-    crte <- peek crt
-    if generation crte == gen
-       then return rep
-       else do
-           repe <- peek rep
-           if betterpart repe > betterpart crte
-              then return crt
-              else return rep
-    where generation = (.&. 0x3F) . lo
-          betterpart = lo	-- there is some noise at the end of that word (26 bits), but we don't care
+scoreReplaceEntry :: Word64 -> PCacheEn -> Ptr PCacheEn -> Ptr PCacheEn -> Word32 -> (Ptr PCacheEn, Word32)
+scoreReplaceEntry gen crte crt rep sco
+    | sco' < sco = (crt, sco')
+    | otherwise  = (rep, sco)
+    where sco' | generation crte /= gen = 0
+               | otherwise              = repScore crte
+          generation = (.&. 0x3F) . lo
+
+-- This one is a shorter function to get the score of an entry for the replacement policy
+-- Type is most important, then depth
+-- Type: 2 - exact (only few entries, PV)
+--       1 - low bound: have good moves
+--       0 - high bound - can be used only for score, sometimes
+-- We can try variations of this. Important factors are:
+-- generation - must be most important
+-- type
+-- depth
+-- nodes
+-- giving (with generation fixed on first position) 6 combinations
+-- After finding the best combination, the word 2 can be coded to minimize
+-- computing time for the score
+repScore :: PCacheEn -> Word32
+repScore (PCacheEn { lo = w2 }) = sco
+    where w2low = fromIntegral w2 :: Word32	-- low word from lo
+          !sco = w2low .&. 0xFE000000	-- mask generation and move
 
 quintToCacheEn :: Cache -> ZKey -> Int -> Int -> Int -> Move -> Int -> PCacheEn
 quintToCacheEn tt zkey depth tp score (Move move) nodes = pCE
