@@ -184,7 +184,7 @@ writeCache tt zkey depth tp score move nodes = do
     let (bas, idx) = zKeyToCellIndex tt zkey
         gen = gener tt
         pCE = quintToCacheEn tt zkey depth tp score move nodes
-    store gen pCE idx bas bas 0 (4::Int)
+    store gen pCE idx bas bas maxBound (4::Int)
     where store gen !pCE idx = go
               where go !crt0 !rep0 !sco0 !tries0 = do
                        cpCE <- peek crt0
