@@ -250,10 +250,10 @@ mateKBNK p = mateScore (bnMateDistance wbish) p
 {-# INLINE mateScore #-}
 mateScore :: (Square -> Int) -> MyPos -> Bool -> Int
 mateScore f p mywin = msc
-    where !kadv = if mywin then kb else kw
-          !kw = kingSquare (kings p) (me p)
-          !kb = kingSquare (kings p) (me p)
-          !distk = squareDistance kw kb
+    where !kadv = if mywin then ky else km
+          !km = kingSquare (kings p) (me p)
+          !ky = kingSquare (kings p) (yo p)
+          !distk = squareDistance km ky
           !distc = f kadv
           !sc = winBonus + distc*distc - distk*distk
           !mtr = if moving p == White then mater p else -(mater p)
