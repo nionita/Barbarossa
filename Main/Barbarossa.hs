@@ -38,7 +38,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.01"
-progVerSuff = "ttopt"
+progVerSuff = "aditp"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -114,7 +114,7 @@ initContext opts = do
             change = ctxVar,
             loglev = llev,
             evpid  = parc,
-            tipars = npSetParm (colParams paramList :: CollectTimeParams)
+            tipars = npSetParm (colParams paramList :: CollectFor TimeParams)
          }
     return context
 
@@ -504,79 +504,61 @@ correctTime draft ms sc path = do
             -- We have previous moves, update and calculate time factor
             let pmi = PrevMvInfo { pmiBestSc = sc, pmiChanged = k, pmiBMSoFar = bsf }
                 bm = head path
-                (k, bsf) = if bm == head obsf	-- same best move?
-                              then (ok, obsf)
-                              else (ok + 1, bm : delete bm obsf)
+                (k, bsf, cha) = if bm == head obsf	-- same best move?
+                                   then (ok, obsf, False)
+                                   else (ok + 1, bm : delete bm obsf, True)
                 func = \c -> c { prvMvInfo = Just pmi }
-                ms'  = timeFactor tp draft ms osc sc k bsf
+                ms'  = timeFactor tp cha draft ms osc sc k bsf
+            ctxLog LogInfo $ "timeFactor: " ++ show cha
+                                       ++ " / " ++ show draft
+                                       ++ " / " ++ show ms
+                                       ++ " / " ++ show osc
+                                       ++ " / " ++ show sc
+                                       ++ " / " ++ show k
+                                       ++ " / " ++ show bsf
             return (ms', func)
     modifyChanging func
     return ti
 
-data CollectTimeParams = CollectTimeParams {
-         ctpIniFact, ctpMaxFact, ctpDrScale, ctpScScale, ctpChScale, ctpDiScale :: !Double,
-         ctpDraft, ctpChanges, ctpDistMvs :: !Int
-     }
-
-instance CollectParams CollectTimeParams where
-    type CollectFor CollectTimeParams = TimeParams
-    npColInit = CollectTimeParams {
-                    ctpIniFact = 0.70,	-- initial factor (if all other is 1)
-                    ctpMaxFact = 10,		-- to limit the time factor
-                    ctpDrScale = 2,		-- to scale the draft
-                    ctpScScale = 80,		-- to scale score differences
-                    ctpChScale = 2,		-- to scale best move changes
-                    ctpDiScale = 3,		-- to scale distinc best moves so far
-                    ctpDraft   = 4,	-- so many drafts are free
-                    ctpChanges = 2,	-- so many changes are free
-                    ctpDistMvs = 3	-- so many distinc moves are free
+instance CollectParams TimeParams where
+    type CollectFor TimeParams = TimeParams
+    npColInit = TimeParams {
+                    tpIniFact = 0.50,	-- initial factor (if all other is 1)
+                    tpMaxFact = 18,	-- to limit the time factor
+                    tpDrScale = 0.1,	-- to scale the draft factor
+                    tpScScale = 0.0003,	-- to scale score differences factor
+                    tpChScale = 0.01	-- to scale best move changes factor
                 }
     npColParm = collectTimeParams
-    npSetParm = setTimeParams
+    npSetParm = id
 
 
-collectTimeParams :: (String, Double) -> CollectTimeParams -> CollectTimeParams
-collectTimeParams (s, v) ctp = lookApply s v ctp [
+collectTimeParams :: (String, Double) -> TimeParams -> TimeParams
+collectTimeParams (s, v) tp = lookApply s v tp [
         ("tpIniFact", setTpIniFact),
         ("tpMaxFact", setTpMaxFact),
         ("tpDrScale", setTpDrScale),
         ("tpScScale", setTpScScale),
-        ("tpChScale", setTpChScale),
-        ("tpDiScale", setTpDiScale),
-        ("tpDraft",   setTpDraft),
-        ("tpChanges", setTpChanges),
-        ("tpDistMvs", setTpDistMvs)
+        ("tpChScale", setTpChScale)
     ]
-    where setTpIniFact v ctp = ctp { ctpIniFact =       v }
-          setTpMaxFact v ctp = ctp { ctpMaxFact =       v }
-          setTpDrScale v ctp = ctp { ctpDrScale =       v }
-          setTpScScale v ctp = ctp { ctpScScale =       v }
-          setTpChScale v ctp = ctp { ctpChScale =       v }
-          setTpDiScale v ctp = ctp { ctpDiScale =       v }
-          setTpDraft   v ctp = ctp { ctpDraft   = round v }
-          setTpChanges v ctp = ctp { ctpChanges = round v }
-          setTpDistMvs v ctp = ctp { ctpDistMvs = round v }
+    where setTpIniFact v ctp = ctp { tpIniFact = v }
+          setTpMaxFact v ctp = ctp { tpMaxFact = v }
+          setTpDrScale v ctp = ctp { tpDrScale = v }
+          setTpScScale v ctp = ctp { tpScScale = v }
+          setTpChScale v ctp = ctp { tpChScale = v }
 
-setTimeParams :: CollectTimeParams -> TimeParams
-setTimeParams (CollectTimeParams {..}) = TimeParams {
-        tpIniFact = ctpIniFact,
-        tpMaxFact = ctpMaxFact,
-        tpScale   = 1 / (ctpDrScale * ctpScScale * ctpChScale * ctpDiScale),
-        tpDraft   = ctpDraft,
-        tpChanges = ctpChanges,
-        tpDistMvs = ctpDistMvs
-    }
-
--- For example: score drops in draft 6 by 50 cp, we have 4 changes with 4 different best moves
--- then we have factor: 0.70 + 3 * 50 * 4 * 2 / (2 * 80 * 2 * 3) = 0.70 + 1.20 = 1.90
-
-timeFactor :: TimeParams -> Int -> Int -> Int -> Int -> Int -> [Move] -> Int
-timeFactor tp draft tim osc sc chgs mvs = round $ fromIntegral tim * min (tpMaxFact tp) finf
-    where finf = (tpIniFact tp) + drf * scf * chf * dmf * (tpScale tp)
-          drf = fromIntegral $ max 1 $ draft - (tpDraft tp) + 1	-- draft factor
-          scf = fromIntegral $ max 1 $ abs $ osc - sc		-- score factor: if score drops
-          chf = fromIntegral $ max 1 $ chgs - (tpChanges tp) + 1	-- changes factor
-          dmf = fromIntegral $ max 1 $ length mvs - (tpDistMvs tp) + 1	-- distinct best moves factor
+-- Concept is: have an initial factor and 3 auxiliary: one for draft (when last best move
+-- changed), one for score change and one for number of changes and different best moves so far
+-- Add all together and limit by a max factor
+-- Then multiply the given time by that factor
+timeFactor :: TimeParams -> Bool -> Int -> Int -> Int -> Int -> Int -> [Move] -> Int
+timeFactor tp cha draft tim osc sc chgs mvs = round $ fromIntegral tim * min (tpMaxFact tp) finf
+    where finf = tpIniFact tp + drf + scf + chf
+          drf  = if cha then tpDrScale tp * fromIntegral (draft * draft)	-- draft factor
+                        else 0
+          scf  = let scdiff = osc - sc
+                 in tpScScale tp * fromIntegral (scdiff * scdiff * draft)	-- score change factor
+          chf  = tpChScale tp * fromIntegral (chgs * length mvs * draft)	-- change factor
 
 storeBestMove :: [Move] -> Int -> CtxIO ()
 storeBestMove mvs sc = do
