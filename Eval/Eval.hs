@@ -186,7 +186,8 @@ evalDispatch p sti
     | pawns p == 0 = evalNoPawns p sti
     | pawns p .&. me p == 0 ||
       pawns p .&. yo p == 0 = evalSideNoPawns p sti
-    | kings p .|. pawns p == occup p = pawnEndGame p
+    | kings p .|. pawns p == occup p,
+      Just r <- pawnEndGame p = r
     | otherwise    = normalEval p sti
 
 itemEval :: EvalParams -> MyPos -> AnyEvalItem -> [Int]
@@ -758,20 +759,20 @@ passPawns p = [dfp, dfp4, dfp5, dfp6, dfp7]
 -- 2. What about the rest of pawns? Here we make a trick: we shift the passed
 -- pawns virtually one row back, which gives less points for the possibly remaining
 -- passed pawns - now with queens)
-pawnEndGame :: MyPos -> (Int, [Int])
+pawnEndGame :: MyPos -> Maybe (Int, [Int])
 pawnEndGame p
-    | null mescds && null yescds             = (speg, [speg])
-    | not (null mescds) && not (null yescds) = (dpr, [dpr])
-    | not (null mescds)                      = (myrace, [myrace])
-    | not (null yescds)                      = (yorace, [yorace])
+    | null mescds && null yescds             = Nothing
+    | not (null mescds) && not (null yescds) = Just (dpr, [dpr])
+    | not (null mescds)                      = Just (myrace, [myrace])
+    | not (null yescds)                      = Just (yorace, [yorace])
     -- | -- here we will consider what is with 2 passed pawns which are far enough from each other
     where !mfpbb = passed p .&. me p
           !yfpbb = passed p .&. yo p
           !myking = kingSquare (kings p) (me p)
           !yoking = kingSquare (kings p) (yo p)
           (escMe, escYo, maDiff)
-              | moving p == White = (escMeWhite myking, escYoBlack yoking,   mater p)
-              | otherwise         = (escMeBlack myking, escYoWhite yoking, - mater p)
+              | moving p == White = (escMeWhite yoking, escYoBlack myking,   mater p)
+              | otherwise         = (escMeBlack yoking, escYoWhite myking, - mater p)
           mpsqs  = map escMe $ bbToSquares mfpbb	-- my pp squares & distances to promotion
           !mescds = map snd $ filter fst mpsqs		-- my escaped passed pawns
           ypsqs  = map escYo $ bbToSquares yfpbb	-- your pp squares & distances to promotion
@@ -800,7 +801,7 @@ pawnEndGame p
           withQueens = maDiff
           -- This one is for prunning: so match we can win at most
           -- yoPawnCount = popCount1 $ pawns p .&. yo p
-          speg = simplePawnEndGame p	-- just to see how it works...
+          -- speg = simplePawnEndGame p	-- just to see how it works...
  
 escMeWhite :: Square -> Square -> (Bool, (Square, Int))
 escMeWhite !ksq !psq = (esc, (psq, dis))
