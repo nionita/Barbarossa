@@ -196,7 +196,9 @@ itemEval ep p (EvIt a) = evalItem ep p a
 normalEval :: MyPos -> EvalState -> (Int, [Int])
 normalEval p sti = (sc, feat)
     where !feat = concatMap (itemEval (esEParams sti) p) evalItems
-          !sc   = feat <*> esIWeights sti `shiftR` shift2Cp
+          !sc'  = feat <*> esIWeights sti `shiftR` shift2Cp
+          !sc   = sc' + meMoving
+          meMoving = 5	-- advantage for moving
 
 evalSideNoPawns :: MyPos -> EvalState -> (Int, [Int])
 evalSideNoPawns p sti
