@@ -328,7 +328,7 @@ beatAt p !bb = pawnBeatAt p bb ++ defendAt p bb
 
 -- Here we generate a possible en passant capture of a pawn which maybe checks
 beatAtP :: MyPos -> BBoard -> [Move]
-beatAtP p !bb = genEPCapts p ++ defendAt p bb
+beatAtP p !bb = genEPCapts p ++ pawnBeatAt p bb ++ defendAt p bb
 
 blockAt :: MyPos -> BBoard -> [Move]
 blockAt p !bb = pawnBlockAt p bb ++ defendAt p bb
