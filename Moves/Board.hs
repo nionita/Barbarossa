@@ -880,20 +880,45 @@ chooseAttacker pos !frompieces
           q1 = lsb q
           k1 = lsb k
 
-newAttacs :: MyPos -> Square -> BBoard -> BBoard
-newAttacs pos sq moved = bAttacs occ sq .&. (b .|. q)
-                     .|. rAttacs occ sq .&. (r .|. q)
-                     .|. nAttacs     sq .&. n
-                     .|. kAttacs     sq .&. k
-                     .|. (pAttacs White sq .&. black pos .|. pAttacs Black sq .&. white) .&. p
-    where !occ = occup pos `less` moved
-          !b = bishops pos  `less` moved
-          !r = rooks pos    `less` moved
-          !q = queens pos  `less` moved
-          !n = knights pos `less` moved
-          !k = kings pos   `less` moved
-          !p = pawns pos   `less` moved
-          !white = occup pos `less` black pos
+-- Data structure to keep the status for the incremental calculation
+-- of the new attacks during SEE
+data Attacks = Attacks {
+                   atAtt, atOcc, atBQ, atRQ, atRst :: !BBoard
+               }
+ 
+-- The new attacks are calculated once per central square with this function,
+-- which is more heavy, and then updated with newAttacs incrementally, which is cheaper
+theAttacs :: MyPos -> Square -> Attacks
+theAttacs pos sq = axx
+    where !occ = occup pos
+          !b = bishops pos
+          !r = rooks pos
+          !q = queens pos
+          !n = knights pos
+          !k = kings pos
+          !p = pawns pos
+          !white = occ `less` black pos
+          !bq  = b .|. q                -- bishops & queens
+          !rq  = r .|. q                -- rooks & queens
+          !rst =   nAttacs     sq .&. n
+               .|. kAttacs     sq .&. k
+               .|. (pAttacs White sq .&. black pos .|. pAttacs Black sq .&. white) .&. p
+          !bqa = bAttacs occ sq .&. bq
+          !rqa = rAttacs occ sq .&. rq
+          !ats = bqa .|. rqa .|. rst    -- these are all attackers
+          !axx = Attacks ats occ bq rq rst      -- this is result and state for the next step
+ 
+newAttacs :: Square -> BBoard -> Attacks -> Attacks
+newAttacs sq moved atts = axx
+    where !mvc = complement moved
+          !occ = atOcc atts .&. mvc     -- reduce occupacy
+          !bq  = atBQ  atts .&. mvc     -- reduce bishops & queens
+          !rq  = atRQ  atts .&. mvc     -- reduce rooks & queens
+          !rst = atRst atts .&. mvc     -- reduce pawns, knights & kings
+          !bqa = bAttacs occ sq .&. bq  -- new bishops & queens can arise because reduced occupacy
+          !rqa = rAttacs occ sq .&. rq  -- new rooks & queens can arise because reduced occupacy
+          !ats = bqa .|. rqa .|. rst    -- these are all new attackers
+          !axx = Attacks ats occ bq rq rst      -- this is result and state for the next step
 
 slideAttacs :: Square -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard
 slideAttacs sq b r q occ = bAttacs occ sq .&. (b .|. q)
@@ -915,14 +940,15 @@ usePosXRay = False
 
 data SEEPars = SEEPars {
                    seeGain, seeVal :: !Int,
-                   seeAtts, seeFrom, seeMovd, seeDefn, seeAgrs :: !BBoard
+                   seeAtts, seeFrom, seeMovd, seeDefn, seeAgrs :: !BBoard,
+                   seeAttsRec :: Attacks
                }
 
 -- Calculate the value of a move per SEE, given the position,
 -- the source square of the first capture, the destination of the captures
 -- and the value of the first captured piece
-seeMoveValue :: MyPos -> Square -> Square -> Int -> Int
-seeMoveValue pos sqfirstmv sqto gain0 = v
+seeMoveValue :: MyPos -> Attacks -> Square -> Square -> Int -> Int
+seeMoveValue pos attacks sqfirstmv sqto gain0 = v
     where v = go sp0 [gain0]
           go :: SEEPars -> [Int] -> Int
           go seepars acc =
@@ -930,16 +956,19 @@ seeMoveValue pos sqfirstmv sqto gain0 = v
                  !moved'  = seeMovd seepars .|.   seeFrom seepars
                  !attacs1 = seeAtts seepars `xor` seeFrom seepars
                  (!from', !val') = chooseAttacker pos (attacs1 .&. seeAgrs seepars)
-                 attacs2  = newAttacs pos sqto moved'
+                 attacs2  = newAttacs sqto moved' (seeAttsRec seepars)
                  acc' = gain' : acc
                  seepars1 = SEEPars { seeGain = gain', seeVal = val', seeAtts = attacs1,
                                       seeFrom = from', seeMovd = moved', seeDefn = seeAgrs seepars,
-                                      seeAgrs = seeDefn seepars }
-                 seepars2 = SEEPars { seeGain = gain', seeVal = val', seeAtts = attacs2,
+                                      seeAgrs = seeDefn seepars,
+                                      seeAttsRec = seeAttsRec seepars }
+                 seepars2 = SEEPars { seeGain = gain', seeVal = val', seeAtts = atAtt attacs2,
                                       seeFrom = from', seeMovd = moved', seeDefn = seeAgrs seepars,
-                                      seeAgrs = seeDefn seepars }
+                                      seeAgrs = seeDefn seepars,
+                                      seeAttsRec = attacs2 }
              in if from' == 0
                    then unimax (minBound+2) acc
+                   -- With the new attacks: is it perhaps better to recalculate always?
                    else if usePosXRay
                            then if posXRay && seeFrom seepars .&. mayXRay /= 0
                                    then go seepars2 acc'
@@ -947,13 +976,14 @@ seeMoveValue pos sqfirstmv sqto gain0 = v
                            else if seeFrom seepars .&. mayXRay /= 0
                                    then go seepars2 acc'
                                    else go seepars1 acc'
-          !mayXRay = pawns pos .|. bishops pos .|. rooks pos .|. queens pos
-          posXRay = xrayAttacs pos sqto
-          !moved0 = bit sqfirstmv
-          attacs0 = newAttacs pos sqto moved0
-          (!from0, !valfrom) = chooseAttacker pos (attacs0 .&. yo pos)
-          sp0 = SEEPars { seeGain = gain0, seeVal = valfrom, seeAtts = newAttacs pos sqto moved0,
-                          seeFrom = from0, seeMovd = moved0, seeDefn = yo pos, seeAgrs = me pos }
+          !mayXRay = pawns pos .|. bishops pos .|. rooks pos .|. queens pos  -- could be calc.
+          posXRay = xrayAttacs pos sqto  -- only once, as it is per pos (but it's cheap anyway)
+          !moved0 = uBit sqfirstmv
+          attacs0 = newAttacs sqto moved0 attacks
+          (!from0, !valfrom) = chooseAttacker pos (atAtt attacs0 .&. yo pos)
+          sp0 = SEEPars { seeGain = gain0, seeVal = valfrom, seeAtts = atAtt attacs0,
+                          seeFrom = from0, seeMovd = moved0, seeDefn = yo pos, seeAgrs = me pos,
+                          seeAttsRec = attacs0 }
 
 -- This function can produce illegal captures with the king!
 genMoveCaptWL :: MyPos -> ([Move], [Move])
@@ -973,11 +1003,12 @@ genEPCapts !pos
 
 perCaptFieldWL :: MyPos -> BBoard -> BBoard -> Square -> ([Move], [Move]) -> ([Move], [Move])
 perCaptFieldWL pos mypc advdefence sq mvlst
-    | hanging   = let mvlst1 = foldr (addHanging  sq) mvlst reAgrsqs
-                  in foldr (addHangingP sq) mvlst1 prAgrsqs	-- for promotions
-    | otherwise = let mvlst1 = foldr (perCaptWL pos False valto sq) mvlst reAgrsqs
-                  in foldr (perCaptWL pos True  valto sq) mvlst1 prAgrsqs	-- promotions
-    where myattacs = mypc .&. newAttacs pos sq 0
+    | hanging   = let mvlst1 = foldr (addHanging  sq) mvlst  reAgrsqs
+                  in           foldr (addHangingP sq) mvlst1 prAgrsqs	-- for promotions
+    | otherwise = let mvlst1 = foldr (perCaptWL pos myAttRec False valto sq) mvlst  reAgrsqs
+                  in           foldr (perCaptWL pos myAttRec True  valto sq) mvlst1 prAgrsqs
+    where myAttRec = theAttacs pos sq
+          myattacs = mypc .&. atAtt myAttRec
           Busy _ pcto = tabla pos sq
           valto = value pcto
           hanging = not (advdefence `testBit` sq)
@@ -997,8 +1028,8 @@ perCaptFieldWL pos mypc advdefence sq mvlst
 approximateEasyCapts :: Bool
 approximateEasyCapts = True	-- when capturing a better piece: no SEE, it is always winning
 
-perCaptWL :: MyPos -> Bool -> Int -> Square -> Square -> ([Move], [Move]) -> ([Move], [Move])
-perCaptWL pos promo gain0 sq sqfa (wsqs, lsqs)
+perCaptWL :: MyPos -> Attacks -> Bool -> Int -> Square -> Square -> ([Move], [Move]) -> ([Move], [Move])
+perCaptWL pos attacks promo gain0 sq sqfa (wsqs, lsqs)
     | promo = (makeTransf Queen sqfa sq : wsqs, lsqs)
     | approx || adv <= gain0 = (ss:wsqs, lsqs)
     | otherwise = (wsqs, ss:lsqs)
@@ -1007,7 +1038,7 @@ perCaptWL pos promo gain0 sq sqfa (wsqs, lsqs)
           Busy _ pcfa = tabla pos sqfa
           v0 = value pcfa
           gain1 = gain0 - v0
-          adv = seeMoveValue pos sqfa sq v0
+          adv = seeMoveValue pos attacks sqfa sq v0
 
 -- Captures of hanging pieces are always winning
 addHanging :: Square -> Square -> ([Move], [Move]) -> ([Move], [Move])
