@@ -909,7 +909,7 @@ theAttacs pos sq = axx
           !axx = Attacks ats occ bq rq rst      -- this is result and state for the next step
  
 newAttacs :: Square -> BBoard -> Attacks -> Attacks
-newAttacs sq moved atts = axx
+newAttacs sq !moved !atts = axx
     where !mvc = complement moved
           !occ = atOcc atts .&. mvc     -- reduce occupacy
           !bq  = atBQ  atts .&. mvc     -- reduce bishops & queens
@@ -1034,10 +1034,9 @@ perCaptWL pos attacks promo gain0 sq sqfa (wsqs, lsqs)
     | approx || adv <= gain0 = (ss:wsqs, lsqs)
     | otherwise = (wsqs, ss:lsqs)
     where ss = moveFromTo sqfa sq
-          approx = approximateEasyCapts && gain1 >= 0
+          approx = approximateEasyCapts && gain0 >= v0
           Busy _ pcfa = tabla pos sqfa
           v0 = value pcfa
-          gain1 = gain0 - v0
           adv = seeMoveValue pos attacks sqfa sq v0
 
 -- Captures of hanging pieces are always winning
