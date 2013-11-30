@@ -3,7 +3,7 @@
 module Moves.Board (
     posFromFen, initPos,
     isCheck, inCheck,
-    goPromo, movePassed, hasMoves, moveIsCapture,
+    goPromo, hasMoves, moveIsCapture,
     kingMoved, castKingRookOk, castQueenRookOk,
     -- genMoveCapt,
     genMoveCast, genMoveNCapt, genMoveTransf, genMoveFCheck, genMoveCaptWL,

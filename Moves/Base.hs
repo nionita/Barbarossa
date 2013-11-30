@@ -213,7 +213,8 @@ doMove real m qs = do
                        then return $ Final 0
                        else do
                            -- let dext = if inCheck p || goPromo p m1 || movePassed p m1 then 1 else 0
-                           let dext = if inCheck p || goPromo pc m1 then 1 else 0
+                           -- let dext = if inCheck p || goPromo pc m1 then 1 else 0
+                           let dext = if inCheck p then 1 else 0
                            return $ Exten dext $ moveIsSpecial pc m1
 
 doNullMove :: Game ()
