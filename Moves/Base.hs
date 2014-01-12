@@ -293,13 +293,10 @@ staticVal = do
         !stSc = if not (kingsOk t && checkOk t)
                    then error $ "Wrong position, pos stack:\n" ++ concatMap showMyPos (stack s)
                    else staticScore t
-        -- Here we actually don't need genMoves - it would be enough to know that
-        -- there is at least one legal move, which should be much cheaper
-        stSc1 | hasMoves t c  = stSc
-              | check t /= 0  = -mateScore
-              | otherwise     = 0
+        !stSc1 | check t /= 0 = if hasMoves t c then stSc else -mateScore
+               | otherwise    = stSc
     -- when debug $ lift $ ctxLog "Debug" $ "--> staticVal " ++ show stSc1
-    return $! stSc1
+    return stSc1
 
 {-# INLINE finNode #-}
 finNode :: String -> Game ()
