@@ -4,7 +4,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Main where
-import Prelude hiding (catch)
+-- import Prelude hiding (catch)
 import Control.Monad
 import Control.Monad.Reader
 import Control.Concurrent
@@ -38,7 +38,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.2.0"
-progVerSuff = "exte"
+progVerSuff = "clse"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -543,11 +543,11 @@ collectTimeParams (s, v) tp = lookApply s v tp [
         ("tpScScale", setTpScScale),
         ("tpChScale", setTpChScale)
     ]
-    where setTpIniFact v ctp = ctp { tpIniFact = v }
-          setTpMaxFact v ctp = ctp { tpMaxFact = v }
-          setTpDrScale v ctp = ctp { tpDrScale = v }
-          setTpScScale v ctp = ctp { tpScScale = v }
-          setTpChScale v ctp = ctp { tpChScale = v }
+    where setTpIniFact x ctp = ctp { tpIniFact = x }
+          setTpMaxFact x ctp = ctp { tpMaxFact = x }
+          setTpDrScale x ctp = ctp { tpDrScale = x }
+          setTpScScale x ctp = ctp { tpScScale = x }
+          setTpChScale x ctp = ctp { tpChScale = x }
 
 -- Concept is: have an initial factor and 3 auxiliary: one for draft (when last best move
 -- changed), one for score change and one for number of changes and different best moves so far
