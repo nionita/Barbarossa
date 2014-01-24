@@ -25,7 +25,7 @@ Executable Barbarossa
                -funfolding-use-threshold=32
                -- -msse4.2
                -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques
-               -ddump-opt-cmm -ddump-asm
+               -- -ddump-opt-cmm -ddump-asm
   if flag(profile)
     GHC-Options: -auto-all -with-rtsopts="-p"
   else
