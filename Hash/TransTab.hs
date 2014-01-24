@@ -1,7 +1,8 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE EmptyDataDecls #-}
+{-# LANGUAGE MagicHash #-}
 module Hash.TransTab (
-    Cache, newCache, readCache, writeCache, newGener,
+    Cache, newCache, retrieveEntry, readCache, writeCache, newGener,
     checkProp
     ) where
 
@@ -13,7 +14,10 @@ import Data.Word
 import Foreign.Marshal.Array
 import Foreign.Storable
 import Foreign.Ptr
+import Data.Text.Unsafe (inlinePerformIO)
 import Test.QuickCheck hiding ((.&.))
+
+import GHC.Exts
 
 import Struct.Struct
 
@@ -155,29 +159,32 @@ zKeyToCell tt zkey = base
 -- and in the search itself (up to 4 times) we have just to mask that part too,
 -- and compare the result with the precomputed sought key
 -- So we don't need to reconstruct the original key (which would be more expensive)
-isSameKey :: Word64 -> Word64 -> Ptr Word64 -> IO Bool
-isSameKey !mmask !mzkey !ptr = (== mzkey) . (.&. mmask) <$> peek ptr
+isSameKey :: Word64 -> Word64 -> Ptr Word64 -> Bool
+isSameKey !mmask !mzkey !ptr =
+    let w = inlinePerformIO $ peek ptr
+    in w .&. mmask == mzkey
 
 -- Search a position in table based on ZKey
 -- The position ZKey determines the cell where the TT entry should be, and there we do a linear search
 -- (i.e. 4 comparisons in case of a miss)
-readCache :: Cache -> ZKey -> IO (Maybe (Int, Int, Int, Move, Int))
-readCache tt zkey = fmap cacheEnToQuint <$> retrieveEntry tt zkey
+readCache :: Addr# -> IO (Maybe (Int, Int, Int, Move, Int))
+readCache addr = if eqAddr# addr nullAddr#
+                    then return Nothing
+                    else Just . cacheEnToQuint <$> peek (castPtr (Ptr addr))
 
-retrieveEntry :: Cache -> ZKey -> IO (Maybe PCacheEn)
-retrieveEntry tt zkey = do
+retrieveEntry :: Cache -> ZKey -> Addr#
+retrieveEntry tt zkey =
     let bas   = zKeyToCell tt zkey
         mkey  = zkey .&. zemask tt
         lasta = bas `plusPtr` lastaAmount
-    retrieve (zemask tt) mkey lasta bas
+    in retrieve (zemask tt) mkey lasta bas
     where retrieve mmask mkey lasta = go
-              where go !crt0 = do
-                       found <- isSameKey mmask mkey crt0
-                       if found
-                          then Just <$> peek (castPtr crt0)
-                          else if crt0 >= lasta
-                                  then return Nothing
-                                  else go $ crt0 `plusPtr` pCacheEnSize
+              where go !crt0@(Ptr a)
+                        = if isSameKey mmask mkey crt0
+                             then a
+                             else if crt0 >= lasta
+                                     then nullAddr#
+                                     else go $ crt0 `plusPtr` pCacheEnSize
 
 -- Write the position in the table
 -- We want to keep table entries that:
@@ -197,16 +204,15 @@ writeCache tt zkey depth tp score move nodes = do
         lasta = bas `plusPtr` lastaAmount
     store gen (zemask tt) mkey pCE lasta bas bas maxBound
     where store !gen !mmask !mkey !pCE !lasta = go
-              where go !crt0 !rep0 !sco0 = do
-                       found <- isSameKey mmask mkey crt0
-                       if found
-                          then poke (castPtr crt0) pCE	 -- here we found the same entry: just update (but depth?)
-                          else do
-                              lowc <- peek (crt0 `plusPtr` 8)	-- take the low word
-                              let (rep1, sco1) = scoreReplaceLow gen lowc crt0 rep0 sco0
-                              if sco1 == 0 || crt0 >= lasta	-- score 0 is lowest: shortcut
-                                 then poke (castPtr rep1) pCE -- replace the weakest entry so far
-                                 else go (crt0 `plusPtr` pCacheEnSize) rep1 sco1	-- search further
+              where go !crt0 !rep0 !sco0
+                       = if isSameKey mmask mkey crt0
+                            then poke (castPtr crt0) pCE	 -- here we found the same entry: just update (but depth?)
+                            else do
+                                lowc <- peek (crt0 `plusPtr` 8)	-- take the low word
+                                let (rep1, sco1) = scoreReplaceLow gen lowc crt0 rep0 sco0
+                                if sco1 == 0 || crt0 >= lasta	-- score 0 is lowest: shortcut
+                                   then poke (castPtr rep1) pCE -- replace the weakest entry so far
+                                   else go (crt0 `plusPtr` pCacheEnSize) rep1 sco1	-- search further
 
 lastaAmount = 3 * pCacheEnSize	-- for computation of the lat address in the cell
 
@@ -289,7 +295,8 @@ testIt = do
     putStrLn "Write: 5 2 124 (Move 364) 123456"
     writeCache tt z 5 2 124 (Move 364) 123456
     putStrLn "Read:"
-    mr <- readCache tt z
+    let ptr = retrieveEntry tt z
+    mr <- readCache ptr
     putStrLn $ show mr
     return tt
 

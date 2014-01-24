@@ -332,7 +332,9 @@ ttRead = if not useHash then return empRez else do
     -- when debug $ lift $ ctxLog "Debug" $ "--> ttRead "
     s <- get
     p <- getPos
-    mhr <- liftIO $ readCache (hash s) (zobkey p)
+    mhr <- liftIO $ do
+        let ptr = retrieveEntry (hash s) (zobkey p)
+        readCache ptr
     -- let (r, sc) = case mhr of
                -- Just t@(_, _, sco, _, _) -> (t, sco)
                -- _      -> (empRez, 0)
