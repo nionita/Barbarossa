@@ -209,10 +209,11 @@ writeCache tt zkey depth tp score move nodes = do
                             then poke (castPtr crt0) pCE	 -- here we found the same entry: just update (but depth?)
                             else do
                                 lowc <- peek (crt0 `plusPtr` 8)	-- take the low word
-                                let (rep1, sco1) = scoreReplaceLow gen lowc crt0 rep0 sco0
-                                if sco1 == 0 || crt0 >= lasta	-- score 0 is lowest: shortcut
-                                   then poke (castPtr rep1) pCE -- replace the weakest entry so far
-                                   else go (crt0 `plusPtr` pCacheEnSize) rep1 sco1	-- search further
+                                scoreReplaceLow gen lowc crt0 rep0 sco0
+                                    (\r -> poke (castPtr r) pCE)
+                                    (\r s -> if crt0 >= lasta
+                                                then poke (castPtr r) pCE
+                                                else go (crt0 `plusPtr` pCacheEnSize) r s)
 
 lastaAmount = 3 * pCacheEnSize	-- for computation of the lat address in the cell
 
@@ -222,24 +223,15 @@ lastaAmount = 3 * pCacheEnSize	-- for computation of the lat address in the cell
 -- type (2 - exact - only few entries, PV, 1 - lower bound: have good moves, 0 - upper bound)
 -- depth
 -- nodes
-scoreReplaceEntry :: Word64 -> PCacheEn -> Ptr PCacheEn -> Ptr PCacheEn -> Word64 -> (Ptr PCacheEn, Word64)
-scoreReplaceEntry gen crte crt rep sco
-    | sco' < sco = (crt, sco')
-    | otherwise  = (rep, sco)
-    where sco' | generation > gen = 0
-               | otherwise        = lowm
-          low = lo crte
-          generation = low .&. generMsk
-          lowm = low .&. 0xFFFF	-- mask the move
-
--- Same as before, but simpler and (hopefully) faster
-scoreReplaceLow :: Word64 -> Word64 -> Ptr Word64 -> Ptr Word64 -> Word64 -> (Ptr Word64, Word64)
-scoreReplaceLow gen lowc crt rep sco
-    | sco' < sco = (crt, sco')
-    | otherwise  = (rep, sco)
-    where sco' | generation > gen = 0
-               | otherwise        = lowm
-          generation = lowc .&. generMsk
+scoreReplaceLow :: Word64 -> Word64 -> Ptr Word64 -> Ptr Word64 -> Word64
+    -> (Ptr Word64 -> IO ())		-- terminating function
+    -> (Ptr Word64 -> Word64 -> IO ())	-- continue function
+    -> IO ()
+scoreReplaceLow gen lowc crt rep sco term cont
+    | generation > gen = term crt
+    | lowm < sco = cont crt lowm
+    | otherwise  = cont rep sco
+    where generation = lowc .&. generMsk
           lowm = lowc .&. 0xFFFF	-- mask the move
 
 quintToCacheEn :: Cache -> ZKey -> Int -> Int -> Int -> Move -> Int -> PCacheEn
