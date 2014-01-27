@@ -887,11 +887,15 @@ pvInnerLoopExten b d spec !exd nst = do
               else return (-1, 0, 0, undefined, 0)
     -- TT score is for the opponent (we just made our move),
     -- so we have to invert the score and the inequality (tp: 2->2, 1->0, 0->1)
+    -- tp == 1 => his_score >= hscore => -his_score <= -hscore => my_score <= -hscore
+    --    so if -hscore <= asco then we fail low and can terminate the search
+    -- tp == 0 => his_score <= hscore => -his_score >= -hscore => my_score => -hscore
+    --    so if -hscore >  asco then we have at least a better score
+    --    but how good is this score? Can we use it in PV?
     let asco = pathScore a
         !hsco = - hscore		
-        !tp'  = if tp == 2 then 2 else 1-tp
     -- This logic could be done depending on node type?
-    if hdeep >= d' && (tp' == 2 || tp' == 1 && hsco > asco || tp' == 0 && hsco <= asco)
+    if hdeep >= d' && (tp == 2 || tp == 0 && hsco > asco || tp == 1 && hsco <= asco)
        then {-# SCC "hashRetrieveScoreOk" #-} do
            let ttpath = Path { pathScore = hsco, pathDepth = hdeep, pathMoves = Seq [e'], pathOrig = "TT" }
            reSucc nodes' >> return ttpath
@@ -905,7 +909,7 @@ pvInnerLoopExten b d spec !exd nst = do
              else do
                 let aGrain = nega -: scoreGrain
                     pvpath_ = pvcont nst
-                    pvpath' = if nullSeq pvpath_ && hdeep > 0 then Seq [e'] else pvpath_
+                    pvpath' = if nullSeq pvpath_ && hdeep > 0 && tp /= 0 then Seq [e'] else pvpath_
                 -- Here we expect to fail low
                 viztreeABD (pathScore aGrain) (pathScore nega) d'
                 !s1 <- fmap pnextlev (pvZeroW nst { pvcont = pvpath' } nega d' nulMoves)
@@ -962,15 +966,14 @@ pvInnerLoopExtenZ b d spec !exd nst = do
     -- Score and inequality must be inverted
     let bsco = pathScore b
         !hsco = - hscore
-        !tp' = if tp == 2 then 2 else 1-tp
-    if hdeep >= d' && (tp' == 2 || tp' == 1 && hsco >= bsco || tp' == 0 && hsco < bsco)
+    if hdeep >= d' && (tp == 2 || tp == 0 && hsco >= bsco || tp == 1 && hsco < bsco)
        then {-# SCC "hashRetrieveScoreOk" #-} do
            let ttpath = Path { pathScore = hsco, pathDepth = hdeep, pathMoves = Seq [e'], pathOrig = "TT" }
            reSucc nodes' >> return ttpath	-- !!!
        else do
           -- Very probable we don't have pvpath, so don't bother - why not?
           let pvpath_ = pvcont nst
-          let pvpath' = if nullSeq pvpath_ && hdeep > 0 then Seq [e'] else pvpath_
+          let pvpath' = if nullSeq pvpath_ && hdeep > 0 && tp /= 0 then Seq [e'] else pvpath_
           -- Here we expect to fail low
           viztreeABD (pathScore negb) (pathScore onemB) d'
           fmap pnextlev (pvZeroW nst { pvcont = pvpath' } onemB d' nulMoves)
@@ -1258,11 +1261,11 @@ pvQInnerLoop !b c !a e = do
 bestMoveFromHash :: Search (Maybe Move)
 bestMoveFromHash = do
     reTrieve
-    (hdeep, _, _, e, _) <- {-# SCC "hashRetrieveMove" #-} lift ttRead
-    if hdeep > 0
+    (hdeep, tp, _, e, _) <- {-# SCC "hashRetrieveMove" #-} lift ttRead
+    if hdeep > 0 && tp /= 0
        then {-# SCC "hashRetrieveMoveOk" #-} do
            reSucc 1		-- here we save just move generation
-           return $ Just e	-- upper score has correct move
+           return $ Just e
        else return Nothing
 
 {-# INLINE bestMoveFromIID #-}
