@@ -194,7 +194,7 @@ data NodeState
       } deriving Show
 
 data SStats = SStats {
-        sNodes, sNodesQS, sRetr, sRSuc :: !Int
+        sNodes, sNodesQS, sRetr, sRSuc, sBeta, sBMNo :: !Int
     } deriving Show
 
 -- The node type is the expected node type of the new (child) node, which
@@ -302,7 +302,7 @@ nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, forpv = True, cursc = pathFromScore
              movno = 1, killer = NoKiller, pvsl = [], pvcont = emptySeq }
 
 stt0 :: SStats
-stt0 = SStats { sNodes = 0, sNodesQS = 0, sRetr = 0, sRSuc = 0 }
+stt0 = SStats { sNodes = 0, sNodesQS = 0, sRetr = 0, sRSuc = 0, sBeta = 0, sBMNo = 0 }
 
 pvro00 :: PVReadOnly
 pvro00 = PVReadOnly { draft = 0, albest = False, timeli = False, abmili = 0 }
@@ -1014,6 +1014,7 @@ checkFailOrPVLoop xstats b d e s nst = do
               when (de >= minToStore) $
                   lift $ {-# SCC "hashStore" #-} ttStore de typ (pathScore b) e nodes'
               lift $ betaCut True d (absdp sst) e -- anounce a beta move (for example, update history)
+              incBeta mn
               -- when debug $ logmes $ "<-- pvInner: beta cut: " ++ show s ++ ", return " ++ show b
               let !csc = if s > b then combinePath s b else bestPath s b
               pindent $ "beta cut: " ++ show csc
@@ -1053,6 +1054,7 @@ checkFailOrPVLoopZ xstats b d e s nst = do
          let typ = 1	-- best move is e and is beta cut (score is lower limit)
          when (de >= minToStore) $ lift $ {-# SCC "hashStore" #-} ttStore de typ (pathScore b) e nodes'
          lift $ betaCut True d (absdp sst) e -- anounce a beta move (for example, update history)
+         incBeta mn
          -- when debug $ logmes $ "<-- pvInner: beta cut: " ++ show s ++ ", return " ++ show b
          let !csc = if s > b then combinePath s b else bestPath s b
          pindent $ "beta cut: " ++ show csc
@@ -1329,6 +1331,8 @@ reportStats = do
     lift $ logmes $ "Search statistics after draft " ++ show (draft $ ronly s) ++ ":"
     lift $ logmes $ "Nodes: " ++ show (sNodes xst) ++ ", in QS: " ++ show (sNodesQS xst)
              ++ ", retrieve: " ++ show (sRetr xst) ++ ", succes: " ++ show (sRSuc xst)
+    lift $ logmes $ "Beta cuts: " ++ show (sBeta xst) ++ ", beta factor: "
+               ++ show (fromIntegral (sBMNo xst) / fromIntegral (sBeta xst))
 
 -- Functions to keep statistics
 modStat :: (SStats -> SStats) -> Search ()
@@ -1363,6 +1367,9 @@ reTrieve  = modStat incReTrieve
 
 reSucc :: Int -> Search ()
 reSucc n  = modStat (addReSucc n)
+
+incBeta :: Int -> Search ()
+incBeta n  = modStat $ \s -> s { sBeta = sBeta s + 1, sBMNo = sBMNo s + n }
 
 indentActive :: String -> Search ()
 indentActive s = do
