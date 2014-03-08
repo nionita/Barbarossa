@@ -215,7 +215,7 @@ writeCache tt zkey depth tp score move nodes = do
                                                 then poke (castPtr r) pCE
                                                 else go (crt0 `plusPtr` pCacheEnSize) r s)
 
-lastaAmount = 3 * pCacheEnSize	-- for computation of the lat address in the cell
+lastaAmount = 3 * pCacheEnSize	-- for computation of the last address in the cell
 
 -- Here we implement the logic which decides which entry is weaker
 -- the low word is the score (when the move is masked away):
@@ -247,10 +247,10 @@ quintToCacheEn tt zkey depth tp score (Move move) nodes = pCE
 
 cacheEnToQuint :: PCacheEn -> (Int, Int, Int, Move, Int)
 cacheEnToQuint (PCacheEn { hi = w1, lo = w2 }) = (de, ty, sc, Move mv, no)
-    where scp  = (w1 .&. 0x3FFFF) `unsafeShiftR` 2
-          ssc  = fromIntegral scp :: Int16
-          !sc  = fromIntegral ssc
-          !no  = fromIntegral $ w2 `unsafeShiftR` 16
+    where u32  = fromIntegral (w1 `unsafeShiftR` 2) :: Word32
+          s16  = fromIntegral (u32 .&. 0xFFFF) :: Int16
+          !sc  = fromIntegral s16
+          !no  = fromIntegral $ (w2 `unsafeShiftR` 16) .&. 0xFFFFFFFF
           w2lo = fromIntegral w2 :: Word32
           !mv  = fromIntegral $ w2lo .&. 0xFFFF
           w2hi = fromIntegral   (w2   `unsafeShiftR` 32) :: Word32
