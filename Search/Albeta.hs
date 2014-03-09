@@ -882,33 +882,42 @@ pvInnerLoopExten b d spec !exd nst = do
               ++ " mvn " ++ show (movno nst) ++ " next depth " ++ show d'
               ++ " forpv " ++ show (forpv nst)
     (hdeep, tp, hscore, e', nodes')
-        <- if (useTTinPv || not inPv) && d' >= minToRetr
+        <- if d' >= minToRetr
               then {-# SCC "hashRetrieveScore" #-} reTrieve >> lift ttRead
               else return (-1, 0, 0, undefined, 0)
     -- TT score is for the opponent (we just made our move),
     -- so we have to invert the score and the inequality (tp: 2->2, 1->0, 0->1)
+    -- tp == 1 => his_score >= hscore => -his_score <= -hscore => my_score <= -hscore
+    --    so if -hscore <= asco then we fail low and can terminate the search
+    -- tp == 0 => his_score <= hscore => -his_score >= -hscore => my_score >= -hscore
+    --    so if -hscore >  asco then we have at least a better score
+    --    but how good is this score? Can we use it in PV? This score is not exact!!!
+    --    We must test variants here
     let asco = pathScore a
         !hsco = - hscore		
-        !tp'  = if tp == 2 then 2 else 1-tp
-    -- This logic could be done depending on node type?
-    if hdeep >= d' && (tp' == 2 || tp' == 1 && hsco > asco || tp' == 0 && hsco <= asco)
+    if hdeep >= d' && (not inPv || useTTinPv) && (
+            tp == 2			-- exact score: always good
+         || tp == 1 && hsco <= asco	-- we will fail low
+         || tp == 0 && hsco >  asco	-- we get better score but inexact!
+       )
        then {-# SCC "hashRetrieveScoreOk" #-} do
            let ttpath = Path { pathScore = hsco, pathDepth = hdeep, pathMoves = Seq [e'], pathOrig = "TT" }
            reSucc nodes' >> return ttpath
        else do
           let nega = negatePath a
               negb = negatePath b
+              nst0 = if nullSeq (pvcont nst) && hdeep > 0 && tp /= 0
+                        then nst { pvcont = Seq [e'] }
+                        else nst
           if pvs
              then do
                 viztreeABD (pathScore negb) (pathScore nega) d'
-                fmap pnextlev (pvSearch nst negb nega d' nulMoves)
+                fmap pnextlev (pvSearch nst0 negb nega d' nulMoves)
              else do
                 let aGrain = nega -: scoreGrain
-                    pvpath_ = pvcont nst
-                    pvpath' = if nullSeq pvpath_ && hdeep > 0 then Seq [e'] else pvpath_
                 -- Here we expect to fail low
                 viztreeABD (pathScore aGrain) (pathScore nega) d'
-                !s1 <- fmap pnextlev (pvZeroW nst { pvcont = pvpath' } nega d' nulMoves)
+                !s1 <- fmap pnextlev (pvZeroW nst0 nega d' nulMoves)
                 abrt <- gets abort
                 if abrt || s1 <= a
                    then return s1	-- failed low (as expected) or aborted
@@ -916,31 +925,36 @@ pvInnerLoopExten b d spec !exd nst = do
                      -- we didn't fail low and need re-search, 2 kinds: full depth, full window
                      pindent $ "Research! (" ++ show s1 ++ ")"
                      viztreeReSe
-                     -- let pvc = if pathDepth s1 > 0 then pathMoves s1 else pvpath'
-                     let pvc = if nullSeq (pathMoves s1) then pvpath' else pathMoves s1
+                     let nst1 = if nullSeq (pathMoves s1)
+                                   then nst0
+                                   else nst0 { pvcont = pathMoves s1 }
                      if d' < d1	-- did we search with reduced depth?
                         then do	-- yes: re-search with with normal depth
                             viztreeABD (pathScore aGrain) (pathScore nega) d1
-                            !s2 <- fmap pnextlev (pvZeroW nst { pvcont = pvc } nega d1 nulMoves)
+                            !s2 <- fmap pnextlev (pvZeroW nst1 nega d1 nulMoves)
                             abrt' <- gets abort
                             if abrt' || s2 <= a
                                then return s2	-- failed low (as expected) or aborted
                                else do
                                    viztreeReSe
                                    viztreeABD (pathScore negb) (pathScore nega) d1
-                                   let nst' = if crtnt nst == PVNode
-                                                 then nst { nxtnt = PVNode, forpv = True, pvcont = pvc' }
-                                                 else nst { forpv = True, pvcont = pvc' }
-                                       -- pvc' = if pathDepth s2 > 0 then pathMoves s2 else pvc
-                                       pvc' = if nullSeq (pathMoves s2) then pvc else pathMoves s2
-                                   fmap pnextlev (pvSearch nst' negb nega d1 0)
+                                   let nst2 = if crtnt nst1 == PVNode
+                                                 then nst1 { nxtnt = PVNode,
+                                                             forpv = True, pvcont = pvc }
+                                                 else nst1 { forpv = True, pvcont = pvc }
+                                       pvc  = if nullSeq (pathMoves s2)
+                                                 then pvcont nst1
+                                                 else pathMoves s2
+                                   fmap pnextlev (pvSearch nst2 negb nega d1 0)
                         else do
                            -- was not reduced, try full window
                            viztreeABD (pathScore negb) (pathScore nega) d1
-                           let nst' = if crtnt nst == PVNode
-                                         then nst { nxtnt = PVNode, forpv = True, pvcont = pvc }
+                           let nst2 = if crtnt nst == PVNode
+                                         then nst { nxtnt = PVNode,
+                                                    forpv = True, pvcont = pvc }
                                          else nst { forpv = True, pvcont = pvc }
-                           fmap pnextlev (pvSearch nst' negb nega d1 0)
+                               pvc  = pvcont nst1
+                           fmap pnextlev (pvSearch nst2 negb nega d1 0)
 
 -- For zero window
 pvInnerLoopExtenZ :: Path -> Int -> Bool -> Int -> NodeState
@@ -962,18 +976,18 @@ pvInnerLoopExtenZ b d spec !exd nst = do
     -- Score and inequality must be inverted
     let bsco = pathScore b
         !hsco = - hscore
-        !tp' = if tp == 2 then 2 else 1-tp
-    if hdeep >= d' && (tp' == 2 || tp' == 1 && hsco >= bsco || tp' == 0 && hsco < bsco)
+    if hdeep >= d' && (tp == 2 || tp == 0 && hsco >= bsco || tp == 1 && hsco < bsco)
        then {-# SCC "hashRetrieveScoreOk" #-} do
            let ttpath = Path { pathScore = hsco, pathDepth = hdeep, pathMoves = Seq [e'], pathOrig = "TT" }
            reSucc nodes' >> return ttpath	-- !!!
        else do
           -- Very probable we don't have pvpath, so don't bother - why not?
-          let pvpath_ = pvcont nst
-          let pvpath' = if nullSeq pvpath_ && hdeep > 0 then Seq [e'] else pvpath_
+          let nst0 = if nullSeq (pvcont nst) && hdeep > 0 && tp /= 0
+                        then nst { pvcont = Seq [e'] }
+                        else nst
           -- Here we expect to fail low
           viztreeABD (pathScore negb) (pathScore onemB) d'
-          fmap pnextlev (pvZeroW nst { pvcont = pvpath' } onemB d' nulMoves)
+          fmap pnextlev (pvZeroW nst0 onemB d' nulMoves)
     where onemB = negatePath $ b -: scoreGrain
           negb = negatePath b
 
@@ -1258,11 +1272,11 @@ pvQInnerLoop !b c !a e = do
 bestMoveFromHash :: Search (Maybe Move)
 bestMoveFromHash = do
     reTrieve
-    (hdeep, _, _, e, _) <- {-# SCC "hashRetrieveMove" #-} lift ttRead
-    if hdeep > 0
+    (hdeep, tp, _, e, _) <- {-# SCC "hashRetrieveMove" #-} lift ttRead
+    if hdeep > 0 && tp /= 0
        then {-# SCC "hashRetrieveMoveOk" #-} do
            reSucc 1		-- here we save just move generation
-           return $ Just e	-- upper score has correct move
+           return $ Just e
        else return Nothing
 
 {-# INLINE bestMoveFromIID #-}
