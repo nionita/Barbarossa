@@ -644,8 +644,8 @@ pvSearch nst !a !b !d lastnull = do
     --    can terminate the search
     if hdeep >= d && (not inPv || useTTinPv) && (
             tp == 2				-- exact score: always good
-         || tp == 0 && hsc <= pathScore a	-- we will fail low
          || tp == 1 && hsc >= pathScore b	-- we will fail high
+         || tp == 0 && hsc <= pathScore a	-- we will fail low
        )
        then {-# SCC "hashRetrieveScoreOk" #-} do
            let ttpath = Path { pathScore = hsc, pathDepth = hdeep,
@@ -662,7 +662,7 @@ pvSearch nst !a !b !d lastnull = do
                 return s
               else do
                 -- Use the found TT move as best move
-                let nst' = if nullSeq (pvcont nst) && hdeep > 0 && tp /= 0
+                let nst' = if hdeep > 0 && nullSeq (pvcont nst)
                               then nst { pvcont = Seq [e'] }
                               else nst
                 edges <- genAndSort nst0 a b d
@@ -743,7 +743,7 @@ pvZeroW nst b !d lastnull = do
                 return s
               else do
                 -- Use the TT move as best move
-                let nst' = if nullSeq (pvcont nst) && hdeep > 0 && tp /= 0
+                let nst' = if hdeep > 0 && nullSeq (pvcont nst)
                               then nst { pvcont = Seq [e'] }
                               else nst
                 edges <- genAndSort nst' bGrain b d
