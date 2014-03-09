@@ -662,10 +662,10 @@ pvSearch nst !a !b !d lastnull = do
                 return s
               else do
                 -- Use the found TT move as best move
-                let nst' = if hdeep > 0 && nullSeq (pvcont nst)
+                let nst' = if hdeep > 0 && (tp /= 0 || nullSeq (pvcont nst))
                               then nst { pvcont = Seq [e'] }
                               else nst
-                edges <- genAndSort nst0 a b d
+                edges <- genAndSort nst' a b d
                 if noMove edges
                    then do
                      v <- lift staticVal
@@ -743,7 +743,7 @@ pvZeroW nst b !d lastnull = do
                 return s
               else do
                 -- Use the TT move as best move
-                let nst' = if hdeep > 0 && nullSeq (pvcont nst)
+                let nst' = if hdeep > 0 && (tp /= 0 || nullSeq (pvcont nst))
                               then nst { pvcont = Seq [e'] }
                               else nst
                 edges <- genAndSort nst' bGrain b d
