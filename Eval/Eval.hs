@@ -363,18 +363,17 @@ data KingOpen = KingOpen
 
 instance EvalItem KingOpen where
     evalItem _ p _ = kingOpen p
-    evalItemNDL _  = [ ("kingOpenOwn", (-10, (-48, 0))), ("kingOpenAdv", (10, (0, 48)))] 
+    evalItemNDL _  = [ ("kingOpenOwn", (-8, (-48, 0))), ("kingOpenAdv", (8, (0, 48)))] 
 
 -- Openness can be tought only with pawns (like we take) or all pieces
--- This function is optimized
 kingOpen :: MyPos -> IWeights
 kingOpen p = [own, adv]
-    where mopbishops = popCount1 $ bishops p .&. yo p
+    where -- mopbishops = popCount1 $ bishops p .&. yo p
           moprooks   = popCount1 $ rooks p .&. yo p
           mopqueens  = popCount1 $ queens p .&. yo p
           mwb = popCount $ bAttacs paw msq `less` paw
           mwr = popCount $ rAttacs paw msq `less` (paw .|. lastrs)
-          yopbishops = popCount1 $ bishops p .&. me p
+          -- yopbishops = popCount1 $ bishops p .&. me p
           yoprooks   = popCount1 $ rooks p .&. me p
           yopqueens  = popCount1 $ queens p .&. me p
           ywb = popCount $ bAttacs paw ysq `less` paw
@@ -382,9 +381,9 @@ kingOpen p = [own, adv]
           paw = pawns p
           msq = kingSquare (kings p) $ me p
           ysq = kingSquare (kings p) $ yo p
-          comb !oB !oR !oQ !wb !wr = let !v = oB * wb + oR * wr + oQ * (wb + wr) in v
-          !own = comb mopbishops moprooks mopqueens mwb mwr
-          !adv = comb yopbishops yoprooks yopqueens ywb ywr
+          comb !oR !oQ !wb !wr = let !v = oR * wr + 2 * oQ * (wb + wr) in v
+          !own = comb moprooks mopqueens mwb mwr
+          !adv = comb yoprooks yopqueens ywb ywr
           lastrs = 0xFF000000000000FF	-- approx: take out last row which cant be covered by pawns
 
 ------ King on a center file ------
