@@ -187,7 +187,7 @@ bbToSingleSquare b
     | otherwise  = fail "Ambiguous piece"
 
 posToFen :: MyPos -> String
-posToFen pos = unwords [lines, tmv, cast, rest]
+posToFen pos = unwords [lines, tmv, correct cast, rest]
     where lines :: String
           lines = concat $ map (extline . foldl tra ("", 0))
                          $ map (\s -> map (tabla pos) [s..s+7]) $ reverse [0, 8 .. 56]
@@ -205,3 +205,5 @@ posToFen pos = unwords [lines, tmv, cast, rest]
           ckb = if not (kingMoved pos Black) && castKingRookOk  pos Black then 'k' else '-'
           cqb = if not (kingMoved pos Black) && castQueenRookOk pos Black then 'q' else '-'
           rest = "- 0 1"	-- rest not yet implemented
+          correct "----" = "-"
+          correct x = filter ((/=) '-') x
