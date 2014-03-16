@@ -10,6 +10,7 @@ import Control.Monad.Reader
 import Control.Concurrent
 import Control.Exception
 import Data.Array.Unboxed
+import Data.Foldable (foldrM)
 import Data.List (intersperse, delete)
 import Data.Maybe
 import Data.Typeable
@@ -38,19 +39,21 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.2.0"
-progVerSuff = "koco"
+progVerSuff = "self"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
         optParams   :: [String],	-- list of eval parameter assignements
-        optLogging  :: LogLevel		-- logging level
+        optLogging  :: LogLevel,	-- logging level
+        optAFenFile :: Maybe FilePath	-- annotated fen file for self analysis
     }
 
 defaultOptions :: Options
 defaultOptions = Options {
         optConfFile = Nothing,
         optParams   = [],
-        optLogging  = DebugUci
+        optLogging  = DebugUci,
+        optAFenFile = Nothing
     }
 
 setConfFile :: String -> Options -> Options
@@ -70,11 +73,15 @@ setLogging lev opt = opt { optLogging = llev }
                    _ -> if levi < 0 then DebugSearch else LogNever
           levi = read lev :: Int
 
+addAFile :: FilePath -> Options -> Options
+addAFile fi opt = opt { optAFenFile = Just fi }
+
 options :: [OptDescr (Options -> Options)]
 options = [
         Option "c" ["config"] (ReqArg setConfFile "STRING") "Configuration file",
         Option "l" ["loglev"] (ReqArg setLogging "STRING")  "Logging level from 0 (debug) to 5 (never)",
-        Option "p" ["param"]  (ReqArg addParam "STRING")    "Eval/search/time parameters: name=value,..."
+        Option "p" ["param"]  (ReqArg addParam "STRING")    "Eval/search/time parameters: name=value,...",
+        Option "a" ["analyse"] (ReqArg addAFile "STRING")   "Analysis file"
     ]
 
 theOptions :: IO (Options, [String])
@@ -83,7 +90,7 @@ theOptions = do
     case getOpt Permute options args of
         (o, n, []) -> return (foldr ($) defaultOptions o, n)
         (_, _, es) -> ioError (userError (concat es ++ usageInfo header options))
-    where header = "Usage: " ++ idName ++ " [-c CONF] [-l LEV] [-p name=val[,...]]"
+    where header = "Usage: " ++ idName ++ " [-c CONF] [-l LEV] [-p name=val[,...]] [-a AFILE]"
 
 initContext :: Options -> IO Context
 initContext opts = do
@@ -122,21 +129,35 @@ main :: IO ()
 main = do
     (opts, _) <- theOptions
     ctx <- initContext opts
-    runReaderT startTheMachine ctx
+    case optAFenFile opts of
+        Nothing -> runReaderT interMachine ctx	-- the normal (interactive) mode
+        Just fi -> runReaderT (analysingMachine fi) ctx	-- the analysis mode
 
 -- The logger, writer and informer will be started only once, here,
 -- so every setting about them cannot be changed later, which mainly
 -- excludes logging level and log file name
-startTheMachine :: CtxIO ()
-startTheMachine = do
+interMachine :: CtxIO ()
+interMachine = do
     ctx <- ask
     let logFileName = progLogName ++ "-" ++ show (startSecond ctx) ++ ".log"
     startLogger logFileName
-    startWriter
+    startWriter True
     startInformer
     beforeReadLoop
     ctxCatch theReader
         $ \e -> ctxLog LogError $ "Reader error: " ++ show e
+    -- whatever to do when ending:
+    beforeProgExit
+
+analysingMachine :: FilePath -> CtxIO ()
+analysingMachine fi = do
+    ctx <- ask
+    let logFileName = progLogName ++ "-" ++ show (startSecond ctx) ++ ".log"
+    startLogger logFileName
+    startWriter False
+    startInformer
+    beforeReadLoop
+    fileReader fi
     -- whatever to do when ending:
     beforeProgExit
 
@@ -171,17 +192,18 @@ theLogger lchan lst = do
 
 -- The writer just writes to standard output
 -- But it is necessary to write from a single thread, as this is a shared resource
-startWriter :: CtxIO ()
-startWriter = do
+startWriter :: Bool -> CtxIO ()
+startWriter inter = do
     ctx <- ask
     void $ liftIO $ forkIO
-         $ theWriter (writer ctx) (logger ctx) (LogInfo >= loglev ctx) (startSecond ctx)
+         $ theWriter inter (writer ctx) (logger ctx) (LogInfo >= loglev ctx) (startSecond ctx)
 
-theWriter :: Chan String -> Chan String -> Bool -> Integer -> IO ()
-theWriter wchan lchan mustlog refs = forever $ do
+theWriter :: Bool -> Chan String -> Chan String -> Bool -> Integer -> IO ()
+theWriter inter wchan lchan mustlog refs = forever $ do
     s <- readChan wchan
-    putStrLn s
-    hFlush stdout
+    when inter $ do	-- we write only in intercative mode
+        putStrLn s
+        hFlush stdout
     when mustlog $ logging lchan refs "Output" s
 
 -- The informer is getting structured data
@@ -341,6 +363,42 @@ doGo cmds = do
                                  _ -> 0
                 startWorking tim tpm mtg dpt
 
+data Agreg = Agreg {
+         agrCumErr :: !Integer,	-- accumulated error
+         agrFenOk  :: !Int,	-- number of fens analysed
+         agrFenNOk :: !Int	-- number of fens aborted
+     } deriving Show
+
+-- The file reader reads an annotated analysis file
+-- and analyses every fen, cummulating the error
+-- and reporting it
+fileReader :: FilePath -> CtxIO ()
+fileReader fi = do
+    inp <- liftIO $ readFile fi
+    let header : fens = lines inp
+        "Reference" : "depth" : sdepth : refeng = words header
+        depth = read sdepth
+    ctxLog LogInfo $ "Start analysing from: " ++ header
+    agr <- foldrM (perFenLine depth) (Agreg 0 0 0) fens
+    lift $ putStrLn $ show agr
+
+perFenLine :: Int -> String -> Agreg -> CtxIO Agreg
+perFenLine depth fenLine agr = do
+    let (refsc, fen') = break ((==) '\t') fenLine
+        rsc = read refsc
+        fen = tail fen'	-- it has the \t in front
+    ctxLog LogInfo $ "Ref.Score " ++ refsc ++ " fen " ++ fen
+    doPosition (Pos fen) []
+    modifyChanging $ \c -> c { working = True }
+    sc <- searchTheTree 1 depth 0 0 0 0 Nothing [] []
+    chg <- readChanging
+    return $ aggregateError agr rsc sc
+
+aggregateError :: Agreg -> Int -> Int -> Agreg
+aggregateError agr refsc sc
+    = agr { agrCumErr = agrCumErr agr + fromIntegral (dif * dif), agrFenOk = agrFenOk agr + 1 }
+    where dif = sc - refsc
+
 getTimeParams :: [GoCmds] -> Int -> Color -> (Int, Int, Int)
 getTimeParams cs _ c	-- unused: lastsc
     = if tpm == 0 && tim == 0
@@ -417,7 +475,7 @@ startWorking tim tpm mtg dpt = do
 -- find another scheme, for example with STM
 startSearchThread :: Int -> Int -> Int -> Int -> CtxIO ()
 startSearchThread tim tpm mtg dpt =
-    ctxCatch (searchTheTree 1 dpt 0 tim tpm mtg Nothing [] [])
+    ctxCatch (void $ searchTheTree 1 dpt 0 tim tpm mtg Nothing [] [])
         $ \e -> do
             chg <- readChanging
             let mes = "searchTheTree terminated by exception: " ++ show e
@@ -427,7 +485,6 @@ startSearchThread tim tpm mtg dpt =
                 Nothing  -> return ()
             ctxLog LogError mes
             lift $ collectError $ SomeException (SearchException mes)
-            -- Why? liftIO $ threadDelay $ 50*1000 -- give time to send the ans
 
 data SearchException = SearchException String deriving (Show, Typeable)
 
@@ -451,7 +508,7 @@ betterSc :: Int
 betterSc = 25
 
 -- Search with the given depth
-searchTheTree :: Int -> Int -> Int -> Int -> Int -> Int -> Maybe Int -> [Move] -> [Move] -> CtxIO ()
+searchTheTree :: Int -> Int -> Int -> Int -> Int -> Int -> Maybe Int -> [Move] -> [Move] -> CtxIO Int
 searchTheTree tief mtief timx tim tpm mtg lsc lpv rmvs = do
     ctx <- ask
     chg <- readChanging
@@ -478,6 +535,7 @@ searchTheTree tief mtief timx tim tpm mtg lsc lpv rmvs = do
         then do
             when depthmax $ ctxLog LogInfo "in searchTheTree: max depth reached"
             giveBestMove path
+            return sc
         else do
             chg' <- readChanging
             if working chg'
@@ -487,6 +545,7 @@ searchTheTree tief mtief timx tim tpm mtg lsc lpv rmvs = do
                 else do
                     ctxLog DebugUci "in searchTheTree: not working"
                     giveBestMove path -- was stopped
+                    return sc
 
 -- We assume here that we always have at least the first move of the PV (our best)
 -- If not (which is a fatal error) we will get an exception (head of empty list)
