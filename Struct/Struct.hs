@@ -263,13 +263,15 @@ moveIsEnPas :: Move -> Bool
 moveIsEnPas (Move w) = w .&. 0x6000 == 0x4000
 
 -- The location of the adverse pawn to delete:
+{-# INLINE moveEnPasDel #-}
 moveEnPasDel :: Move -> Square
-moveEnPasDel m@(Move w) = if testBit w 15 then src + 1 else src - 1
-    where src = fromSquare m
+moveEnPasDel m@(Move w) = if testBit w 15 then dst + 8 else dst - 8	-- set means +
+    where dst = toSquare m
 
+{-# INLINE makeEnPas #-}
 makeEnPas f t del = Move w2
     where w1 = encodeFromTo f t `setBit` 14
-          w2 = if del == f - 1 then w1 else w1 `setBit` 15
+          w2 = if del == t + 8 then w1 `setBit` 15 else w1	-- set when +
 
 -- Promotions:
 transfCodes :: Array Int Piece

@@ -999,7 +999,7 @@ genEPCapts !pos
     where !epBB = epcas pos .&. epMask
           dst = head $ bbToSquares epBB
           srcBB = pAttacs (other $ moving pos) dst .&. me pos .&. pawns pos
-          del = if moving pos == White then dst + 1 else dst - 1
+          del = if moving pos == White then dst - 8 else dst + 8
 
 perCaptFieldWL :: MyPos -> BBoard -> BBoard -> Square -> ([Move], [Move]) -> ([Move], [Move])
 perCaptFieldWL pos mypc advdefence sq mvlst
