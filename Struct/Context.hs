@@ -1,15 +1,15 @@
+{-# LANGUAGE TypeFamilies #-}
 module Struct.Context where
 
 import Control.Concurrent.Chan
 import Control.Concurrent
-import Control.Concurrent.MVar
 import Control.Monad.State.Strict
 import Control.Monad.Reader
 import System.Time
 
 import Struct.Struct
 import Struct.Status
--- import Search.SearchMonad
+import Struct.Config
 
 data InfoToGui = Info {
                     infoDepth :: Int,
@@ -69,6 +69,33 @@ data TimeParams = TimeParams {
                       tpDrScale, tpScScale, tpChScale :: !Double
                   } deriving Show
 
+instance CollectParams TimeParams where
+    type CollectFor TimeParams = TimeParams
+    npColInit = TimeParams {
+                    tpIniFact = 0.50,	-- initial factor (if all other is 1)
+                    tpMaxFact = 18,	-- to limit the time factor
+                    tpDrScale = 0.1,	-- to scale the draft factor
+                    tpScScale = 0.0003,	-- to scale score differences factor
+                    tpChScale = 0.01	-- to scale best move changes factor
+                }
+    npColParm = collectTimeParams
+    npSetParm = id
+
+
+collectTimeParams :: (String, Double) -> TimeParams -> TimeParams
+collectTimeParams (s, v) tp = lookApply s v tp [
+        ("tpIniFact", setTpIniFact),
+        ("tpMaxFact", setTpMaxFact),
+        ("tpDrScale", setTpDrScale),
+        ("tpScScale", setTpScScale),
+        ("tpChScale", setTpChScale)
+    ]
+    where setTpIniFact x ctp = ctp { tpIniFact = x }
+          setTpMaxFact x ctp = ctp { tpMaxFact = x }
+          setTpDrScale x ctp = ctp { tpDrScale = x }
+          setTpScScale x ctp = ctp { tpScScale = x }
+          setTpChScale x ctp = ctp { tpChScale = x }
+
 -- This is the variable context part (global mutable context)
 data Changing = Chg {
         working    :: Bool,             -- are we in tree search?
@@ -104,6 +131,7 @@ startSecond :: Context -> Integer
 startSecond ctx = s
     where TOD s _ = strttm ctx
 
+logging :: Chan String -> Integer -> String -> String -> IO ()
 logging lchan refs prf mes = do
     cms <- currMilli refs
     writeChan lchan $ show cms ++ " [" ++ prf ++ "]: " ++ mes

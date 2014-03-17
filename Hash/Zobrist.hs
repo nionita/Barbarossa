@@ -2,7 +2,6 @@
 
 module Hash.Zobrist (
     ZKey,
-    zobrist,
     zobMove,
     zobPiece,
     zobCastKw, zobCastQw, zobCastKb, zobCastQb,
@@ -10,35 +9,18 @@ module Hash.Zobrist (
 ) where
 
 import Data.Array.Base
-import Data.Array.IArray
-import Data.Array.Unboxed
-import Data.Bits
 import GHC.Arr (unsafeIndex)
-import Data.Word
 import System.Random
-import Foreign.Storable
 import Control.Exception (assert)
 
 import Struct.Struct
 
-genInit = 118863 :: Int
+genInit, zLen :: Int
+genInit = 118863
 zLen = 781
 
 zobrist :: UArray Int ZKey
 zobrist = listArray (0, zLen-1) $ take zLen $ randoms (mkStdGen genInit)
-
-{--
-randomW64s :: [ZKey]
-randomW64s = toW64 $ map fromIntegral randomInts
-    where isize = sizeOf (undefined :: Word)
-          toW64 = case isize of
-                    64 -> id
-                    _  -> w32Tow64
-
-w32Tow64 :: [Word64] -> [Word64]
-w32Tow64 (x:y:ws) = w : w32Tow64 ws
-    where w = (x `shift` 32) .|. y
---}
 
 -- When black is moving: xor with that number
 zobMove :: ZKey
@@ -59,11 +41,15 @@ p2intb = array (Pawn, King) $ zip [Pawn .. King] [b0, b1 .. ]
     where b0 = p2intw!King + 64
           b1 = b0 + 64
 
+zobCastBegin :: Int
 zobCastBegin = 12*64+1
+
+zobCastKw, zobCastQw, zobCastKb, zobCastQb :: ZKey
 zobCastKw = zobrist `unsafeAt` zobCastBegin
 zobCastQw = zobrist `unsafeAt` (zobCastBegin + 1)
 zobCastKb = zobrist `unsafeAt` (zobCastBegin + 2)
 zobCastQb = zobrist `unsafeAt` (zobCastBegin + 3)
 
 zobEP :: Int -> ZKey
+{-# INLINE zobEP #-}
 zobEP x = assert (x >= 0 && x <= 7) $ zobrist `unsafeAt` (zobCastBegin + 4 + x)

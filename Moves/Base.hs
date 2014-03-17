@@ -44,9 +44,10 @@ nearmate :: Int -> Bool
 nearmate i = i >= mateScore - 255 || i <= -mateScore + 255
 
 -- Some options and parameters:
-debug, useHash :: Bool
-debug       = False
-useHash     = True
+-- debug, useHash :: Bool
+-- debug       = False
+useHash :: Bool
+useHash = True
 
 depthForMovesSortPv, depthForMovesSort, scoreDiffEqual, printEvalInt :: Int
 depthForMovesSortPv = 1	-- use history for sorting moves when pv or cut nodes
@@ -428,6 +429,7 @@ talkToContext (BestMv a b c d) = informGui a b c d
 talkToContext (CurrMv a b)     = informGuiCM a b
 talkToContext (InfoStr s)      = informGuiString s
 
+timeFromContext :: CtxIO Int
 timeFromContext = do
     ctx <- ask
     let refs = startSecond ctx

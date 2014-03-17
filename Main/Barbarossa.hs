@@ -39,7 +39,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.2.0"
-progVerSuff = "self"
+progVerSuff = "selfs"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -376,22 +376,21 @@ fileReader :: FilePath -> CtxIO ()
 fileReader fi = do
     inp <- liftIO $ readFile fi
     let header : fens = lines inp
-        "Reference" : "depth" : sdepth : refeng = words header
-        depth = read sdepth
+        "Reference" : "depth" : sdepth : _ = words header
+        dpt = read sdepth
     ctxLog LogInfo $ "Start analysing from: " ++ header
-    agr <- foldrM (perFenLine depth) (Agreg 0 0 0) fens
+    agr <- foldrM (perFenLine dpt) (Agreg 0 0 0) fens
     lift $ putStrLn $ show agr
 
 perFenLine :: Int -> String -> Agreg -> CtxIO Agreg
-perFenLine depth fenLine agr = do
+perFenLine dpt fenLine agr = do
     let (refsc, fen') = break ((==) '\t') fenLine
         rsc = read refsc
         fen = tail fen'	-- it has the \t in front
     ctxLog LogInfo $ "Ref.Score " ++ refsc ++ " fen " ++ fen
     doPosition (Pos fen) []
     modifyChanging $ \c -> c { working = True }
-    sc <- searchTheTree 1 depth 0 0 0 0 Nothing [] []
-    chg <- readChanging
+    sc <- searchTheTree 1 dpt 0 0 0 0 Nothing [] []
     return $ aggregateError agr rsc sc
 
 aggregateError :: Agreg -> Int -> Int -> Agreg
@@ -580,33 +579,6 @@ correctTime draft ms sc path = do
             return (ms', func)
     modifyChanging func
     return ti
-
-instance CollectParams TimeParams where
-    type CollectFor TimeParams = TimeParams
-    npColInit = TimeParams {
-                    tpIniFact = 0.50,	-- initial factor (if all other is 1)
-                    tpMaxFact = 18,	-- to limit the time factor
-                    tpDrScale = 0.1,	-- to scale the draft factor
-                    tpScScale = 0.0003,	-- to scale score differences factor
-                    tpChScale = 0.01	-- to scale best move changes factor
-                }
-    npColParm = collectTimeParams
-    npSetParm = id
-
-
-collectTimeParams :: (String, Double) -> TimeParams -> TimeParams
-collectTimeParams (s, v) tp = lookApply s v tp [
-        ("tpIniFact", setTpIniFact),
-        ("tpMaxFact", setTpMaxFact),
-        ("tpDrScale", setTpDrScale),
-        ("tpScScale", setTpScScale),
-        ("tpChScale", setTpChScale)
-    ]
-    where setTpIniFact x ctp = ctp { tpIniFact = x }
-          setTpMaxFact x ctp = ctp { tpMaxFact = x }
-          setTpDrScale x ctp = ctp { tpDrScale = x }
-          setTpScScale x ctp = ctp { tpScScale = x }
-          setTpChScale x ctp = ctp { tpChScale = x }
 
 -- Concept is: have an initial factor and 3 auxiliary: one for draft (when last best move
 -- changed), one for score change and one for number of changes and different best moves so far

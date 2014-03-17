@@ -1,13 +1,12 @@
-{-# LANGUAGE TypeSynonymInstances, MultiParamTypeClasses,
-    FlexibleInstances
-  #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
+
 module Uci.UciGlue (
     bestMoveCont
 ) where
 
--- import Data.Array.IArray
 import Control.Monad.State.Lazy
-import Control.Monad.Reader
 
 import qualified Search.CStateMonad as SM
 import Search.AlbetaTypes
@@ -15,17 +14,6 @@ import Search.Albeta
 import Struct.Struct
 import Struct.Status
 import Struct.Context
--- import Moves.Base
--- import Eval.Eval
-
-{--
-instance CtxMon CtxIO where
-    tellCtx = talkToContext
-    timeCtx = do
-        ctx <- ask
-        let refs = startSecond ctx
-        lift $ currMilli refs
---}
 
 -- Parameter of the search at this level:
 aspirWindow :: Int

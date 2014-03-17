@@ -643,10 +643,12 @@ legalMove p m
 specialMoveIsLegal :: MyPos -> Move -> Bool
 specialMoveIsLegal _ _ = False
 
+{-
 nonCapt :: MyPos -> Move -> Bool
 nonCapt p m
     | Busy _ _ <- tabla p (toSquare m) = False
     | otherwise                        = True
+-}
 
 {-# INLINE moveIsCapture #-}
 moveIsCapture :: MyPos -> Move -> Bool
