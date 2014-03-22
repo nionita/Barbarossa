@@ -12,7 +12,8 @@ module Eval.Eval (
 ) where
 
 import Prelude hiding ((++), head, foldl, map, concat, filter, takeWhile, iterate, sum, minimum,
-                       zip, zipWith, foldr, concatMap, length, replicate, lookup, repeat, null)
+                       zip, zipWith, foldr, concatMap, length, replicate, lookup, repeat, null,
+                       unzip, drop)
 import Data.Array.Base (unsafeAt)
 import Data.Bits hiding (popCount)
 import Data.List.Stream
@@ -63,7 +64,7 @@ collectEvalParams (s, v) ep = lookApply s v ep [
 
 class EvalItem a where
     evalItem    :: EvalParams -> MyPos -> a -> IWeights
-    evalItemNDL :: a -> [(String, (Double, (Double, Double)))]	-- Name, Default, Limits
+    evalItemNDL :: a -> [(String, ((Double, Double), (Double, Double)))] -- Name, Defaults, Limits
 
 -- some handy functions for eval item types:
 weightName :: (a, b) -> a
@@ -89,9 +90,7 @@ evalItems = [ EvIt Material,	-- material balance (i.e. white - black material
               EvIt RookPawn,	-- the rook pawns are about 15% less valuable
               EvIt KingSafe,	-- king safety
               EvIt KingOpen,	-- malus for king openness
-              -- EvIt KingCenter,	-- malus for king on center files
               EvIt KingPlace,	-- bonus when king is near some fields
-              -- EvIt KingMob,	-- bonus for restricted mobility of adverse king when alone
               -- EvIt Castles,	-- bonus for castle rights
               EvIt LastLine,	-- malus for pieces on last line (except rooks and king)
               EvIt Mobility,	-- pieces mobility
@@ -108,32 +107,39 @@ weightLims :: [(Double, Double)]
 weightLims = concatMap evalLims evalItems
     where evalLims (EvIt a) = map weightLimits $ evalItemNDL a
 
--- zeroParam :: DWeights
--- zeroParam = replicate parDim 0	-- theese are doubles
-
 zeroFeats :: [Int]
 zeroFeats = replicate parDim 0	-- theese are ints
 
-evalItemPar :: EvalItem a => a -> DWeights -> (String, Double) -> Maybe DWeights
-evalItemPar a dps (s, v) = lookup s (zip lu posi) >>= \i -> Just (replace dps i v)
+evalItemPar :: EvalItem a => a -> (DWeights, DWeights) -> (String, Double)
+                               -> Maybe (DWeights, DWeights)
+evalItemPar a (dms, des) (s, v) = lookup sf (zip lu posi) >>= return . f
     where lu = map weightName $ evalItemNDL a
+          posi = [0..] :: [Int]
+          (sf, f) | mid `isPrefixOf` s = (restmid, \i -> (replace dms i v, des))
+                  | end `isPrefixOf` s = (restend, \i -> (dms, replace des i v))
+                  | otherwise          = (s, \i -> (replace dms i v, replace des i v))
           replace []       _ _ = []
           replace (_ : ds) 0 v' = v' : ds
           replace (d : ds) i v' = d : replace ds (i-1) v'
-          posi = [0..] :: [Int]
+          mid = "mid."
+          end = "end."
+          restmid = drop (length mid) s
+          restend = drop (length end) s
 
-oneWeight :: [(AnyEvalItem, DWeights)] -> (String, Double) -> [(AnyEvalItem, DWeights)]
+oneWeight :: [(AnyEvalItem, (DWeights, DWeights))] -> (String, Double)
+          -> [(AnyEvalItem, (DWeights, DWeights))]
 oneWeight [] _ = []
-oneWeight (evp@(EvIt ei, dp) : evps) sd
-    | Just ndp <- evalItemPar ei dp sd = (EvIt ei, ndp) : evps
-    | otherwise = evp : oneWeight evps sd
+oneWeight (evp@(EvIt ei, dp) : evps) sds
+    | Just ndp <- evalItemPar ei dp sds = (EvIt ei, ndp) : evps
+    | otherwise = evp : oneWeight evps sds
 
 -- Map a list of parameter assignments (name, value)
--- to a vector of parameter, taking defaults for missing parameters
-allWeights :: [(String, Double)] -> DWeights
-allWeights = concatMap snd . foldl oneWeight defevps
+-- to two vectors of parameters (mid, end), taking defaults for missing parameters
+allWeights :: [(String, Double)] -> (DWeights, DWeights)
+allWeights sds = (concat ms, concat es)
     where defevps = map defp evalItems
-          defp ei@(EvIt a) = (ei, map weightDefault $ evalItemNDL a)
+          defp ei@(EvIt a) = (ei, unzip . map weightDefault $ evalItemNDL a)
+          (ms, es) = unzip $ map snd $ foldl oneWeight defevps sds
 
 weightNames :: [String]
 weightNames = concatMap pnames evalItems
@@ -155,14 +161,16 @@ maxStatsIntvs = 20	-- number of difference interval
 
 initEvalState :: [(String, Double)] -> EvalState
 initEvalState sds = EvalState {
-        esDWeights = weights,
-        esIWeights = map round weights,
+        esDWeightsM = weightsM,
+        esDWeightsE = weightsE,
+        esIWeightsM = map round weightsM,
+        esIWeightsE = map round weightsE,
         esEParams  = npSetParm (colParams sds :: CollectFor EvalParams)
     }
-    where weights = inLimits weightLims $ allWeights sds
+    where (weightsM, weightsE) = inLimits weightLims $ allWeights sds
 
-inLimits :: Limits -> DWeights -> DWeights
-inLimits ls ps = map inlim $ zip ls ps
+inLimits :: Limits -> (DWeights, DWeights) -> (DWeights, DWeights)
+inLimits ls (psm, pse) = (map inlim $ zip ls psm, map inlim $ zip ls pse)
     where inlim ((mi, ma), p) = max mi $ min ma p
 
 (<*>) :: Num a => [a] -> [a] -> a
@@ -170,7 +178,7 @@ a <*> b = sum $ zipWith (*) a b
 {-# SPECIALIZE (<*>) :: [Int] -> [Int] -> Int #-}
 
 matesc :: Int
-matesc = 20000 - 255	-- attention, this is also defined in Base.hs!!
+matesc = 20000 - 255	-- warning, this is also defined in Base.hs!!
 
 posEval :: MyPos -> State EvalState (Int, [Int])
 posEval !p = do
@@ -178,7 +186,6 @@ posEval !p = do
     let (sce, feat) = evalDispatch p sti
         !scl = min matesc $ max (-matesc) sce
         !scc = if granCoarse > 0 then (scl + granCoarse2) .&. granCoarseM else scl
-        -- !sc = if moving p == White then scc else -scc
     return (scc, feat)
 
 evalDispatch :: MyPos -> EvalState -> (Int, [Int])
@@ -195,10 +202,23 @@ itemEval ep p (EvIt a) = evalItem ep p a
 
 normalEval :: MyPos -> EvalState -> (Int, [Int])
 normalEval p sti = (sc, feat)
-    where !feat = concatMap (itemEval (esEParams sti) p) evalItems
-          !sc'  = feat <*> esIWeights sti `shiftR` shift2Cp
-          !sc   = sc' + meMoving
-          meMoving = 5	-- advantage for moving
+    where
+          feat = concatMap (itemEval (esEParams sti) p) evalItems
+          scm  = feat <*> esIWeightsM sti
+          sce  = feat <*> esIWeightsE sti
+          gph  = gamePhase p
+          !sc = ((scm + meMovingMid) * gph + (sce + meMovingEnd) * (256 - gph)) `unsafeShiftR` nm
+          meMovingMid = 15 `shiftL` shift2Cp	-- advantage for moving in mid game
+          meMovingEnd =  5 `shiftL` shift2Cp	-- advantage for moving in end game
+          nm = shift2Cp + 8
+
+gamePhase :: MyPos -> Int
+gamePhase p = g
+    where qs = popCount1 $ queens p
+          rs = popCount1 $ rooks p
+          bs = popCount1 $ bishops p
+          ns = popCount1 $ knights p
+          !g = qs * 39 + rs * 20 + (bs + ns) * 12	-- opening: 254, end: 0
 
 evalSideNoPawns :: MyPos -> EvalState -> (Int, [Int])
 evalSideNoPawns p sti
@@ -302,7 +322,7 @@ data KingSafe = KingSafe
 
 instance EvalItem KingSafe where
     evalItem _ p _ = kingSafe p
-    evalItemNDL _  = [("kingSafe", (1, (0, 20)))]
+    evalItemNDL _  = [("kingSafe", ((1, 0), (0, 20)))]
 
 -- Rewrite of king safety taking into account number and quality
 -- of pieces attacking king neighbour squares
@@ -351,7 +371,7 @@ data Material = Material
 
 instance EvalItem Material where
     evalItem _ p _ = materDiff p
-    evalItemNDL _  = [("materialDiff", (8, (8, 8)))]
+    evalItemNDL _  = [("materialDiff", ((8, 8), (8, 8)))]
 
 materDiff :: MyPos -> IWeights
 materDiff p = [md]
@@ -363,7 +383,7 @@ data KingOpen = KingOpen
 
 instance EvalItem KingOpen where
     evalItem _ p _ = kingOpen p
-    evalItemNDL _  = [ ("kingOpenOwn", (-8, (-48, 0))), ("kingOpenAdv", (8, (0, 48)))] 
+    evalItemNDL _  = [ ("kingOpenOwn", ((-8, 0), (-48, 0))), ("kingOpenAdv", ((8, 0), (0, 48)))] 
 
 -- Openness can be tought only with pawns (like we take) or all pieces
 kingOpen :: MyPos -> IWeights
@@ -386,35 +406,14 @@ kingOpen p = [own, adv]
           !adv = comb yoprooks yopqueens ywb ywr
           lastrs = 0xFF000000000000FF	-- approx: take out last row which cant be covered by pawns
 
------- King on a center file ------
-{--
-data KingCenter = KingCenter
-
-instance EvalItem KingCenter where
-    evalItem _ p _ = kingCenter p
-    evalItemNDL _  = [ ("kingCenter", (-120, (-200, 0))) ]
-
--- This function is optimised
-kingCenter :: MyPos -> IWeights
-kingCenter p = [ kcd ]
-    where kcenter = fileC .|. fileD .|. fileE .|. fileF
-          !wkc = popCount1 (kings p .&. me p .&. kcenter) * (brooks + 2 * bqueens - 1)
-          !bkc = popCount1 (kings p .&. yo p .&. kcenter) * (wrooks + 2 * wqueens - 1)
-          !kcd = wkc - bkc
-          !wrooks  = popCount1 $ rooks  p .&. me p
-          !wqueens = popCount1 $ queens p .&. me p
-          !brooks  = popCount1 $ rooks  p .&. yo p
-          !bqueens = popCount1 $ queens p .&. yo p
---}
-
 ------ King placement ------
 data KingPlace = KingPlace
 
 instance EvalItem KingPlace where
     evalItem ep p _  = kingPlace ep p
     evalItemNDL _ = [
-                      ("kingPlaceCent", (4, (0, 400))),
-                      ("kingPlacePwns", (4, (0, 400)))
+                      ("kingPlaceCent", ((4, 0), (0, 400))),
+                      ("kingPlacePwns", ((4, 0), (0, 400)))
                     ]
 
 
@@ -544,10 +543,10 @@ data Mobility = Mobility	-- "safe" moves
 
 instance EvalItem Mobility where
     evalItem _ p _ = mobDiff p
-    evalItemNDL _  = [ ("mobilityKnight", (72, (60, 100))),
-                       ("mobilityBishop", (72, (60, 100))),
-                       ("mobilityRook", (48, (40, 100))),
-                       ("mobilityQueen", (3, (0, 50))) ]
+    evalItemNDL _  = [ ("mobilityKnight", ((78, 72), (60, 100))),
+                       ("mobilityBishop", ((78, 72), (60, 100))),
+                       ("mobilityRook",   ((40, 48), (40, 100))),
+                       ("mobilityQueen",  (( 0,  3), ( 0,  50))) ]
 
 -- Here we do not calculate pawn mobility (which, calculated as attacs, is useless)
 mobDiff :: MyPos -> IWeights
@@ -574,7 +573,7 @@ data Center = Center
 
 instance EvalItem Center where
     evalItem _ p _ = centerDiff p
-    evalItemNDL _  = [("centerAttacs", (72, (50, 100)))]
+    evalItemNDL _  = [("centerAttacs", ((72, 72), (50, 100)))]
 
 -- This function is already optimised
 centerDiff :: MyPos -> IWeights
@@ -638,7 +637,7 @@ data LastLine = LastLine
 
 instance EvalItem LastLine where
     evalItem _ p _ = lastline p
-    evalItemNDL _  = [("lastLinePenalty", (8, (0, 24)))]
+    evalItemNDL _  = [("lastLinePenalty", ((8, 0), (0, 24)))]
 
 -- This function is already optimised
 lastline :: MyPos -> IWeights
@@ -647,27 +646,13 @@ lastline p = [cdiff]
           !bll = popCount1 $ (yo p `less` (rooks p .|. kings p)) .&. 0xFF00000000000000
           !cdiff = bll - whl
 
------- King Mobility when alone ------
---data KingMob = KingMob
---
---instance EvalItem KingMob where
---    evalItem p c _ = kingAlone p c
---    evalItemNDL _ = [("advKingAlone", (26, (0, 100)))]
---
---kingAlone :: MyPos -> Color -> IWeights
---kingAlone p _ = [kmb]
---    where !kmb = if okalone then 8 - okmvs + together else 0
---          !together = popCount1 $ whKAttacs p .&. blKAttacs p
---          !okmvs = popCount1 $ blAttacs p
---          !okalone = black p `less` kings p == 0
-
 ------ Redundance: bishop pair and rook redundance ------
 data Redundance = Redundance
 
 instance EvalItem Redundance where
     evalItem _ p _ = evalRedundance p
-    evalItemNDL _  = [("bishopPair",       (320,  (100, 400))),
-                      ("redundanceRook",   (-104,  (-150, 0))) ]
+    evalItemNDL _  = [("bishopPair",       ((320,  320), ( 100, 400))),
+                      ("redundanceRook",   ((  0, -104), (-150,   0))) ]
 
 -- This function is optimised
 evalRedundance :: MyPos -> [Int]
@@ -690,7 +675,7 @@ data NRCorrection = NRCorrection
 
 instance EvalItem NRCorrection where
     evalItem _ p _ = evalNRCorrection p
-    evalItemNDL _  = [("nrCorrection", (0, (0, 8)))]
+    evalItemNDL _  = [("nrCorrection", ((0, 0), (0, 8)))]
 
 -- This function seems to be already optimised
 evalNRCorrection :: MyPos -> [Int]
@@ -708,7 +693,7 @@ data RookPawn = RookPawn
 
 instance EvalItem RookPawn where
     evalItem _ p _ = evalRookPawn p
-    evalItemNDL _  = [("rookPawn", (-64, (-120, 0))) ]
+    evalItemNDL _  = [("rookPawn", ((-64, -64), (-120, 0))) ]
 
 -- This function is already optimised
 evalRookPawn :: MyPos -> [Int]
@@ -722,11 +707,11 @@ data PassPawns = PassPawns
 
 instance EvalItem PassPawns where
     evalItem _ p _ = passPawns p
-    evalItemNDL _  = [("passPawnBonus", (104,  (   0,  160))),
-                      ("passPawn4",     (424,  ( 400,  480))),
-                      ("passPawn5",     (520,  ( 520,  640))),
-                      ("passPawn6",     (1132, (1100, 1200))),
-                      ("passPawn7",     (1920, (1600, 2300)))
+    evalItemNDL _  = [("passPawnBonus", (( 42,  124), (   0,  160))),
+                      ("passPawn4",     ((232,  464), ( 400,  480))),
+                      ("passPawn5",     ((270,  540), ( 520,  640))),
+                      ("passPawn6",     ((582, 1162), (1100, 1200))),
+                      ("passPawn7",     ((985, 1970), (1600, 2300)))
                      ]
  
 passPawns :: MyPos -> IWeights

@@ -4,7 +4,6 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Main where
--- import Prelude hiding (catch)
 import Control.Monad
 import Control.Monad.Reader
 import Control.Concurrent
@@ -616,7 +615,8 @@ beforeReadLoop = do
     let evst = evalst $ crtStatus chg
     ctxLog LogInfo "Eval parameters and weights:"
     ctxLog LogInfo $ show (esEParams evst)
-    forM_ (zip weightNames (esDWeights evst)) $ \(n, v) -> ctxLog LogInfo $! n ++ "\t" ++ show v
+    forM_ (zip3 weightNames (esDWeightsM evst) (esDWeightsE evst))
+       $ \(n, vm, ve) -> ctxLog LogInfo $! n ++ "\t" ++ show vm ++ "\t" ++ show ve
     bm <- liftIO $ hGetBuffering stdin
     ctxLog DebugUci $ "Stdin: " ++ show bm
 

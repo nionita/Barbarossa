@@ -5,8 +5,8 @@ module Struct.Status (
     EvalParams(..)
 ) where
 
-import Data.Array.Unboxed
-import Data.Word
+-- import Data.Array.Unboxed
+-- import Data.Word
 
 import Struct.Struct
 import Moves.History
@@ -26,9 +26,11 @@ data MyState = MyState {
     }
 
 data EvalState = EvalState {
-        esDWeights :: [Double],
-        esIWeights :: [Int],
-        esEParams  :: EvalParams
+        esDWeightsM :: [Double],
+        esDWeightsE :: [Double],
+        esIWeightsM :: [Int],
+        esIWeightsE :: [Int],
+        esEParams   :: EvalParams
     } deriving Show
 
 -- This is the parameter record for characteristics evaluation
