@@ -54,12 +54,12 @@ collectEvalParams (s, v) ep = lookApply s v ep [
         ("epMaterBonusScale", setEpMaterBonusScale),
         ("epPawnBonusScale",  setEpPawnBonusScale)
     ]
-    where setEpMaterMinor      v ep = ep { epMaterMinor      = round v }
-          setEpMaterRook       v ep = ep { epMaterRook       = round v }
-          setEpMaterQueen      v ep = ep { epMaterQueen      = round v }
-          setEpMaterScale      v ep = ep { epMaterScale      = round v }
-          setEpMaterBonusScale v ep = ep { epMaterBonusScale = round v }
-          setEpPawnBonusScale  v ep = ep { epPawnBonusScale  = round v }
+    where setEpMaterMinor      v' ep' = ep' { epMaterMinor      = round v' }
+          setEpMaterRook       v' ep' = ep' { epMaterRook       = round v' }
+          setEpMaterQueen      v' ep' = ep' { epMaterQueen      = round v' }
+          setEpMaterScale      v' ep' = ep' { epMaterScale      = round v' }
+          setEpMaterBonusScale v' ep' = ep' { epMaterBonusScale = round v' }
+          setEpPawnBonusScale  v' ep' = ep' { epPawnBonusScale  = round v' }
 
 class EvalItem a where
     evalItem    :: EvalParams -> MyPos -> a -> IWeights
@@ -387,6 +387,7 @@ kingOpen p = [own, adv]
           lastrs = 0xFF000000000000FF	-- approx: take out last row which cant be covered by pawns
 
 ------ King on a center file ------
+{--
 data KingCenter = KingCenter
 
 instance EvalItem KingCenter where
@@ -404,6 +405,7 @@ kingCenter p = [ kcd ]
           !wqueens = popCount1 $ queens p .&. me p
           !brooks  = popCount1 $ rooks  p .&. yo p
           !bqueens = popCount1 $ queens p .&. yo p
+--}
 
 ------ King placement ------
 data KingPlace = KingPlace
@@ -763,10 +765,11 @@ passPawns p = [dfp, dfp4, dfp5, dfp6, dfp7]
 -- passed pawns - now with queens)
 pawnEndGame :: MyPos -> Maybe (Int, [Int])
 pawnEndGame p
-    | null mescds && null yescds             = Nothing
+    -- | null mescds && null yescds             = Nothing
     | not (null mescds) && not (null yescds) = Just (dpr, [dpr])
     | not (null mescds)                      = Just (myrace, [myrace])
-    | not (null yescds)                      = Just (yorace, [yorace])
+    |                      not (null yescds) = Just (yorace, [yorace])
+    | otherwise                              = Nothing
     -- | -- here we will consider what is with 2 passed pawns which are far enough from each other
     where !mfpbb = passed p .&. me p
           !yfpbb = passed p .&. yo p
@@ -779,22 +782,18 @@ pawnEndGame p
           !mescds = map snd $ filter fst mpsqs		-- my escaped passed pawns
           ypsqs  = map escYo $ bbToSquares yfpbb	-- your pp squares & distances to promotion
           !yescds = map snd $ filter fst ypsqs		-- your escaped passed pawns
-          mesc = not . null $ mescds
-          yesc = not . null $ yescds
+          -- mesc = not . null $ mescds
+          -- yesc = not . null $ yescds
           dpr | mim < miy     =  promoBonus - distMalus mim
               | mim > miy + 1 = -promoBonus + distMalus miy
               | otherwise     =  withQueens     -- Here: this is more complex, e.g. if check while promoting
                                        -- or direct after promotion + queen capture?
-          (mim, msq) = minimumBy (comparing snd) mescds      -- who is promoting first?
-          (miy, ysq) = minimumBy (comparing snd) yescds
+          -- (mim, msq) = minimumBy (comparing snd) mescds      -- who is promoting first?
+          -- (miy, ysq) = minimumBy (comparing snd) yescds
+          mim = fst $ minimumBy (comparing snd) mescds      -- who is promoting first?
+          miy = fst $ minimumBy (comparing snd) yescds
           myrace =  promoBonus - distMalus mim
           yorace = -promoBonus + distMalus miy
-          {--
-          dpp | mesc      =  promoBonus - distMalus mim        -- only because we know promo == True
-              | otherwise = -promoBonus + distMalus miy
-              where (mim, _) = minimumBy (comparing snd) mescds      -- who is promoting first?
-                    (miy, _) = minimumBy (comparing snd) yescds
-          --}
           promoBonus = 1000     -- i.e. almost a queen (here the unit is 1 cp)
           distMalus x = unsafeShiftL x 3        -- to bring at least 8 cp per move until promotion
           -- We try to estimate static what will be after promotions of both queens
@@ -829,6 +828,7 @@ escYoBlack !ksq !psq = (esc, (psq, dis))
           !dis = squareDistance psq tsq
           !esc = dis < squareDistance ksq tsq - 1       -- because we move
 
+{--
 simplePawnEndGame :: MyPos -> Int
 simplePawnEndGame p = d
     where !d = mepv - yopv
@@ -865,4 +865,5 @@ halfPawnMax mx d
     | steps > mx = 100 * mx
     | otherwise  = 100 * steps
     where steps = (d + 1) `unsafeShiftR` 1
+--}
 --------------------------------------

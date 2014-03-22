@@ -3,7 +3,7 @@ module Eval.FileParams (
     fileToState
   ) where
 
-import Data.Char (isSpace)
+-- import Data.Char (isSpace)
 import Data.List (tails, intersperse)
 import System.Directory
 
