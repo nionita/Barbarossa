@@ -201,9 +201,8 @@ itemEval :: EvalParams -> MyPos -> AnyEvalItem -> [Int]
 itemEval ep p (EvIt a) = evalItem ep p a
 
 normalEval :: MyPos -> EvalState -> (Int, [Int])
-normalEval p sti = (sc, feat)
-    where
-          feat = concatMap (itemEval (esEParams sti) p) evalItems
+normalEval p !sti = (sc, feat)
+    where feat = concatMap (itemEval (esEParams sti) p) evalItems
           scm  = feat <*> esIWeightsM sti
           sce  = feat <*> esIWeightsE sti
           gph  = gamePhase p
@@ -546,7 +545,7 @@ instance EvalItem Mobility where
     evalItemNDL _  = [ ("mobilityKnight", ((78, 72), (60, 100))),
                        ("mobilityBishop", ((78, 72), (60, 100))),
                        ("mobilityRook",   ((40, 48), (40, 100))),
-                       ("mobilityQueen",  (( 0,  3), ( 0,  50))) ]
+                       ("mobilityQueen",  (( 0, 11), ( 0,  50))) ]
 
 -- Here we do not calculate pawn mobility (which, calculated as attacs, is useless)
 mobDiff :: MyPos -> IWeights
