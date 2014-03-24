@@ -545,7 +545,7 @@ instance EvalItem Mobility where
     evalItemNDL _  = [ ("mobilityKnight", ((78, 72), (60, 100))),
                        ("mobilityBishop", ((78, 72), (60, 100))),
                        ("mobilityRook",   ((40, 48), (40, 100))),
-                       ("mobilityQueen",  (( 0, 11), ( 0,  50))) ]
+                       ("mobilityQueen",  (( 0,  7), ( 0,  50))) ]
 
 -- Here we do not calculate pawn mobility (which, calculated as attacs, is useless)
 mobDiff :: MyPos -> IWeights
