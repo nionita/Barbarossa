@@ -96,7 +96,8 @@ evalItems = [ EvIt Material,	-- material balance (i.e. white - black material
               EvIt Mobility,	-- pieces mobility
               EvIt Center,	-- attacs of center squares
               -- EvIt DblPawns,	-- malus for doubled pawns
-              EvIt PassPawns	-- pass pawns
+              EvIt PassPawns,	-- pass pawns
+              EvIt RookPlc	-- rooks points for placements
             ]
 
 parDim :: Int
@@ -544,27 +545,28 @@ instance EvalItem Mobility where
     evalItem _ p _ = mobDiff p
     evalItemNDL _  = [ ("mobilityKnight", ((78, 72), (60, 100))),
                        ("mobilityBishop", ((78, 72), (60, 100))),
-                       ("mobilityRook",   ((40, 48), (40, 100))),
+                    -- ("mobilityRook",   ((40, 48), (40, 100))),
                        ("mobilityQueen",  (( 0,  7), ( 0,  50))) ]
 
 -- Here we do not calculate pawn mobility (which, calculated as attacs, is useless)
 mobDiff :: MyPos -> IWeights
-mobDiff p = [n, b, r, q]
+-- mobDiff p = [n, b, r, q]
+mobDiff p = [n, b, q]
     where !myN = popCount1 $ myNAttacs p `less` (me p .|. yoPAttacs p)
           !myB = popCount1 $ myBAttacs p `less` (me p .|. yoPAttacs p)
-          !myR = popCount1 $ myRAttacs p `less` (me p .|. yoA1)
+          -- !myR = popCount1 $ myRAttacs p `less` (me p .|. yoA1)
           !myQ = popCount1 $ myQAttacs p `less` (me p .|. yoA2)
           !yoA1 = yoPAttacs p .|. yoNAttacs p .|. yoBAttacs p
           !yoA2 = yoA1 .|. yoRAttacs p
           !yoN = popCount1 $ yoNAttacs p `less` (yo p .|. myPAttacs p)
           !yoB = popCount1 $ yoBAttacs p `less` (yo p .|. myPAttacs p)
-          !yoR = popCount1 $ yoRAttacs p `less` (yo p .|. myA1)
+          -- !yoR = popCount1 $ yoRAttacs p `less` (yo p .|. myA1)
           !yoQ = popCount1 $ yoQAttacs p `less` (yo p .|. myA2)
           !myA1 = myPAttacs p .|. myNAttacs p .|. myBAttacs p
           !myA2 = myA1 .|. myRAttacs p
           !n = myN - yoN
           !b = myB - yoB
-          !r = myR - yoR
+          -- !r = myR - yoR
           !q = myQ - yoQ
 
 ------ Center control ------
@@ -636,14 +638,16 @@ data LastLine = LastLine
 
 instance EvalItem LastLine where
     evalItem _ p _ = lastline p
-    evalItemNDL _  = [("lastLinePenalty", ((8, 0), (0, 24)))]
+    evalItemNDL _  = [("lastLinePenalty", ((24, 0), (0, 24)))]
 
 -- This function is already optimised
 lastline :: MyPos -> IWeights
 lastline p = [cdiff]
-    where !whl = popCount1 $ (me p `less` (rooks p .|. kings p)) .&. 0xFF
-          !bll = popCount1 $ (yo p `less` (rooks p .|. kings p)) .&. 0xFF00000000000000
+    where !whl = popCount1 $ (me p `less` rok) .&. lali
+          !bll = popCount1 $ (yo p `less` rok) .&. lali
           !cdiff = bll - whl
+          !rok = rooks p .|. kings p
+          lali = 0xFF000000000000FF	-- approximation!
 
 ------ Redundance: bishop pair and rook redundance ------
 data Redundance = Redundance
@@ -686,6 +690,38 @@ evalNRCorrection p = [md]
           !wrp = - popCount1 (rooks p .&. me p) * wpc * 12	-- 1/8 for each pawn under 5
           !brp = - popCount1 (rooks p .&. yo p) * bpc * 12	-- 1/8 for each pawn under 5
           !md = wnp + wrp - bnp - brp
+
+------ Rookm placement points ------
+data RookPlc = RookPlc
+
+instance EvalItem RookPlc where
+    evalItem _ p _ = evalRookPlc p
+    evalItemNDL _  = [ ("rookHOpen", ((240,   0), (0, 500))),
+                       ("rookOpen",  ((320,   0), (0, 800))) ]
+                  --   ("rook7th",   ((400, 500), (0, 900))),
+                  --   ("rookBhnd",  ((100, 800), (0, 900))) ]
+
+evalRookPlc :: MyPos -> [Int]
+evalRookPlc p = [ ho, op ]
+    where !mRs = rooks p .&. me p
+          !mPs = pawns p .&. me p
+          (mho, mop) = foldr (perRook (pawns p) mPs) (0, 0) $ bbToSquares mRs
+          !yRs = rooks p .&. yo p
+          !yPs = pawns p .&. yo p
+          (yho, yop) = foldr (perRook (pawns p) yPs) (0, 0) $ bbToSquares yRs
+          !ho = mho - yho
+          !op = mop - yop
+
+perRook :: BBoard -> BBoard -> Square -> (Int, Int) -> (Int, Int)
+perRook allp myp rsq (ho, op)
+    | rco .&. allp == 0 = (ho,  op')
+    | rco .&. myp  == 0 = (ho', op)
+    | otherwise         = (ho,  op)
+    where !rco = rcolls `unsafeAt` (rsq .&. 0x7)
+          ho'  = ho + 1
+          op'  = op + 1
+          rcolls :: UArray Int BBoard
+          rcolls = listArray (0, 7) [ fileA, fileB, fileC, fileD, fileE, fileF, fileG, fileH ]
 
 ------ Rook pawn weakness ------
 data RookPawn = RookPawn
