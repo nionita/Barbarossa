@@ -545,28 +545,27 @@ instance EvalItem Mobility where
     evalItem _ p _ = mobDiff p
     evalItemNDL _  = [ ("mobilityKnight", ((78, 72), (60, 100))),
                        ("mobilityBishop", ((78, 72), (60, 100))),
-                    -- ("mobilityRook",   ((40, 48), (40, 100))),
+                       ("mobilityRook",   ((16, 48), (40, 100))),
                        ("mobilityQueen",  (( 0,  7), ( 0,  50))) ]
 
 -- Here we do not calculate pawn mobility (which, calculated as attacs, is useless)
 mobDiff :: MyPos -> IWeights
--- mobDiff p = [n, b, r, q]
-mobDiff p = [n, b, q]
+mobDiff p = [n, b, r, q]
     where !myN = popCount1 $ myNAttacs p `less` (me p .|. yoPAttacs p)
           !myB = popCount1 $ myBAttacs p `less` (me p .|. yoPAttacs p)
-          -- !myR = popCount1 $ myRAttacs p `less` (me p .|. yoA1)
+          !myR = popCount1 $ myRAttacs p `less` (me p .|. yoA1)
           !myQ = popCount1 $ myQAttacs p `less` (me p .|. yoA2)
           !yoA1 = yoPAttacs p .|. yoNAttacs p .|. yoBAttacs p
           !yoA2 = yoA1 .|. yoRAttacs p
           !yoN = popCount1 $ yoNAttacs p `less` (yo p .|. myPAttacs p)
           !yoB = popCount1 $ yoBAttacs p `less` (yo p .|. myPAttacs p)
-          -- !yoR = popCount1 $ yoRAttacs p `less` (yo p .|. myA1)
+          !yoR = popCount1 $ yoRAttacs p `less` (yo p .|. myA1)
           !yoQ = popCount1 $ yoQAttacs p `less` (yo p .|. myA2)
           !myA1 = myPAttacs p .|. myNAttacs p .|. myBAttacs p
           !myA2 = myA1 .|. myRAttacs p
           !n = myN - yoN
           !b = myB - yoB
-          -- !r = myR - yoR
+          !r = myR - yoR
           !q = myQ - yoQ
 
 ------ Center control ------
