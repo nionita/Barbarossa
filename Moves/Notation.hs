@@ -1,10 +1,12 @@
+{-# LANGUAGE PatternGuards #-}
+
 module Moves.Notation where
 
-import Data.Array.Unboxed
+-- import Data.Array.Unboxed
 import Data.Bits
 import Data.Char (ord, chr, toUpper, toLower)
-import Data.List
-import Data.Word
+-- import Data.List
+-- import Data.Word
 import qualified Text.ParserCombinators.Parsec as P
 import Text.ParserCombinators.Parsec ((<|>))
 
@@ -40,7 +42,7 @@ cap x y z t = fromIntegral $ (x' .|. shiftR y' 1 .|. shiftR z' 2 .|. shiftR t' 3
 toNiceNotation :: MyPos -> Move -> String
 toNiceNotation p m
     | moveIsCastle m = if s > d then "0-0-0" else "0-0"
-    | otherwise      = piece ++ src ++ capt ++ dst ++ transf ++ check
+    | otherwise      = piece ++ src ++ capt ++ dst ++ transf ++ chk
     where piece = pcToCh False fig
           s = fromSquare m
           d = toSquare m
@@ -52,15 +54,15 @@ toNiceNotation p m
           capt = if iscapt then "x" else ""
           att = fAttacs d fig (occup p)
           src | fig == Pawn = if iscapt then col sc : "" else ""
-              | fig == King = ""
               | fig == Knight = desamb (knights p)
               | fig == Bishop = desamb (bishops p)
               | fig == Rook   = desamb (rooks p)
               | fig == Queen  = desamb (queens p)
+              | otherwise     = ""	-- king
           dst = col dc : row dr : ""
           transf = if moveIsTransf m then pcToCh False (moveTransfPiece m) else ""
           p' = doFromToMove m p
-          check = if isCheck p' (other fcol) then "+" else ""
+          chk = if isCheck p' (other fcol) then "+" else ""
           orda = ord 'a'
           ord1 = ord '1'
           col x = chr (orda + x)
@@ -85,7 +87,7 @@ data SrcDest = SDCol Int | SDRow Int | SDColRow Int Int
 
 -- What about castle? What about en passant?
 fromNiceNotation :: MyPos -> Color -> P.Parser Move
-fromNiceNotation p c = do
+fromNiceNotation p _ = do
     piece <- parsePiece
     srcc  <- parseSrcOrCapt
     (msrc, capt, dst) <- case srcc of
@@ -104,7 +106,7 @@ fromNiceNotation p c = do
             dst <- parseSrcDst
             return (Nothing, capt, dst)
     mtra <- parseTransf
-    chk <- parseCheck
+    _ <- parseCheck
     sqdst <- case dst of
         SDColRow x y -> return $ colRowToSquare x y
         _            -> fail "Wrong destination"
@@ -119,7 +121,8 @@ fromNiceNotation p c = do
                 Nothing -> parseFigureMove p piece msrc sqdst
 
 -- Todo here: promotion and en passant!
-parsePawnCapt p x sqdst mtra = do
+parsePawnCapt :: MyPos -> Int -> Int -> Maybe Piece -> P.Parser Move
+parsePawnCapt p x sqdst _ = do
     let fcol = moving p
         target = me p .&. pawns p
         att  = pAttacs (other fcol) sqdst
@@ -127,19 +130,22 @@ parsePawnCapt p x sqdst mtra = do
     return $ moveFromTo sqsrc sqdst
 
 -- Todo here: promotion and en passant!
-parsePawnMove p x sqdst mtra = do
+parsePawnMove :: MyPos -> Int -> Int -> Maybe Piece -> P.Parser Move
+parsePawnMove p x sqdst _ = do
     let fcol = moving p
         target = me p .&. pawns p
         att  = pAttacs (other fcol) sqdst
     sqsrc <- bbToSingleSquare (target .&. att .&. colBB x)
     return $ moveFromTo sqsrc sqdst
 
+parseFigureMove :: MyPos -> Piece -> Maybe SrcDest -> Int -> P.Parser Move
 parseFigureMove p piece msrc sqdst = do
-    let target | piece == King = me p .&. kings p
-               | piece == Queen = me p .&. queens p
-               | piece == Rook = me p .&. rooks p
+    let target | piece == King   = me p .&. kings p
+               | piece == Queen  = me p .&. queens p
+               | piece == Rook   = me p .&. rooks p
                | piece == Bishop = me p .&. bishops p
                | piece == Knight = me p .&. knights p
+               | otherwise       = 0	-- this is dummy, for warnings
         att = fAttacs sqdst piece (occup p)
     sqsrc <- case msrc of
                  Just (SDCol x) -> bbToSingleSquare (target .&. att .&. colBB x) 
@@ -149,48 +155,62 @@ parseFigureMove p piece msrc sqdst = do
     -- we don't check if it's really check
     return $ moveFromTo sqsrc sqdst
 
+parsePiece :: P.Parser Piece
 parsePiece = parseFigure <|> return Pawn
 
+parseFigure :: P.Parser Piece
 parseFigure = fmap chToPc $ P.oneOf "KQRBN"
 
+chToPc :: Char -> Piece
 chToPc 'K' = King
 chToPc 'Q' = Queen
 chToPc 'R' = Rook
 chToPc 'B' = Bishop
 chToPc 'N' = Knight
+chToPc _   = Pawn	-- this is dummy, just to eliminate warnings
 
+parseSrcOrCapt :: P.Parser (Either SrcDest Bool)
 parseSrcOrCapt = (P.char 'x' >> return (Right True))
              <|> fmap Left parseSrcDst
 
+parseCapt :: P.Parser Bool
 parseCapt = (P.char 'x' >> return True) <|> return False
 
+parseSrcDst :: P.Parser SrcDest
 parseSrcDst = parseRow <|> parseColRow
 
+parseCol :: P.Parser SrcDest
 parseCol = fmap (SDCol . (\c -> ord c - ord 'a')) $ P.oneOf "abcdefgh"
 
+parseRow :: P.Parser SrcDest
 parseRow = fmap (SDRow . (\c -> ord c - ord '1')) $ P.oneOf "12345678"
 
+parseColRow :: P.Parser SrcDest
 parseColRow = do
     col@(SDCol c) <- parseCol
     parseRow >>= \(SDRow r) -> return (SDColRow c r) <|> return col
 
+parseTransf :: P.Parser (Maybe Piece)
 parseTransf = fmap (Just . chToPc . toUpper) (P.oneOf "QRBNqrbn")
               <|> return Nothing
 
+parseCheck :: P.Parser Bool
 parseCheck = (P.char '+' >> return True) <|> return False
 
+colRowToSquare :: Int -> Int -> Int
 colRowToSquare x y = y*8 + x
 
+bbToSingleSquare :: Monad m => BBoard -> m Square
 bbToSingleSquare b
     | b == 0     = fail "No piece found"
     | exactOne b = return $ firstOne b
     | otherwise  = fail "Ambiguous piece"
 
 posToFen :: MyPos -> String
-posToFen pos = unwords [lines, tmv, correct cast, rest]
-    where lines :: String
-          lines = concat $ map (extline . foldl tra ("", 0))
-                         $ map (\s -> map (tabla pos) [s..s+7]) $ reverse [0, 8 .. 56]
+posToFen pos = unwords [lns, tmv, correct cast, rest]
+    where lns :: String
+          lns = concat $ map (extline . foldl tra ("", 0))
+                       $ map (\s -> map (tabla pos) [s..s+7]) $ reverse [0, 8 .. 56]
           tra :: (String, Int) -> TabCont -> (String, Int)
           tra (s, n) Empty      = (s, n+1)
           tra (s, n) (Busy c f) = let zw = if n > 0 then show n else "" in (s ++ zw ++ trasq c f, 0)
