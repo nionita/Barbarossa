@@ -765,7 +765,8 @@ pvZeroW !nst !b !d !lastnull = do
 
 nullEdgeFailsHigh :: NodeState -> Path -> Int -> Int -> Search Bool
 nullEdgeFailsHigh nst b d lastnull
-    | not nulActivate || lastnull < 1 || d1 <= 0 = return False
+    -- | not nulActivate || lastnull < 1 || d1 <= 0 = return False
+    | not nulActivate || lastnull < 1 = return False	-- go smooth into QS
     | otherwise = do
          tact <- lift tacticalPos
          if tact
