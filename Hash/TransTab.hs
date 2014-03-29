@@ -196,7 +196,7 @@ retrieveEntry tt zkey =
 -- Actually we always search in the whole cell in the hope to find the zkey and replace it
 -- but also keep track of the weakest entry in the cell, which will be replaced otherwise
 writeCache :: Cache -> ZKey -> Int -> Int -> Int -> Move -> Int -> IO ()
-writeCache tt zkey depth tp score move nodes = do
+writeCache !tt !zkey !depth !tp !score !move !nodes = do
     let bas   = zKeyToCell tt zkey
         gen   = gener tt
         pCE   = quintToCacheEn tt zkey depth tp score move nodes
@@ -235,7 +235,7 @@ scoreReplaceLow gen lowc crt rep sco term cont
           lowm = lowc .&. 0xFFFF	-- mask the move
 
 quintToCacheEn :: Cache -> ZKey -> Int -> Int -> Int -> Move -> Int -> PCacheEn
-quintToCacheEn tt zkey depth tp score (Move move) nodes = pCE
+quintToCacheEn !tt !zkey !depth !tp !score !(Move move) !nodes = pCE
     where w1 =   (zkey .&. zemask tt)
              .|. fromIntegral ((score .&. 0xFFFF) `unsafeShiftL` 2)
           w2 = gener tt
