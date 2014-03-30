@@ -538,6 +538,38 @@ proxyLine :: Int -> Square -> Int
 proxyLine line sq = proxyBonusArr `unsafeAt` (unsafeShiftR sq 3 - line)
 --}
 
+------ Rookm placement points ------
+data RookPlc = RookPlc
+
+instance EvalItem RookPlc where
+    evalItem _ p _ = evalRookPlc p
+    evalItemNDL _  = [ ("rookHOpen", ((203,   0), (0, 500))),
+                       ("rookOpen",  ((268,   0), (0, 800))) ]
+                  --   ("rook7th",   ((400, 500), (0, 900))),
+                  --   ("rookBhnd",  ((100, 800), (0, 900))) ]
+
+evalRookPlc :: MyPos -> [Int]
+evalRookPlc p = [ ho, op ]
+    where !mRs = rooks p .&. me p
+          !mPs = pawns p .&. me p
+          (mho, mop) = foldr (perRook (pawns p) mPs) (0, 0) $ bbToSquares mRs
+          !yRs = rooks p .&. yo p
+          !yPs = pawns p .&. yo p
+          (yho, yop) = foldr (perRook (pawns p) yPs) (0, 0) $ bbToSquares yRs
+          !ho = mho - yho
+          !op = mop - yop
+
+perRook :: BBoard -> BBoard -> Square -> (Int, Int) -> (Int, Int)
+perRook allp myp rsq (ho, op)
+    | rco .&. allp == 0 = (ho,  op')
+    | rco .&. myp  == 0 = (ho', op)
+    | otherwise         = (ho,  op)
+    where !rco = rcolls `unsafeAt` (rsq .&. 0x7)
+          ho'  = ho + 1
+          op'  = op + 1
+          rcolls :: UArray Int BBoard
+          rcolls = listArray (0, 7) [ fileA, fileB, fileC, fileD, fileE, fileF, fileG, fileH ]
+
 ------ Mobility ------
 data Mobility = Mobility	-- "safe" moves
 
@@ -545,7 +577,7 @@ instance EvalItem Mobility where
     evalItem _ p _ = mobDiff p
     evalItemNDL _  = [ ("mobilityKnight", ((78, 72), (60, 100))),
                        ("mobilityBishop", ((78, 72), (60, 100))),
-                       ("mobilityRook",   ((20, 60), (10, 100))),
+                       ("mobilityRook",   ((17, 52), (10, 100))),
                        ("mobilityQueen",  (( 0,  7), ( 0,  50))) ]
 
 -- Here we do not calculate pawn mobility (which, calculated as attacs, is useless)
@@ -689,38 +721,6 @@ evalNRCorrection p = [md]
           !wrp = - popCount1 (rooks p .&. me p) * wpc * 12	-- 1/8 for each pawn under 5
           !brp = - popCount1 (rooks p .&. yo p) * bpc * 12	-- 1/8 for each pawn under 5
           !md = wnp + wrp - bnp - brp
-
------- Rookm placement points ------
-data RookPlc = RookPlc
-
-instance EvalItem RookPlc where
-    evalItem _ p _ = evalRookPlc p
-    evalItemNDL _  = [ ("rookHOpen", ((172,   0), (0, 500))),
-                       ("rookOpen",  ((225,   0), (0, 800))) ]
-                  --   ("rook7th",   ((400, 500), (0, 900))),
-                  --   ("rookBhnd",  ((100, 800), (0, 900))) ]
-
-evalRookPlc :: MyPos -> [Int]
-evalRookPlc p = [ ho, op ]
-    where !mRs = rooks p .&. me p
-          !mPs = pawns p .&. me p
-          (mho, mop) = foldr (perRook (pawns p) mPs) (0, 0) $ bbToSquares mRs
-          !yRs = rooks p .&. yo p
-          !yPs = pawns p .&. yo p
-          (yho, yop) = foldr (perRook (pawns p) yPs) (0, 0) $ bbToSquares yRs
-          !ho = mho - yho
-          !op = mop - yop
-
-perRook :: BBoard -> BBoard -> Square -> (Int, Int) -> (Int, Int)
-perRook allp myp rsq (ho, op)
-    | rco .&. allp == 0 = (ho,  op')
-    | rco .&. myp  == 0 = (ho', op)
-    | otherwise         = (ho,  op)
-    where !rco = rcolls `unsafeAt` (rsq .&. 0x7)
-          ho'  = ho + 1
-          op'  = op + 1
-          rcolls :: UArray Int BBoard
-          rcolls = listArray (0, 7) [ fileA, fileB, fileC, fileD, fileE, fileF, fileG, fileH ]
 
 ------ Rook pawn weakness ------
 data RookPawn = RookPawn
