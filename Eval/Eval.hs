@@ -545,7 +545,7 @@ instance EvalItem Mobility where
     evalItem _ p _ = mobDiff p
     evalItemNDL _  = [ ("mobilityKnight", ((78, 72), (60, 100))),
                        ("mobilityBishop", ((78, 72), (60, 100))),
-                       ("mobilityRook",   ((16, 48), (10, 100))),
+                       ("mobilityRook",   ((20, 60), (10, 100))),
                        ("mobilityQueen",  (( 0,  7), ( 0,  50))) ]
 
 -- Here we do not calculate pawn mobility (which, calculated as attacs, is useless)
@@ -695,8 +695,8 @@ data RookPlc = RookPlc
 
 instance EvalItem RookPlc where
     evalItem _ p _ = evalRookPlc p
-    evalItemNDL _  = [ ("rookHOpen", ((240,   0), (0, 500))),
-                       ("rookOpen",  ((320,   0), (0, 800))) ]
+    evalItemNDL _  = [ ("rookHOpen", ((172,   0), (0, 500))),
+                       ("rookOpen",  ((225,   0), (0, 800))) ]
                   --   ("rook7th",   ((400, 500), (0, 900))),
                   --   ("rookBhnd",  ((100, 800), (0, 900))) ]
 
