@@ -545,7 +545,7 @@ instance EvalItem Mobility where
     evalItem _ p _ = mobDiff p
     evalItemNDL _  = [ ("mobilityKnight", ((78, 72), (60, 100))),
                        ("mobilityBishop", ((78, 72), (60, 100))),
-                       ("mobilityRook",   ((16, 48), (40, 100))),
+                       ("mobilityRook",   ((16, 48), (10, 100))),
                        ("mobilityQueen",  (( 0,  7), ( 0,  50))) ]
 
 -- Here we do not calculate pawn mobility (which, calculated as attacs, is useless)
