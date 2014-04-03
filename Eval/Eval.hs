@@ -412,7 +412,7 @@ data KingPlace = KingPlace
 instance EvalItem KingPlace where
     evalItem ep p _  = kingPlace ep p
     evalItemNDL _ = [
-                      ("kingPlaceCent", ((3, 7), (0, 400))),
+                      ("kingPlaceCent", ((3, 9), (0, 400))),
                       ("kingPlacePwns", ((4, 0), (0, 400)))
                     ]
 
@@ -543,8 +543,8 @@ data RookPlc = RookPlc
 
 instance EvalItem RookPlc where
     evalItem _ p _ = evalRookPlc p
-    evalItemNDL _  = [ ("rookHOpen", ((206, 254), (0, 500))),
-                       ("rookOpen",  ((275, 247), (0, 800))) ]
+    evalItemNDL _  = [ ("rookHOpen", ((215, 327), (0, 500))),
+                       ("rookOpen",  ((258, 250), (0, 800))) ]
                   --   ("rook7th",   ((400, 500), (0, 900))),
                   --   ("rookBhnd",  ((100, 800), (0, 900))) ]
 
@@ -575,8 +575,8 @@ data Mobility = Mobility	-- "safe" moves
 
 instance EvalItem Mobility where
     evalItem _ p _ = mobDiff p
-    evalItemNDL _  = [ ("mobilityKnight", ((61, 74), (50, 120))),
-                       ("mobilityBishop", ((60, 73), (50, 120))),
+    evalItemNDL _  = [ ("mobilityKnight", ((55, 64), (50, 120))),
+                       ("mobilityBishop", ((54, 61), (50, 120))),
                        ("mobilityRook",   ((28, 25), ( 0, 100))),
                        ("mobilityQueen",  (( 0,  7), (-5,  50))) ]
 
@@ -741,11 +741,11 @@ data PassPawns = PassPawns
 
 instance EvalItem PassPawns where
     evalItem _ p _ = passPawns p
-    evalItemNDL _  = [("passPawnBonus", ((  50,   77), (   0,  200))),
-                      ("passPawn4",     (( 326,  324), ( 200,  520))),
-                      ("passPawn5",     (( 488,  476), ( 250,  740))),
-                      ("passPawn6",     (( 856,  849), ( 500, 1200))),
-                      ("passPawn7",     ((1489, 1491), ( 900, 2300)))
+    evalItemNDL _  = [("passPawnBonus", ((  46,   79), (   0,  200))),
+                      ("passPawn4",     (( 286,  275), ( 200,  520))),
+                      ("passPawn5",     (( 426,  401), ( 250,  740))),
+                      ("passPawn6",     (( 777,  755), ( 500, 1200))),
+                      ("passPawn7",     ((1288, 1292), ( 900, 2300)))
                      ]
  
 passPawns :: MyPos -> IWeights

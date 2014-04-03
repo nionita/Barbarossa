@@ -38,7 +38,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.2.0"
-progVerSuff = "plc40k"
+progVerSuff = "plc25k2"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
