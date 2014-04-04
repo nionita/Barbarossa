@@ -352,7 +352,7 @@ ttRead = if not useHash then return empRez else do
 
 {-# INLINE ttStore #-}
 ttStore :: Int -> Int -> Int -> Move -> Int -> Game ()
-ttStore deep tp sc bestm nds = if not useHash then return () else do
+ttStore !deep !tp !sc !bestm !nds = if not useHash then return () else do
     s <- get
     p <- getPos
     -- when (sc `mod` 4 /= 0 && tp == 2) $ liftIO $ do

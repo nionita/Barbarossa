@@ -19,7 +19,7 @@ data Stats = Stats {
 
 data MyState = MyState {
         stack :: [MyPos],	-- stack of played positions
-        hash  :: !Cache,	-- transposition table
+        hash  :: Cache,		-- transposition table
         hist  :: History,	-- history table
         stats :: !Stats,	-- statistics
         evalst :: EvalState	-- eval status (parameter & statistics)
