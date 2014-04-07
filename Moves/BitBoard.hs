@@ -1,10 +1,9 @@
 {-# LANGUAGE BangPatterns #-}
 module Moves.BitBoard (
     popCount, popCount1, lsb, bbToSquares, less, firstOne, exactOne, bbToSquaresBB,
-    uTestBit
+    uTestBit, shadowDown, shadowUp
 ) where
 
--- import Control.Exception (assert)
 import Data.Array.Base
 import Data.Array.Unboxed
 import Data.Bits hiding (popCount)
@@ -87,3 +86,19 @@ popCount1 = B.popCount
 uTestBit :: BBoard -> Int -> Bool
 uTestBit w b = let bb = 1 `unsafeShiftL` b
                in w .&. bb /= 0
+
+{-# INLINE shadowDown #-}
+shadowDown :: BBoard -> BBoard
+shadowDown !wp = wp3
+    where !wp0 =          wp  `unsafeShiftR`  8
+          !wp1 = wp0 .|. (wp0 `unsafeShiftR`  8)
+          !wp2 = wp1 .|. (wp1 `unsafeShiftR` 16)
+          !wp3 = wp2 .|. (wp2 `unsafeShiftR` 32)
+
+{-# INLINE shadowUp #-}
+shadowUp :: BBoard -> BBoard
+shadowUp !wp = wp3
+    where !wp0 =          wp  `unsafeShiftL`  8
+          !wp1 = wp0 .|. (wp0 `unsafeShiftL`  8)
+          !wp2 = wp1 .|. (wp1 `unsafeShiftL` 16)
+          !wp3 = wp2 .|. (wp2 `unsafeShiftL` 32)

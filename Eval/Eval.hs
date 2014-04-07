@@ -494,20 +494,24 @@ data RookPlc = RookPlc
 instance EvalItem RookPlc where
     evalItem _ p _ = evalRookPlc p
     evalItemNDL _  = [ ("rookHOpen", ((228, 261), (0, 500))),
-                       ("rookOpen",  ((295, 294), (0, 800))) ]
+                       ("rookOpen",  ((295, 294), (0, 800))),
                   --   ("rook7th",   ((400, 500), (0, 900))),
-                  --   ("rookBhnd",  ((100, 800), (0, 900))) ]
+                       ("rookBhnd",  ((100, 800), (0, 900))) ]
 
 evalRookPlc :: MyPos -> [Int]
-evalRookPlc p = [ ho, op ]
+evalRookPlc p = [ ho, op, be ]
     where !mRs = rooks p .&. me p
           !mPs = pawns p .&. me p
           (mho, mop) = foldr (perRook (pawns p) mPs) (0, 0) $ bbToSquares mRs
           !yRs = rooks p .&. yo p
           !yPs = pawns p .&. yo p
           (yho, yop) = foldr (perRook (pawns p) yPs) (0, 0) $ bbToSquares yRs
+          (!mbe, !ybe)
+              | moving p == White = tarrasch mRs yRs (passed p) mPs yPs
+              | otherwise         = tarrasch mRs yRs (passed p) yPs mPs
           !ho = mho - yho
           !op = mop - yop
+          !be = mbe - ybe
 
 perRook :: BBoard -> BBoard -> Square -> (Int, Int) -> (Int, Int)
 perRook allp myp rsq (ho, op)
@@ -519,6 +523,24 @@ perRook allp myp rsq (ho, op)
           op'  = op + 1
           rcolls :: UArray Int BBoard
           rcolls = listArray (0, 7) [ fileA, fileB, fileC, fileD, fileE, fileF, fileG, fileH ]
+
+tarrasch :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> (Int, Int)
+tarrasch !myrooks !yorooks !pass !wpawns !bpawns = (myb, yob)
+    where (!mybw, !yobw) = behind (behindW `unsafeAt`) myrooks yorooks (pass .&. wpawns)
+          (!mybb, !yobb) = behind (behindB `unsafeAt`) myrooks yorooks (pass .&. bpawns)
+          !myb = mybw + mybb
+          !yob = yobw + yobb
+
+{-# INLINE behind #-}
+behind :: (Square -> BBoard) -> BBoard -> BBoard -> BBoard -> (Int, Int)
+behind f !myrooks !yorooks !pwns = foldr g (0, 0) $ map f $ bbToSquares pwns
+    where g bb (m, y) = (incIf myrooks bb m, incIf yorooks bb y)
+          incIf ro beh s | ro .&. beh /= 0 = s + 1
+                         | otherwise       = s
+
+behindW, behindB :: UArray Square BBoard
+behindW = array (0, 63) [ (i, shadowDown (bit i)) | i <- [0..63]]
+behindB = array (0, 63) [ (i, shadowUp   (bit i)) | i <- [0..63]]
 
 ------ Mobility ------
 data Mobility = Mobility	-- "safe" moves

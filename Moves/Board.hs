@@ -5,7 +5,6 @@ module Moves.Board (
     isCheck, inCheck,
     goPromo, hasMoves, moveIsCapture,
     kingMoved, castKingRookOk, castQueenRookOk,
-    -- genMoveCapt,
     genMoveCast, genMoveNCapt, genMoveTransf, genMoveFCheck, genMoveCaptWL,
     genMoveNCaptToCheck,
     updatePos, kingsOk, checkOk,
@@ -27,7 +26,6 @@ import Data.Ord (comparing)
 import Struct.Struct
 import Moves.Moves
 import Moves.BitBoard
--- import Moves.Muster
 import Moves.ShowMe
 import Eval.BasicEval
 import Hash.Zobrist
@@ -402,22 +400,6 @@ blackPassed !wp !bp = bpa
           !wp0 = wpL .|. wp .|. wpR
           !wp3 = shadowUp wp0	-- erase same and neighbours files
           !bpa = bp `less` (bp3 .|. wp3)
-
-{-# INLINE shadowDown #-}
-shadowDown :: BBoard -> BBoard
-shadowDown !wp = wp3
-    where !wp0 =          wp  `unsafeShiftR`  8
-          !wp1 = wp0 .|. (wp0 `unsafeShiftR`  8)
-          !wp2 = wp1 .|. (wp1 `unsafeShiftR` 16)
-          !wp3 = wp2 .|. (wp2 `unsafeShiftR` 32)
-
-{-# INLINE shadowUp #-}
-shadowUp :: BBoard -> BBoard
-shadowUp !wp = wp3
-    where !wp0 =          wp  `unsafeShiftL`  8
-          !wp1 = wp0 .|. (wp0 `unsafeShiftL`  8)
-          !wp2 = wp1 .|. (wp1 `unsafeShiftL` 16)
-          !wp3 = wp2 .|. (wp2 `unsafeShiftL` 32)
 
 updatePos :: MyPos -> MyPos
 updatePos = updatePosCheck . updatePosAttacs . updatePosOccup
