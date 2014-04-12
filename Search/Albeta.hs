@@ -1133,13 +1133,11 @@ isPruneFutil d a
     | otherwise = do
         tact <- lift tacticalPos
         if tact then return False else do
-            -- let !margin = futilMargins ! d
             v <- lift staticVal	-- E1
-            -- v <- lift materVal	-- can we do here direct static evaluation?
-            -- v <- pvQSearch a' b' 0	-- E2
+            q <- lift staticQNote
             let margin = futilMargins d
                 a' = pathScore a
-            if v + margin <= a'
+            if v + margin + q <= a'
                then return True
                else return False
 
@@ -1168,12 +1166,12 @@ pvQSearch !a !b c = do				   -- to avoid endless loops
            let edges = Alt $ es1 ++ es2
            if noMove edges
               then do
-                  lift $ finNode "MATE"
+                  lift $ finNode "MATE" 0
                   return $! trimax a b stp
               else if c >= qsMaxChess
                       then do
                           viztreeScore $ "endless check: " ++ show inEndlessCheck
-                          lift $ finNode "ENDL"
+                          lift $ finNode "ENDL" 0
                           return $! trimax a b inEndlessCheck
                       else do
                           -- for check extensions in case of very few moves (1 or 2):
@@ -1185,17 +1183,17 @@ pvQSearch !a !b c = do				   -- to avoid endless loops
                           pvQLoop b nc a edges
        else if qsBetaCut && stp >= b
                then do
-                   lift $ finNode "BETA"
+                   lift $ finNode "BETA" b
                    return b
                else if qsDeltaCut && stp + qsDelta < a
                       then do
-                          lift $ finNode "DELT"
+                          lift $ finNode "DELT" a
                           return a
                       else do
                           edges <- liftM Alt $ lift genTactMoves
                           if noMove edges
                              then do
-                                 lift $ finNode "NOCA"
+                                 lift $ finNode "NOCA" 0
                                  return $! trimax a b stp
                              else if stp > a
                                      then pvQLoop b c stp edges

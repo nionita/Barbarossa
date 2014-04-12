@@ -9,7 +9,7 @@ module Moves.Base (
     posToState, initPos, getPos, posNewSearch,
     doMove, undoMove, genMoves, genTactMoves,
     useHash,
-    staticVal, materVal, tacticalPos, isMoveLegal, isKillCand, okInSequence,
+    staticVal, staticQNote, materVal, tacticalPos, isMoveLegal, isKillCand, okInSequence,
     betaCut, doNullMove, ttRead, ttStore, curNodes, chooseMove, isTimeout, informCtx,
     mateScore,
     finNode,
@@ -19,7 +19,7 @@ module Moves.Base (
 
 -- import Data.Array.IArray
 -- import Debug.Trace
--- import Control.Exception (assert)
+import Control.Applicative ((<$>))
 import Data.Bits
 import Data.List
 import Control.Monad.State
@@ -205,9 +205,9 @@ doMove real m qs = do
         else if not cok
                 then return Illegal
                 else do
-                    let (!sts, feats) | real      = (0, [])
-                                      | otherwise = evalState (posEval p') (evalst s)
-                        !p = p' { staticScore = sts, staticFeats = feats }
+                    let (!sts, feats, sqs) | real      = (0, [], 0)
+                                           | otherwise = evalState (posEval p') (evalst s)
+                        !p = p' { staticScore = sts, staticFeats = feats, staticQs = sqs }
                     put s { stack = p : stack s }
                     remis <- if qs then return False else checkRemisRules p'
                     if remis
@@ -224,8 +224,8 @@ doNullMove = do
     s <- get
     let !p0 = if null (stack s) then error "doNullMove" else head $ stack s
         !p' = reverseMoving p0
-        (!sts, feats) = evalState (posEval p') (evalst s)
-        !p = p' { staticScore = sts, staticFeats = feats }
+        (!sts, feats, qs) = evalState (posEval p') (evalst s)
+        !p = p' { staticScore = sts, staticFeats = feats, staticQs = qs }
     put s { stack = p : stack s }
 
 checkRemisRules :: MyPos -> Game Bool
@@ -298,18 +298,24 @@ staticVal = do
                | otherwise    = stSc
     return stSc1
 
+-- Static quescence score: how tensioned is the position?
+{-# INLINE staticQNote #-}
+staticQNote :: Game Int
+staticQNote = staticQs <$> getPos
+
 {-# INLINE finNode #-}
-finNode :: String -> Game ()
-finNode str = do
+finNode :: String -> Int -> Game ()
+finNode str sc = do
     s <- get
     when (printEvalInt /= 0 && nodes (stats s) .&. printEvalInt == 0) $ do
         let (p:_) = stack s	-- we never saw an empty stack error until now
             fen = posToFen p
             mv = head . tail $ words fen
-        logMes $ str ++ " Fen: " ++ fen
+        logMes $ str ++ " " ++ show sc ++ " Fen: " ++ fen
         logMes $ "Eval info " ++ mv ++ ":"
                       ++ concatMap (\(n, v) -> " " ++ n ++ "=" ++ show v)
-                                   (("score", staticScore p) : weightPairs (staticFeats p))
+                                   (("score", staticScore p) : ("qnote", staticQs p)
+                                      : weightPairs (staticFeats p))
 
 materVal :: Game Int
 materVal = do

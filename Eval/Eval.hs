@@ -63,7 +63,7 @@ collectEvalParams (s, v) ep = lookApply s v ep [
           setEpPawnBonusScale  v' ep' = ep' { epPawnBonusScale  = round v' }
 
 class EvalItem a where
-    evalItem    :: EvalParams -> MyPos -> a -> IWeights
+    evalItem    :: EvalParams -> MyPos -> a -> (IWeights, Int)
     evalItemNDL :: a -> [(String, ((Double, Double), (Double, Double)))] -- Name, Defaults, Limits
 
 -- some handy functions for eval item types:
@@ -181,15 +181,15 @@ a <*> b = sum $ zipWith (*) a b
 matesc :: Int
 matesc = 20000 - 255	-- warning, this is also defined in Base.hs!!
 
-posEval :: MyPos -> State EvalState (Int, [Int])
+posEval :: MyPos -> State EvalState (Int, [Int], Int)
 posEval !p = do
     sti <- get
-    let (sce, feat) = evalDispatch p sti
+    let (sce, feat, qs) = evalDispatch p sti
         !scl = min matesc $ max (-matesc) sce
         !scc = if granCoarse > 0 then (scl + granCoarse2) .&. granCoarseM else scl
-    return (scc, feat)
+    return (scc, feat, qs)
 
-evalDispatch :: MyPos -> EvalState -> (Int, [Int])
+evalDispatch :: MyPos -> EvalState -> (Int, [Int], Int)
 evalDispatch p sti
     | pawns p == 0 = evalNoPawns p sti
     | pawns p .&. me p == 0 ||
@@ -198,16 +198,21 @@ evalDispatch p sti
       Just r <- pawnEndGame p = r
     | otherwise    = normalEval p sti
 
-itemEval :: EvalParams -> MyPos -> AnyEvalItem -> [Int]
+itemEval :: EvalParams -> MyPos -> AnyEvalItem -> ([Int], Int)
 itemEval ep p (EvIt a) = evalItem ep p a
 
-normalEval :: MyPos -> EvalState -> (Int, [Int])
-normalEval p !sti = (sc, feat)
-    where feat = concatMap (itemEval (esEParams sti) p) evalItems
+normalEval :: MyPos -> EvalState -> (Int, [Int], Int)
+normalEval p !sti = (sc, feat, qsc')
+    where (feat, qsc) = foldr (\ev (fl, qs) -> let (efl, eqs) = itemEval (esEParams sti) p ev
+                                                   !qss = eqs + qs
+                                               in  (efl ++ fl, qss)
+                              )
+                            ([], 0) evalItems
           scm  = feat <*> esIWeightsM sti
           sce  = feat <*> esIWeightsE sti
           gph  = gamePhase p
           !sc = ((scm + meMovingMid) * gph + (sce + meMovingEnd) * (256 - gph)) `unsafeShiftR` nm
+          !qsc' = qsc `unsafeShiftR` shift2Cp
           meMovingMid = 15 `shiftL` shift2Cp	-- advantage for moving in mid game
           meMovingEnd =  5 `shiftL` shift2Cp	-- advantage for moving in end game
           nm = shift2Cp + 8
@@ -220,11 +225,11 @@ gamePhase p = g
           ns = popCount1 $ knights p
           !g = qs * 39 + rs * 20 + (bs + ns) * 12	-- opening: 254, end: 0
 
-evalSideNoPawns :: MyPos -> EvalState -> (Int, [Int])
+evalSideNoPawns :: MyPos -> EvalState -> (Int, [Int], Int)
 evalSideNoPawns p sti
-    | npwin && insufficient = (0, zeroFeats)
-    | otherwise             = (nsc, feats)
-    where (nsc, feats) = normalEval p sti
+    | npwin && insufficient = (0, zeroFeats, 0)
+    | otherwise             = (nsc, feats, qs)
+    where (nsc, feats, qs) = normalEval p sti
           npside = if pawns p .&. me p == 0 then me p else yo p
           npwin = npside == me p && nsc > 0 || npside == yo p && nsc < 0
           insufficient = majorcnt == 0 && (minorcnt == 1 || minorcnt == 2 && bishopcnt == 0)
@@ -233,15 +238,15 @@ evalSideNoPawns p sti
           majorcnt  = popCount1 $ (queens p .|. rooks p) .&. npside
 
 -- These evaluation function distiguishes between some known finals with no pawns
-evalNoPawns :: MyPos -> EvalState -> (Int, [Int])
-evalNoPawns p sti = (sc, zeroFeats)
+evalNoPawns :: MyPos -> EvalState -> (Int, [Int], Int)
+evalNoPawns p sti = (sc, zeroFeats, 0)
     where !sc | onlykings   = 0
               | kmk || knnk = 0		-- one minor or two knights
               | kbbk        = mateKBBK p kaloneyo	-- 2 bishops
               | kbnk        = mateKBNK p kaloneyo	-- bishop + knight
               | kMxk        = mateKMajxK p kaloneyo	-- simple mate with at least one major
               -- | kqkx        = mateQRest p kaloneb	-- queen against minor or rook
-              | otherwise   = fst $ normalEval p sti
+              | otherwise   = let (s, _, _) = normalEval p sti in s
           kaloneme = me p `less` kings p == 0
           kaloneyo = yo p `less` kings p == 0
           onlykings = kaloneme && kaloneyo
@@ -328,9 +333,10 @@ instance EvalItem KingSafe where
 -- of pieces attacking king neighbour squares
 -- This function is almost optimised, it could perhaps be faster
 -- if we eliminate the lists
-kingSafe :: MyPos -> [Int]
-kingSafe !p = [ksafe]
+kingSafe :: MyPos -> ([Int], Int)
+kingSafe !p = ([ksafe], kquet)
     where !ksafe = mattacs - yattacs
+          !kquet = mattacs + (yattacs `unsafeShiftR` 1)
           !freem = popCount1 $ myKAttacs p .&. yoAttacs p `less` me p
           !freey = popCount1 $ yoKAttacs p .&. myAttacs p `less` yo p
           flag k a = if k .&. a /= 0 then 1 else 0
@@ -373,8 +379,8 @@ instance EvalItem Material where
     evalItem _ p _ = materDiff p
     evalItemNDL _  = [("materialDiff", ((8, 8), (8, 8)))]
 
-materDiff :: MyPos -> IWeights
-materDiff p = [md]
+materDiff :: MyPos -> (IWeights, Int)
+materDiff p = ([md], 0)
     where !md | moving p == White =   mater p
               | otherwise         = - mater p
 
@@ -383,11 +389,12 @@ data KingOpen = KingOpen
 
 instance EvalItem KingOpen where
     evalItem _ p _ = kingOpen p
-    evalItemNDL _  = [ ("kingOpenOwn", ((-8, 0), (-48, 0))), ("kingOpenAdv", ((8, 0), (0, 48)))] 
+    evalItemNDL _  = [ ("kingOpen", ((8, 0), (-10, 50))) ]
 
 -- Openness can be tought only with pawns (like we take) or all pieces
-kingOpen :: MyPos -> IWeights
-kingOpen p = [own, adv]
+kingOpen :: MyPos -> (IWeights, Int)
+-- kingOpen p = ([qod], qop)
+kingOpen p = ([qod], 0)
     where -- mopbishops = popCount1 $ bishops p .&. yo p
           moprooks   = popCount1 $ rooks p .&. yo p
           mopqueens  = popCount1 $ queens p .&. yo p
@@ -404,6 +411,8 @@ kingOpen p = [own, adv]
           comb !oR !oQ !wb !wr = let !v = oR * wr + 2 * oQ * (wb + wr) in v
           !own = comb moprooks mopqueens mwb mwr
           !adv = comb yoprooks yopqueens ywb ywr
+          !qod = own - adv
+          -- !qop = 8 * (own + adv)
           lastrs = 0xFF000000000000FF	-- approx: take out last row which cant be covered by pawns
 
 ------ King placement ------
@@ -420,9 +429,11 @@ instance EvalItem KingPlace where
 -- Depending on which pieces are on the board we have some preferences
 -- where the king should be placed. For example, in the opening and middle game it should
 -- be in some corner, in endgame it should be near some (passed) pawn(s)
-kingPlace :: EvalParams -> MyPos -> IWeights
-kingPlace ep p = [ kcd, kpd ]
+kingPlace :: EvalParams -> MyPos -> (IWeights, Int)
+-- kingPlace ep p = ([ kcd, kpd ], kqs)
+kingPlace ep p = ([ kcd, kpd ], 0)
     where !kcd = mpl - ypl
+          -- !kqs = 4 * (mpl + ypl)
           !kpd = 0	-- mpi - ypi
           !mks = kingSquare (kings p) $ me p
           !yks = kingSquare (kings p) $ yo p
@@ -548,8 +559,8 @@ instance EvalItem RookPlc where
                   --   ("rook7th",   ((400, 500), (0, 900))),
                   --   ("rookBhnd",  ((100, 800), (0, 900))) ]
 
-evalRookPlc :: MyPos -> [Int]
-evalRookPlc p = [ ho, op ]
+evalRookPlc :: MyPos -> ([Int], Int)
+evalRookPlc p = ([ ho, op ], 0)
     where !mRs = rooks p .&. me p
           !mPs = pawns p .&. me p
           (mho, mop) = foldr (perRook (pawns p) mPs) (0, 0) $ bbToSquares mRs
@@ -581,8 +592,9 @@ instance EvalItem Mobility where
                        ("mobilityQueen",  (( 0,  7), (-5,  50))) ]
 
 -- Here we do not calculate pawn mobility (which, calculated as attacs, is useless)
-mobDiff :: MyPos -> IWeights
-mobDiff p = [n, b, r, q]
+mobDiff :: MyPos -> (IWeights, Int)
+-- mobDiff p = ([n, b, r, q], qs)
+mobDiff p = ([n, b, r, q], 0)
     where !myN = popCount1 $ myNAttacs p `less` (me p .|. yoPAttacs p)
           !myB = popCount1 $ myBAttacs p `less` (me p .|. yoPAttacs p)
           !myR = popCount1 $ myRAttacs p `less` (me p .|. yoA1)
@@ -599,6 +611,7 @@ mobDiff p = [n, b, r, q]
           !b = myB - yoB
           !r = myR - yoR
           !q = myQ - yoQ
+          -- !qs = 50 * popCount1 (myAttacs p .&. yo p .|. yoAttacs p .&. me p)
 
 ------ Center control ------
 data Center = Center
@@ -608,8 +621,8 @@ instance EvalItem Center where
     evalItemNDL _  = [("centerAttacs", ((72, 72), (0, 100)))]
 
 -- This function is already optimised
-centerDiff :: MyPos -> IWeights
-centerDiff p = [wb]
+centerDiff :: MyPos -> (IWeights, Int)
+centerDiff p = ([wb], 0)
     where (w, b) = zoneAttacs p center
           !wb = w - b
           center = 0x0000003C3C000000
@@ -672,8 +685,8 @@ instance EvalItem LastLine where
     evalItemNDL _  = [("lastLinePenalty", ((24, 0), (0, 100)))]
 
 -- This function is already optimised
-lastline :: MyPos -> IWeights
-lastline p = [cdiff]
+lastline :: MyPos -> (IWeights, Int)
+lastline p = ([cdiff], 0)
     where !whl = popCount1 $ (me p `less` rok) .&. lali
           !bll = popCount1 $ (yo p `less` rok) .&. lali
           !cdiff = bll - whl
@@ -689,8 +702,8 @@ instance EvalItem Redundance where
                       ("redundanceRook",   ((  0, -104), (-150,   0))) ]
 
 -- This function is optimised
-evalRedundance :: MyPos -> [Int]
-evalRedundance p = [bp, rr]
+evalRedundance :: MyPos -> ([Int], Int)
+evalRedundance p = ([bp, rr], 0)
     where !wbl = bishops p .&. me p .&. lightSquares
           !wbd = bishops p .&. me p .&. darkSquares
           !bbl = bishops p .&. yo p .&. lightSquares
@@ -712,8 +725,8 @@ instance EvalItem NRCorrection where
     evalItemNDL _  = [("nrCorrection", ((0, 0), (0, 8)))]
 
 -- This function seems to be already optimised
-evalNRCorrection :: MyPos -> [Int]
-evalNRCorrection p = [md]
+evalNRCorrection :: MyPos -> ([Int], Int)
+evalNRCorrection p = ([md], 0)
     where !wpc = popCount1 (pawns p .&. me p) - 5
           !bpc = popCount1 (pawns p .&. yo p) - 5
           !wnp = popCount1 (knights p .&. me p) * wpc * 6	-- 1/16 for each pawn over 5
@@ -730,8 +743,8 @@ instance EvalItem RookPawn where
     evalItemNDL _  = [("rookPawn", ((-64, -64), (-120, 0))) ]
 
 -- This function is already optimised
-evalRookPawn :: MyPos -> [Int]
-evalRookPawn p = [rps]
+evalRookPawn :: MyPos -> ([Int], Int)
+evalRookPawn p = ([rps], 0)
     where !wrp = popCount1 $ pawns p .&. me p .&. rookFiles
           !brp = popCount1 $ pawns p .&. yo p .&. rookFiles
           !rps = wrp - brp
@@ -748,8 +761,8 @@ instance EvalItem PassPawns where
                       ("passPawn7",     ((985, 1970), ( 900, 2300)))
                      ]
  
-passPawns :: MyPos -> IWeights
-passPawns p = [dfp, dfp4, dfp5, dfp6, dfp7]
+passPawns :: MyPos -> (IWeights, Int)
+passPawns p = ([dfp, dfp4, dfp5, dfp6, dfp7], qs)
     where !mfpbb = passed p .&. me p
           !yfpbb = passed p .&. yo p
           !mfp  = popCount1   mfpbb
@@ -770,6 +783,7 @@ passPawns p = [dfp, dfp4, dfp5, dfp6, dfp7]
           (!row4m, !row5m, !row6m, !row7m, !row4y, !row5y, !row6y, !row7y)
               | moving p == White = (row4, row5, row6, row7, row5, row4, row3, row2)
               | otherwise         = (row5, row4, row3, row2, row4, row5, row6, row7)
+          !qs = 100 * (8 * mfp7 + 4 * mfp6 + 2 * yfp7 + yfp6)
 
 -- Pawn end games are treated specially
 -- We consider escaped passed pawns in 2 situations:
@@ -782,12 +796,12 @@ passPawns p = [dfp, dfp4, dfp5, dfp6, dfp7]
 -- 2. What about the rest of pawns? Here we make a trick: we shift the passed
 -- pawns virtually one row back, which gives less points for the possibly remaining
 -- passed pawns - now with queens)
-pawnEndGame :: MyPos -> Maybe (Int, [Int])
+pawnEndGame :: MyPos -> Maybe (Int, [Int], Int)
 pawnEndGame p
     -- | null mescds && null yescds             = Nothing
-    | not (null mescds) && not (null yescds) = Just (dpr, [dpr])
-    | not (null mescds)                      = Just (myrace, [myrace])
-    |                      not (null yescds) = Just (yorace, [yorace])
+    | not (null mescds) && not (null yescds) = Just (dpr, [dpr], 0)
+    | not (null mescds)                      = Just (myrace, [myrace], 0)
+    |                      not (null yescds) = Just (yorace, [yorace], 0)
     | otherwise                              = Nothing
     -- | -- here we will consider what is with 2 passed pawns which are far enough from each other
     where !mfpbb = passed p .&. me p
