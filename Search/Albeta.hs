@@ -960,7 +960,22 @@ pvInnerLoopExtenZ b d spec !exd nst = do
     let onemB = negatePath $ b -: scoreGrain
         negb  = negatePath b
     viztreeABD (pathScore negb) (pathScore onemB) d'
-    fmap pnextlev (pvZeroW nst0 onemB d' nulMoves)
+    -- fmap pnextlev (pvZeroW nst0 onemB d' nulMoves)
+--------
+    !s1 <- fmap pnextlev (pvZeroW nst onemB d' nulMoves)
+    abrt <- gets abort
+    if abrt || s1 < b || d' >= d1
+       then return s1	-- aborted, failed low (as expected), or not reduced
+       else do
+         -- was reduced and didn't fail low: re-search with full depth
+         pindent $ "Research! (" ++ show s1 ++ ")"
+         viztreeReSe
+         let nst1 = if nullSeq (pathMoves s1)
+                       then nst
+                       else nst { pvcont = pathMoves s1 }
+         viztreeABD (pathScore negb) (pathScore onemB) d1
+         fmap pnextlev (pvZeroW nst1 onemB d1 nulMoves)
+--------
 
 checkFailOrPVLoop :: SStats -> Path -> Int -> Move -> Path
                   -> NodeState -> Search (Bool, NodeState)
