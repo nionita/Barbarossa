@@ -1062,10 +1062,12 @@ genAndSort nst a b d = do
 reduceLmr :: Int -> Bool -> Bool -> Int -> Int -> Int
 reduceLmr !d nearmatea !spec !exd !w
     | not lmrActive || spec || d < lmrMinDRed
-         || exd > 0 || w <= lmrUnredMvs || nearmatea = d
-    | otherwise = d - 2
-    where lmrMinDRed  = 3 :: Int		-- minimum reduced depth
-          lmrUnredMvs = 5 :: Int		-- unreduced moves
+         || exd > 0 || w <= lmrUnred1 || nearmatea = d
+    | w <= lmrUnred2 = d - 1
+    | otherwise      = d - 2
+    where lmrMinDRed =  3 :: Int		-- minimum reduced depth
+          lmrUnred1  =  4 :: Int		-- unreduced moves
+          lmrUnred2  = 16 :: Int		-- unreduced moves
 
 {-# INLINE reduceDepth #-}
 reduceDepth :: Int -> Int -> Bool -> Int
