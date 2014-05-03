@@ -477,50 +477,34 @@ pvInnerRootExten b d spec !exd nst =  do
     let !inPv = nxtnt nst == PVNode
         !a  = cursc nst
         !d1 = d + exd' - 1	-- this is the normal (unreduced) depth for the next search
-    d' <- reduceLmr d1 inPv False spec exd (movno nst) True
+    -- d' <- reduceLmr d1 inPv False spec exd (movno nst) True
     pindent $ "depth " ++ show d ++ " nt " ++ show (nxtnt nst)
               ++ " exd' = " ++ show exd'
-              ++ " mvn " ++ show (movno nst) ++ " next depth " ++ show d'
+              ++ " mvn " ++ show (movno nst) ++ " next depth " ++ show d1
     let nega = negatePath a
         negb = negatePath b
     if inPv	-- search of principal variation
        then do
-           viztreeABD (pathScore negb) (pathScore nega) d'
-           fmap pnextlev (pvSearch nst negb nega d')
+           viztreeABD (pathScore negb) (pathScore nega) d1
+           fmap pnextlev (pvSearch nst negb nega d1)
        else do
            let aGrain = nega -: scoreGrain
-           -- no futility pruning for root moves!
+           -- no futility pruning & no LMR for root moves!
            -- Here we expect to fail low
-           viztreeABD (pathScore aGrain) (pathScore nega) d'
-           !s1 <- fmap pnextlev (pvZeroW nst nega d' nulMoves)
+           viztreeABD (pathScore aGrain) (pathScore nega) d1
+           !s1 <- fmap pnextlev (pvZeroW nst nega d1 nulMoves)
            abrt <- gets abort
            if abrt || s1 <= a -- we failed low as expected
               then return s1
               else  do
                  -- Here we didn't fail low and need re-search
-                 -- Two re-searches must be considered: a: full depth, b: full window
+                 -- As we don't reduce (beeing in a PV node), re-search is full window
                  pindent $ "Research! (" ++ show s1 ++ ")"
                  viztreeReSe
-                 let pvc = if nullSeq (pathMoves s1) then pvcont nst else pathMoves s1
-                 if d' < d1	-- did we search with reduced depth?
-                    then do	-- yes: re-search with normal depth
-                      viztreeABD (pathScore aGrain) (pathScore nega) d1
-                      !s2 <- fmap pnextlev (pvZeroW nst { pvcont = pvc } nega d1 nulMoves)
-                      abrt1 <- gets abort
-                      if abrt1 || s2 <= a -- now we failed low as expected
-                         then return s2
-                         else do
-                             -- we must search full window
-                             viztreeReSe
-                             viztreeABD (pathScore negb) (pathScore nega) d1
-                             let pvc' = if nullSeq (pathMoves s2) then pvc else pathMoves s2
-                                 nst' = nst { nxtnt = PVNode, pvcont = pvc' }
-                             fmap pnextlev (pvSearch nst' negb nega d1)
-                    else do
-                        -- Depth was not reduced, so re-search full window
-                        viztreeABD (pathScore negb) (pathScore nega) d1
-                        let nst' = nst { nxtnt = PVNode, pvcont = pvc }
-                        fmap pnextlev (pvSearch nst' negb nega d1)
+                 viztreeABD (pathScore negb) (pathScore nega) d1
+                 let pvc  = if nullSeq (pathMoves s1) then pvcont nst else pathMoves s1
+                     nst' = nst { nxtnt = PVNode, pvcont = pvc }
+                 fmap pnextlev (pvSearch nst' negb nega d1)
 
 checkFailOrPVRoot :: SStats -> Path -> Int -> Move -> Path
                   -> NodeState -> Search (Bool, NodeState)
@@ -899,52 +883,35 @@ pvInnerLoopExten b d spec !exd nst = do
     let !inPv = nxtnt nst == PVNode
         a = cursc nst
         !d1 = d + exd' - 1	-- this is the normal (unreduced) depth for next search
-    d' <- reduceLmr d1 inPv (pnearmate a) spec exd (movno nst) True
+    -- d' <- reduceLmr d1 inPv (pnearmate a) spec exd (movno nst) True
     pindent $ "depth " ++ show d ++ " nt " ++ show (nxtnt nst)
-              ++ " exd' = " ++ show exd' ++ " mvn " ++ show (movno nst) ++ " next depth " ++ show d'
+           ++ " exd' = " ++ show exd' ++ " mvn " ++ show (movno nst) ++ " next depth " ++ show d1
     let nega = negatePath a
         negb = negatePath b
     if inPv
        then do
-          viztreeABD (pathScore negb) (pathScore nega) d'
-          fmap pnextlev (pvSearch nst negb nega d')
+          viztreeABD (pathScore negb) (pathScore nega) d1
+          fmap pnextlev (pvSearch nst negb nega d1)
        else do
           let aGrain = nega -: scoreGrain
           -- Here we must be in a Cut node (will fail low)
           -- and we should have: crtnt = PVNode, nxtnt = CutNode
-          viztreeABD (pathScore aGrain) (pathScore nega) d'
-          !s1 <- fmap pnextlev (pvZeroW nst nega d' nulMoves)
+          viztreeABD (pathScore aGrain) (pathScore nega) d1
+          !s1 <- fmap pnextlev (pvZeroW nst nega d1 nulMoves)
           abrt <- gets abort
           if abrt || s1 <= a
              then return s1	-- failed low (as expected) or aborted
              else do
-               -- we didn't fail low and need re-search, 2 kinds: full depth, full window
+               -- we didn't fail low and need re-search: full window
                pindent $ "Research! (" ++ show s1 ++ ")"
                viztreeReSe
+               viztreeABD (pathScore negb) (pathScore nega) d1
                let nst1 = if nullSeq (pathMoves s1)
                              then nst
                              else nst { pvcont = pathMoves s1 }
-               if d' < d1	-- did we search with reduced depth?
-                  then do	-- yes: re-search with with normal depth
-                      viztreeABD (pathScore aGrain) (pathScore nega) d1
-                      !s2 <- fmap pnextlev (pvZeroW nst1 nega d1 nulMoves)
-                      abrt' <- gets abort
-                      if abrt' || s2 <= a
-                         then return s2	-- failed low (as expected) or aborted
-                         else do
-                             viztreeReSe
-                             viztreeABD (pathScore negb) (pathScore nega) d1
-                             let nst2 = nst1 { nxtnt = PVNode, pvcont = pvc }
-                                 pvc  = if nullSeq (pathMoves s2)
-                                           then pvcont nst1
-                                           else pathMoves s2
-                             fmap pnextlev (pvSearch nst2 negb nega d1)
-                  else do
-                     -- was not reduced, try full window
-                     viztreeABD (pathScore negb) (pathScore nega) d1
-                     let nst2 = nst { nxtnt = PVNode, pvcont = pvc }
-                         pvc  = pvcont nst1
-                     fmap pnextlev (pvSearch nst2 negb nega d1)
+                   pvc  = pvcont nst1
+                   nst2 = nst { nxtnt = PVNode, pvcont = pvc }
+               fmap pnextlev (pvSearch nst2 negb nega d1)
 
 -- For zero window
 pvInnerLoopExtenZ :: Path -> Int -> Bool -> Int -> NodeState
@@ -954,7 +921,7 @@ pvInnerLoopExtenZ b d spec !exd nst = do
     exd' <- reserveExtension (usedext old) exd
     -- late move reduction
     let !d1 = d + exd' - 1	-- this is the normal (unreduced) depth for next search
-    d' <- reduceLmr d1 False (pnearmate b) spec exd (movno nst) False
+        !d' = reduceLmr d1 (pnearmate b) spec exd (movno nst)
     pindent $ "depth " ++ show d ++ " nt " ++ show (nxtnt nst)
               ++ " exd' = " ++ show exd' ++ " mvn " ++ show (movno nst) ++ " next depth " ++ show d'
     let onemB = negatePath $ b -: scoreGrain
@@ -1092,13 +1059,11 @@ genAndSort nst a b d = do
 -- Late Move Reduction
 -- This part (including lmrIndex) seems well optimized
 {-# INLINE reduceLmr #-}
-reduceLmr :: Int -> Bool -> Bool -> Bool -> Int -> Int -> Bool -> Search Int
-reduceLmr d inPv nearmatea spec exd w pv
-    = if not lmrActive || pv || inPv || d < lmrMinDRed || spec || exd > 0 || nearmatea
-         then return d
-         else do
-             !tact <- lift tacticalPos
-             return $! if tact || w <= lmrUnredMvs then d else d - 2
+reduceLmr :: Int -> Bool -> Bool -> Int -> Int -> Int
+reduceLmr !d nearmatea !spec !exd !w
+    | not lmrActive || spec || d < lmrMinDRed
+         || exd > 0 || w <= lmrUnredMvs || nearmatea = d
+    | otherwise = d - 2
     where lmrMinDRed  = 3 :: Int		-- minimum reduced depth
           lmrUnredMvs = 5 :: Int		-- unreduced moves
 

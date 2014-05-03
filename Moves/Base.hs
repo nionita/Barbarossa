@@ -376,9 +376,11 @@ betaCut good _ absdp m = do	-- dummy: depth
         Empty -> liftIO $ toHist (hist s) good (fromSquare m) (toSquare m) absdp
         _     -> return ()
 
+-- Will not be pruned nor LMR reduced
 moveIsSpecial :: MyPos -> Move -> Bool
 moveIsSpecial p m
     | moveIsTransf m || moveIsEnPas m = True
+    | check p /= 0                    = True
     | otherwise                       = moveIsCapture p m
 
 {--
