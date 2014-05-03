@@ -1094,13 +1094,13 @@ genAndSort nst a b d = do
 {-# INLINE reduceLmr #-}
 reduceLmr :: Int -> Bool -> Bool -> Bool -> Int -> Int -> Bool -> Search Int
 reduceLmr d inPv nearmatea spec exd w pv
-    = if not lmrActive || inPv || d < lmrMinDRed || spec || exd > 0 || nearmatea
+    = if not lmrActive || pv || inPv || d < lmrMinDRed || spec || exd > 0 || nearmatea
          then return d
          else do
              !tact <- lift tacticalPos
-             let !rd = reduceDepth d w pv
-             return $! if tact then d else rd
-    where lmrMinDRed = 2 :: Int		-- minimum reduced depth
+             return $! if tact || w <= lmrUnredMvs then d else d - 2
+    where lmrMinDRed  = 3 :: Int		-- minimum reduced depth
+          lmrUnredMvs = 5 :: Int		-- unreduced moves
 
 {-# INLINE reduceDepth #-}
 reduceDepth :: Int -> Int -> Bool -> Int
