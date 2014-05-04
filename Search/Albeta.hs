@@ -65,8 +65,9 @@ negHistMNo  = 1		-- how many moves get negative history
 useTTinPv   = False	-- retrieve from TT in PV?
 
 -- Parameters for late move reduction:
-lmrActive :: Bool
+lmrActive, lmrDebug :: Bool
 lmrActive   = True
+lmrDebug    = False
 
 lmrMaxDepth, lmrMaxWidth :: Int
 lmrMaxDepth = 15
@@ -922,42 +923,44 @@ pvInnerLoopExtenZ b d spec !exd nst redu = do
     exd' <- reserveExtension (usedext old) exd
     -- late move reduction
     let !d1 = d + exd' - 1	-- this is the normal (unreduced) depth for next search
-        !d' = if redu then reduceLmr d1 (pnearmate b) spec exd (movno nst) else d1
+        -- !d' = if redu && crtnt nst == AllNode
+        !d' = if redu
+                 then reduceLmr d1 (pnearmate b) spec exd (movno nst)
+                 else d1
     pindent $ "depth " ++ show d ++ " nt " ++ show (nxtnt nst)
               ++ " exd' = " ++ show exd' ++ " mvn " ++ show (movno nst) ++ " next depth " ++ show d'
     let onemB = negatePath $ b -: scoreGrain
         negb  = negatePath b
     viztreeABD (pathScore negb) (pathScore onemB) d'
-    -- fmap pnextlev (pvZeroW nst0 onemB d' nulMoves)
---------
-    if redu && d' < d1
-       then do
+    if not redu || d' == d1
+       then fmap pnextlev (pvZeroW nst onemB d' nulMoves redu)
+       else do
            incRedu
            nds0 <- gets $ sNodes . stats
            !sr <- fmap pnextlev (pvZeroW nst onemB d' nulMoves True)
            nds1 <- gets $ sNodes . stats
            let nodre = nds1 - nds0
-           !s1 <- fmap pnextlev (pvZeroW nst onemB d1 nulMoves False)
+           !s1 <- if lmrDebug then fmap pnextlev (pvZeroW nst onemB d1 nulMoves False) else return sr
            nds2 <- gets $ sNodes . stats
            let nodnr = nds2 - nds1
            incReBe (nodnr - nodre)	-- so many nodes we spare by reducing
-           when (sr < b && s1 >= b) incReMi	-- LMR missed the point
+           when (sr < b && s1 >= b) $ do
+               incReMi	-- LMR missed the point
+               lift $ finNode "LMRM" True
            if sr < b	-- || d' >= d1
-              then return s1	-- aborted, failed low (as expected), or not reduced
+              then return sr	-- failed low (as expected), or not reduced
               else do
                 -- was reduced and didn't fail low: re-search with full depth
-                pindent $ "Research! (" ++ show s1 ++ ")"
+                pindent $ "Research! (" ++ show sr ++ ")"
                 viztreeReSe
                 sts <- get
                 let nds1 = sNodes $ stats sts
                 incReSe nodre	-- so many nodes we wasted by reducing this time
-                let nst1 = if nullSeq (pathMoves s1)
+                let nst1 = if nullSeq (pathMoves sr)
                               then nst
-                              else nst { pvcont = pathMoves s1 }
+                              else nst { pvcont = pathMoves sr }
                 viztreeABD (pathScore negb) (pathScore onemB) d1
                 fmap pnextlev (pvZeroW nst1 onemB d1 nulMoves True)
-       else fmap pnextlev (pvZeroW nst onemB d' nulMoves redu)
---------
 
 checkFailOrPVLoop :: SStats -> Path -> Int -> Move -> Path
                   -> NodeState -> Search (Bool, NodeState)
@@ -1066,7 +1069,8 @@ genAndSort nst a b d = do
                                Just e' -> return [e']
                                Nothing -> return []
     adp <- gets absdp
-    esp <- lift $ genMoves d adp (crtnt nst /= AllNode)
+    -- esp <- lift $ genMoves d adp (crtnt nst /= AllNode)
+    esp <- lift $ genMoves d adp True
     kl  <- lift $ filterM isMoveLegal $ killerToList (killer nst)
     let es = bestFirst path kl esp
     return $ Alt es
@@ -1166,12 +1170,12 @@ pvQSearch !a !b c = do				   -- to avoid endless loops
            let edges = Alt $ es1 ++ es2
            if noMove edges
               then do
-                  lift $ finNode "MATE"
+                  lift $ finNode "MATE" False
                   return $! trimax a b stp
               else if c >= qsMaxChess
                       then do
                           viztreeScore $ "endless check: " ++ show inEndlessCheck
-                          lift $ finNode "ENDL"
+                          lift $ finNode "ENDL" False
                           return $! trimax a b inEndlessCheck
                       else do
                           -- for check extensions in case of very few moves (1 or 2):
@@ -1183,17 +1187,17 @@ pvQSearch !a !b c = do				   -- to avoid endless loops
                           pvQLoop b nc a edges
        else if qsBetaCut && stp >= b
                then do
-                   lift $ finNode "BETA"
+                   lift $ finNode "BETA" False
                    return b
                else if qsDeltaCut && stp + qsDelta < a
                       then do
-                          lift $ finNode "DELT"
+                          lift $ finNode "DELT" False
                           return a
                       else do
                           edges <- liftM Alt $ lift genTactMoves
                           if noMove edges
                              then do
-                                 lift $ finNode "NOCA"
+                                 lift $ finNode "NOCA" False
                                  return $! trimax a b stp
                              else if stp > a
                                      then pvQLoop b c stp edges
@@ -1302,9 +1306,12 @@ reportStats = do
                   ++ ", retrieve: " ++ show (sRetr xst) ++ ", succes: " ++ show (sRSuc xst)
        let r = fromIntegral (sBMNo xst) / fromIntegral (sBeta xst) :: Double
        logmes $ "Beta cuts: " ++ show (sBeta xst) ++ ", beta factor: " ++ show r
-       logmes $ "Reduced: " ++ show (sRedu xst) ++ ", Re-benefits: " ++ show (sReBe xst)
-             ++ ", ReSearchs: " ++ show (sReSe xst) ++ ", Re-waste: " ++ show (sReNo xst)
-             ++ ", missed: " ++ show (sReMi xst) ++ ", net benefit: " ++ show (sReBe xst - sReNo xst)
+       if lmrDebug
+          then logmes $ "Reduced: " ++ show (sRedu xst) ++ ", Re-benefits: " ++ show (sReBe xst)
+                 ++ ", ReSearchs: " ++ show (sReSe xst) ++ ", Re-waste: " ++ show (sReNo xst)
+                 ++ ", missed: " ++ show (sReMi xst) ++ ", net benefit: "
+                 ++ show (sReBe xst - sReNo xst)
+          else logmes $ "Reduced: " ++ show (sRedu xst) ++ ", ReSearchs: " ++ show (sReSe xst)
 
 -- Functions to keep statistics
 modStat :: (SStats -> SStats) -> Search ()

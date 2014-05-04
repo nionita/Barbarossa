@@ -299,10 +299,10 @@ staticVal = do
     return stSc1
 
 {-# INLINE finNode #-}
-finNode :: String -> Game ()
-finNode str = do
+finNode :: String -> Bool -> Game ()
+finNode str force = do
     s <- get
-    when (printEvalInt /= 0 && nodes (stats s) .&. printEvalInt == 0) $ do
+    when (printEvalInt /= 0 && (force || nodes (stats s) .&. printEvalInt == 0)) $ do
         let (p:_) = stack s	-- we never saw an empty stack error until now
             fen = posToFen p
             mv = head . tail $ words fen
