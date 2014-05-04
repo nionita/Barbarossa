@@ -195,7 +195,7 @@ data NodeState
       } deriving Show
 
 data SStats = SStats {
-        sNodes, sNodesQS, sRetr, sRSuc, sBeta, sBMNo :: !Int
+        sNodes, sNodesQS, sRetr, sRSuc, sBeta, sBMNo, sRedu, sReMi, sReBe, sReSe, sReNo :: !Int
     } deriving Show
 
 -- The node type is the expected node type of the new (child) node, which
@@ -303,7 +303,8 @@ nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore "Zero" 0,
              movno = 1, killer = NoKiller, pvsl = [], pvcont = emptySeq }
 
 stt0 :: SStats
-stt0 = SStats { sNodes = 0, sNodesQS = 0, sRetr = 0, sRSuc = 0, sBeta = 0, sBMNo = 0 }
+stt0 = SStats { sNodes = 0, sNodesQS = 0, sRetr = 0, sRSuc = 0,
+                sBeta = 0, sBMNo = 0, sRedu = 0, sReMi = 0, sReBe = 0, sReSe = 0, sReNo = 0 }
 
 pvro00 :: PVReadOnly
 pvro00 = PVReadOnly { draft = 0, albest = False, timeli = False, abmili = 0 }
@@ -492,7 +493,7 @@ pvInnerRootExten b d spec !exd nst =  do
            -- no futility pruning & no LMR for root moves!
            -- Here we expect to fail low
            viztreeABD (pathScore aGrain) (pathScore nega) d1
-           !s1 <- fmap pnextlev (pvZeroW nst nega d1 nulMoves)
+           !s1 <- fmap pnextlev (pvZeroW nst nega d1 nulMoves True)
            abrt <- gets abort
            if abrt || s1 <= a -- we failed low as expected
               then return s1
@@ -672,8 +673,8 @@ pvSearch nst !a !b !d = do
                                return $! trimaxPath a b s'	-- shouldn't we ttStore this?
 
 -- PV Zero Window
-pvZeroW :: NodeState -> Path -> Int -> Int -> Search Path
-pvZeroW !nst !b !d !lastnul | d <= 0 = do
+pvZeroW :: NodeState -> Path -> Int -> Int -> Bool -> Search Path
+pvZeroW !nst !b !d !lastnul redu | d <= 0 = do
     -- Now that we moved the ttRead call under pvZeroW we are not prepared
     -- to handle correctly the case minToRetr = 0
     (v, ns) <- mustQSearch (pathScore bGrain) (pathScore b)
@@ -683,7 +684,7 @@ pvZeroW !nst !b !d !lastnul | d <= 0 = do
     pindent $ "<> " ++ show esc
     return esc
     where bGrain = b -: scoreGrain
-pvZeroW !nst !b !d !lastnull = do
+pvZeroW !nst !b !d !lastnull redu = do
     pindent $ ":> " ++ show b
     -- Check if we have it in TT
     (hdeep, tp, hsc, e', nodes')
@@ -726,7 +727,7 @@ pvZeroW !nst !b !d !lastnull = do
                      -- Loop thru the moves
                      let !nsti = nst0 { crtnt = nxtnt nst', nxtnt = deepNodeType (nxtnt nst'),
                                         cursc = bGrain, pvcont = tailSeq (pvcont nst') }
-                     nstf <- pvZLoop b d prune nsti edges
+                     nstf <- pvZLoop b d prune redu nsti edges
                      let s = cursc nstf
                      -- Here we expect bGrain <= s < b -- this must be checked
                      pindent $ "<: " ++ show s
@@ -764,7 +765,7 @@ nullEdgeFailsHigh nst b d lastnull
                       nn <- newNode
                       viztreeDown0 nn
                       viztreeABD (pathScore negnmb) (pathScore negnma) d1
-                      val <- fmap pnextlev $ pvZeroW nst { pvcont = emptySeq } negnma d1 lastnull1
+                      val <- fmap pnextlev $ pvZeroW nst { pvcont = emptySeq } negnma d1 lastnull1 True
                       lift undoMove	-- undo null move
                       viztreeUp0 nn (pathScore val)
                       return $! val >= nmb
@@ -783,11 +784,11 @@ pvSLoop b d p = go
               if cut then return s'
                      else go s' $ Alt es
 
-pvZLoop :: Path -> Int -> Bool -> NodeState -> Alt Move -> Search NodeState
-pvZLoop b d p = go
+pvZLoop :: Path -> Int -> Bool -> Bool -> NodeState -> Alt Move -> Search NodeState
+pvZLoop b d p redu = go
     where go !s (Alt []) = return s
           go !s (Alt (e:es)) = do
-              (!cut, !s') <- pvInnerLoopZ b d p s e
+              (!cut, !s') <- pvInnerLoopZ b d p s e redu
               if cut then return s'
                      else go s' $ Alt es
 
@@ -836,8 +837,9 @@ pvInnerLoopZ :: Path 	-- current beta
             -> Bool	-- prune?
             -> NodeState 	-- node status
             -> Move	-- move to search
+            -> Bool	-- reduce in LMR?
             -> Search (Bool, NodeState)
-pvInnerLoopZ b d prune nst e = do
+pvInnerLoopZ b d prune nst e redu = do
     abrt <- timeToAbort
     if abrt
        then return (True, nst)
@@ -854,7 +856,7 @@ pvInnerLoopZ b d prune nst e = do
                          Exten exd' spc -> do
                            if prune && exd' == 0 && not spc -- don't prune special or extended
                               then return $! onlyScore $! cursc nst	-- prune, return a
-                              else pvInnerLoopExtenZ b d spc exd' nst
+                              else pvInnerLoopExtenZ b d spc exd' nst redu
                          Final sco -> do
                              viztreeScore $ "Final: " ++ show sco
                              return $! pathFromScore "Final" (-sco)
@@ -897,7 +899,7 @@ pvInnerLoopExten b d spec !exd nst = do
           -- Here we must be in a Cut node (will fail low)
           -- and we should have: crtnt = PVNode, nxtnt = CutNode
           viztreeABD (pathScore aGrain) (pathScore nega) d1
-          !s1 <- fmap pnextlev (pvZeroW nst nega d1 nulMoves)
+          !s1 <- fmap pnextlev (pvZeroW nst nega d1 nulMoves True)
           abrt <- gets abort
           if abrt || s1 <= a
              then return s1	-- failed low (as expected) or aborted
@@ -914,14 +916,13 @@ pvInnerLoopExten b d spec !exd nst = do
                fmap pnextlev (pvSearch nst2 negb nega d1)
 
 -- For zero window
-pvInnerLoopExtenZ :: Path -> Int -> Bool -> Int -> NodeState
-                 -> Search Path
-pvInnerLoopExtenZ b d spec !exd nst = do
-    old <- get
+pvInnerLoopExtenZ :: Path -> Int -> Bool -> Int -> NodeState -> Bool -> Search Path
+pvInnerLoopExtenZ b d spec !exd nst redu = do
+    old  <- get
     exd' <- reserveExtension (usedext old) exd
     -- late move reduction
     let !d1 = d + exd' - 1	-- this is the normal (unreduced) depth for next search
-        !d' = reduceLmr d1 (pnearmate b) spec exd (movno nst)
+        !d' = if redu then reduceLmr d1 (pnearmate b) spec exd (movno nst) else d1
     pindent $ "depth " ++ show d ++ " nt " ++ show (nxtnt nst)
               ++ " exd' = " ++ show exd' ++ " mvn " ++ show (movno nst) ++ " next depth " ++ show d'
     let onemB = negatePath $ b -: scoreGrain
@@ -929,19 +930,33 @@ pvInnerLoopExtenZ b d spec !exd nst = do
     viztreeABD (pathScore negb) (pathScore onemB) d'
     -- fmap pnextlev (pvZeroW nst0 onemB d' nulMoves)
 --------
-    !s1 <- fmap pnextlev (pvZeroW nst onemB d' nulMoves)
-    abrt <- gets abort
-    if abrt || s1 < b || d' >= d1
-       then return s1	-- aborted, failed low (as expected), or not reduced
-       else do
-         -- was reduced and didn't fail low: re-search with full depth
-         pindent $ "Research! (" ++ show s1 ++ ")"
-         viztreeReSe
-         let nst1 = if nullSeq (pathMoves s1)
-                       then nst
-                       else nst { pvcont = pathMoves s1 }
-         viztreeABD (pathScore negb) (pathScore onemB) d1
-         fmap pnextlev (pvZeroW nst1 onemB d1 nulMoves)
+    if redu && d' < d1
+       then do
+           incRedu
+           nds0 <- gets $ sNodes . stats
+           !sr <- fmap pnextlev (pvZeroW nst onemB d' nulMoves True)
+           nds1 <- gets $ sNodes . stats
+           let nodre = nds1 - nds0
+           !s1 <- fmap pnextlev (pvZeroW nst onemB d1 nulMoves False)
+           nds2 <- gets $ sNodes . stats
+           let nodnr = nds2 - nds1
+           incReBe (nodnr - nodre)	-- so many nodes we spare by reducing
+           when (sr < b && s1 >= b) incReMi	-- LMR missed the point
+           if sr < b	-- || d' >= d1
+              then return s1	-- aborted, failed low (as expected), or not reduced
+              else do
+                -- was reduced and didn't fail low: re-search with full depth
+                pindent $ "Research! (" ++ show s1 ++ ")"
+                viztreeReSe
+                sts <- get
+                let nds1 = sNodes $ stats sts
+                incReSe nodre	-- so many nodes we wasted by reducing this time
+                let nst1 = if nullSeq (pathMoves s1)
+                              then nst
+                              else nst { pvcont = pathMoves s1 }
+                viztreeABD (pathScore negb) (pathScore onemB) d1
+                fmap pnextlev (pvZeroW nst1 onemB d1 nulMoves True)
+       else fmap pnextlev (pvZeroW nst onemB d' nulMoves redu)
 --------
 
 checkFailOrPVLoop :: SStats -> Path -> Int -> Move -> Path
@@ -1061,13 +1076,14 @@ genAndSort nst a b d = do
 {-# INLINE reduceLmr #-}
 reduceLmr :: Int -> Bool -> Bool -> Int -> Int -> Int
 reduceLmr !d nearmatea !spec !exd !w
-    | not lmrActive || spec || d < lmrMinDRed
-         || exd > 0 || w <= lmrUnred1 || nearmatea = d
-    | w <= lmrUnred2 = d - 1
-    | otherwise      = d - 2
-    where lmrMinDRed =  3 :: Int		-- minimum reduced depth
-          lmrUnred1  =  4 :: Int		-- unreduced moves
-          lmrUnred2  = 16 :: Int		-- unreduced moves
+    | not lmrActive || spec || exd > 0
+        || d <= 1 || w <= lmrMvs1 || nearmatea = d
+    | d <= 2 || w <= lmrMvs2 = d - 1
+    | d <= 3 || w <= lmrMvs3 = d - 2
+    | otherwise              = d - 3
+    where lmrMvs1  =  3	-- unreduced moves
+          lmrMvs2  =  9	-- unreduced moves
+          lmrMvs3  = 27	-- unreduced moves
 
 {-# INLINE reduceDepth #-}
 reduceDepth :: Int -> Int -> Bool -> Int
@@ -1286,6 +1302,9 @@ reportStats = do
                   ++ ", retrieve: " ++ show (sRetr xst) ++ ", succes: " ++ show (sRSuc xst)
        let r = fromIntegral (sBMNo xst) / fromIntegral (sBeta xst) :: Double
        logmes $ "Beta cuts: " ++ show (sBeta xst) ++ ", beta factor: " ++ show r
+       logmes $ "Reduced: " ++ show (sRedu xst) ++ ", Re-benefits: " ++ show (sReBe xst)
+             ++ ", ReSearchs: " ++ show (sReSe xst) ++ ", Re-waste: " ++ show (sReNo xst)
+             ++ ", missed: " ++ show (sReMi xst) ++ ", net benefit: " ++ show (sReBe xst - sReNo xst)
 
 -- Functions to keep statistics
 modStat :: (SStats -> SStats) -> Search ()
@@ -1322,7 +1341,19 @@ reSucc :: Int -> Search ()
 reSucc n  = modStat (addReSucc n)
 
 incBeta :: Int -> Search ()
-incBeta n  = modStat $ \s -> s { sBeta = sBeta s + 1, sBMNo = sBMNo s + n }
+incBeta n = modStat $ \s -> s { sBeta = sBeta s + 1, sBMNo = sBMNo s + n }
+
+incReSe :: Int -> Search ()
+incReSe n = modStat $ \s -> s { sReSe = sReSe s + 1, sReNo = sReNo s + n }
+
+incRedu :: Search ()
+incRedu = modStat $ \s -> s { sRedu = sRedu s + 1 }
+
+incReBe :: Int -> Search ()
+incReBe n = modStat $ \s -> s { sReBe = sReBe s + n }
+
+incReMi :: Search ()
+incReMi = modStat $ \s -> s { sReMi = sReMi s + 1 }
 
 pindent, qindent :: String -> Search ()
 pindent = indentPassive
