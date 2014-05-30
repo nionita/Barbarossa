@@ -412,8 +412,8 @@ data KingPlace = KingPlace
 instance EvalItem KingPlace where
     evalItem ep p _  = kingPlace ep p
     evalItemNDL _ = [
-                      ("kingPlaceCent", ((4, 0), (0, 400))),
-                      ("kingPlacePwns", ((4, 0), (0, 400)))
+                      ("kingPlaceCent", ((4,  0), (0, 400))),
+                      ("kingPlacePwns", ((0, 25), (0, 400)))
                     ]
 
 
@@ -422,22 +422,23 @@ instance EvalItem KingPlace where
 -- be in some corner, in endgame it should be near some (passed) pawn(s)
 kingPlace :: EvalParams -> MyPos -> IWeights
 kingPlace ep p = [ kcd, kpd ]
-    where !kcd = mpl - ypl
-          !kpd = 0	-- mpi - ypi
+    where !kcd = (mpl - ypl) `unsafeShiftR` epMaterBonusScale ep
+          !kpd = (mpi - ypi) `unsafeShiftR` epPawnBonusScale  ep
           !mks = kingSquare (kings p) $ me p
           !yks = kingSquare (kings p) $ yo p
           !mkm = materFun yminor yrooks yqueens
           !ykm = materFun mminor mrooks mqueens
-          !mpl = kingMaterBonus mpawns mro mkm mks `unsafeShiftR` epMaterBonusScale ep
-          !ypl = kingMaterBonus ypawns yro ykm yks `unsafeShiftR` epMaterBonusScale ep
-          {--
-          !mpi | passed p /= 0            = kingPawnsBonus c mks (passed p) mpassed ypassed
-               | mkm <= 0 && pawns p /= 0 = kingPawnsBonus c mks (pawns  p) mpawns  ypawns
-               | otherwise                = 0
-          !ypi | passed p /= 0            = kingPawnsBonus c yks (passed p) mpassed ypassed
-               | ykm <= 0 && pawns p /= 0 = kingPawnsBonus c yks (pawns  p) mpawns  ypawns
-               | otherwise                = 0
-          --}
+          (!mpl, !ypl, !mpi, !ypi)
+              | moving p == White = ( kingMaterBonus White mpawns mkm mks
+                                    , kingMaterBonus Black ypawns ykm yks
+                                    , kingPawnsBonus mks (passed p) mpassed ypassed
+                                    , kingPawnsBonus yks (passed p) mpassed ypassed
+                                    )
+              | otherwise         = ( kingMaterBonus Black mpawns mkm mks
+                                    , kingMaterBonus White ypawns ykm yks
+                                    , kingPawnsBonus mks (passed p) ypassed mpassed
+                                    , kingPawnsBonus yks (passed p) ypassed mpassed
+                                    )
           !mro     = rooks p .&. me p
           !mrooks  = popCount1 mro
           !mqueens = popCount1 $ queens p .&. me p
@@ -448,9 +449,8 @@ kingPlace ep p = [ kcd, kpd ]
           !yminor  = popCount1 $ (bishops p .|. knights p) .&. yo p
           !mpawns  = pawns p .&. me p
           !ypawns  = pawns p .&. yo p
-          -- !mpassed = passed p .&. me p
-          -- !ypassed = passed p .&. yo p
-          -- !c = moving p
+          !mpassed = passed p .&. me p
+          !ypassed = passed p .&. yo p
           materFun m r q = (m * epMaterMinor ep + r * epMaterRook ep + q * epMaterQueen ep)
                                `unsafeShiftR` epMaterScale ep
 
@@ -458,43 +458,31 @@ promoW, promoB :: Square -> Square
 promoW s = 56 + (s .&. 7)
 promoB s =       s .&. 7
 
-{--
--- We give bonus also for pawn promotion squares, if the pawn is near enough to promote
--- Give as parameter bitboards for all pawns, white pawns and black pawns for performance
-kingPawnsBonus :: Color -> Square -> BBoard -> BBoard -> BBoard -> Int
-kingPawnsBonus White !ksq !alp !mbb !ybb = kingPawnsBonus' ksq alp wHalf bHalf
-    where !wHalf = 0x00000000FFFFFFFF .&. ybb
-          !bHalf = 0xFFFFFFFF00000000 .&. mbb
-kingPawnsBonus Black !ksq !alp !mbb !ybb = kingPawnsBonus' ksq alp wHalf bHalf
-    where !wHalf = 0x00000000FFFFFFFF .&. mbb
-          !bHalf = 0xFFFFFFFF00000000 .&. ybb
-
 promoFieldDistIncr :: Int -> Int
 promoFieldDistIncr = \d -> d + 1
 
-kingPawnsBonus' :: Square -> BBoard -> BBoard -> BBoard -> Int
-kingPawnsBonus' !ksq !alp !wHalf !bHalf = bonus
+-- We give bonus also for pawn promotion squares, if the pawn is near enough to promote
+-- Give as parameter bitboards for all pawns, white pawns and black pawns for performance
+kingPawnsBonus :: Square -> BBoard -> BBoard -> BBoard -> Int
+kingPawnsBonus !ksq !alp !wpass !bpass = bonus
     where !bpsqs = sum $ map (proxyBonus . squareDistance ksq) $ bbToSquares alp
           !bqsqs = sum $ map (proxyBonus . promoFieldDistIncr . squareDistance ksq)
-                       $ map promoW (bbToSquares bHalf) ++ map promoB (bbToSquares wHalf)
-          !bonus = (bpsqs + bqsqs) `unsafeShiftR` pawnBonusScale
---}
+                       $ map promoW (bbToSquares wpass) ++ map promoB (bbToSquares bpass)
+          !bonus = bpsqs + bqsqs
 
 -- This is a bonus for the king beeing near one corner
 -- It's bigger when the enemy has more material (only pieces)
 -- and when that corner has a pawn shelter
-kingMaterBonus :: BBoard -> BBoard -> Int -> Square -> Int
-kingMaterBonus !myp !myrooks !mat !ksq = bonus
-    where !bonus = matFactor mat * prx
-          !prx = prxWA + prxWH + prxBA + prxBH
-          !prxWA = (unsafeShiftL (opawns shWA2) 1 + opawns shWA3 - roMWA) * (prxBo wa + prxBo wb)
-          !prxWH = (unsafeShiftL (opawns shWH2) 1 + opawns shWH3 - roMWH) * (prxBo wg + prxBo wh)
-          !prxBA = (unsafeShiftL (opawns shBA7) 1 + opawns shBA6 - roMBA) * (prxBo ba + prxBo bb)
-          !prxBH = (unsafeShiftL (opawns shBH7) 1 + opawns shBH6 - roMBH) * (prxBo bg + prxBo bh)
-          !roMWA = flip unsafeShiftL 2 $ popCount1 $ myrooks .&. roWA
-          !roMWH = flip unsafeShiftL 2 $ popCount1 $ myrooks .&. roWH
-          !roMBA = flip unsafeShiftL 2 $ popCount1 $ myrooks .&. roBA
-          !roMBH = flip unsafeShiftL 2 $ popCount1 $ myrooks .&. roBH
+kingMaterBonus :: Color -> BBoard -> Int -> Square -> Int
+kingMaterBonus c !myp !mat !ksq
+    | c == White = matFactor mat * prxw
+    | otherwise  = matFactor mat * prxb
+    where !prxw = prxWA + prxWH
+          !prxb = prxBA + prxBH
+          !prxWA = (unsafeShiftL (opawns shWA2) 1 + opawns shWA3) * (prxBo wa + prxBo wb)
+          !prxWH = (unsafeShiftL (opawns shWH2) 1 + opawns shWH3) * (prxBo wg + prxBo wh)
+          !prxBA = (unsafeShiftL (opawns shBA7) 1 + opawns shBA6) * (prxBo ba + prxBo bb)
+          !prxBH = (unsafeShiftL (opawns shBH7) 1 + opawns shBH6) * (prxBo bg + prxBo bh)
           opawns = popCount1 . (.&. myp)
           prxBo  = proxyBonus . squareDistance ksq
           matFactor = unsafeAt matKCArr
@@ -507,10 +495,10 @@ kingMaterBonus !myp !myrooks !mat !ksq = bonus
           bb = 57
           bg = 62
           bh = 63
-          roWA = row1 .&. (fileA .|. fileB .|. fileC)
-          roWH = row1 .&. (fileG .|. fileH)
-          roBA = row8 .&. (fileA .|. fileB .|. fileC)
-          roBH = row8 .&. (fileG .|. fileH)
+          -- roWA = row1 .&. (fileA .|. fileB .|. fileC)
+          -- roWH = row1 .&. (fileG .|. fileH)
+          -- roBA = row8 .&. (fileA .|. fileB .|. fileC)
+          -- roBH = row8 .&. (fileG .|. fileH)
           shWA2 = row2 .&. (fileA .|. fileB .|. fileC)
           shWA3 = row3 .&. (fileA .|. fileB .|. fileC)
           shWH2 = row2 .&. (fileF .|. fileG .|. fileH)
@@ -543,8 +531,8 @@ data RookPlc = RookPlc
 
 instance EvalItem RookPlc where
     evalItem _ p _ = evalRookPlc p
-    evalItemNDL _  = [ ("rookHOpen", ((203,   0), (0, 500))),
-                       ("rookOpen",  ((268,   0), (0, 800))) ]
+    evalItemNDL _  = [ ("rookHOpen", ((228, 261), (0, 500))),
+                       ("rookOpen",  ((295, 294), (0, 800))) ]
                   --   ("rook7th",   ((400, 500), (0, 900))),
                   --   ("rookBhnd",  ((100, 800), (0, 900))) ]
 
@@ -575,10 +563,10 @@ data Mobility = Mobility	-- "safe" moves
 
 instance EvalItem Mobility where
     evalItem _ p _ = mobDiff p
-    evalItemNDL _  = [ ("mobilityKnight", ((78, 72), (50, 120))),
-                       ("mobilityBishop", ((78, 72), (50, 120))),
-                       ("mobilityRook",   ((17, 52), ( 0, 100))),
-                       ("mobilityQueen",  (( 0,  7), (-5,  50))) ]
+    evalItemNDL _  = [ ("mobilityKnight", ((66, 75), (50, 120))),
+                       ("mobilityBishop", ((60, 73), (50, 120))),
+                       ("mobilityRook",   ((32, 34), ( 0, 100))),
+                       ("mobilityQueen",  (( 2, 10), (-5,  50))) ]
 
 -- Here we do not calculate pawn mobility (which, calculated as attacs, is useless)
 mobDiff :: MyPos -> IWeights
@@ -741,11 +729,11 @@ data PassPawns = PassPawns
 
 instance EvalItem PassPawns where
     evalItem _ p _ = passPawns p
-    evalItemNDL _  = [("passPawnBonus", (( 42,  124), (   0,  200))),
-                      ("passPawn4",     ((232,  464), ( 200,  520))),
-                      ("passPawn5",     ((270,  540), ( 250,  740))),
-                      ("passPawn6",     ((582, 1162), ( 500, 1200))),
-                      ("passPawn7",     ((985, 1970), ( 900, 2300)))
+    evalItemNDL _  = [("passPawnBonus", ((  62,   78), (   0,  200))),
+                      ("passPawn4",     (( 346,  341), ( 200,  520))),
+                      ("passPawn5",     (( 483,  474), ( 250,  740))),
+                      ("passPawn6",     (( 850,  836), ( 500, 1200))),
+                      ("passPawn7",     ((1552, 1448), ( 900, 2300)))
                      ]
  
 passPawns :: MyPos -> IWeights
