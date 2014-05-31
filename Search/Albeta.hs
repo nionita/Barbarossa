@@ -1086,10 +1086,10 @@ reduceLmr !d nearmatea !spec !exd !w
     | d <= 3 || w <= lmrMvs3 = d - 2
     | d <= 4 || w <= lmrMvs4 = d - 3
     | otherwise              = d - 4
-    where lmrMvs1  =  4	-- unreduced quiet moves
-          lmrMvs2  =  9	-- reduced by max 1 (2xprev+1)
-          lmrMvs3  = 19	-- reduced by max 2
-          lmrMvs4  = 39	-- reduced by max 3
+    where lmrMvs1  =  5	-- unreduced quiet moves
+          lmrMvs2  =  9	-- reduced by max 1 (2xprev-1)
+          lmrMvs3  = 17	-- reduced by max 2
+          lmrMvs4  = 33	-- reduced by max 3
 
 {-# INLINE reduceDepth #-}
 reduceDepth :: Int -> Int -> Bool -> Int
