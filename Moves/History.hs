@@ -11,51 +11,28 @@ import Struct.Struct
 
 type History = V.IOVector Int
 
-rows, cols, depths, vsize :: Int
+rows, cols, vsize :: Int
 rows = 64
 cols = 64
-depths = 20
-vsize = rows * cols * depths
+vsize = rows * cols
 
-adr :: Int -> Int -> Int -> Int
-adr f t d = rows * (cols * d + f) + t
+adr :: Int -> Int -> Int
+adr !f !t = rows * f + t
 
 newHist :: IO History
 newHist = V.replicate vsize 0
 
-ad00 :: Int
-ad00 = 8	-- 8	-- 1
--- adp2 = 8	-- 16	-- 1
--- adp4 = 8	-- 32	-- 1
--- adp6 = 8	-- 64	-- 1
--- adm2 = 4	-- 1	-- 4
--- adm4 = 2	-- 1	-- 2
--- adm6 = 1
-
-pos, neg :: [Int]
-pos = [16, 16, 16, 16]
-neg = [8, 4, 2, 1]
+histw :: Int -> Int
+histw !d = dm * dm
+    where !dm = maxd - d
+          maxd = 20
 
 toHist :: History -> Bool -> Square -> Square -> Int -> IO ()
-toHist !h True !f !t !d = do
-    let ad = adr f t d
-    addHist h ad ad00
-    mapM_ (uncurry (addHist h) . first (ad +))
-             (zip (takeWhile (< dd) [2, 4 ..]) pos)
-    mapM_ (uncurry (addHist h) . first (ad -))
-             (zip (takeWhile (<= d) [2, 4 ..]) neg)
-    where !dd = depths - d
-toHist !h False !f !t !d = do
-    let ad = adr f t d
-    subHist h ad ad00
-    mapM_ (uncurry (subHist h) . first (ad +))
-             (zip (takeWhile (< dd) [2, 4 ..]) pos)
-    mapM_ (uncurry (subHist h) . first (ad -))
-             (zip (takeWhile (<= d) [2, 4 ..]) neg)
-    where !dd = depths - d
+toHist h True  f t d = addHist h (adr f t) (histw d)
+toHist h False f t d = subHist h (adr f t) (histw d)
 
 valHist :: History -> Square -> Square -> Int -> IO Int
-valHist !h !f !t !d = V.unsafeRead h $! adr f t d
+valHist !h !f !t _ = V.unsafeRead h $! adr f t
 
 addHist :: History -> Int -> Int -> IO ()
 addHist h !ad !p = do
