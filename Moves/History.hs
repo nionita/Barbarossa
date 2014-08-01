@@ -3,10 +3,8 @@ module Moves.History (
         History, newHist, toHist, valHist
     ) where
 
-import Control.Arrow (first)
-
+import Data.Bits
 import qualified Data.Vector.Unboxed.Mutable as V
-
 import Struct.Struct
 
 type History = V.IOVector Int
@@ -23,7 +21,7 @@ newHist :: IO History
 newHist = V.replicate vsize 0
 
 histw :: Int -> Int
-histw !d = dm * dm
+histw !d = 1 `unsafeShiftL` dm
     where !dm = maxd - d
           maxd = 20
 
