@@ -18,7 +18,7 @@ depths = 20
 vsize = rows * cols * depths
 
 adr :: Int -> Int -> Int -> Int
-adr r c d = (r * rows + c) * depths + d
+adr f t d = rows * (cols * d + f) + t
 
 newHist :: IO History
 newHist = V.replicate vsize 0
