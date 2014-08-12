@@ -35,9 +35,17 @@ valHist !h !f !t _ = V.unsafeRead h $! adr f t
 addHist :: History -> Int -> Int -> IO ()
 addHist h !ad !p = do
     a <- V.unsafeRead h ad
-    V.unsafeWrite h ad (a - p)	-- trick here: we subtract, so that the sort is big to small
+    let !u = a - p	-- trick here: we subtract, so that the sort is big to small
+        !v = if u < lowLimit then lowHalf else u
+    V.unsafeWrite h ad v
+    where lowLimit = -1000000000
+          lowHalf  =  -500000000
 
 subHist :: History -> Int -> Int -> IO ()
 subHist h !ad !p = do
     a <- V.unsafeRead h ad
-    V.unsafeWrite h ad (a + p)	-- trick here: we add, so that the sort is big to small
+    let !u = a + p	-- trick here: we add, so that the sort is big to small
+        !v = if u > higLimit then higHalf else u
+    V.unsafeWrite h ad v
+    where higLimit = 1000000000
+          higHalf  =  500000000

@@ -95,7 +95,7 @@ evalItems = [ EvIt Material,	-- material balance (i.e. white - black material
               EvIt LastLine,	-- malus for pieces on last line (except rooks and king)
               EvIt Mobility,	-- pieces mobility
               EvIt Center,	-- attacs of center squares
-              -- EvIt DblPawns,	-- malus for doubled pawns
+              EvIt PawnMo,	-- pawn mobility
               EvIt PassPawns,	-- pass pawns
               EvIt RookPlc	-- rooks points for placements
             ]
@@ -723,6 +723,26 @@ evalRookPawn p = [rps]
     where !wrp = popCount1 $ pawns p .&. me p .&. rookFiles
           !brp = popCount1 $ pawns p .&. yo p .&. rookFiles
           !rps = wrp - brp
+
+------ Pawns mobility ------
+data PawnMo = PawnMo
+
+instance EvalItem PawnMo where
+    evalItem _ p _ = pawnMo p
+    evalItemNDL _  = [("pawnMobility", ((29, 182), (0, 200)))]
+
+pawnMo :: MyPos -> IWeights
+pawnMo p
+    | moving p == White = [ pawnMobWhite mep (occup p) - pawnMobBlack yop (occup p) ]
+    | otherwise         = [ pawnMobBlack mep (occup p) - pawnMobWhite yop (occup p) ]
+    where !mep = pawns p .&. me p
+          !yop = pawns p .&. yo p
+
+pawnMobWhite :: BBoard -> BBoard -> Int
+pawnMobWhite pa oc = popCount1 $ (pa `unsafeShiftL` 8) `less` oc
+
+pawnMobBlack :: BBoard -> BBoard -> Int
+pawnMobBlack pa oc = popCount1 $ (pa `unsafeShiftR` 8) `less` oc
 
 ------ Pass pawns ------
 data PassPawns = PassPawns
