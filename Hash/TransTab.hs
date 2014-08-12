@@ -168,7 +168,7 @@ isSameKey !mmask !mzkey !ptr =
 -- The position ZKey determines the cell where the TT entry should be, and there we do a linear search
 -- (i.e. 4 comparisons in case of a miss)
 readCache :: Addr# -> IO (Maybe (Int, Int, Int, Move, Int))
-readCache addr = if eqAddr# addr nullAddr#
+readCache addr = if isTrue# (eqAddr# addr nullAddr#)
                     then return Nothing
                     else Just . cacheEnToQuint <$> peek (castPtr (Ptr addr))
 
