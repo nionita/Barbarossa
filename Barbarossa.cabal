@@ -5,7 +5,7 @@ License:             BSD3
 License-file:        LICENSE
 Author:              Nicu Ionita
 Maintainer:          nicu.ionita@acons.at
-Copyright:           Nicu Ionita 2013
+Copyright:           Nicu Ionita 2013, 2014
 Category:            Game
 Build-type:          Simple
 Cabal-version:       >=1.8
@@ -19,7 +19,6 @@ Executable Barbarossa
   Build-depends: base >= 4.5, array, old-time, containers, mtl, parsec, vector,
                  random, stream-fusion, directory, transformers, QuickCheck, text
   GHC-Options: -O2 -Wall
-               -DGENEP
                -funbox-strict-fields -threaded -rtsopts
                -fspec-constr-count=24
                -funfolding-use-threshold=32

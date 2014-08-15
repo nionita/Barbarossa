@@ -1,5 +1,4 @@
 {-# LANGUAGE TypeSynonymInstances, MultiParamTypeClasses, PatternGuards, BangPatterns #-}
-{-# LANGUAGE CPP #-}
 module Moves.Board (
     posFromFen, initPos,
     isCheck, inCheck,
@@ -695,13 +694,6 @@ epClrZob bb
           !epLastBB' = epToFile epLastBB
           epLastSq   = head $ bbToSquares epLastBB'
 
-genEP :: Bool
-#ifdef GENEP
-genEP = True
-#else
-genEP = False
-#endif
-
 -- Copy one square to another and clear the source square
 -- doFromToMove :: Square -> Square -> MyPos -> Maybe MyPos
 doFromToMove :: Move -> MyPos -> MyPos
@@ -727,7 +719,7 @@ doFromToMove m !p | moveIsNormal m
           -- For e.p. zob key:
           !epcl = epClrZob $ epcas p
           (setEp, !epSetZob)
-              | genEP && pawnmoving && (src - dst == 16 || dst - src == 16)
+              | pawnmoving && (src - dst == 16 || dst - src == 16)
                   = let epFld = (src + dst) `unsafeShiftR` 1
                         epBit = uBit epFld
                     in ((.|.) epBit, zobEP epFld)
