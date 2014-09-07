@@ -95,7 +95,7 @@ evalItems = [ EvIt Material,	-- material balance (i.e. white - black material
               EvIt LastLine,	-- malus for pieces on last line (except rooks and king)
               EvIt Mobility,	-- pieces mobility
               EvIt Center,	-- attacs of center squares
-              EvIt PawnMo,	-- pawn mobility
+              EvIt PaBlo,	-- pawn blocking
               EvIt PassPawns,	-- pass pawns
               EvIt RookPlc	-- rooks points for placements
             ]
@@ -724,25 +724,43 @@ evalRookPawn p = [rps]
           !brp = popCount1 $ pawns p .&. yo p .&. rookFiles
           !rps = wrp - brp
 
------- Pawns mobility ------
-data PawnMo = PawnMo
+------ Blocked pawns ------
+-- Parameter after 16k CLOP runs with fix depth 4 against version 'alle'
+-- The values are max, but not yet stable, score is 148 +- 31 better then alle
+data PaBlo = PaBlo
 
-instance EvalItem PawnMo where
-    evalItem _ p _ = pawnMo p
-    evalItemNDL _  = [("pawnMobility", ((29, 182), (0, 200)))]
+instance EvalItem PaBlo where
+    evalItem _ p _ = pawnBl p
+    evalItemNDL _  = [
+                     ("pawnBlockP", ((-193, -263), (-300, 0))),	-- blocked by own pawn
+                     ("pawnBlockO", (( -60, -100), (-300, 0))),	-- blocked by own piece
+                     ("pawnBlockA", (( -51, -186), (-300, 0)))	-- blocked by adverse piece
+                     ]
 
-pawnMo :: MyPos -> IWeights
-pawnMo p
-    | moving p == White = [ pawnMobWhite mep (occup p) - pawnMobBlack yop (occup p) ]
-    | otherwise         = [ pawnMobBlack mep (occup p) - pawnMobWhite yop (occup p) ]
+pawnBl :: MyPos -> IWeights
+pawnBl p
+    | moving p == White = let (wp, wo, wa) = pawnBloWhite mep mef yof
+                              (bp, bo, ba) = pawnBloBlack yop yof mef
+                          in  [wp - bp, wo - bo, wa - ba]
+    | otherwise         = let (wp, wo, wa) = pawnBloWhite yop yof mef
+                              (bp, bo, ba) = pawnBloBlack mep mef yof
+                          in  [bp - wp, bo - wo, ba - wa]
     where !mep = pawns p .&. me p
           !yop = pawns p .&. yo p
+          !mef = me p `less` mep
+          !yof = yo p `less` yop
 
-pawnMobWhite :: BBoard -> BBoard -> Int
-pawnMobWhite pa oc = popCount1 $ (pa `unsafeShiftL` 8) `less` oc
+cntPaBlo :: BBoard -> BBoard -> BBoard -> BBoard -> (Int, Int, Int)
+cntPaBlo !ps !op !ofi !afi = (f op, f ofi, f afi)
+    where f = popCount1 . (ps .&.)
 
-pawnMobBlack :: BBoard -> BBoard -> Int
-pawnMobBlack pa oc = popCount1 $ (pa `unsafeShiftR` 8) `less` oc
+pawnBloWhite :: BBoard -> BBoard -> BBoard -> (Int, Int, Int)
+pawnBloWhite !pa !op !ap = cntPaBlo p1 pa op ap
+    where !p1 = pa `unsafeShiftL` 8
+
+pawnBloBlack :: BBoard -> BBoard -> BBoard -> (Int, Int, Int)
+pawnBloBlack !pa !op !ap = cntPaBlo p1 pa op ap
+    where !p1 = pa `unsafeShiftR` 8
 
 ------ Pass pawns ------
 data PassPawns = PassPawns
