@@ -386,21 +386,19 @@ notFileH = 0x7F7F7F7F7F7F7F7F
 -- Passed pawns: only with bitboard operations
 whitePassed :: BBoard -> BBoard -> BBoard
 whitePassed !wp !bp = wpa
-    where !wp3 = shadowDown wp	-- shadow back of the own pawns for back doubles
-          !bpL = (bp .&. notFileA) `unsafeShiftR` 9	-- left down
+    where !bpL = (bp .&. notFileA) `unsafeShiftR` 9	-- left down
           !bpR = (bp .&. notFileH) `unsafeShiftR` 7	-- and right down
-          !bp0 = bpL .|. bp .|. bpR
-          !bp3 = shadowDown bp0	-- erase same and neighbours files
-          !wpa = wp `less` (wp3 .|. bp3)
+          !wb0 = bpR .|. bpL .|. bp .|. wp
+          !sha = shadowDown wb0	-- erase
+          !wpa = wp `less` sha
 
 blackPassed :: BBoard -> BBoard -> BBoard
 blackPassed !wp !bp = bpa
-    where !bp3 = shadowUp bp	-- shadow back of the own pawns for back doubles
-          !wpL = (wp .&. notFileA) `unsafeShiftL` 7	-- left up
+    where !wpL = (wp .&. notFileA) `unsafeShiftL` 7	-- left up
           !wpR = (wp .&. notFileH) `unsafeShiftL` 9	-- and right up
-          !wp0 = wpL .|. wp .|. wpR
-          !wp3 = shadowUp wp0	-- erase same and neighbours files
-          !bpa = bp `less` (bp3 .|. wp3)
+          !wb0 = wpR .|. wpL .|. wp .|. bp
+          !sha = shadowUp wb0	-- erase
+          !bpa = bp `less` sha
 
 {-# INLINE shadowDown #-}
 shadowDown :: BBoard -> BBoard

@@ -725,16 +725,16 @@ evalRookPawn p = [rps]
           !rps = wrp - brp
 
 ------ Blocked pawns ------
--- Parameter after 63k CLOP runs with fix depth 4 against version 'alle'
--- The values are (local) max, score is 166 +- 14 better then alle
+-- Parameter after 150k CLOP runs with fix depth 4 against version 'alle'
+-- The values are (local) max, CLOP score is 164 +- 8 better then alle
 data PaBlo = PaBlo
 
 instance EvalItem PaBlo where
     evalItem _ p _ = pawnBl p
     evalItemNDL _  = [
-                     ("pawnBlockP", ((-159, -128), (-300, 0))),	-- blocked by own pawn
-                     ("pawnBlockO", (( -69,  -43), (-300, 0))),	-- blocked by own piece
-                     ("pawnBlockA", (( -36, -221), (-300, 0)))	-- blocked by adverse piece
+                     ("pawnBlockP", ((-154, -145), (-300, 0))),	-- blocked by own pawn
+                     ("pawnBlockO", (( -65,  -69), (-300, 0))),	-- blocked by own piece
+                     ("pawnBlockA", (( -34, -203), (-300, 0)))	-- blocked by adverse piece
                      ]
 
 pawnBl :: MyPos -> IWeights
