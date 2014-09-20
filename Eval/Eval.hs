@@ -96,6 +96,7 @@ evalItems = [ EvIt Material,	-- material balance (i.e. white - black material
               EvIt Mobility,	-- pieces mobility
               EvIt Center,	-- attacs of center squares
               EvIt PaBlo,	-- pawn blocking
+              EvIt Izolan,	-- isolated pawns
               EvIt PassPawns,	-- pass pawns
               EvIt RookPlc	-- rooks points for placements
             ]
@@ -593,14 +594,67 @@ data Center = Center
 
 instance EvalItem Center where
     evalItem _ p _ = centerDiff p
-    evalItemNDL _  = [("centerAttacs", ((72, 72), (0, 100)))]
+    evalItemNDL _  = [
+                      ("centerPAtts", ((86, 80), (0, 200))),
+                      ("centerNAtts", ((76, 60), (0, 200))),
+                      ("centerBAtts", ((76, 60), (0, 200))),
+                      ("centerRAtts", ((26, 40), (0, 200))),
+                      ("centerQAtts", (( 6, 80), (0, 200))),
+                      ("centerKAtts", (( 1, 92), (0, 200)))
+                     ]
 
 -- This function is already optimised
 centerDiff :: MyPos -> IWeights
-centerDiff p = [wb]
-    where (w, b) = zoneAttacs p center
-          !wb = w - b
-          center = 0x0000003C3C000000
+centerDiff p = [pd, nd, bd, rd, qd, kd]
+    where !mpa = popCount1 $ myPAttacs p .&. center
+          !ypa = popCount1 $ yoPAttacs p .&. center
+          !pd  = mpa - ypa
+          !mna = popCount1 $ myNAttacs p .&. center
+          !yna = popCount1 $ yoNAttacs p .&. center
+          !nd  = mna - yna
+          !mba = popCount1 $ myBAttacs p .&. center
+          !yba = popCount1 $ yoBAttacs p .&. center
+          !bd  = mba - yba
+          !mra = popCount1 $ myRAttacs p .&. center
+          !yra = popCount1 $ yoRAttacs p .&. center
+          !rd  = mra - yra
+          !mqa = popCount1 $ myQAttacs p .&. center
+          !yqa = popCount1 $ yoQAttacs p .&. center
+          !qd  = mqa - yqa
+          !mka = popCount1 $ myKAttacs p .&. center
+          !yka = popCount1 $ yoKAttacs p .&. center
+          !kd  = mka - yka
+          center = 0x0000001818000000
+
+-------- Isolated pawns --------
+data Izolan = Izolan
+
+instance EvalItem Izolan where
+    evalItem _ p _ = isolDiff p
+    evalItemNDL _  = [
+                      ("isolPawns",  ((-56, -120), (-300, 0))),
+                      ("isolPassed", ((-76, -200), (-500, 0)))
+                     ]
+
+isolDiff :: MyPos -> IWeights
+isolDiff p = [ nd, pd]
+    where (!myr, !myp) = isol (pawns p .&. me p) (passed p)
+          (!yor, !yop) = isol (pawns p .&. yo p) (passed p)
+          !nd = myr - yor
+          !pd = myp - yop
+
+isol :: BBoard -> BBoard -> (Int, Int)
+isol ps pp = (ris, pis)
+    where !myp = ps .&. pp
+          !myr = ps `less` myp
+          !myf = ((ps .&. notA) `unsafeShiftR` 1) .|. ((ps .&. notH) `unsafeShiftL` 1)
+          !myu = myf `unsafeShiftL` 8
+          !myd = myf `unsafeShiftR` 8
+          !myc = myf .|. myu .|. myd
+          !ris = popCount1 $ myr `less`myc
+          !pis = popCount1 $ myp `less`myc
+          notA = 0xFEFEFEFEFEFEFEFE
+          notH = 0x7F7F7F7F7F7F7F7F
 
 ------ En prise ------
 --data EnPrise = EnPrise
@@ -725,30 +779,38 @@ evalRookPawn p = [rps]
           !rps = wrp - brp
 
 ------ Blocked pawns ------
--- Parameter after 150k CLOP runs with fix depth 4 against version 'alle'
--- The values are (local) max, CLOP score is 164 +- 8 better then alle
 data PaBlo = PaBlo
 
 instance EvalItem PaBlo where
     evalItem _ p _ = pawnBl p
     evalItemNDL _  = [
                      ("pawnBlockP", ((-154, -145), (-300, 0))),	-- blocked by own pawn
-                     ("pawnBlockO", (( -65,  -69), (-300, 0))),	-- blocked by own piece
-                     ("pawnBlockA", (( -34, -203), (-300, 0)))	-- blocked by adverse piece
+                     ("pawnBlockO", (( -32,  -35), (-300, 0))),	-- blocked by own piece
+                     ("pawnBlockA", (( -17, -102), (-300, 0))),	-- blocked by adverse piece
+                     ("passBlockO", ((-130, -138), (-300, 0))),	-- passed blocked by own piece
+                     ("passBlockA", (( -68, -406), (-300, 0)))	-- passed blocked by adverse piece
                      ]
 
 pawnBl :: MyPos -> IWeights
 pawnBl p
-    | moving p == White = let (wp, wo, wa) = pawnBloWhite mep mef yof
-                              (bp, bo, ba) = pawnBloBlack yop yof mef
-                          in  [wp - bp, wo - bo, wa - ba]
-    | otherwise         = let (wp, wo, wa) = pawnBloWhite yop yof mef
-                              (bp, bo, ba) = pawnBloBlack mep mef yof
-                          in  [bp - wp, bo - wo, ba - wa]
-    where !mep = pawns p .&. me p
-          !yop = pawns p .&. yo p
-          !mef = me p `less` mep
-          !yof = yo p `less` yop
+    | moving p == White = let (wp, wo, wa) = pawnBloWhite mer mef yof
+                              (_ , ao, aa) = pawnBloWhite mes mef yof
+                              (bp, bo, ba) = pawnBloBlack yor yof mef
+                              (_ , no, na) = pawnBloBlack yos yof mef
+                          in  [wp-bp, wo-bo, wa-ba, ao-no, aa-na]
+    | otherwise         = let (wp, wo, wa) = pawnBloWhite yor yof mef
+                              (_ , ao, aa) = pawnBloWhite yos yof mef
+                              (bp, bo, ba) = pawnBloBlack mer mef yof
+                              (_ , no, na) = pawnBloBlack mes mef yof
+                          in  [bp-wp, bo-wo, ba-wa, no-ao, na-aa]
+    where !mep = pawns p .&. me p	-- my pawns
+          !mes = mep .&. passed p	-- my passed pawns
+          !mer = mep `less` mes		-- my rest pawns
+          !yop = pawns p .&. yo p	-- your pawns
+          !yos = yop .&. passed p	-- your passed pawns
+          !yor = yop `less` yos		-- your rest pawns
+          !mef = me p `less` mep	-- my figures
+          !yof = yo p `less` yop	-- your figures
 
 cntPaBlo :: BBoard -> BBoard -> BBoard -> BBoard -> (Int, Int, Int)
 cntPaBlo !ps !op !ofi !afi = (f op, f ofi, f afi)
