@@ -6,7 +6,7 @@
 {-# LANGUAGE CPP #-}
 
 module Search.Albeta (
-    alphaBeta, logmes
+    alphaBeta, logmes, onlyQSearch
 ) where
 
 import Control.Monad
@@ -1158,6 +1158,11 @@ trimax a b x
     | x < a     = a
     | x > b     = b
     | otherwise = x
+
+onlyQSearch :: Game Int
+onlyQSearch = do
+    (sc, _) <- runCState (pvQSearch alpha0 beta0 0) pvsInit
+    return sc
 
 -- PV Quiescent Search
 pvQSearch :: Int -> Int -> Int -> Search Int
