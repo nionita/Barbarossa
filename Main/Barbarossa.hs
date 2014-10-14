@@ -4,6 +4,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Main where
+import Control.Applicative ((<$>))
 import Control.Monad
 import Control.Monad.Reader
 import Control.Concurrent
@@ -29,7 +30,8 @@ import Moves.Base
 import Moves.Moves (movesInit)
 import Moves.Board (posFromFen)
 import Moves.History
-import Search.CStateMonad (execCState)
+import Search.Albeta (onlyQSearch)
+import Search.CStateMonad (execCState, runCState)
 import Eval.Eval (weightNames)
 import Eval.FileParams (makeEvalState)
 
@@ -44,7 +46,8 @@ data Options = Options {
         optConfFile :: Maybe String,	-- config file
         optParams   :: [String],	-- list of eval parameter assignements
         optLogging  :: LogLevel,	-- logging level
-        optAFenFile :: Maybe FilePath	-- annotated fen file for self analysis
+        optAFenFile :: Maybe FilePath,	-- annotated/normal fen file for self analysis
+        optOResFile :: Maybe FilePath	-- output file for parameter optimisation by quiescent search
     }
 
 defaultOptions :: Options
@@ -52,7 +55,8 @@ defaultOptions = Options {
         optConfFile = Nothing,
         optParams   = [],
         optLogging  = DebugUci,
-        optAFenFile = Nothing
+        optAFenFile = Nothing,
+        optOResFile = Nothing
     }
 
 setConfFile :: String -> Options -> Options
@@ -75,12 +79,16 @@ setLogging lev opt = opt { optLogging = llev }
 addAFile :: FilePath -> Options -> Options
 addAFile fi opt = opt { optAFenFile = Just fi }
 
+addOFile :: FilePath -> Options -> Options
+addOFile fi opt = opt { optOResFile = Just fi }
+
 options :: [OptDescr (Options -> Options)]
 options = [
-        Option "c" ["config"] (ReqArg setConfFile "STRING") "Configuration file",
-        Option "l" ["loglev"] (ReqArg setLogging "STRING")  "Logging level from 0 (debug) to 5 (never)",
-        Option "p" ["param"]  (ReqArg addParam "STRING")    "Eval/search/time parameters: name=value,...",
-        Option "a" ["analyse"] (ReqArg addAFile "STRING")   "Analysis file"
+        Option "c" ["config"]  (ReqArg setConfFile "STRING") "Configuration file",
+        Option "l" ["loglev"]  (ReqArg setLogging "STRING")  "Logging level from 0 (debug) to 5 (never)",
+        Option "p" ["param"]   (ReqArg addParam "STRING")    "Eval/search/time parameters: name=value,...",
+        Option "a" ["analyse"] (ReqArg addAFile "STRING")   "Analysis file",
+        Option "o" ["output"]  (ReqArg addOFile "STRING")   "Output file"
     ]
 
 theOptions :: IO (Options, [String])
@@ -128,37 +136,54 @@ main :: IO ()
 main = do
     (opts, _) <- theOptions
     ctx <- initContext opts
+    -- The logic is:
+    -- if analysis file is given,
+    --    then: if also output file is given,
+    --             then: quiescent search on all fens in input, out to that file
+    --             else: given depth search with score calculation and output
+    --    else: normal run as an interactive engine
     case optAFenFile opts of
-        Nothing -> runReaderT interMachine ctx	-- the normal (interactive) mode
-        Just fi -> runReaderT (analysingMachine fi) ctx	-- the analysis mode
+        Nothing -> startWithContext True ctx interMachine		-- the normal (interactive) mode
+        Just fi -> case optOResFile opts of
+            Nothing -> startWithContext False ctx (analysingMachine fi)	-- the analysis mode
+            Just fo -> startWithContext False ctx (quietMaschine fi fo)	-- quescence search
 
 -- The logger, writer and informer will be started only once, here,
 -- so every setting about them cannot be changed later, which mainly
 -- excludes logging level and log file name
-interMachine :: CtxIO ()
-interMachine = do
-    ctx <- ask
+startWithContext :: Bool -> Context -> CtxIO () -> IO ()
+startWithContext wri ctx act = flip runReaderT ctx $ do
     let logFileName = progLogName ++ "-" ++ show (startSecond ctx) ++ ".log"
     startLogger logFileName
-    startWriter True
+    startWriter wri
     startInformer
     beforeReadLoop
-    ctxCatch theReader
-        $ \e -> ctxLog LogError $ "Reader error: " ++ show e
-    -- whatever to do when ending:
+    act
     beforeProgExit
 
+interMachine :: CtxIO ()
+interMachine = ctxCatch theReader $
+    \e -> ctxLog LogError $ "Reader error: " ++ show e
+
 analysingMachine :: FilePath -> CtxIO ()
-analysingMachine fi = do
-    ctx <- ask
-    let logFileName = progLogName ++ "-" ++ show (startSecond ctx) ++ ".log"
-    startLogger logFileName
-    startWriter False
-    startInformer
-    beforeReadLoop
-    fileReader fi
-    -- whatever to do when ending:
-    beforeProgExit
+analysingMachine = fileReader
+
+-- We even (and should) parallelize this!
+quietMaschine :: FilePath -> FilePath -> CtxIO ()
+quietMaschine fi fo = do
+    chg <- readChanging
+    let ha = hash   $ crtStatus chg
+        es = evalst $ crtStatus chg
+    hi <- liftIO newHist
+    fens <- liftIO $ lines <$> readFile fi
+    foh <- liftIO $ openFile fo WriteMode
+    mapM_ (perFenLineQ foh ha hi es) fens
+    liftIO $ hClose foh
+
+perFenLineQ :: Handle -> Cache -> History -> EvalState -> String -> CtxIO ()
+perFenLineQ h ha hi es fen = do
+    (sc, _) <- runCState onlyQSearch $ posToState (posFromFen fen) ha hi es
+    liftIO $ hPutStrLn h $ show sc
 
 -- The logger will be startet anyway, but will open a file
 -- only when it has to write the first message
