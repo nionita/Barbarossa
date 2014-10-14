@@ -1167,7 +1167,7 @@ onlyQSearch = do
 -- PV Quiescent Search
 pvQSearch :: Int -> Int -> Int -> Search Int
 pvQSearch !a !b c = do				   -- to avoid endless loops
-    -- qindent $ "=> " ++ show a ++ ", " ++ show b
+    qindent $ "=> " ++ show a ++ ", " ++ show b
     !stp <- lift staticVal				-- until we can recognize repetition
     viztreeScore $ "Static: " ++ show stp
     !tact <- lift tacticalPos
@@ -1229,7 +1229,7 @@ pvQInnerLoop !b c !a e = do
        then return (True, b)	-- it doesn't matter which score we return
        else do
          -- here: delta pruning: captured piece + 200 > a? then go on, else return
-         -- qindent $ "-> " ++ show e
+         qindent $ "-> " ++ show e
          r <-  lift $ doMove False e True
          if legalResult r
             then do
@@ -1246,7 +1246,7 @@ pvQInnerLoop !b c !a e = do
                              return (-sc)
                 lift undoMove
                 viztreeUp nn e sc
-                -- qindent $ "<- " ++ show e ++ " (" ++ show s ++ ")"
+                qindent $ "<- " ++ show e ++ " (" ++ show sc ++ ")"
                 if sc >= b
                    then return (True, b)
                    else do
@@ -1374,12 +1374,13 @@ pindent = indentPassive
 qindent = indentPassive
 
 -- Uncomment this when using it above (pindent, qindent):
-{--
+{-
 indentActive :: String -> Search ()
 indentActive s = do
     ad <- gets absdp
-    lift $ informStr $ replicate ad ' ' ++ s
---}
+    -- lift $ informStr $ replicate ad ' ' ++ s
+    lift $ logMes s
+-}
 
 indentPassive :: String -> Search ()
 indentPassive _ = return ()

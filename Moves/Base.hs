@@ -13,7 +13,7 @@ module Moves.Base (
     betaCut, doNullMove, ttRead, ttStore, curNodes, chooseMove, isTimeout, informCtx,
     mateScore,
     finNode,
-    showMyPos,
+    showMyPos, logMes,
     nearmate	-- , special
 ) where
 
@@ -72,16 +72,16 @@ informCtx = lift . talkToContext
 
 posToState :: MyPos -> Cache -> History -> EvalState -> MyState
 posToState p c h e = MyState {
-                       stack = [updatePos p],
+                       stack = [p''],
                        hash = c,
                        hist = h,
                        stats = stats0,
                        evalst = e
                    }
-    where stats0 = Stats {
-                       nodes = 0,
-                       maxmvs = 0
-                   }
+    where p' = updatePos p
+          (stsc, feats) = evalState (posEval p') e
+          p'' = p' { staticScore = stsc, staticFeats = feats }
+          stats0 = Stats { nodes = 0, maxmvs = 0 }
 
 posNewSearch :: MyState -> MyState
 posNewSearch p = p { hash = newGener (hash p) }
