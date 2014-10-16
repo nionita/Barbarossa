@@ -122,15 +122,15 @@ genMoves depth absdp pv = do
                          else (l1 ++ l2w ++ l2l, l0 ++ l3)
 
 -- Generate only tactical moves, i.e. promotions, captures & check escapes
-genTactMoves :: Game [Move]
-genTactMoves = do
+genTactMoves :: Bool -> Game [Move]
+genTactMoves los = do
     p <- getPos
     let !c = moving p
         -- l1 = map (genmvT p) $ genMoveTransf p
         l1 = genMoveTransf p
         -- l2 = map (genmv True p) $ genMoveCapt p
         -- lnc = map (genmv True p) $ genMoveNCaptToCheck p c
-        (l2w, _) = genMoveCaptWL p
+        (l2w, l2l) = genMoveCaptWL p
         -- l2w = map (genmv True p) pl2
         -- l2w = map (genmv True p) $ genMoveCaptSEE p c
         -- lc = map (genmv True p) $ genMoveFCheck p
@@ -138,6 +138,7 @@ genTactMoves = do
         -- the non capturing check moves have to be at the end (tested!)
         -- else if onlyWinningCapts then l1 ++ l2w ++ lnc else l1 ++ l2 ++ lnc
         !mvs | isCheck p c = lc
+             | los         = l1 ++ l2w ++ l2l
              | otherwise   = l1 ++ l2w
     return mvs
 
