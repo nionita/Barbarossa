@@ -40,7 +40,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.2.0"
-progVerSuff = "icp"
+progVerSuff = "icpqsa"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -182,8 +182,11 @@ quietMaschine fi fo = do
 
 perFenLineQ :: Handle -> Cache -> History -> EvalState -> String -> CtxIO ()
 perFenLineQ h ha hi es fen = do
-    (sc, _) <- runCState onlyQSearch $ posToState (posFromFen fen) ha hi es
-    liftIO $ hPutStrLn h $ show sc
+    let pos = posFromFen fen
+    (sc, _) <- runCState onlyQSearch $ posToState pos ha hi es
+    liftIO $ hPutStrLn h $ show $ case moving pos of
+        White ->  sc
+        Black -> -sc
 
 -- The logger will be startet anyway, but will open a file
 -- only when it has to write the first message
