@@ -84,21 +84,20 @@ data AnyEvalItem = forall a . EvalItem a => EvIt a
 -- but for the evaluation itself one copy of integer parameter values is also kept)
 evalItems :: [AnyEvalItem]
 evalItems = [ EvIt Material,	-- material balance (i.e. white - black material
-              -- EvIt EnPrise,	-- when not quiescent - pieces en prise
               EvIt Redundance,	-- bishop pair and rook redundance
-              EvIt NRCorrection,	-- material correction for knights & rooks
               EvIt RookPawn,	-- the rook pawns are about 15% less valuable
               EvIt KingSafe,	-- king safety
               EvIt KingOpen,	-- malus for king openness
               EvIt KingPlace,	-- bonus when king is near some fields
-              -- EvIt Castles,	-- bonus for castle rights
               EvIt LastLine,	-- malus for pieces on last line (except rooks and king)
               EvIt Mobility,	-- pieces mobility
               EvIt Center,	-- attacs of center squares
+              EvIt RookPlc,	-- rooks points for placements
+              -- EvIt EnPrise,	-- when not quiescent - pieces en prise
+              -- EvIt NRCorrection,	-- material correction for knights & rooks
               EvIt PaBlo,	-- pawn blocking
               EvIt Izolan,	-- isolated pawns
-              EvIt PassPawns,	-- pass pawns
-              EvIt RookPlc	-- rooks points for placements
+              EvIt PassPawns	-- pass pawns
             ]
 
 parDim :: Int
@@ -533,12 +532,13 @@ data RookPlc = RookPlc
 instance EvalItem RookPlc where
     evalItem _ p _ = evalRookPlc p
     evalItemNDL _  = [ ("rookHOpen", ((228, 261), (0, 500))),
-                       ("rookOpen",  ((295, 294), (0, 800))) ]
+                       ("rookOpen",  ((295, 294), (0, 800))),
+                       ("rookConn",  ((130, 100), (0, 300))) ]
                   --   ("rook7th",   ((400, 500), (0, 900))),
                   --   ("rookBhnd",  ((100, 800), (0, 900))) ]
 
 evalRookPlc :: MyPos -> [Int]
-evalRookPlc p = [ ho, op ]
+evalRookPlc p = [ ho, op, rc ]
     where !mRs = rooks p .&. me p
           !mPs = pawns p .&. me p
           (mho, mop) = foldr (perRook (pawns p) mPs) (0, 0) $ bbToSquares mRs
@@ -547,6 +547,11 @@ evalRookPlc p = [ ho, op ]
           (yho, yop) = foldr (perRook (pawns p) yPs) (0, 0) $ bbToSquares yRs
           !ho = mho - yho
           !op = mop - yop
+          !mrc | myRAttacs p .&. me p .&. rooks p == 0 = 0
+               | otherwise                             = 1
+          !yrc | yoRAttacs p .&. yo p .&. rooks p == 0 = 0
+               | otherwise                             = 1
+          !rc = mrc - yrc
 
 perRook :: BBoard -> BBoard -> Square -> (Int, Int) -> (Int, Int)
 perRook allp myp rsq (ho, op)
@@ -651,8 +656,8 @@ isol ps pp = (ris, pis)
           !myu = myf `unsafeShiftL` 8
           !myd = myf `unsafeShiftR` 8
           !myc = myf .|. myu .|. myd
-          !ris = popCount1 $ myr `less`myc
-          !pis = popCount1 $ myp `less`myc
+          !ris = popCount1 $ myr `less` myc
+          !pis = popCount1 $ myp `less` myc
           notA = 0xFEFEFEFEFEFEFEFE
           notH = 0x7F7F7F7F7F7F7F7F
 
@@ -680,47 +685,22 @@ isol ps pp = (ris, pis)
 --          !q = (qa - qo) * matPiece White Queen
 --          !epp = (k + b + r + q) `div` 100
 
------- Castle rights ------
---data Castles = Castles
---
---instance EvalItem Castles where
---    evalItem p c _ = castles p c
---    evalItemNDL _ = [("castlePoints", (0, (-50, 200)))]
-
--- This will have to be replaced, because not the castle rights are important, but
--- the king safety and the rook mobility
---castles :: MyPos -> Color -> IWeights
---castles p _ = [crd]
---    where (ok, ork, orq, ak, ark, arq) = (4, 7, 0, 60, 63, 56)
---          !epc = epcas p
---          !okmoved = not $ epc `testBit` ok
---          !akmoved = not $ epc `testBit` ak
---          !orkc = if epc `testBit` ork then 1 else 0
---          !arkc = if epc `testBit` ark then 1 else 0
---          !orqc = if epc `testBit` orq then 1 else 0
---          !arqc = if epc `testBit` arq then 1 else 0
---          !co = if okmoved then 0 else orkc + orqc
---          !ca = if akmoved then 0 else arkc + arqc
---          !cdiff = co - ca
---          !qfact = popCount1 $ queens p
---          !rfact = popCount1 $ rooks p
---          !crd = cdiff * (2 * qfact + rfact)
-
 ------ Last Line ------
 data LastLine = LastLine
 
 instance EvalItem LastLine where
     evalItem _ p _ = lastline p
-    evalItemNDL _  = [("lastLinePenalty", ((24, 0), (0, 100)))]
+    evalItemNDL _  = [("lastLinePenalty", ((133, -15), (-100, 300)))]
 
--- This function is already optimised
+-- Only for minor figures (queen is free to stay where it wants)
+-- Negative at the end: so that it falls stronger
 lastline :: MyPos -> IWeights
 lastline p = [cdiff]
-    where !whl = popCount1 $ (me p `less` rok) .&. lali
-          !bll = popCount1 $ (yo p `less` rok) .&. lali
-          !cdiff = bll - whl
-          !rok = rooks p .|. kings p
+    where !whl = popCount1 $ me p .&. cb
+          !bll = popCount1 $ yo p .&. cb
+          !cb = (knights p .|. bishops p) .&. lali
           lali = 0xFF000000000000FF	-- approximation!
+          !cdiff = bll - whl
 
 ------ Redundance: bishop pair and rook redundance ------
 data Redundance = Redundance
@@ -787,8 +767,8 @@ instance EvalItem PaBlo where
                      ("pawnBlockP", ((-154, -145), (-300, 0))),	-- blocked by own pawn
                      ("pawnBlockO", (( -32,  -35), (-300, 0))),	-- blocked by own piece
                      ("pawnBlockA", (( -17, -102), (-300, 0))),	-- blocked by adverse piece
-                     ("passBlockO", ((-130, -138), (-300, 0))),	-- passed blocked by own piece
-                     ("passBlockA", (( -68, -406), (-300, 0)))	-- passed blocked by adverse piece
+                     ("passBlockO", ((-130, -138), (-500, 0))),	-- passed blocked by own piece (was 300)
+                     ("passBlockA", (( -68, -300), (-500, 0)))	-- passed blocked by adverse piece (was 300)
                      ]
 
 pawnBl :: MyPos -> IWeights
@@ -830,31 +810,55 @@ data PassPawns = PassPawns
 instance EvalItem PassPawns where
     evalItem _ p _ = passPawns p
     evalItemNDL _  = [("passPawnBonus", ((  62,   78), (   0,  200))),
-                      ("passPawn4",     (( 346,  341), ( 200,  520))),
-                      ("passPawn5",     (( 483,  474), ( 250,  740))),
-                      ("passPawn6",     (( 850,  836), ( 500, 1200))),
-                      ("passPawn7",     ((1552, 1448), ( 900, 2300)))
+                      ("passPawn4",     (( 260,  256), ( 200,  400))),
+                      ("passPawn5",     (( 362,  356), ( 250,  650))),
+                      ("passPawn6",     (( 638,  627), ( 500, 1000))),
+                      ("passPawn7",     ((1164, 1086), ( 900, 1600))),
+                      ("pasPPawn4",     ((  86, 1000), (  50, 3200))),	-- this is a further
+                      ("pasPPawn5",     (( 121, 1100), ( 100, 3400))),	-- bonus for protected
+                      ("pasPPawn6",     (( 212, 1307), ( 200, 3700))),	-- passed pawns
+                      ("pasPPawn7",     (( 388, 1586), ( 300, 4400)))
                      ]
  
 passPawns :: MyPos -> IWeights
-passPawns p = [dfp, dfp4, dfp5, dfp6, dfp7]
+passPawns p = [dfp, dfp4, dfp5, dfp6, dfp7, dpp4, dpp5, dpp6, dpp7]
     where !mfpbb = passed p .&. me p
           !yfpbb = passed p .&. yo p
           !mfp  = popCount1   mfpbb
-          !mfp4 = popCount1 $ mfpbb .&. row4m
-          !mfp5 = popCount1 $ mfpbb .&. row5m
-          !mfp6 = popCount1 $ mfpbb .&. row6m
-          !mfp7 = popCount1 $ mfpbb .&. row7m
+          !mbbp4 = mfpbb .&. row4m
+          !mbbp5 = mfpbb .&. row5m
+          !mbbp6 = mfpbb .&. row6m
+          !mbbp7 = mfpbb .&. row7m
+          !mfp4 = popCount1   mbbp4
+          !mfp5 = popCount1   mbbp5
+          !mfp6 = popCount1   mbbp6
+          !mfp7 = popCount1   mbbp7
+          !mpp4 = popCount1 $ mbbp4 .&. myPAttacs p
+          !mpp5 = popCount1 $ mbbp5 .&. myPAttacs p
+          !mpp6 = popCount1 $ mbbp6 .&. myPAttacs p
+          !mpp7 = popCount1 $ mbbp7 .&. myPAttacs p
           !yfp  = popCount1   yfpbb
-          !yfp4 = popCount1 $ yfpbb .&. row4y
-          !yfp5 = popCount1 $ yfpbb .&. row5y
-          !yfp6 = popCount1 $ yfpbb .&. row6y
-          !yfp7 = popCount1 $ yfpbb .&. row7y
+          !ybbp4 = yfpbb .&. row4y
+          !ybbp5 = yfpbb .&. row5y
+          !ybbp6 = yfpbb .&. row6y
+          !ybbp7 = yfpbb .&. row7y
+          !yfp4 = popCount1   ybbp4
+          !yfp5 = popCount1   ybbp5
+          !yfp6 = popCount1   ybbp6
+          !yfp7 = popCount1   ybbp7
+          !ypp4 = popCount1 $ ybbp4 .&. yoPAttacs p
+          !ypp5 = popCount1 $ ybbp5 .&. yoPAttacs p
+          !ypp6 = popCount1 $ ybbp6 .&. yoPAttacs p
+          !ypp7 = popCount1 $ ybbp7 .&. yoPAttacs p
           !dfp  = mfp  - yfp
           !dfp4 = mfp4 - yfp4
           !dfp5 = mfp5 - yfp5
           !dfp6 = mfp6 - yfp6
           !dfp7 = mfp7 - yfp7
+          !dpp4 = mpp4 - ypp4
+          !dpp5 = mpp5 - ypp5
+          !dpp6 = mpp6 - ypp6
+          !dpp7 = mpp7 - ypp7
           (!row4m, !row5m, !row6m, !row7m, !row4y, !row5y, !row6y, !row7y)
               | moving p == White = (row4, row5, row6, row7, row5, row4, row3, row2)
               | otherwise         = (row5, row4, row3, row2, row4, row5, row6, row7)
@@ -878,6 +882,7 @@ pawnEndGame p
     |                      not (null yescds) = Just (yorace, [yorace])
     | otherwise                              = Nothing
     -- | -- here we will consider what is with 2 passed pawns which are far enough from each other
+    -- and even with connected (or defended) passed pawns
     where !mfpbb = passed p .&. me p
           !yfpbb = passed p .&. yo p
           !myking = kingSquare (kings p) (me p)
