@@ -63,10 +63,9 @@ initPos :: MyPos
 initPos = posFromFen startFen
 
 posFromFen :: String -> MyPos
-posFromFen fen = p { epcas = x, zobkey = zk }
+posFromFen fen = updatePos p { epcas = x, zobkey = zk }
     where fen1:fen2:fen3:fen4:fen5:_ = fenFromString fen
           p  = fenToTable fen1
-          -- bp = (basicPos p) { bpepcas = x }
           x  = fyInit . castInit . epInit $ epcas0
           (epcas0, z) = case fen2 of
               'w':_ -> (0, 0)
@@ -587,10 +586,12 @@ changePining p src dst = kings p `testBit` src	-- king is moving
 
 {-# INLINE clearCast #-}
 clearCast :: BBoard -> BBoard -> BBoard
-clearCast sqbb cas = xor (caRiMa .&. cas .&. sqbb) cas
+-- clearCast sqbb cas = xor (caRiMa .&. cas .&. sqbb) cas
+clearCast sqbb cas = cas `less` (caRiMa .&. sqbb)
 
 {-# INLINE isClearingCast #-}
 isClearingCast :: BBoard -> BBoard -> Bool
+--isClearingCast sqbb cas = (caRiMa .&. cas .&. sqbb) /= 0
 isClearingCast sqbb cas = (caRiMa .&. cas .&. sqbb) /= 0
 
 -- When we know we have a move which clears some castling rights

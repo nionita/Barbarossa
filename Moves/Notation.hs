@@ -207,7 +207,7 @@ bbToSingleSquare b
     | otherwise  = fail "Ambiguous piece"
 
 posToFen :: MyPos -> String
-posToFen pos = unwords [lns, tmv, correct cast, rest]
+posToFen pos = unwords [lns, tmv, correct cast, ep, halb, rest]
     where lns :: String
           lns = concat $ map (extline . foldl tra ("", 0))
                        $ map (\s -> map (tabla pos) [s..s+7]) $ reverse [0, 8 .. 56]
@@ -224,6 +224,12 @@ posToFen pos = unwords [lns, tmv, correct cast, rest]
           cqw = if not (kingMoved pos White) && castQueenRookOk pos White then 'Q' else '-'
           ckb = if not (kingMoved pos Black) && castKingRookOk  pos Black then 'k' else '-'
           cqb = if not (kingMoved pos Black) && castQueenRookOk pos Black then 'q' else '-'
-          rest = "- 0 1"	-- rest not yet implemented
+          epbb = epcas pos .&. epMask
+          ep | epbb == 0 = "-"
+             | otherwise = let sq = firstOne epbb
+                               (r, c) = sq `divMod` 8
+                           in chr (ord 'a' + c) : chr (ord '1' + r) : []
+          halb = show $ (epcas pos .&. fyMask) `div` fyIncr
+          rest = "1"	-- rest not yet implemented
           correct "----" = "-"
           correct x = filter ((/=) '-') x

@@ -6,14 +6,14 @@
              #-}
 
 module Moves.Base (
-    posToState, initPos, getPos, posNewSearch,
+    posToState, getPos, posNewSearch,
     doMove, undoMove, genMoves, genTactMoves,
     useHash,
     staticVal, materVal, tacticalPos, isMoveLegal, isKillCand, okInSequence,
     betaCut, doNullMove, ttRead, ttStore, curNodes, chooseMove, isTimeout, informCtx,
     mateScore,
     finNode,
-    showMyPos,
+    showMyPos, logMes,
     nearmate	-- , special
 ) where
 
@@ -72,16 +72,15 @@ informCtx = lift . talkToContext
 
 posToState :: MyPos -> Cache -> History -> EvalState -> MyState
 posToState p c h e = MyState {
-                       stack = [updatePos p],
+                       stack = [p''],
                        hash = c,
                        hist = h,
                        stats = stats0,
                        evalst = e
                    }
-    where stats0 = Stats {
-                       nodes = 0,
-                       maxmvs = 0
-                   }
+    where (stsc, feats) = evalState (posEval p) e
+          p'' = p { staticScore = stsc, staticFeats = feats }
+          stats0 = Stats { nodes = 0, maxmvs = 0 }
 
 posNewSearch :: MyState -> MyState
 posNewSearch p = p { hash = newGener (hash p) }
@@ -205,6 +204,7 @@ doMove real m qs = do
         else if not cok
                 then return Illegal
                 else do
+                    bigCheckPos "doMove" pc (Just m) p'
                     let (!sts, feats) | real      = (0, [])
                                       | otherwise = evalState (posEval p') (evalst s)
                         !p = p' { staticScore = sts, staticFeats = feats }
@@ -226,7 +226,24 @@ doNullMove = do
         !p' = reverseMoving p0
         (!sts, feats) = evalState (posEval p') (evalst s)
         !p = p' { staticScore = sts, staticFeats = feats }
+    bigCheckPos "doNullMove" p0 Nothing p'
     put s { stack = p : stack s }
+
+bigCheckPos :: String -> MyPos -> Maybe Move -> MyPos -> Game ()
+bigCheckPos loc pin mmv pou = do
+    let fpou = posToFen pou
+        p    = posFromFen fpou
+    when (pou { staticScore = 0, staticFeats = [] } /= p { staticScore = 0, staticFeats = [] }) $ do
+        let fpin = posToFen pin
+        logMes $ "Wrong pos in " ++ loc
+        logMes $ "Input:  " ++ fpin
+        case mmv of
+            Just mv -> logMes $ "Move:   " ++ toNiceNotation pin mv
+            Nothing -> logMes $ "Move:   null move"
+        logMes $ "Output: " ++ fpou
+        logMes $ "Outget: " ++ fpou
+        logMes $ "MyPos pou: " ++ show pou
+        logMes $ "MyPos p:   " ++ show p
 
 checkRemisRules :: MyPos -> Game Bool
 checkRemisRules p = do
