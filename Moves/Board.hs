@@ -3,7 +3,7 @@ module Moves.Board (
     posFromFen, initPos,
     isCheck, inCheck,
     goPromo, hasMoves, moveIsCapture,
-    kingMoved, castKingRookOk, castQueenRookOk,
+    castKingRookOk, castQueenRookOk,
     -- genMoveCapt,
     genMoveCast, genMoveNCapt, genMoveTransf, genMoveFCheck, genMoveCaptWL,
     genMoveNCaptToCheck,
@@ -489,7 +489,8 @@ updatePosCheck p = p {
 -- and test anyway kingmoved first (or even a more general pattern for all moved)
 genMoveCast :: MyPos -> [Move]
 genMoveCast p
-    | inCheck p || kingMoved p c = []
+    -- | inCheck p || kingMoved p c = []
+    | inCheck p = []
     | otherwise = kingside ++ queenside
     where (cmidk, cmidq) = if c == White then (caRMKw, caRMQw)
                                          else (caRMKb, caRMQb)
@@ -501,20 +502,15 @@ genMoveCast p
           caqs = makeCastleFor c False
           !c = moving p
 
-{-# INLINE kingMoved #-}
-kingMoved :: MyPos -> Color -> Bool
-kingMoved !p White = not (epcas p `testBit` 4)
-kingMoved !p Black = not (epcas p `testBit` 60)
-
 {-# INLINE castKingRookOk #-}
 castKingRookOk :: MyPos -> Color -> Bool
-castKingRookOk !p White = epcas p `testBit` 7
-castKingRookOk !p Black = epcas p `testBit` 63
+castKingRookOk !p White = epcas p .&.  b7 /= 0 where b7 = uBit 7
+castKingRookOk !p Black = epcas p .&. b63 /= 0 where b63 = uBit 63
 
 {-# INLINE castQueenRookOk #-}
 castQueenRookOk :: MyPos -> Color -> Bool
-castQueenRookOk !p White = epcas p `testBit` 0
-castQueenRookOk !p Black = epcas p `testBit` 56
+castQueenRookOk !p White = epcas p .&.  b0 /= 0 where b0 = 1 
+castQueenRookOk !p Black = epcas p .&. b56 /= 0 where b56 = uBit 56
 
 {-# INLINE uBit #-}
 uBit :: Square -> BBoard
@@ -590,7 +586,7 @@ clearCast cas sd
     | sdposs == 0 || sdcas == 0 = (0, 0)	-- most of the time
     | otherwise = clearingCast sdcas cas	-- complicated cases
     where !sdposs = sd .&. caRiMa	-- moving from/to king/rook position?
-          sdcas = sdposs .&. cas	-- was that not yet moved?
+          sdcas = sdposs .&. cas	-- first time touched
 
 {-# INLINE clearingCast #-}
 clearingCast :: BBoard -> BBoard -> (BBoard, ZKey)
@@ -620,12 +616,12 @@ clearingCast sdcas cas = (cascl, zobcl)
                                             then (bkqb .|. bkkb, zobCastQb `xor` zobCastKb)
                                             else if sdcas .&. bqrb /= 0
                                                     then (bqrb, zobCastQb)
-                                                    else if sdcas .&. wkrb /= 0
+                                                    else if sdcas .&. bkrb /= 0
                                                             then (bkrb, zobCastKb)
                                                             else (0, 0)
           !casr  = cas .&. caRiMa
-          !casrw = cas .&. caRiMa .&. 0xFF
-          !casrb = cas .&. caRiMa .&. 0xFF00000000000000
+          !casrw = casr .&. 0xFF
+          !casrb = casr .&. 0xFF00000000000000
           !cascl = casw .|. casb
           !zobcl = zobw `xor` zobb
           wkqb = 0x11	-- king & queen rook for white
@@ -638,27 +634,6 @@ clearingCast sdcas cas = (cascl, zobcl)
           bkbb = 0x1000000000000000	-- black king
           bqrb = 0x0100000000000000	-- black queen rook
           bkrb = 0x8000000000000000	-- black king rook
-
-{-# INLINE isClearingCast #-}
-isClearingCast :: BBoard -> BBoard -> Bool
---isClearingCast sqbb cas = (caRiMa .&. cas .&. sqbb) /= 0
-isClearingCast sqbb cas = (caRiMa .&. cas .&. sqbb) /= 0
-
--- When we know we have a move which clears some castling rights
--- we call this function to compute a start zobrist key from
--- the one of the current position, xoring the Zobrist keys
--- for the rights which are lost
--- These ones are precalculated in an array with most elements =0,
--- except for rooks and kings start places - see next array
-clearCastZob :: BBoard -> Square -> Square -> BBoard
-clearCastZob !zob !src !dst
-    = zob `xor` (castZobArray `unsafeAt` src) `xor` (castZobArray `unsafeAt` dst)
-
-castZobArray :: UArray Square ZKey
-castZobArray = listArray (0, 63) (repeat 0) // [
-        ( 0, zobCastQw), ( 4, zobCastQw `xor` zobCastKw), ( 7, zobCastKw),
-        (56, zobCastQb), (60, zobCastQb `xor` zobCastKb), (63, zobCastKb)
-    ]
 
 -- Just for a dumb debug: a quick check if two consecutive moves
 -- can be part of a move sequence

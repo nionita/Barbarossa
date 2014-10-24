@@ -220,10 +220,10 @@ posToFen pos = unwords [lns, tmv, correct cast, ep, halb, rest]
           extline (s, k) = s ++ show k ++ "/"
           tmv = if moving pos == White then "w" else "b"
           cast = [ckw, cqw, ckb, cqb]
-          ckw = if not (kingMoved pos White) && castKingRookOk  pos White then 'K' else '-'
-          cqw = if not (kingMoved pos White) && castQueenRookOk pos White then 'Q' else '-'
-          ckb = if not (kingMoved pos Black) && castKingRookOk  pos Black then 'k' else '-'
-          cqb = if not (kingMoved pos Black) && castQueenRookOk pos Black then 'q' else '-'
+          ckw = if castKingRookOk  pos White then 'K' else '-'
+          cqw = if castQueenRookOk pos White then 'Q' else '-'
+          ckb = if castKingRookOk  pos Black then 'k' else '-'
+          cqb = if castQueenRookOk pos Black then 'q' else '-'
           epbb = epcas pos .&. epMask
           ep | epbb == 0 = "-"
              | otherwise = let sq = firstOne epbb
