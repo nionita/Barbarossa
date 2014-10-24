@@ -11,7 +11,7 @@ module Hash.Zobrist (
 import Data.Array.Base
 import GHC.Arr (unsafeIndex)
 import System.Random
-import Control.Exception (assert)
+-- import Control.Exception (assert)
 
 import Struct.Struct
 
@@ -52,4 +52,4 @@ zobCastQb = zobrist `unsafeAt` (zobCastBegin + 3)
 
 zobEP :: Int -> ZKey
 {-# INLINE zobEP #-}
-zobEP x = assert (x >= 0 && x <= 7) $ zobrist `unsafeAt` (zobCastBegin + 4 + x)
+zobEP x = zobrist `unsafeAt` (zobCastBegin + 4 + x)

@@ -204,7 +204,7 @@ doMove real m qs = do
         else if not cok
                 then return Illegal
                 else do
-                    bigCheckPos "doMove" pc (Just m) p'
+                    -- bigCheckPos "doMove" pc (Just m) p'
                     let (!sts, feats) | real      = (0, [])
                                       | otherwise = evalState (posEval p') (evalst s)
                         !p = p' { staticScore = sts, staticFeats = feats }
@@ -226,14 +226,15 @@ doNullMove = do
         !p' = reverseMoving p0
         (!sts, feats) = evalState (posEval p') (evalst s)
         !p = p' { staticScore = sts, staticFeats = feats }
-    bigCheckPos "doNullMove" p0 Nothing p'
+    -- bigCheckPos "doNullMove" p0 Nothing p'
     put s { stack = p : stack s }
 
 bigCheckPos :: String -> MyPos -> Maybe Move -> MyPos -> Game ()
 bigCheckPos loc pin mmv pou = do
     let fpou = posToFen pou
         p    = posFromFen fpou
-    when (pou { staticScore = 0, staticFeats = [] } /= p { staticScore = 0, staticFeats = [] }) $ do
+    -- when (pou { staticScore = 0, staticFeats = [] } /= p { staticScore = 0, staticFeats = [] }) $ do
+    when (zobkey pou /= zobkey p) $ do
         let fpin = posToFen pin
         logMes $ "Wrong pos in " ++ loc
         logMes $ "Input:  " ++ fpin

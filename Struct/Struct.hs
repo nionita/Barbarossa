@@ -9,7 +9,7 @@ module Struct.Struct (
          fromSquare, toSquare, isSlide, isDiag, isKkrq,
          moveIsNormal, moveIsCastle, moveIsTransf, moveIsEnPas,
          moveColor, moveTransfPiece, moveEnPasDel, makeEnPas,
-         makeCastleFor, makeTransf, moveFromTo,
+         makeCastleFor, makeTransf, moveFromTo, showWord64,
          activateTransf, fromColRow, checkCastle, checkEnPas, toString
          -- isPawnMoving, isKingMoving
     ) where
