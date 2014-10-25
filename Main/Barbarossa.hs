@@ -27,7 +27,7 @@ import Uci.UCI
 import Uci.UciGlue
 import Moves.Base
 import Moves.Moves (movesInit)
-import Moves.Board (posFromFen)
+import Moves.Board (posFromFen, initPos)
 import Moves.History
 import Search.CStateMonad (execCState)
 import Eval.Eval (weightNames)
@@ -38,7 +38,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.2.0"
-progVerSuff = "kbpr"
+progVerSuff = "pass"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file

@@ -3,7 +3,7 @@ module Moves.Board (
     posFromFen, initPos,
     isCheck, inCheck,
     goPromo, hasMoves, moveIsCapture,
-    kingMoved, castKingRookOk, castQueenRookOk,
+    castKingRookOk, castQueenRookOk,
     -- genMoveCapt,
     genMoveCast, genMoveNCapt, genMoveTransf, genMoveFCheck, genMoveCaptWL,
     genMoveNCaptToCheck,
@@ -63,10 +63,9 @@ initPos :: MyPos
 initPos = posFromFen startFen
 
 posFromFen :: String -> MyPos
-posFromFen fen = p { epcas = x, zobkey = zk }
+posFromFen fen = updatePos p { epcas = x, zobkey = zk }
     where fen1:fen2:fen3:fen4:fen5:_ = fenFromString fen
           p  = fenToTable fen1
-          -- bp = (basicPos p) { bpepcas = x }
           x  = fyInit . castInit . epInit $ epcas0
           (epcas0, z) = case fen2 of
               'w':_ -> (0, 0)
@@ -490,7 +489,8 @@ updatePosCheck p = p {
 -- and test anyway kingmoved first (or even a more general pattern for all moved)
 genMoveCast :: MyPos -> [Move]
 genMoveCast p
-    | inCheck p || kingMoved p c = []
+    -- | inCheck p || kingMoved p c = []
+    | inCheck p = []
     | otherwise = kingside ++ queenside
     where (cmidk, cmidq) = if c == White then (caRMKw, caRMQw)
                                          else (caRMKb, caRMQb)
@@ -502,20 +502,15 @@ genMoveCast p
           caqs = makeCastleFor c False
           !c = moving p
 
-{-# INLINE kingMoved #-}
-kingMoved :: MyPos -> Color -> Bool
-kingMoved !p White = not (epcas p `testBit` 4)
-kingMoved !p Black = not (epcas p `testBit` 60)
-
 {-# INLINE castKingRookOk #-}
 castKingRookOk :: MyPos -> Color -> Bool
-castKingRookOk !p White = epcas p `testBit` 7
-castKingRookOk !p Black = epcas p `testBit` 63
+castKingRookOk !p White = epcas p .&.  b7 /= 0 where b7 = uBit 7
+castKingRookOk !p Black = epcas p .&. b63 /= 0 where b63 = uBit 63
 
 {-# INLINE castQueenRookOk #-}
 castQueenRookOk :: MyPos -> Color -> Bool
-castQueenRookOk !p White = epcas p `testBit` 0
-castQueenRookOk !p Black = epcas p `testBit` 56
+castQueenRookOk !p White = epcas p .&.  b0 /= 0 where b0 = 1 
+castQueenRookOk !p Black = epcas p .&. b56 /= 0 where b56 = uBit 56
 
 {-# INLINE uBit #-}
 uBit :: Square -> BBoard
@@ -586,28 +581,59 @@ changePining p src dst = kings p `testBit` src	-- king is moving
 -}
 
 {-# INLINE clearCast #-}
-clearCast :: BBoard -> BBoard -> BBoard
-clearCast sqbb cas = xor (caRiMa .&. cas .&. sqbb) cas
+clearCast :: BBoard -> BBoard -> (BBoard, ZKey)
+clearCast cas sd
+    | sdposs == 0 || sdcas == 0 = (0, 0)	-- most of the time
+    | otherwise = clearingCast sdcas cas	-- complicated cases
+    where !sdposs = sd .&. caRiMa	-- moving from/to king/rook position?
+          sdcas = sdposs .&. cas	-- first time touched
 
-{-# INLINE isClearingCast #-}
-isClearingCast :: BBoard -> BBoard -> Bool
-isClearingCast sqbb cas = (caRiMa .&. cas .&. sqbb) /= 0
-
--- When we know we have a move which clears some castling rights
--- we call this function to compute a start zobrist key from
--- the one of the current position, xoring the Zobrist keys
--- for the rights which are lost
--- These ones are precalculated in an array with most elements =0,
--- except for rooks and kings start places - see next array
-clearCastZob :: BBoard -> Square -> Square -> BBoard
-clearCastZob !zob !src !dst
-    = zob `xor` (castZobArray `unsafeAt` src) `xor` (castZobArray `unsafeAt` dst)
-
-castZobArray :: UArray Square ZKey
-castZobArray = listArray (0, 63) (repeat 0) // [
-        ( 0, zobCastQw), ( 4, zobCastQw `xor` zobCastKw), ( 7, zobCastKw),
-        (56, zobCastQb), (60, zobCastQb `xor` zobCastKb), (63, zobCastKb)
-    ]
+{-# INLINE clearingCast #-}
+clearingCast :: BBoard -> BBoard -> (BBoard, ZKey)
+clearingCast sdcas cas = (cascl, zobcl)
+    where (casw, zobw) | casrw == 0 = (0, 0)	-- cast rights & changes for white
+                       | casrw == wkqb = if sdcas .&. wkqb /= 0
+                                            then (wkqb, zobCastQw)
+                                            else (0, 0)
+                       | casrw == wkkb = if sdcas .&. wkkb /= 0
+                                            then (wkkb, zobCastKw)
+                                            else (0, 0)
+                       | otherwise     = if sdcas .&. wkbb /= 0
+                                            then (wkqb .|. wkkb, zobCastQw `xor` zobCastKw)
+                                            else if sdcas .&. wqrb /= 0
+                                                    then (wqrb, zobCastQw)
+                                                    else if sdcas .&. wkrb /= 0
+                                                            then (wkrb, zobCastKw)
+                                                            else (0, 0)
+          (casb, zobb) | casrb == 0 = (0, 0)	-- cast rights & changes for white
+                       | casrb == bkqb = if sdcas .&. bkqb /= 0
+                                            then (bkqb, zobCastQb)
+                                            else (0, 0)
+                       | casrb == bkkb = if sdcas .&. bkkb /= 0
+                                            then (bkkb, zobCastKb)
+                                            else (0, 0)
+                       | otherwise     = if sdcas .&. bkbb /= 0
+                                            then (bkqb .|. bkkb, zobCastQb `xor` zobCastKb)
+                                            else if sdcas .&. bqrb /= 0
+                                                    then (bqrb, zobCastQb)
+                                                    else if sdcas .&. bkrb /= 0
+                                                            then (bkrb, zobCastKb)
+                                                            else (0, 0)
+          !casr  = cas .&. caRiMa
+          !casrw = casr .&. 0xFF
+          !casrb = casr .&. 0xFF00000000000000
+          !cascl = casw .|. casb
+          !zobcl = zobw `xor` zobb
+          wkqb = 0x11	-- king & queen rook for white
+          wkkb = 0x90	-- king & king rook for white
+          wkbb = 0x10	-- white king
+          wqrb = 0x01	-- white queen rook
+          wkrb = 0x80	-- white king rook
+          bkqb = 0x1100000000000000	-- king & queen rook for black
+          bkkb = 0x9000000000000000	-- king & king rook for black
+          bkbb = 0x1000000000000000	-- black king
+          bqrb = 0x0100000000000000	-- black queen rook
+          bkrb = 0x8000000000000000	-- black king rook
 
 -- Just for a dumb debug: a quick check if two consecutive moves
 -- can be part of a move sequence
@@ -679,18 +705,16 @@ mvBit !src !dst !w	-- = w `xor` ((w `xor` (shifted .&. nbsrc)) .&. mask)
 moveAndClearEp :: BBoard -> BBoard
 moveAndClearEp bb = bb `xor` (bb .&. epMask) `xor` mvMask
 
-{-# INLINE epToFile #-}
-epToFile :: BBoard -> BBoard
-epToFile bb = 0xFF .&. (bb `unsafeShiftR` 16 .|. bb `unsafeShiftR` 32)
-
 {-# INLINE epClrZob #-}
 epClrZob :: BBoard -> BBoard
 epClrZob bb
-    | epLastBB' == 0 = 0
-    | otherwise      = zobEP epLastSq
-    where !epLastBB  = bb .&. epMask
-          !epLastBB' = epToFile epLastBB
-          epLastSq   = head $ bbToSquares epLastBB'
+    | epLastBB == 0 = 0
+    | otherwise     = epSetZob $ head $ bbToSquares epLastBB
+    where epLastBB  = bb .&. epMask
+
+{-# INLINE epSetZob #-}
+epSetZob :: Square -> BBoard
+epSetZob = zobEP . (.&. 0x7)
 
 -- Copy one square to another and clear the source square
 -- doFromToMove :: Square -> Square -> MyPos -> Maybe MyPos
@@ -710,21 +734,19 @@ doFromToMove m !p | moveIsNormal m
           !dstbb = uBit dst
           !pawnmoving = pawns p .&. srcbb /= 0	-- the correct color is
           !iscapture  = occup p .&. dstbb /= 0	-- checked somewhere else
-          !isclc = isClearingCast srcbb (epcas p) || isClearingCast dstbb (epcas p)
-          !irevers = pawnmoving || iscapture || isclc
-          !tepcas' = clearCast srcbb $ clearCast dstbb $ moveAndClearEp $ epcas p
+          (clearcast, zobcast) = clearCast (epcas p) (srcbb .|. dstbb)
+          !irevers = pawnmoving || iscapture || clearcast /= 0
+          !tepcas' = moveAndClearEp $ epcas p `less` clearcast
           !tepcas  = setEp $! if irevers then reset50Moves tepcas' else addHalfMove tepcas'
           -- For e.p. zob key:
           !epcl = epClrZob $ epcas p
-          (setEp, !epSetZob)
+          (setEp, !epst)
               | pawnmoving && (src - dst == 16 || dst - src == 16)
-                  = let epFld = (src + dst) `unsafeShiftR` 1
-                        epBit = uBit epFld
-                    in ((.|.) epBit, zobEP epFld)
+                  = let !epFld = (src + dst) `unsafeShiftR` 1
+                        !epBit = uBit epFld
+                    in ((.|.) epBit, epSetZob epFld)
               | otherwise = (id, 0)
-          -- !zob = if isclc then clearCastZob (zobkey p) src dst else zobkey p
-          -- What is faster? Alwas, or only when isclc?
-          !zob = clearCastZob (zobkey p `xor` epcl `xor` epSetZob) src dst
+          !zob = zobkey p `xor` epcl `xor` epst `xor` zobcast
           CA tzobkey tmater = case tabla p src of	-- identify the moving piece
                Busy col fig -> chainAccum (CA zob (mater p)) [
                                    accumClearSq src p,
@@ -774,9 +796,11 @@ doFromToMove m !p | moveIsTransf m
           tslide = mvBit src dst $ slide p0
           tkkrq  = mvBit src dst $ kkrq p0
           tdiag  = mvBit src dst $ diag p0
-          tepcas = reset50Moves $ moveAndClearEp $ epcas p
+          !dstbb = uBit dst	-- destination could clear cast rights!
+          (clearcast, zobcast) = clearCast (epcas p) dstbb
+          tepcas = reset50Moves $ moveAndClearEp $ epcas p `less` clearcast
           !epcl = epClrZob $ epcas p0
-          !zk = zobkey p0 `xor` epcl
+          !zk = zobkey p0 `xor` epcl `xor` zobcast
           CA tzobkey tmater = chainAccum (CA zk (mater p0)) [
                                 accumClearSq src p0,
                                 accumSetPiece dst col pie p0,
@@ -803,12 +827,13 @@ doFromToMove m !p | moveIsCastle m
           tslide = mvBit csr cds $ mvBit src dst $ slide p
           tkkrq  = mvBit csr cds $ mvBit src dst $ kkrq p
           tdiag  = mvBit csr cds $ mvBit src dst $ diag p
-          srcbb = uBit src
-          tepcas = reset50Moves $ clearCast srcbb $ moveAndClearEp $ epcas p
+          !srcbb = uBit src	-- source clears cast rights
+          (clearcast, zobcast) = clearCast (epcas p) srcbb
+          tepcas = reset50Moves $ moveAndClearEp $ epcas p `less` clearcast
           Busy col King = tabla p src	-- identify the moving piece (king)
           Busy co1 Rook = tabla p csr	-- identify the moving rook
           !epcl = epClrZob $ epcas p
-          !zob = clearCastZob (zobkey p `xor` epcl) src dst
+          !zob = zobkey p `xor` epcl `xor` zobcast
           CA tzobkey tmater = chainAccum (CA zob (mater p)) [
                                 accumClearSq src p,
                                 accumSetPiece dst col King p,

@@ -9,7 +9,7 @@ module Struct.Struct (
          fromSquare, toSquare, isSlide, isDiag, isKkrq,
          moveIsNormal, moveIsCastle, moveIsTransf, moveIsEnPas,
          moveColor, moveTransfPiece, moveEnPasDel, makeEnPas,
-         makeCastleFor, makeTransf, moveFromTo,
+         makeCastleFor, makeTransf, moveFromTo, showWord64,
          activateTransf, fromColRow, checkCastle, checkEnPas, toString
          -- isPawnMoving, isKingMoving
     ) where
@@ -17,6 +17,7 @@ module Struct.Struct (
 import Data.Array.Unboxed
 import Data.Array.Base
 import Data.Char (ord, chr)
+import Data.List (unfoldr)
 import Data.Word
 import Data.Bits
 import Data.Ix
@@ -53,7 +54,44 @@ data MyPos = MyPos {
     staticScore :: Int,
     staticFeats :: [Int]
     }
-    deriving (Eq, Show)
+    deriving Eq
+
+instance Show MyPos where
+   show p = "MyPos {" ++ concatMap showField [
+            (black, "black"),
+            (slide, "slide"),
+            (kkrq, "kkrq"),
+            (diag, "diag"),
+            (epcas, "epcas"),
+            (zobkey, "zobkey"),
+            (me, "me"),
+            (yo, "yo"),
+            (occup, "occup"),
+            (kings, "kings"),
+            (pawns, "pawns"),
+            (queens, "queens"),
+            (rooks, "rooks"),
+            (bishops, "bishops"),
+            (knights, "knights"),
+            (passed, "passed"),
+            (myAttacs, "myAttacs"),
+            (yoAttacs, "yoAttacs"),
+            (check, "check"),
+            (myPAttacs, "myPAttacs"),
+            (myNAttacs, "myNAttacs"),
+            (myBAttacs, "myBAttacs"),
+            (myRAttacs, "myRAttacs"),
+            (myQAttacs, "myQAttacs"),
+            (myKAttacs, "myKAttacs"),
+            (yoPAttacs, "yoPAttacs"),
+            (yoNAttacs, "yoNAttacs"),
+            (yoBAttacs, "yoBAttacs"),
+            (yoRAttacs, "yoRAttacs"),
+            (yoQAttacs, "yoQAttacs"),
+            (yoKAttacs, "yoKAttacs")
+            ]
+          ++ "}"
+       where showField (f, sf) = " " ++ sf ++ " = " ++ showWord64 (f p)
 
 {-
 Piece coding in MyPos (vertical over slide, kkrq and diag):
@@ -216,6 +254,13 @@ moving :: MyPos -> Color
 moving !p = case epcas p .&. mvMask of
                0 -> White
                _ -> Black
+
+showWord64 :: Word64 -> String
+showWord64 x = reverse $ take 16 (map f xs)
+    where xs = x : map (`unsafeShiftR` 4) xs
+          f w = unsafeAt hex . fromIntegral $ w .&. 0xF
+          hex :: UArray Int Char
+          hex = listArray (0, 15) "0123456789ABCDEF"
 
 -- The move is coded in currently 19 bits (the lower of a Word32)
 -- So we need a few functions to handle them
