@@ -41,7 +41,12 @@ instance CollectParams EvalParams where
                     epMaterQueen = 11,
                     epMaterScale = 1,
                     epMaterBonusScale = 4,
-                    epPawnBonusScale  = 4
+                    epPawnBonusScale  = 4,
+                    epPassKingProx  = 3,
+                    epPassBlockO = 10,
+                    epPassBlockA = 15,
+                    epPassMin    = 50,
+                    epPassCoef   = 10
                 }
     npColParm = collectEvalParams
     npSetParm = id
@@ -53,7 +58,12 @@ collectEvalParams (s, v) ep = lookApply s v ep [
         ("epMaterQueen",      setEpMaterQueen),
         ("epMaterScale",      setEpMaterScale),
         ("epMaterBonusScale", setEpMaterBonusScale),
-        ("epPawnBonusScale",  setEpPawnBonusScale)
+        ("epPawnBonusScale",  setEpPawnBonusScale),
+        ("epPassKingProx",    setEpPassKingProx),
+        ("epPassBlockO",      setEpPassBlockO),
+        ("epPassBlockA",      setEpPassBlockA),
+        ("epPassMin",         setEpPassMin),
+        ("epPassCoef",        setEpPassCoef)
     ]
     where setEpMaterMinor      v' ep' = ep' { epMaterMinor      = round v' }
           setEpMaterRook       v' ep' = ep' { epMaterRook       = round v' }
@@ -61,6 +71,11 @@ collectEvalParams (s, v) ep = lookApply s v ep [
           setEpMaterScale      v' ep' = ep' { epMaterScale      = round v' }
           setEpMaterBonusScale v' ep' = ep' { epMaterBonusScale = round v' }
           setEpPawnBonusScale  v' ep' = ep' { epPawnBonusScale  = round v' }
+          setEpPassKingProx    v' ep' = ep' { epPassKingProx    = round v' }
+          setEpPassBlockO      v' ep' = ep' { epPassBlockO      = round v' }
+          setEpPassBlockA      v' ep' = ep' { epPassBlockA      = round v' }
+          setEpPassMin         v' ep' = ep' { epPassMin         = round v' }
+          setEpPassCoef        v' ep' = ep' { epPassCoef        = round v' }
 
 class EvalItem a where
     evalItem    :: EvalParams -> MyPos -> a -> IWeights
@@ -810,8 +825,8 @@ pawnBloBlack !pa !op !ap = cntPaBlo p1 pa op ap
 data PassPawns = PassPawns
 
 instance EvalItem PassPawns where
-    evalItem _ p _ = passPawns p
-    evalItemNDL _  = [("passPawnLev", ((0, 8), (0, 20)))]
+    evalItem ep p _ = passPawns ep p
+    evalItemNDL _   = [("passPawnLev", ((0, 8), (0, 20)))]
  
 -- Every passed pawn get a maximum value which depends on the distance to promotion
 -- This value goes down conditioned by factors, like:
@@ -819,37 +834,34 @@ instance EvalItem PassPawns where
 -- - if own king is farther than opponent king
 -- - if it is blocked by own or opponent pieces
 -- - if it has an opponent rook behind *** not yet
-passPawns :: MyPos -> IWeights
-passPawns p = [dpp]
+passPawns :: EvalParams -> MyPos -> IWeights
+passPawns ep p = [dpp]
     where !mppbb = passed p .&. me p
           !yppbb = passed p .&. yo p
           myc = moving p
           yoc = other myc
-          !mypp = sum $ map (perPassedPawn p myc) $ bbToSquares mppbb
-          !yopp = sum $ map (perPassedPawn p yoc) $ bbToSquares yppbb
+          !mypp = sum $ map (perPassedPawn ep p myc) $ bbToSquares mppbb
+          !yopp = sum $ map (perPassedPawn ep p yoc) $ bbToSquares yppbb
           !dpp  = mypp - yopp
 
-perPassedPawn :: MyPos -> Color -> Square -> Int
-perPassedPawn p c sq = val
+perPassedPawn :: EvalParams -> MyPos -> Color -> Square -> Int
+perPassedPawn ep p c sq = val
     where !x | c == White = (promoW sq - sq) `unsafeShiftR` 3
              | otherwise  = (sq - promoB sq) `unsafeShiftR` 3
-          -- fmax = 300 cp, fmin = 50 cp
-          a0 = 10
-          b0 = -120
-          c0 = 410
-          !pmax = (a0 * x + b0) * x + c0
+          !x6 = x - 6
+          !pmax = epPassMin ep + epPassCoef ep * x6 * x6
           !sqbb = 1 `unsafeShiftL` sq
           !sqbl | c == White = sqbb `unsafeShiftL` 1
                 | otherwise  = sqbb `unsafeShiftR` 1
-          !blo | sqbl .&. me p /= 0 = 10	-- blocked by own piece
-               | sqbl .&. yo p /= 0 = 15	-- blocked by opponent piece
+          !blo | sqbl .&. me p /= 0 = epPassBlockO ep	-- blocked by own piece
+               | sqbl .&. yo p /= 0 = epPassBlockA ep	-- blocked by opponent piece
                | otherwise          =  0
           !myking = kingSquare (kings p) (me p)
           !yoking = kingSquare (kings p) (yo p)
           !mdis = squareDistance sq myking
           !ydis = squareDistance sq yoking
           !kingb | mdis <= ydis =  0
-                 | otherwise    = (mdis - ydis) * 10
+                 | otherwise    = (mdis - ydis) * epPassKingProx ep
           !val  = (pmax * (128 - blo) * (128 - kingb)) `unsafeShiftR` 14
 
 -- Pawn end games are treated specially

@@ -5,9 +5,6 @@ module Struct.Status (
     EvalParams(..)
 ) where
 
--- import Data.Array.Unboxed
--- import Data.Word
-
 import Struct.Struct
 import Moves.History
 import Hash.TransTab
@@ -42,5 +39,10 @@ data EvalParams
           epMaterQueen :: !Int,	-- = 5
           epMaterScale :: !Int,	-- = 0
           epMaterBonusScale :: Int,	-- 4
-          epPawnBonusScale  :: !Int	-- 4
+          epPawnBonusScale  :: !Int,	-- 4
+          epPassKingProx    :: !Int,
+          epPassBlockO :: !Int,
+          epPassBlockA :: !Int,
+          epPassMin    :: !Int,
+          epPassCoef   :: !Int
       } deriving Show
