@@ -766,23 +766,25 @@ instance EvalItem PaBlo where
     evalItemNDL _  = [
                      ("pawnBlockP", ((-154, -145), (-300, 0))),	-- blocked by own pawn
                      ("pawnBlockO", (( -32,  -35), (-300, 0))),	-- blocked by own piece
-                     ("pawnBlockA", (( -17, -102), (-300, 0))),	-- blocked by adverse piece
-                     ("passBlockO", ((-130, -138), (-500, 0))),	-- passed blocked by own piece (was 300)
-                     ("passBlockA", (( -68, -300), (-500, 0)))	-- passed blocked by adverse piece (was 300)
+                     ("pawnBlockA", (( -17, -102), (-300, 0)))	-- blocked by adverse piece
                      ]
+               --    ("passBlockO", ((-130, -138), (-500, 0))),	-- passed blocked by own piece (was 300)
+               --    ("passBlockA", (( -68, -300), (-500, 0)))	-- passed blocked by adverse piece (was 300)
 
 pawnBl :: MyPos -> IWeights
 pawnBl p
     | moving p == White = let (wp, wo, wa) = pawnBloWhite mer mef yof
-                              (_ , ao, aa) = pawnBloWhite mes mef yof
+                          --  (_ , ao, aa) = pawnBloWhite mes mef yof
                               (bp, bo, ba) = pawnBloBlack yor yof mef
-                              (_ , no, na) = pawnBloBlack yos yof mef
-                          in  [wp-bp, wo-bo, wa-ba, ao-no, aa-na]
+                          --  (_ , no, na) = pawnBloBlack yos yof mef
+                          -- in  [wp-bp, wo-bo, wa-ba, ao-no, aa-na]
+                          in  [wp-bp, wo-bo, wa-ba ]
     | otherwise         = let (wp, wo, wa) = pawnBloWhite yor yof mef
-                              (_ , ao, aa) = pawnBloWhite yos yof mef
+                          --  (_ , ao, aa) = pawnBloWhite yos yof mef
                               (bp, bo, ba) = pawnBloBlack mer mef yof
-                              (_ , no, na) = pawnBloBlack mes mef yof
-                          in  [bp-wp, bo-wo, ba-wa, no-ao, na-aa]
+                          --  (_ , no, na) = pawnBloBlack mes mef yof
+                          -- in  [bp-wp, bo-wo, ba-wa, no-ao, na-aa]
+                          in  [bp-wp, bo-wo, ba-wa ]
     where !mep = pawns p .&. me p	-- my pawns
           !mes = mep .&. passed p	-- my passed pawns
           !mer = mep `less` mes		-- my rest pawns
@@ -809,59 +811,46 @@ data PassPawns = PassPawns
 
 instance EvalItem PassPawns where
     evalItem _ p _ = passPawns p
-    evalItemNDL _  = [("passPawnBonus", ((  62,   78), (   0,  200))),
-                      ("passPawn4",     (( 260,  256), ( 200,  400))),
-                      ("passPawn5",     (( 362,  356), ( 250,  650))),
-                      ("passPawn6",     (( 638,  627), ( 500, 1000))),
-                      ("passPawn7",     ((1164, 1086), ( 900, 1600))),
-                      ("pasPPawn4",     ((  86, 1000), (  50, 3200))),	-- this is a further
-                      ("pasPPawn5",     (( 121, 1100), ( 100, 3400))),	-- bonus for protected
-                      ("pasPPawn6",     (( 212, 1307), ( 200, 3700))),	-- passed pawns
-                      ("pasPPawn7",     (( 388, 1586), ( 300, 4400)))
-                     ]
+    evalItemNDL _  = [("passPawnLev", ((0, 8), (0, 20)))]
  
+-- Every passed pawn get a maximum value which depends on the distance to promotion
+-- This value goes down conditioned by factors, like:
+-- - if it is isolated
+-- - if own king is farther than opponent king
+-- - if it is blocked by own or opponent pieces
+-- - if it has an opponent rook behind *** not yet
 passPawns :: MyPos -> IWeights
-passPawns p = [dfp, dfp4, dfp5, dfp6, dfp7, dpp4, dpp5, dpp6, dpp7]
-    where !mfpbb = passed p .&. me p
-          !yfpbb = passed p .&. yo p
-          !mfp  = popCount1   mfpbb
-          !mbbp4 = mfpbb .&. row4m
-          !mbbp5 = mfpbb .&. row5m
-          !mbbp6 = mfpbb .&. row6m
-          !mbbp7 = mfpbb .&. row7m
-          !mfp4 = popCount1   mbbp4
-          !mfp5 = popCount1   mbbp5
-          !mfp6 = popCount1   mbbp6
-          !mfp7 = popCount1   mbbp7
-          !mpp4 = popCount1 $ mbbp4 .&. myPAttacs p
-          !mpp5 = popCount1 $ mbbp5 .&. myPAttacs p
-          !mpp6 = popCount1 $ mbbp6 .&. myPAttacs p
-          !mpp7 = popCount1 $ mbbp7 .&. myPAttacs p
-          !yfp  = popCount1   yfpbb
-          !ybbp4 = yfpbb .&. row4y
-          !ybbp5 = yfpbb .&. row5y
-          !ybbp6 = yfpbb .&. row6y
-          !ybbp7 = yfpbb .&. row7y
-          !yfp4 = popCount1   ybbp4
-          !yfp5 = popCount1   ybbp5
-          !yfp6 = popCount1   ybbp6
-          !yfp7 = popCount1   ybbp7
-          !ypp4 = popCount1 $ ybbp4 .&. yoPAttacs p
-          !ypp5 = popCount1 $ ybbp5 .&. yoPAttacs p
-          !ypp6 = popCount1 $ ybbp6 .&. yoPAttacs p
-          !ypp7 = popCount1 $ ybbp7 .&. yoPAttacs p
-          !dfp  = mfp  - yfp
-          !dfp4 = mfp4 - yfp4
-          !dfp5 = mfp5 - yfp5
-          !dfp6 = mfp6 - yfp6
-          !dfp7 = mfp7 - yfp7
-          !dpp4 = mpp4 - ypp4
-          !dpp5 = mpp5 - ypp5
-          !dpp6 = mpp6 - ypp6
-          !dpp7 = mpp7 - ypp7
-          (!row4m, !row5m, !row6m, !row7m, !row4y, !row5y, !row6y, !row7y)
-              | moving p == White = (row4, row5, row6, row7, row5, row4, row3, row2)
-              | otherwise         = (row5, row4, row3, row2, row4, row5, row6, row7)
+passPawns p = [dpp]
+    where !mppbb = passed p .&. me p
+          !yppbb = passed p .&. yo p
+          myc = moving p
+          yoc = other myc
+          !mypp = sum $ map (perPassedPawn p myc) $ bbToSquares mppbb
+          !yopp = sum $ map (perPassedPawn p yoc) $ bbToSquares yppbb
+          !dpp  = mypp - yopp
+
+perPassedPawn :: MyPos -> Color -> Square -> Int
+perPassedPawn p c sq = val
+    where !x | c == White = (promoW sq - sq) `unsafeShiftR` 3
+             | otherwise  = (sq - promoB sq) `unsafeShiftR` 3
+          -- fmax = 300 cp, fmin = 50 cp
+          a0 = 10
+          b0 = -120
+          c0 = 410
+          !pmax = (a0 * x + b0) * x + c0
+          !sqbb = 1 `unsafeShiftL` sq
+          !sqbl | c == White = sqbb `unsafeShiftL` 1
+                | otherwise  = sqbb `unsafeShiftR` 1
+          !blo | sqbl .&. me p /= 0 = 10	-- blocked by own piece
+               | sqbl .&. yo p /= 0 = 15	-- blocked by opponent piece
+               | otherwise          =  0
+          !myking = kingSquare (kings p) (me p)
+          !yoking = kingSquare (kings p) (yo p)
+          !mdis = squareDistance sq myking
+          !ydis = squareDistance sq yoking
+          !kingb | mdis <= ydis =  0
+                 | otherwise    = (mdis - ydis) * 10
+          !val  = (pmax * (128 - blo) * (128 - kingb)) `unsafeShiftR` 14
 
 -- Pawn end games are treated specially
 -- We consider escaped passed pawns in 2 situations:
