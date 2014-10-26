@@ -34,12 +34,14 @@ data EvalState = EvalState {
 data EvalParams
     = EvalParams {
           -- Parameters of the king placement
-          epMaterMinor :: !Int,	-- = 1
-          epMaterRook  :: !Int,	-- = 2
-          epMaterQueen :: !Int,	-- = 5
-          epMaterScale :: !Int,	-- = 0
-          epMaterBonusScale :: Int,	-- 4
-          epPawnBonusScale  :: !Int,	-- 4
+          epMovingMid  :: !Int,
+          epMovingEnd  :: !Int,
+          epMaterMinor :: !Int,
+          epMaterRook  :: !Int,
+          epMaterQueen :: !Int,
+          epMaterScale :: !Int,
+          epMaterBonusScale :: !Int,
+          epPawnBonusScale  :: !Int,
           epPassKingProx    :: !Int,
           epPassBlockO :: !Int,
           epPassBlockA :: !Int,

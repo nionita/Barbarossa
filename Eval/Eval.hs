@@ -36,13 +36,15 @@ type Limits = [(Double, Double)]
 instance CollectParams EvalParams where
     type CollectFor EvalParams = EvalParams
     npColInit = EvalParams {
+                    epMovingMid  = 15,
+                    epMovingEnd  = 5,
                     epMaterMinor = 1,
                     epMaterRook  = 3,
                     epMaterQueen = 11,
                     epMaterScale = 1,
                     epMaterBonusScale = 4,
                     epPawnBonusScale  = 4,
-                    epPassKingProx  = 3,
+                    epPassKingProx    = 12,
                     epPassBlockO = 10,
                     epPassBlockA = 15,
                     epPassMin    = 50,
@@ -53,6 +55,8 @@ instance CollectParams EvalParams where
 
 collectEvalParams :: (String, Double) -> EvalParams -> EvalParams
 collectEvalParams (s, v) ep = lookApply s v ep [
+        ("epMovingMid",       setEpMovingMid),
+        ("epMovingEnd",       setEpMovingEnd),
         ("epMaterMinor",      setEpMaterMinor),
         ("epMaterRook",       setEpMaterRook),
         ("epMaterQueen",      setEpMaterQueen),
@@ -65,7 +69,9 @@ collectEvalParams (s, v) ep = lookApply s v ep [
         ("epPassMin",         setEpPassMin),
         ("epPassCoef",        setEpPassCoef)
     ]
-    where setEpMaterMinor      v' ep' = ep' { epMaterMinor      = round v' }
+    where setEpMovingMid       v' ep' = ep' { epMovingMid       = round v' }
+          setEpMovingEnd       v' ep' = ep' { epMovingEnd       = round v' }
+          setEpMaterMinor      v' ep' = ep' { epMaterMinor      = round v' }
           setEpMaterRook       v' ep' = ep' { epMaterRook       = round v' }
           setEpMaterQueen      v' ep' = ep' { epMaterQueen      = round v' }
           setEpMaterScale      v' ep' = ep' { epMaterScale      = round v' }
@@ -78,7 +84,7 @@ collectEvalParams (s, v) ep = lookApply s v ep [
           setEpPassCoef        v' ep' = ep' { epPassCoef        = round v' }
 
 class EvalItem a where
-    evalItem    :: EvalParams -> MyPos -> a -> IWeights
+    evalItem    :: Int -> EvalParams -> MyPos -> a -> IWeights
     evalItemNDL :: a -> [(String, ((Double, Double), (Double, Double)))] -- Name, Defaults, Limits
 
 -- some handy functions for eval item types:
@@ -213,18 +219,19 @@ evalDispatch p sti
       Just r <- pawnEndGame p = r
     | otherwise    = normalEval p sti
 
-itemEval :: EvalParams -> MyPos -> AnyEvalItem -> [Int]
-itemEval ep p (EvIt a) = evalItem ep p a
+itemEval :: Int -> EvalParams -> MyPos -> AnyEvalItem -> [Int]
+itemEval gph ep p (EvIt a) = evalItem gph ep p a
 
 normalEval :: MyPos -> EvalState -> (Int, [Int])
 normalEval p !sti = (sc, feat)
-    where feat = concatMap (itemEval (esEParams sti) p) evalItems
+    where feat = concatMap (itemEval gph ep p) evalItems
+          ep   = esEParams sti
           scm  = feat <*> esIWeightsM sti
           sce  = feat <*> esIWeightsE sti
           gph  = gamePhase p
           !sc = ((scm + meMovingMid) * gph + (sce + meMovingEnd) * (256 - gph)) `unsafeShiftR` nm
-          meMovingMid = 15 `shiftL` shift2Cp	-- advantage for moving in mid game
-          meMovingEnd =  5 `shiftL` shift2Cp	-- advantage for moving in end game
+          meMovingMid = epMovingMid ep `unsafeShiftL` shift2Cp	-- advantage for moving in mid game
+          meMovingEnd = epMovingMid ep `unsafeShiftL` shift2Cp	-- advantage for moving in end game
           nm = shift2Cp + 8
 
 gamePhase :: MyPos -> Int
@@ -336,7 +343,7 @@ zoneAttacs p zone = (m, y)
 data KingSafe = KingSafe
 
 instance EvalItem KingSafe where
-    evalItem _ p _ = kingSafe p
+    evalItem _ _ p _ = kingSafe p
     evalItemNDL _  = [("kingSafe", ((1, 0), (0, 20)))]
 
 -- Rewrite of king safety taking into account number and quality
@@ -385,7 +392,7 @@ kingSquare kingsb colorp = head $ bbToSquares $ kingsb .&. colorp
 data Material = Material
 
 instance EvalItem Material where
-    evalItem _ p _ = materDiff p
+    evalItem _ _ p _ = materDiff p
     evalItemNDL _  = [("materialDiff", ((8, 8), (8, 8)))]
 
 materDiff :: MyPos -> IWeights
@@ -397,7 +404,7 @@ materDiff p = [md]
 data KingOpen = KingOpen
 
 instance EvalItem KingOpen where
-    evalItem _ p _ = kingOpen p
+    evalItem _ _ p _ = kingOpen p
     evalItemNDL _  = [ ("kingOpenOwn", ((-8, 0), (-48, 0))), ("kingOpenAdv", ((8, 0), (0, 48)))] 
 
 -- Openness can be tought only with pawns (like we take) or all pieces
@@ -425,7 +432,7 @@ kingOpen p = [own, adv]
 data KingPlace = KingPlace
 
 instance EvalItem KingPlace where
-    evalItem ep p _  = kingPlace ep p
+    evalItem _ ep p _  = kingPlace ep p
     evalItemNDL _ = [
                       ("kingPlaceCent", ((4,  0), (0, 400))),
                       ("kingPlacePwns", ((0, 25), (0, 400)))
@@ -545,7 +552,7 @@ proxyLine line sq = proxyBonusArr `unsafeAt` (unsafeShiftR sq 3 - line)
 data RookPlc = RookPlc
 
 instance EvalItem RookPlc where
-    evalItem _ p _ = evalRookPlc p
+    evalItem _ _ p _ = evalRookPlc p
     evalItemNDL _  = [ ("rookHOpen", ((228, 261), (0, 500))),
                        ("rookOpen",  ((295, 294), (0, 800))),
                        ("rookConn",  ((130, 100), (0, 300))) ]
@@ -583,7 +590,7 @@ perRook allp myp rsq (ho, op)
 data Mobility = Mobility	-- "safe" moves
 
 instance EvalItem Mobility where
-    evalItem _ p _ = mobDiff p
+    evalItem _ _ p _ = mobDiff p
     evalItemNDL _  = [ ("mobilityKnight", ((66, 75), (50, 120))),
                        ("mobilityBishop", ((60, 73), (50, 120))),
                        ("mobilityRook",   ((32, 34), ( 0, 100))),
@@ -613,7 +620,7 @@ mobDiff p = [n, b, r, q]
 data Center = Center
 
 instance EvalItem Center where
-    evalItem _ p _ = centerDiff p
+    evalItem _ _ p _ = centerDiff p
     evalItemNDL _  = [
                       ("centerPAtts", ((86, 80), (0, 200))),
                       ("centerNAtts", ((76, 60), (0, 200))),
@@ -650,7 +657,7 @@ centerDiff p = [pd, nd, bd, rd, qd, kd]
 data Izolan = Izolan
 
 instance EvalItem Izolan where
-    evalItem _ p _ = isolDiff p
+    evalItem _ _ p _ = isolDiff p
     evalItemNDL _  = [
                       ("isolPawns",  ((-56, -120), (-300, 0))),
                       ("isolPassed", ((-76, -200), (-500, 0)))
@@ -704,7 +711,7 @@ isol ps pp = (ris, pis)
 data LastLine = LastLine
 
 instance EvalItem LastLine where
-    evalItem _ p _ = lastline p
+    evalItem _ _ p _ = lastline p
     evalItemNDL _  = [("lastLinePenalty", ((133, -15), (-100, 300)))]
 
 -- Only for minor figures (queen is free to stay where it wants)
@@ -721,7 +728,7 @@ lastline p = [cdiff]
 data Redundance = Redundance
 
 instance EvalItem Redundance where
-    evalItem _ p _ = evalRedundance p
+    evalItem _ _ p _ = evalRedundance p
     evalItemNDL _  = [("bishopPair",       ((320,  320), ( 100, 400))),
                       ("redundanceRook",   ((  0, -104), (-150,   0))) ]
 
@@ -745,7 +752,7 @@ evalRedundance p = [bp, rr]
 data NRCorrection = NRCorrection
 
 instance EvalItem NRCorrection where
-    evalItem _ p _ = evalNRCorrection p
+    evalItem _ _ p _ = evalNRCorrection p
     evalItemNDL _  = [("nrCorrection", ((0, 0), (0, 8)))]
 
 -- This function seems to be already optimised
@@ -763,7 +770,7 @@ evalNRCorrection p = [md]
 data RookPawn = RookPawn
 
 instance EvalItem RookPawn where
-    evalItem _ p _ = evalRookPawn p
+    evalItem _ _ p _ = evalRookPawn p
     evalItemNDL _  = [("rookPawn", ((-64, -64), (-120, 0))) ]
 
 -- This function is already optimised
@@ -777,7 +784,7 @@ evalRookPawn p = [rps]
 data PaBlo = PaBlo
 
 instance EvalItem PaBlo where
-    evalItem _ p _ = pawnBl p
+    evalItem _ _ p _ = pawnBl p
     evalItemNDL _  = [
                      ("pawnBlockP", ((-154, -145), (-300, 0))),	-- blocked by own pawn
                      ("pawnBlockO", (( -32,  -35), (-300, 0))),	-- blocked by own piece
@@ -825,7 +832,7 @@ pawnBloBlack !pa !op !ap = cntPaBlo p1 pa op ap
 data PassPawns = PassPawns
 
 instance EvalItem PassPawns where
-    evalItem ep p _ = passPawns ep p
+    evalItem gph ep p _ = passPawns gph ep p
     evalItemNDL _   = [("passPawnLev", ((0, 8), (0, 20)))]
  
 -- Every passed pawn get a maximum value which depends on the distance to promotion
@@ -834,18 +841,18 @@ instance EvalItem PassPawns where
 -- - if own king is farther than opponent king
 -- - if it is blocked by own or opponent pieces
 -- - if it has an opponent rook behind *** not yet
-passPawns :: EvalParams -> MyPos -> IWeights
-passPawns ep p = [dpp]
+passPawns :: Int -> EvalParams -> MyPos -> IWeights
+passPawns gph ep p = [dpp]
     where !mppbb = passed p .&. me p
           !yppbb = passed p .&. yo p
-          myc = moving p
-          yoc = other myc
-          !mypp = sum $ map (perPassedPawn ep p myc) $ bbToSquares mppbb
-          !yopp = sum $ map (perPassedPawn ep p yoc) $ bbToSquares yppbb
+          !myc = moving p
+          !yoc = other myc
+          !mypp = sum $ map (perPassedPawn gph ep p myc) $ bbToSquares mppbb
+          !yopp = sum $ map (perPassedPawn gph ep p yoc) $ bbToSquares yppbb
           !dpp  = mypp - yopp
 
-perPassedPawn :: EvalParams -> MyPos -> Color -> Square -> Int
-perPassedPawn ep p c sq = val
+perPassedPawn :: Int -> EvalParams -> MyPos -> Color -> Square -> Int
+perPassedPawn !gph ep p c sq = val
     where !x | c == White = (promoW sq - sq) `unsafeShiftR` 3
              | otherwise  = (sq - promoB sq) `unsafeShiftR` 3
           !x6 = x - 6
@@ -861,7 +868,7 @@ perPassedPawn ep p c sq = val
           !mdis = squareDistance sq myking
           !ydis = squareDistance sq yoking
           !kingb | mdis <= ydis =  0
-                 | otherwise    = (mdis - ydis) * epPassKingProx ep
+                 | otherwise    = ((mdis - ydis) * epPassKingProx ep * (256-gph)) `unsafeShiftR` 8
           !val  = (pmax * (128 - blo) * (128 - kingb)) `unsafeShiftR` 14
 
 -- Pawn end games are treated specially
