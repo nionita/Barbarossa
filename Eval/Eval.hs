@@ -841,13 +841,15 @@ perPassedPawn p c sq = val
           !sqbb = 1 `unsafeShiftL` sq
           !sqbl | c == White = sqbb `unsafeShiftL` 1
                 | otherwise  = sqbb `unsafeShiftR` 1
-          !blo | sqbl .&. me p /= 0 = 10	-- blocked by own piece
-               | sqbl .&. yo p /= 0 = 15	-- blocked by opponent piece
-               | otherwise          =  0
-          !myking = kingSquare (kings p) (me p)
-          !yoking = kingSquare (kings p) (yo p)
-          !mdis = squareDistance sq myking
-          !ydis = squareDistance sq yoking
+          (!co, !oc) | c == moving p = (me p, yo p)
+                     | otherwise     = (yo p, me p)
+          !blo | sqbl .&. co /= 0 = 10	-- blocked by own piece
+               | sqbl .&. oc /= 0 = 15	-- blocked by opponent piece
+               | otherwise        =  0
+          !coking = kingSquare (kings p) co
+          !ocking = kingSquare (kings p) oc
+          !mdis = squareDistance sq coking
+          !ydis = squareDistance sq ocking
           !kingb | mdis <= ydis =  0
                  | otherwise    = (mdis - ydis) * 10
           !val  = (pmax * (128 - blo) * (128 - kingb)) `unsafeShiftR` 14
