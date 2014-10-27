@@ -44,11 +44,13 @@ instance CollectParams EvalParams where
                     epMaterScale = 1,
                     epMaterBonusScale = 4,
                     epPawnBonusScale  = 4,
-                    epPassKingProx    = 12,
+                    epPassKingProx    = 10,
                     epPassBlockO = 10,
                     epPassBlockA = 15,
-                    epPassMin    = 50,
-                    epPassCoef   = 10
+                    epPassMin    = 30,
+                    epPassMyCtrl = 1,
+                    epPassFree   = 2,
+                    epPassYoCtrl = 3
                 }
     npColParm = collectEvalParams
     npSetParm = id
@@ -67,7 +69,9 @@ collectEvalParams (s, v) ep = lookApply s v ep [
         ("epPassBlockO",      setEpPassBlockO),
         ("epPassBlockA",      setEpPassBlockA),
         ("epPassMin",         setEpPassMin),
-        ("epPassCoef",        setEpPassCoef)
+        ("epPassMyCtrl",      setEpPassMyCtrl),
+        ("epPassFree",        setEpPassFree),
+        ("epPassYoCtrl",      setEpPassYoCtrl)
     ]
     where setEpMovingMid       v' ep' = ep' { epMovingMid       = round v' }
           setEpMovingEnd       v' ep' = ep' { epMovingEnd       = round v' }
@@ -81,7 +85,9 @@ collectEvalParams (s, v) ep = lookApply s v ep [
           setEpPassBlockO      v' ep' = ep' { epPassBlockO      = round v' }
           setEpPassBlockA      v' ep' = ep' { epPassBlockA      = round v' }
           setEpPassMin         v' ep' = ep' { epPassMin         = round v' }
-          setEpPassCoef        v' ep' = ep' { epPassCoef        = round v' }
+          setEpPassMyCtrl      v' ep' = ep' { epPassMyCtrl      = round v' }
+          setEpPassFree        v' ep' = ep' { epPassFree        = round v' }
+          setEpPassYoCtrl      v' ep' = ep' { epPassYoCtrl      = round v' }
 
 class EvalItem a where
     evalItem    :: Int -> EvalParams -> MyPos -> a -> IWeights
@@ -690,7 +696,15 @@ isol ps pp = (ris, pis)
 --    evalItem p c _ = enPrise p c
 --    evalItemNDL _  = [("enPriseFrac", (10, (0, 100)))]
 
--- Here we could also take care who is moving and even if it's check - now we don't
+-- Here we should only take at least the opponent attacks! When we evaluate,
+-- we are in one on this situations:
+-- 1. we have no further capture and evaluate in a leaf
+-- 2. we are evaluating for delta cut
+-- In 1 we should take the opponent attacks and analyse them:
+-- - if he has more than 2 attacks, than our sencond best attacked piece will be lost
+-- (but not always, for example when we can check or can defent one with the other)
+-- - if he has only one attack, we are somehow restricted to defend or move that piece
+-- In 2 we have a more complicated analysis, which maybe is not worth to do
 --enPrise :: MyPos -> Color -> IWeights
 --enPrise p _ = [epp]
 --    where !ko = popCount1 $ white p .&. knights p .&. blAttacs p
@@ -833,14 +847,9 @@ data PassPawns = PassPawns
 
 instance EvalItem PassPawns where
     evalItem gph ep p _ = passPawns gph ep p
-    evalItemNDL _   = [("passPawnLev", ((0, 8), (0, 20)))]
+    evalItemNDL _   = [("passPawnLev", ((4, 8), (0, 20)))]
  
--- Every passed pawn get a maximum value which depends on the distance to promotion
--- This value goes down conditioned by factors, like:
--- - if it is isolated
--- - if own king is farther than opponent king
--- - if it is blocked by own or opponent pieces
--- - if it has an opponent rook behind *** not yet
+-- Every passed pawn will be evaluated separately
 passPawns :: Int -> EvalParams -> MyPos -> IWeights
 passPawns gph ep p = [dpp]
     where !mppbb = passed p .&. me p
@@ -851,25 +860,60 @@ passPawns gph ep p = [dpp]
           !yopp = sum $ map (perPassedPawn gph ep p yoc) $ bbToSquares yppbb
           !dpp  = mypp - yopp
 
+-- The value of the passed pawn depends answers to this questions:
+-- - is it defended/attacked? by which pieces?
+-- - how many squares ahead are blocked by own/opponent pieces?
+-- - how many squares ahead are controlled by own/opponent pieces?
+-- - does it has a rook behind?
 perPassedPawn :: Int -> EvalParams -> MyPos -> Color -> Square -> Int
-perPassedPawn !gph ep p c sq = val
-    where !x | c == White = (promoW sq - sq) `unsafeShiftR` 3
-             | otherwise  = (sq - promoB sq) `unsafeShiftR` 3
-          !x6 = x - 6
-          !pmax = epPassMin ep + epPassCoef ep * x6 * x6
-          !sqbb = 1 `unsafeShiftL` sq
-          !sqbl | c == White = sqbb `unsafeShiftL` 1
-                | otherwise  = sqbb `unsafeShiftR` 1
-          !blo | sqbl .&. me p /= 0 = epPassBlockO ep	-- blocked by own piece
-               | sqbl .&. yo p /= 0 = epPassBlockA ep	-- blocked by opponent piece
-               | otherwise          =  0
-          !myking = kingSquare (kings p) (me p)
-          !yoking = kingSquare (kings p) (yo p)
+perPassedPawn gph ep p c sq
+    | attacked && not defended = epPassMin ep	-- but if we have more than one like that?
+    | otherwise                = perPassedPawnOk gph ep p c sq sqbb moi toi moia toia
+    where !sqbb = 1 `unsafeShiftL` sq
+          (!moi, !toi, !moia, !toia)
+               | moving p == c = (me p, yo p, myAttacs p, yoAttacs p)
+               | otherwise     = (yo p, me p, yoAttacs p, myAttacs p)
+          !defended = moia .&. sqbb /= 0
+          !attacked = toia .&. sqbb /= 0
+
+perPassedPawnOk :: Int -> EvalParams -> MyPos -> Color -> Square -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
+perPassedPawnOk gph ep p c sq sqbb moi toi moia toia = val
+    where
+          (!way, !behind) | c == White = (shadowDown sqbb, shadowUp sqbb)
+                          | otherwise  = (shadowUp sqbb, shadowDown sqbb)
+          !mblo = popCount1 $ moi .&. way
+          !yblo = popCount1 $ toi .&. way
+          !rookBehind = behind .&. (rooks p .|. queens p)
+          !mebehind = rookBehind .&. moi /= 0
+                   && rookBehind .&. toi == 0
+          !yobehind = rookBehind .&. moi == 0
+                   && rookBehind .&. toi /= 0
+          !bbmyctrl | mebehind  = way
+                    | otherwise = moia .&. way
+          !bbyoctrl | yobehind  = way `less` bbmyctrl
+                    | otherwise = toia .&. (way `less` bbmyctrl)
+          !bbfree   = way `less` (bbmyctrl .|. bbyoctrl)
+          !myctrl = popCount1 bbmyctrl
+          !yoctrl = popCount1 bbyoctrl
+          !free   = popCount1 bbfree
+          !iqd = epPassMyCtrl ep * myctrl
+               + epPassFree   ep * free
+               + epPassYoCtrl ep * yoctrl
+          !idx = epPassBlockO ep * mblo
+               + epPassBlockA ep * yblo
+               + iqd * iqd	-- the quadratic part
+          !myking = kingSquare (kings p) moi
+          !yoking = kingSquare (kings p) toi
           !mdis = squareDistance sq myking
           !ydis = squareDistance sq yoking
-          !kingb | mdis <= ydis =  0
-                 | otherwise    = ((mdis - ydis) * epPassKingProx ep * (256-gph)) `unsafeShiftR` 8
-          !val  = (pmax * (128 - blo) * (128 - kingb)) `unsafeShiftR` 14
+          !kingprx = ((mdis - ydis) * epPassKingProx ep * (256-gph)) `unsafeShiftR` 8
+          !valkp   = (128 - kingprx) `unsafeShiftR` 7
+          !val = (passWayArr `unsafeAt` idx) + epPassMin ep + valkp * kingprx
+
+passWayArr :: UArray Int Int
+passWayArr = array (0, 1024) [(i, f i) | i <- [0..255]]
+    where f i = 350 * k `div` (k + i)
+          k   = 8	-- at this index will be half of initial value
 
 -- Pawn end games are treated specially
 -- We consider escaped passed pawns in 2 situations:

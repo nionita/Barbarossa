@@ -399,22 +399,6 @@ blackPassed !wp !bp = bpa
           !sha = shadowUp wb0	-- erase
           !bpa = bp `less` sha
 
-{-# INLINE shadowDown #-}
-shadowDown :: BBoard -> BBoard
-shadowDown !wp = wp3
-    where !wp0 =          wp  `unsafeShiftR`  8
-          !wp1 = wp0 .|. (wp0 `unsafeShiftR`  8)
-          !wp2 = wp1 .|. (wp1 `unsafeShiftR` 16)
-          !wp3 = wp2 .|. (wp2 `unsafeShiftR` 32)
-
-{-# INLINE shadowUp #-}
-shadowUp :: BBoard -> BBoard
-shadowUp !wp = wp3
-    where !wp0 =          wp  `unsafeShiftL`  8
-          !wp1 = wp0 .|. (wp0 `unsafeShiftL`  8)
-          !wp2 = wp1 .|. (wp1 `unsafeShiftL` 16)
-          !wp3 = wp2 .|. (wp2 `unsafeShiftL` 32)
-
 updatePos :: MyPos -> MyPos
 updatePos = updatePosCheck . updatePosAttacs . updatePosOccup
 
