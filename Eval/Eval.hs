@@ -44,13 +44,12 @@ instance CollectParams EvalParams where
                     epMaterScale = 1,
                     epMaterBonusScale = 4,
                     epPawnBonusScale  = 4,
-                    epPassKingProx    = 10,
+                    epPassKingProx    = 14,
                     epPassBlockO = 10,
-                    epPassBlockA = 15,
-                    epPassMin    = 30,
-                    epPassMyCtrl = 1,
-                    epPassFree   = 2,
-                    epPassYoCtrl = 3
+                    epPassBlockA = 14,
+                    epPassMin    = 32,
+                    epPassMyCtrl = 5,
+                    epPassYoCtrl = 5
                 }
     npColParm = collectEvalParams
     npSetParm = id
@@ -70,7 +69,6 @@ collectEvalParams (s, v) ep = lookApply s v ep [
         ("epPassBlockA",      setEpPassBlockA),
         ("epPassMin",         setEpPassMin),
         ("epPassMyCtrl",      setEpPassMyCtrl),
-        ("epPassFree",        setEpPassFree),
         ("epPassYoCtrl",      setEpPassYoCtrl)
     ]
     where setEpMovingMid       v' ep' = ep' { epMovingMid       = round v' }
@@ -86,7 +84,6 @@ collectEvalParams (s, v) ep = lookApply s v ep [
           setEpPassBlockA      v' ep' = ep' { epPassBlockA      = round v' }
           setEpPassMin         v' ep' = ep' { epPassMin         = round v' }
           setEpPassMyCtrl      v' ep' = ep' { epPassMyCtrl      = round v' }
-          setEpPassFree        v' ep' = ep' { epPassFree        = round v' }
           setEpPassYoCtrl      v' ep' = ep' { epPassYoCtrl      = round v' }
 
 class EvalItem a where
@@ -867,8 +864,9 @@ passPawns gph ep p = [dpp]
 -- - does it has a rook behind?
 perPassedPawn :: Int -> EvalParams -> MyPos -> Color -> Square -> Int
 perPassedPawn gph ep p c sq
-    | attacked && not defended = epPassMin ep	-- but if we have more than one like that?
-    | otherwise                = perPassedPawnOk gph ep p c sq sqbb moi toi moia toia
+    | attacked && not defended
+        && c /= moving p = epPassMin ep	-- but if we have more than one like that?
+    | otherwise          = perPassedPawnOk gph ep p c sq sqbb moi toi moia toia
     where !sqbb = 1 `unsafeShiftL` sq
           (!moi, !toi, !moia, !toia)
                | moving p == c = (me p, yo p, myAttacs p, yoAttacs p)
@@ -879,8 +877,8 @@ perPassedPawn gph ep p c sq
 perPassedPawnOk :: Int -> EvalParams -> MyPos -> Color -> Square -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
 perPassedPawnOk gph ep p c sq sqbb moi toi moia toia = val
     where
-          (!way, !behind) | c == White = (shadowDown sqbb, shadowUp sqbb)
-                          | otherwise  = (shadowUp sqbb, shadowDown sqbb)
+          (!way, !behind) | c == White = (shadowUp sqbb, shadowDown sqbb)
+                          | otherwise  = (shadowDown sqbb, shadowUp sqbb)
           !mblo = popCount1 $ moi .&. way
           !yblo = popCount1 $ toi .&. way
           !rookBehind = behind .&. (rooks p .|. queens p)
@@ -896,24 +894,20 @@ perPassedPawnOk gph ep p c sq sqbb moi toi moia toia = val
           !myctrl = popCount1 bbmyctrl
           !yoctrl = popCount1 bbyoctrl
           !free   = popCount1 bbfree
-          !iqd = epPassMyCtrl ep * myctrl
-               + epPassFree   ep * free
-               + epPassYoCtrl ep * yoctrl
-          !idx = epPassBlockO ep * mblo
-               + epPassBlockA ep * yblo
-               + iqd * iqd	-- the quadratic part
+          !x = myctrl + yoctrl + free
+          a0 = 10
+          b0 = -120
+          c0 = 410
+          !pmax = (a0 * x + b0) * x + c0
           !myking = kingSquare (kings p) moi
           !yoking = kingSquare (kings p) toi
           !mdis = squareDistance sq myking
           !ydis = squareDistance sq yoking
           !kingprx = ((mdis - ydis) * epPassKingProx ep * (256-gph)) `unsafeShiftR` 8
-          !valkp   = (128 - kingprx) `unsafeShiftR` 7
-          !val = (passWayArr `unsafeAt` idx) + epPassMin ep + valkp * kingprx
-
-passWayArr :: UArray Int Int
-passWayArr = array (0, 1024) [(i, f i) | i <- [0..255]]
-    where f i = 350 * k `div` (k + i)
-          k   = 8	-- at this index will be half of initial value
+          !val' = (pmax * (128 - kingprx) * (128 - epPassBlockO ep * mblo)
+                * (128 - epPassBlockA ep * yblo)) `unsafeShiftR` 21
+          !val  = (val' * (128 + epPassMyCtrl ep * myctrl) * (128 - epPassYoCtrl ep * yoctrl))
+                    `unsafeShiftR` 14
 
 -- Pawn end games are treated specially
 -- We consider escaped passed pawns in 2 situations:

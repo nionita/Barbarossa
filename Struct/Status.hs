@@ -47,6 +47,5 @@ data EvalParams
           epPassBlockA :: !Int,
           epPassMin    :: !Int,
           epPassMyCtrl :: !Int,
-          epPassFree   :: !Int,
           epPassYoCtrl :: !Int
       } deriving Show
