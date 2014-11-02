@@ -44,11 +44,11 @@ instance CollectParams EvalParams where
                     epMaterScale = 1,
                     epMaterBonusScale = 4,
                     epPawnBonusScale  = 4,
-                    epPassKingProx    = 14,
+                    epPassKingProx    = 8,
                     epPassBlockO = 10,
-                    epPassBlockA = 14,
-                    epPassMin    = 32,
-                    epPassMyCtrl = 5,
+                    epPassBlockA = 15,
+                    epPassMin    = 29,
+                    epPassMyCtrl = 9,
                     epPassYoCtrl = 5
                 }
     npColParm = collectEvalParams
