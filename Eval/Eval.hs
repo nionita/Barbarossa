@@ -842,9 +842,12 @@ pawnBloBlack !pa !op !ap = cntPaBlo p1 pa op ap
 ------ Pass pawns ------
 data PassPawns = PassPawns
 
+-- passPawnLev after optimization with Clop
+-- 4686 games at 15+0.25 games pass3o against itself (mean)
+-- Clop forecast: 60+-25 elo
 instance EvalItem PassPawns where
     evalItem gph ep p _ = passPawns gph ep p
-    evalItemNDL _   = [("passPawnLev", ((4, 8), (0, 20)))]
+    evalItemNDL _   = [("passPawnLev", ((1, 8), (0, 20)))]
  
 -- Every passed pawn will be evaluated separately
 passPawns :: Int -> EvalParams -> MyPos -> IWeights
