@@ -589,7 +589,7 @@ insertToPvs d p ps@(q:qs)
 mustQSearch :: Int -> Int -> Search (Int, Int)
 mustQSearch !a !b = do
     nodes0 <- gets (sNodes . stats)
-    v <- pvQSearch a b 0
+    v <- pvQSearch a b 0 True
     nodes1 <- gets (sNodes . stats)
     let deltan = nodes1 - nodes0
     return (v, deltan)
@@ -1161,12 +1161,12 @@ trimax a b x
 
 onlyQSearch :: Game Int
 onlyQSearch = do
-    (sc, _) <- runCState (pvQSearch alpha0 beta0 0) pvsInit
+    (sc, _) <- runCState (pvQSearch alpha0 beta0 0 True) pvsInit
     return sc
 
 -- PV Quiescent Search
-pvQSearch :: Int -> Int -> Int -> Search Int
-pvQSearch !a !b c = do				   -- to avoid endless loops
+pvQSearch :: Int -> Int -> Int -> Bool -> Search Int
+pvQSearch !a !b c los = do				   -- to avoid endless loops
     qindent $ "=> " ++ show a ++ ", " ++ show b
     !stp <- lift staticVal				-- until we can recognize repetition
     viztreeScore $ "Static: " ++ show stp
@@ -1201,7 +1201,7 @@ pvQSearch !a !b c = do				   -- to avoid endless loops
                           lift $ finNode "DELT" False
                           return a
                       else do
-                          edges <- liftM Alt $ lift genTactMoves
+                          edges <- liftM Alt $ lift (genTactMoves los)
                           if noMove edges
                              then do
                                  lift $ finNode "NOCA" False
@@ -1241,7 +1241,7 @@ pvQInnerLoop !b c !a e = do
                                return (-sc)
                            _        -> do
                              modify $ \s -> s { absdp = absdp s + 1 }
-                             !sc <- pvQSearch (-b) (-a) c
+                             !sc <- pvQSearch (-b) (-a) c False
                              modify $ \s -> s { absdp = absdp s - 1 }	-- no usedext here
                              return (-sc)
                 lift undoMove

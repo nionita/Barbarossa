@@ -154,31 +154,6 @@ hasMoves !p c
           pcapt = (.&. yopiep)
           legal = (`less` yoAttacs p)
 
-{--
--- This one is not used anymore - see genMoveCaptWL
--- Move generation generates pseudo-legal moves
-genMoveCapt :: MyPos -> [(Square, Square)]
-genMoveCapt !p = sortByMVVLVA p allp
-    where !pGenC = concatMap (srcDests (pcapt . pAttacs (moving p)))
-                     $ bbToSquares $ pawns p .&. me p `less` traR
-          !nGenC = concatMap (srcDests (capt . nAttacs)) 
-                     $ bbToSquares $ knights p .&. me p
-          !bGenC = concatMap (srcDests (capt . bAttacs (occup p)))
-                     $ bbToSquares $ bishops p .&. me p
-          !rGenC = concatMap (srcDests (capt . rAttacs (occup p)))
-                     $ bbToSquares $ rooks p .&. me p
-          !qGenC = concatMap (srcDests (capt . qAttacs (occup p)))
-                     $ bbToSquares $ queens p .&. me p
-          !kGenC =            srcDests (capt . legal . kAttacs)
-                     $ firstOne $ kings p .&. me p
-          allp = concat [ pGenC, nGenC, bGenC, rGenC, qGenC, kGenC ]
-          !yopiep = yo p .|. (epcas p .&. epMask)
-          capt = (.&. yo p)
-          pcapt = (.&. yopiep)
-          legal = (`less` yoAttacs p)
-          !traR = if moving p == White then 0x00FF000000000000 else 0xFF00
---}
-
 genMoveNCapt :: MyPos -> [Move]
 -- genMoveNCapt p c = concat [ pGenNC2, qGenNC, rGenNC, bGenNC, nGenNC, pGenNC1, kGenNC ]
 -- genMoveNCapt p c = concat [ pGenNC1, nGenNC, bGenNC, rGenNC, qGenNC, pGenNC2, kGenNC ]
@@ -339,13 +314,12 @@ beatOrBlock f !p sq = (beat, block)
           !line = findLKA f aksq sq
           !block = blockAt p line
 
-genMoveNCaptToCheck :: MyPos -> [(Square, Square)]
+genMoveNCaptToCheck :: MyPos -> [Move]
 genMoveNCaptToCheck p = genMoveNCaptDirCheck p ++ genMoveNCaptIndirCheck p
 
--- Todo: check with pawns (should be also without transformations)
-genMoveNCaptDirCheck :: MyPos -> [(Square, Square)]
--- genMoveNCaptDirCheck p c = concat [ nGenC, bGenC, rGenC, qGenC ]
-genMoveNCaptDirCheck p = concat [ qGenC, rGenC, bGenC, nGenC ]
+-- Todo: check with pawns (should be also without promotions)
+genMoveNCaptDirCheck :: MyPos -> [Move]
+genMoveNCaptDirCheck p = map (uncurry moveFromTo) $ concat [ qGenC, rGenC, bGenC, nGenC ]
     where nGenC = concatMap (srcDests (target nTar . nAttacs))
                      $ bbToSquares $ knights p .&. me p
           bGenC = concatMap (srcDests (target bTar . bAttacs (occup p)))
@@ -356,13 +330,13 @@ genMoveNCaptDirCheck p = concat [ qGenC, rGenC, bGenC, nGenC ]
                      $ bbToSquares $ queens p .&. me p
           target b = (.&. b)
           !ksq  = firstOne $ yo p .&. kings p
-          !nTar = fAttacs ksq Knight (occup p) `less` yo p
-          !bTar = fAttacs ksq Bishop (occup p) `less` yo p
-          !rTar = fAttacs ksq Rook   (occup p) `less` yo p
+          !nTar = fAttacs ksq Knight (occup p) `less` occup p
+          !bTar = fAttacs ksq Bishop (occup p) `less` occup p
+          !rTar = fAttacs ksq Rook   (occup p) `less` occup p
           !qTar = bTar .|. rTar
 
 -- TODO: indirect non capture checking moves
-genMoveNCaptIndirCheck :: MyPos -> [(Square, Square)]
+genMoveNCaptIndirCheck :: MyPos -> [Move]
 genMoveNCaptIndirCheck _ = []
 
 {--
