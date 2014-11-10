@@ -62,7 +62,7 @@ minToRetr   = 1 -- minimum remaining depth to retrieve
 maxDepthExt = 3 -- maximum depth extension
 useNegHist  = False	-- when not cutting - negative history
 negHistMNo  = 1		-- how many moves get negative history
-useTTinPv   = True	-- retrieve from TT in PV?
+useTTinPv   = False	-- retrieve from TT in PV?
 
 -- Parameters for late move reduction:
 lmrActive, lmrDebug :: Bool
