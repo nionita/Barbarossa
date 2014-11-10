@@ -78,8 +78,9 @@ posToState p c h e = MyState {
                        stats = stats0,
                        evalst = e
                    }
-    where (stsc, feats) = evalState (posEval p) e
-          p'' = p { staticScore = stsc, staticFeats = feats }
+    where p' = updatePos p
+          (stsc, feats) = evalState (posEval p') e
+          p'' = p' { staticScore = stsc, staticFeats = feats }
           stats0 = Stats { nodes = 0, maxmvs = 0 }
 
 posNewSearch :: MyState -> MyState
