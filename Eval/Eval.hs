@@ -117,7 +117,7 @@ evalItems = [ EvIt Material,	-- material balance (i.e. white - black material
               EvIt Mobility,	-- pieces mobility
               EvIt Center,	-- attacs of center squares
               EvIt RookPlc,	-- rooks points for placements
-              -- EvIt EnPrise,	-- when not quiescent - pieces en prise
+              EvIt EnPrise,	-- when not quiescent - pieces en prise
               -- EvIt NRCorrection,	-- material correction for knights & rooks
               EvIt PaBlo,	-- pawn blocking
               EvIt Izolan,	-- isolated pawns
@@ -687,11 +687,15 @@ isol ps pp = (ris, pis)
           notH = 0x7F7F7F7F7F7F7F7F
 
 ------ En prise ------
---data EnPrise = EnPrise
---
---instance EvalItem EnPrise where
---    evalItem p c _ = enPrise p c
---    evalItemNDL _  = [("enPriseFrac", (10, (0, 100)))]
+data EnPrise = EnPrise
+
+instance EvalItem EnPrise where
+    evalItem _ _ p _ = enPrise p
+    evalItemNDL _  = [
+                       ("enpHanging",  (( -5,  -5), (-800, 0))),
+                       ("enpEnPrise",  (( -3,  -3), (-800, 0))),
+                       ("enpAttacked", (( -1,  -1), (-800, 0)))
+                     ]
 
 -- Here we should only take at least the opponent attacks! When we evaluate,
 -- we are in one on this situations:
@@ -702,21 +706,35 @@ isol ps pp = (ris, pis)
 -- (but not always, for example when we can check or can defent one with the other)
 -- - if he has only one attack, we are somehow restricted to defend or move that piece
 -- In 2 we have a more complicated analysis, which maybe is not worth to do
---enPrise :: MyPos -> Color -> IWeights
---enPrise p _ = [epp]
---    where !ko = popCount1 $ white p .&. knights p .&. blAttacs p
---          !ka = popCount1 $ black p .&. knights p .&. whAttacs p
---          !bo = popCount1 $ white p .&. bishops p .&. blAttacs p
---          !ba = popCount1 $ black p .&. bishops p .&. whAttacs p
---          !ro = popCount1 $ white p .&. rooks p .&. blAttacs p
---          !ra = popCount1 $ black p .&. rooks p .&. whAttacs p
---          !qo = popCount1 $ white p .&. queens p .&. blAttacs p
---          !qa = popCount1 $ black p .&. queens p .&. whAttacs p
---          !k = (ka - ko) * matPiece White Knight
---          !b = (ba - bo) * matPiece White Bishop
---          !r = (ra - ro) * matPiece White Rook
---          !q = (qa - qo) * matPiece White Queen
---          !epp = (k + b + r + q) `div` 100
+enPrise :: MyPos -> IWeights
+enPrise p = [ha, ep, at]
+    where !meP = me p .&. pawns   p	-- my pieces
+          !meN = me p .&. knights p
+          !meB = me p .&. bishops p
+          !meR = me p .&. rooks   p
+          !meQ = me p .&. queens  p
+          !atP = meP  .&. yoAttacs p	-- my attacked pieces
+          !atN = meN  .&. yoAttacs p
+          !atB = meB  .&. yoAttacs p
+          !atR = meR  .&. yoAttacs p
+          !atQ = meQ  .&. yoAttacs p
+          !haP = atP `less` myAttacs p	-- attacked and not defended
+          !haN = atN `less` myAttacs p
+          !haB = atB `less` myAttacs p
+          !haR = atR `less` myAttacs p
+          !haQ = atQ `less` myAttacs p
+          !epN = (atP `less` haP) .&. yoPAttacs p	-- defended, but attacked by less
+          !epB = (atB `less` haN) .&. yoPAttacs p	-- valuable opponent pieces
+          !epR = (atR `less` haR) .&. yoA1
+          !epQ = (atQ `less` haQ) .&. yoA2
+          !yoA1 = yoPAttacs p .|. yoNAttacs p .|. yoBAttacs p
+          !yoA2 = yoA1 .|. yoRAttacs p
+          !ha = popCount1 haP + 3 * (popCount1 haN + popCount1 haB)
+              + 5 * popCount1 haR + 9 * popCount1 haQ
+          !ep =                 3 * (popCount1 epN + popCount1 epB)
+              + 5 * popCount1 epR + 9 * popCount1 epQ
+          !at = popCount1 atP + 3 * (popCount1 atN + popCount1 atB)
+              + 5 * popCount1 atR + 9 * popCount1 atQ
 
 ------ Last Line ------
 data LastLine = LastLine
