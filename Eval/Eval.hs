@@ -36,8 +36,8 @@ type Limits = [(Double, Double)]
 instance CollectParams EvalParams where
     type CollectFor EvalParams = EvalParams
     npColInit = EvalParams {
-                    epMovingMid  = 15,
-                    epMovingEnd  = 5,
+                    epMovingMid  = 120,
+                    epMovingEnd  = 40,
                     epMaterMinor = 1,
                     epMaterRook  = 3,
                     epMaterQueen = 11,
@@ -232,10 +232,8 @@ normalEval p !sti = (sc, feat)
           scm  = feat <*> esIWeightsM sti
           sce  = feat <*> esIWeightsE sti
           gph  = gamePhase p
-          !sc = ((scm + meMovingMid) * gph + (sce + meMovingEnd) * (256 - gph)) `unsafeShiftR` nm
-          meMovingMid = epMovingMid ep `unsafeShiftL` shift2Cp	-- advantage for moving in mid game
-          meMovingEnd = epMovingMid ep `unsafeShiftL` shift2Cp	-- advantage for moving in end game
-          nm = shift2Cp + 8
+          !sc = ((scm + epMovingMid ep) * gph + (sce + epMovingEnd ep) * (256 - gph))
+                   `unsafeShiftR` (shift2Cp + 8)
 
 gamePhase :: MyPos -> Int
 gamePhase p = g
@@ -687,13 +685,15 @@ isol ps pp = (ris, pis)
           notH = 0x7F7F7F7F7F7F7F7F
 
 ------ En prise ------
+-- enpHanging and enpEnPrise optimised (only mean) with Clop by running 4222
+-- games at 15+0.25 sec against pass3v, resulting in a Clop forecast of 62 +- 39 ELO
 data EnPrise = EnPrise
 
 instance EvalItem EnPrise where
     evalItem _ _ p _ = enPrise p
     evalItemNDL _  = [
-                       ("enpHanging",  (( -5,  -5), (-800, 0))),
-                       ("enpEnPrise",  (( -3,  -3), (-800, 0))),
+                       ("enpHanging",  ((-32, -32), (-800, 0))),
+                       ("enpEnPrise",  ((-20, -15), (-800, 0))),
                        ("enpAttacked", (( -1,  -1), (-800, 0)))
                      ]
 
