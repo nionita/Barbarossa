@@ -36,8 +36,8 @@ type Limits = [(Double, Double)]
 instance CollectParams EvalParams where
     type CollectFor EvalParams = EvalParams
     npColInit = EvalParams {
-                    epMovingMid  = 120,
-                    epMovingEnd  = 40,
+                    epMovingMid  = 159,		-- after Clop optimisation
+                    epMovingEnd  = 130,		-- with 3700 games at 15+0.25 s
                     epMaterMinor = 1,
                     epMaterRook  = 3,
                     epMaterQueen = 11,
@@ -687,6 +687,8 @@ isol ps pp = (ris, pis)
 ------ En prise ------
 -- enpHanging and enpEnPrise optimised (only mean) with Clop by running 4222
 -- games at 15+0.25 sec against pass3v, resulting in a Clop forecast of 62 +- 39 ELO
+-- enpAttacked optimised (together with epMovingMid & epMovingEnd), only mean, with Clop
+-- by 3712 games at 15+0.25 sec against pass3v, Clop forecast: 82 +- 40 ELO
 data EnPrise = EnPrise
 
 instance EvalItem EnPrise where
@@ -694,7 +696,7 @@ instance EvalItem EnPrise where
     evalItemNDL _  = [
                        ("enpHanging",  ((-32, -32), (-800, 0))),
                        ("enpEnPrise",  ((-20, -15), (-800, 0))),
-                       ("enpAttacked", (( -1,  -1), (-800, 0)))
+                       ("enpAttacked", (( -8, -12), (-800, 0)))
                      ]
 
 -- Here we should only take at least the opponent attacks! When we evaluate,
