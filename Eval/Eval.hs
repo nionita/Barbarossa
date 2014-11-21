@@ -689,13 +689,15 @@ isol ps pp = (ris, pis)
 -- games at 15+0.25 sec against pass3v, resulting in a Clop forecast of 62 +- 39 ELO
 -- enpAttacked optimised (together with epMovingMid & epMovingEnd), only mean, with Clop
 -- by 3712 games at 15+0.25 sec against pass3v, Clop forecast: 82 +- 40 ELO
+-- enpHanging and enpEnPrise again optimised (only mean) with Clop by running 16300
+-- games at 15+0.25 sec against pass3w, resulting in a Clop forecast of 63 +- 19 ELO
 data EnPrise = EnPrise
 
 instance EvalItem EnPrise where
     evalItem _ _ p _ = enPrise p
     evalItemNDL _  = [
-                       ("enpHanging",  ((-32, -32), (-800, 0))),
-                       ("enpEnPrise",  ((-20, -15), (-800, 0))),
+                       ("enpHanging",  ((-23, -30), (-800, 0))),
+                       ("enpEnPrise",  ((-23, -19), (-800, 0))),
                        ("enpAttacked", (( -8, -12), (-800, 0)))
                      ]
 
