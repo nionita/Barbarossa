@@ -11,7 +11,7 @@ module Search.Albeta (
 
 import Control.Monad
 import Control.Monad.State hiding (gets, modify)
-import Data.Bits ((.&.))
+import Data.Bits ((.&.), shiftR)
 import Data.List (delete, sortBy)
 import Data.Ord (comparing)
 -- import Data.Array.Base
@@ -114,13 +114,13 @@ useIID :: Bool
 useIID      = True
 
 minIIDPV, minIIDCut, maxIIDDepth :: Int
-minIIDPV    = 5
-minIIDCut   = 7
-maxIIDDepth = 3
+minIIDPV    = 4
+minIIDCut   = 4
+maxIIDDepth = 4
 
 iidNewDepth :: Int -> Int
-iidNewDepth = subtract 1
--- iidNewDepth = `shiftR` 1	-- i.e. div 2
+-- iidNewDepth = subtract 1
+iidNewDepth = (`shiftR` 1)	-- i.e. div 2
 
 -- Parameter for quiescenst search
 inEndlessCheck, qsDelta :: Int
