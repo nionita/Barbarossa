@@ -1190,8 +1190,8 @@ pvQInnerLoop !b c !a e = do
 {-# INLINE bestMoveFromIID #-}
 bestMoveFromIID :: NodeState -> Int -> Search [Move]
 bestMoveFromIID nst d
-    | nt == PVNode  && d >= minIIDPV ||
-      nt == CutNode && d >= minIIDCut
+    | nt == AllNode && d >= minIIDCut ||
+      nt == PVNode  && d >= minIIDPV
           = do s <- pvSearch nst' (pathFromScore "aiid" alpha0) (pathFromScore "biid" beta0) d'
                return $! unseq $ pathMoves s
     | otherwise =  return []
