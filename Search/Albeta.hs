@@ -14,9 +14,8 @@ import Control.Monad.State hiding (gets, modify)
 import Data.Bits ((.&.))
 import Data.List (delete, sortBy)
 import Data.Ord (comparing)
-import Data.Array.Base
+-- import Data.Array.Base
 import Data.Maybe (fromMaybe)
--- import Control.Applicative ((<$>))
 
 import Search.CStateMonad
 import Search.AlbetaTypes
@@ -69,27 +68,6 @@ lmrActive, lmrDebug :: Bool
 lmrActive   = True
 lmrDebug    = False
 
-lmrMaxDepth, lmrMaxWidth :: Int
-lmrMaxDepth = 15
-lmrMaxWidth = 63
-lmrPv, lmrRest :: Double
-lmrPv     = 13
-lmrRest   = 8
--- LMR parameter optimisation (lmrPv, lmrRest):
--- lm1 = 2, 1	-> elo -127 +- 58
--- lm2 = 3, 2	-> elo  -14 +- 52
--- lm3 = 5, 3	-> elo   17 +- 55
--- lm4 = 8, 5	-> elo   32 +- 53
--- lm5 = 13, 8	-> elo   92 +- 54 --> this is it
-lmrReducePv, lmrReduceArr :: UArray (Int, Int) Int
-lmrReducePv  = array ((1, 1), (lmrMaxDepth, lmrMaxWidth))
-    [((i, j), ceiling $ logrd i j lmrPv) | i <- [1..lmrMaxDepth], j <- [1..lmrMaxWidth]]
-lmrReduceArr = array ((1, 1), (lmrMaxDepth, lmrMaxWidth))
-    [((i, j), ceiling $ logrd i j lmrRest) | i <- [1..lmrMaxDepth], j <- [1..lmrMaxWidth]]
-
-logrd :: Int -> Int -> Double -> Double
-logrd i j f = log (fromIntegral i) * log (fromIntegral j) / f
-
 -- Parameters for futility pruning:
 futilActive :: Bool
 futilActive = True
@@ -133,7 +111,7 @@ nulSubAct   = True
 
 -- Parameters for internal iterative deepening
 useIID :: Bool
-useIID      = False
+useIID      = True
 
 minIIDPV, minIIDCut, maxIIDDepth :: Int
 minIIDPV    = 5
@@ -186,12 +164,13 @@ data PVState
 -- This is a state which reflects the status of alpha beta in a node while going through the edges
 data NodeState
     = NSt {
-          crtnt :: !NodeType,	-- parent node type (actually expected)
-          nxtnt :: !NodeType,	-- expected child node type
-          cursc :: !Path,	-- current alpha value (now plus path & depth)
-          movno :: !Int,	-- current move number
-          pvsl  :: [Pvsl],	-- principal variation list (at root) with node statistics
+          crtnt  :: !NodeType,	-- parent node type (actually expected)
+          nxtnt  :: !NodeType,	-- expected child node type
+          cursc  :: !Path,	-- current alpha value (now plus path & depth)
+          movno  :: !Int,	-- current move number
           killer :: !Killer,	-- the current killer moves
+          iniid  :: !Bool,	-- are we in IID?
+          pvsl   :: [Pvsl],	-- principal variation list (at root) with node statistics
           pvcont :: Seq Move	-- a pv continuation from the previous iteration, if available
       } deriving Show
 
@@ -301,7 +280,7 @@ pvsInit = PVState { ronly = pvro00, absdp = 0, usedext = 0,
                     abort = False, short = False, stats = stt0 }
 nst0 :: NodeState
 nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore "Zero" 0,
-             movno = 1, killer = NoKiller, pvsl = [], pvcont = emptySeq }
+             movno = 1, killer = NoKiller, iniid = False, pvsl = [], pvcont = emptySeq }
 
 stt0 :: SStats
 stt0 = SStats { sNodes = 0, sNodesQS = 0, sRetr = 0, sRSuc = 0,
@@ -374,7 +353,7 @@ pvRootSearch a b d lastpath rmvs aspir = do
                 then do
                     let a' = pathFromScore "a" a
                         b' = pathFromScore "b" b
-                    genAndSort nst0 { pvcont = lastpath } a' b' d -- this will never really do IID as d==1
+                    genAndSort nst0 { pvcont = lastpath } a' b' d	-- this will never really do IID as d==1
                 else case lastpath of
                          Seq []    -> return rmvs	-- probably this never happens... - check to simplify!
                          Seq (e:_) -> return $ Alt $ e : delete e (unalt rmvs)
@@ -455,8 +434,8 @@ pvInnerRoot b d nst e = do
                 modify $ \s -> s { absdp = absdp s + 1 }
                 -- (s, def) <- case exd of
                 s <- case exd of
-                         Exten exd' spc -> pvInnerRootExten b d spc exd' nst
-                         Final sco      -> do
+                         Exten exd' _ -> pvInnerRootExten b d exd' nst
+                         Final sco    -> do
                              viztreeScore $ "Final: " ++ show sco
                              -- return (pathFromScore "Final" (-sco), d)
                              return $! pathFromScore "Final" (-sco)
@@ -471,15 +450,14 @@ pvInnerRoot b d nst e = do
             else return (False, nst)
 
 -- pvInnerRootExten :: Path -> Int -> Bool -> Int -> NodeState -> Search (Path, Int)
-pvInnerRootExten :: Path -> Int -> Bool -> Int -> NodeState -> Search Path
-pvInnerRootExten b d spec !exd nst =  do
+pvInnerRootExten :: Path -> Int -> Int -> NodeState -> Search Path
+pvInnerRootExten b d !exd nst =  do
     pindent $ "depth = " ++ show d
     old <- get
     exd' <- reserveExtension (usedext old) exd
     let !inPv = nxtnt nst == PVNode
         !a  = cursc nst
         !d1 = d + exd' - 1	-- this is the normal (unreduced) depth for the next search
-    -- d' <- reduceLmr d1 inPv False spec exd (movno nst) True
     pindent $ "depth " ++ show d ++ " nt " ++ show (nxtnt nst)
               ++ " exd' = " ++ show exd'
               ++ " mvn " ++ show (movno nst) ++ " next depth " ++ show d1
@@ -675,7 +653,7 @@ pvSearch nst !a !b !d = do
 
 -- PV Zero Window
 pvZeroW :: NodeState -> Path -> Int -> Int -> Bool -> Search Path
-pvZeroW !nst !b !d !lastnul redu | d <= 0 = do
+pvZeroW !_ !b !d !_ _ | d <= 0 = do
     -- Now that we moved the ttRead call under pvZeroW we are not prepared
     -- to handle correctly the case minToRetr = 0
     (v, ns) <- mustQSearch (pathScore bGrain) (pathScore b)
@@ -819,7 +797,7 @@ pvInnerLoop b d prune nst e = do
                          Exten exd' spc -> do
                            if prune && exd' == 0 && not spc -- don't prune special or extended
                               then return $! onlyScore $! cursc nst	-- prune, return a
-                              else pvInnerLoopExten b d spc exd' nst
+                              else pvInnerLoopExten b d exd' nst
                          Final sco -> do
                              viztreeScore $ "Final: " ++ show sco
                              return $! pathFromScore "Final" (-sco)
@@ -877,16 +855,14 @@ reserveExtension !uex !exd
         modify $ \s -> s { usedext = usedext s + exd }
         return exd
 
-pvInnerLoopExten :: Path -> Int -> Bool -> Int -> NodeState
-                 -> Search Path
-pvInnerLoopExten b d spec !exd nst = do
+pvInnerLoopExten :: Path -> Int -> Int -> NodeState -> Search Path
+pvInnerLoopExten b d !exd nst = do
     old <- get
     exd' <- reserveExtension (usedext old) exd
     -- late move reduction
     let !inPv = nxtnt nst == PVNode
         a = cursc nst
         !d1 = d + exd' - 1	-- this is the normal (unreduced) depth for next search
-    -- d' <- reduceLmr d1 inPv (pnearmate a) spec exd (movno nst) True
     pindent $ "depth " ++ show d ++ " nt " ++ show (nxtnt nst)
            ++ " exd' = " ++ show exd' ++ " mvn " ++ show (movno nst) ++ " next depth " ++ show d1
     let nega = negatePath a
@@ -953,8 +929,8 @@ pvInnerLoopExtenZ b d spec !exd nst redu = do
                 -- was reduced and didn't fail low: re-search with full depth
                 pindent $ "Research! (" ++ show sr ++ ")"
                 viztreeReSe
-                sts <- get
-                let nds1 = sNodes $ stats sts
+                -- sts <- get
+                -- let nds1 = sNodes $ stats sts
                 incReSe nodre	-- so many nodes we wasted by reducing this time
                 let nst1 = if nullSeq (pathMoves sr)
                               then nst
@@ -1044,39 +1020,16 @@ newKiller d s nst
 genAndSort :: NodeState -> Path -> Path -> Int -> Search (Alt Move)
 genAndSort nst a b d = do
     let path' = unseq $ pvcont nst
-    path <- if not $ null path'
-               then return path'
-               else do
-                   -- This is not needed anymore as we will have searched
-                   -- already the TT and either we found something, in which case
-                   -- we have it in pvcont nst
-                   -- or did not find, so we will not find it here
-                   {--
-                   path1 <- do
-                       mmv <- bestMoveFromHash
-                       case mmv of
-                           Nothing -> return []
-                           Just e  -> do
-                               le <- lift $ isMoveLegal e
-                               if le then return [e] else return []
-                   --}
-                   let path1 = []
-                   if not (null path1 && useIID)
-                      then return path1
-                      else do
-                          mmv <- bestMoveFromIID nst a b d	-- it will do nothing for AllNode
-                          case mmv of
-                               Just e' -> return [e']
-                               Nothing -> return []
+    path <- if null path' && useIID && not (iniid nst)
+               then bestMoveFromIID nst a b d	-- it will do nothing for AllNode
+               else return path'	-- which is null
     adp <- gets absdp
-    -- esp <- lift $ genMoves d adp (crtnt nst /= AllNode)
     esp <- lift $ genMoves d adp True
     kl  <- lift $ filterM isMoveLegal $ killerToList (killer nst)
     let es = bestFirst path kl esp
     return $ Alt es
 
 -- Late Move Reduction
--- This part (including lmrIndex) seems well optimized
 {-# INLINE reduceLmr #-}
 reduceLmr :: Int -> Bool -> Bool -> Int -> Int -> Int
 reduceLmr !d nearmatea !spec !exd !w
@@ -1091,22 +1044,7 @@ reduceLmr !d nearmatea !spec !exd !w
           lmrMvs3  = 17	-- reduced by max 2
           lmrMvs4  = 33	-- reduced by max 3
 
-{-# INLINE reduceDepth #-}
-reduceDepth :: Int -> Int -> Bool -> Int
-reduceDepth !d !w !pv = m0n
-    where nd = d - k
-          !m0n = max 0 nd
-          k  = if pv then lmrReducePv  `unsafeAt` lmrIndex d w
-                     else lmrReduceArr `unsafeAt` lmrIndex d w
-
--- Here we know the index is correct, but unsafeIndex (from Data.Ix)
--- is unfortunately not exported...
--- The trick: define an UnsafeIx class to calculate direct unsafeIndex
-lmrIndex :: Int -> Int -> Int
-lmrIndex d w = unsafeIndex ((1, 1), (lmrMaxDepth, lmrMaxWidth)) (d1, w1)
-    where d1 = min lmrMaxDepth $ max 1 d
-          w1 = min lmrMaxWidth $ max 1 w
-
+{--
 -- The UnsafeIx inspired from GHC.Arr (class Ix)
 class Ord a => UnsafeIx a where
     unsafeIndex :: (a, a) -> a -> Int
@@ -1121,6 +1059,7 @@ instance (UnsafeIx a, UnsafeIx b) => UnsafeIx (a, b) where -- as derived
     {-# SPECIALISE instance UnsafeIx (Int,Int) #-}
     {-# INLINE unsafeIndex #-}
     unsafeIndex ((l1,l2),(u1,u2)) (i1,i2) = unsafeIndex (l1,u1) i1 * unsafeRangeSize (l2,u2) + unsafeIndex (l2,u2) i2
+--}
 
 -- This is a kind of monadic fold optimized for (beta) cut
 -- {-# INLINE pvLoop #-}
@@ -1251,34 +1190,16 @@ pvQInnerLoop !b c !a e = do
                           else return (abrt', a)
             else return (False, a)
 
-{--
-bestMoveFromHash :: Search (Maybe Move)
-bestMoveFromHash = do
-    reTrieve
-    (hdeep, tp, _, e, _) <-  lift ttRead
-    if hdeep > 0 && tp /= 0
-       then  do
-           reSucc 1		-- here we save just move generation
-           return $ Just e
-       else return Nothing
---}
-
 {-# INLINE bestMoveFromIID #-}
-bestMoveFromIID :: NodeState -> Path -> Path -> Int -> Search (Maybe Move)
+bestMoveFromIID :: NodeState -> Path -> Path -> Int -> Search [Move]
 bestMoveFromIID nst a b d
     | nt == PVNode  && d >= minIIDPV ||
       nt == CutNode && d >= minIIDCut
-                =  do
-                   s <- pvSearch nst a b d'
-                   return $! shead $ pathMoves s
-                -- Here we come from a search (pv or zero), and end up in a new search
-                -- with a smaller depth, but this could be an expensive loop!
-                -- All this time the moves are generated anew!!
-    | otherwise =  return Nothing
+          = do s <- pvSearch nst { iniid = True } a b d'
+               return $! unseq $ pathMoves s
+    | otherwise =  return []
     where d' = min maxIIDDepth (iidNewDepth d)
           nt = nxtnt nst
-          shead (Seq (e:_)) = Just e
-          shead _           = Nothing
 
 {-# INLINE timeToAbort #-}
 timeToAbort :: Search Bool
