@@ -350,10 +350,7 @@ pvRootSearch :: Int -> Int -> Int -> Seq Move -> Alt Move -> Bool
 pvRootSearch a b d lastpath rmvs aspir = do
     viztreeNew d
     edges <- if null (unalt rmvs)	-- only when d==1, but we could have lastpath from the previous real move
-                then do
-                    let a' = pathFromScore "a" a
-                        b' = pathFromScore "b" b
-                    genAndSort nst0 { pvcont = lastpath } a' b' d	-- this will never really do IID as d==1
+                then genAndSort nst0 { pvcont = lastpath } d	-- this will never really do IID as d==1
                 else case lastpath of
                          Seq []    -> return rmvs	-- probably this never happens... - check to simplify!
                          Seq (e:_) -> return $ Alt $ e : delete e (unalt rmvs)
@@ -612,7 +609,7 @@ pvSearch nst !a !b !d = do
            let nst' = if hdeep > 0 && (tp /= 0 || nullSeq (pvcont nst))
                          then nst { pvcont = Seq [e'] }
                          else nst
-           edges <- genAndSort nst' a b d
+           edges <- genAndSort nst' d
            if noMove edges
               then do
                 v <- lift staticVal
@@ -689,7 +686,7 @@ pvZeroW !nst !b !d !lastnull redu = do
                 let nst' = if hdeep > 0 && (tp /= 0 || nullSeq (pvcont nst))
                               then nst { pvcont = Seq [e'] }
                               else nst
-                edges <- genAndSort nst' bGrain b d
+                edges <- genAndSort nst' d
                 if noMove edges
                    then do
                      v <- lift staticVal
@@ -1017,11 +1014,11 @@ newKiller d s nst
 -- We don't sort the moves here, they have to come sorted from genMoves
 -- But we consider the best moves first (from previous iteration, TT or IID)
 -- and the killers
-genAndSort :: NodeState -> Path -> Path -> Int -> Search (Alt Move)
-genAndSort nst a b d = do
+genAndSort :: NodeState -> Int -> Search (Alt Move)
+genAndSort nst d = do
     let path' = unseq $ pvcont nst
     path <- if null path' && useIID && not (iniid nst)
-               then bestMoveFromIID nst a b d	-- it will do nothing for AllNode
+               then bestMoveFromIID nst d	-- it will do nothing for AllNode
                else return path'	-- which is null
     adp <- gets absdp
     esp <- lift $ genMoves d adp True
@@ -1191,15 +1188,16 @@ pvQInnerLoop !b c !a e = do
             else return (False, a)
 
 {-# INLINE bestMoveFromIID #-}
-bestMoveFromIID :: NodeState -> Path -> Path -> Int -> Search [Move]
-bestMoveFromIID nst a b d
+bestMoveFromIID :: NodeState -> Int -> Search [Move]
+bestMoveFromIID nst d
     | nt == PVNode  && d >= minIIDPV ||
       nt == CutNode && d >= minIIDCut
-          = do s <- pvSearch nst { iniid = True } a b d'
+          = do s <- pvSearch nst' (pathFromScore "aiid" alpha0) (pathFromScore "biid" beta0) d'
                return $! unseq $ pathMoves s
     | otherwise =  return []
     where d' = min maxIIDDepth (iidNewDepth d)
           nt = nxtnt nst
+          nst' = nst0 { killer = killer nst, iniid = True }
 
 {-# INLINE timeToAbort #-}
 timeToAbort :: Search Bool
