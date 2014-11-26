@@ -620,8 +620,7 @@ pvSearch nst !a !b !d = do
               else do
                 nodes0 <- gets (sNodes . stats)
                 -- Loop thru the moves
-                let !nsti = nst0 { crtnt = PVNode, nxtnt = PVNode,
-                                   cursc = a, pvcont = tailSeq (pvcont nst') }
+                let !nsti = nst0 { iniid = iniid nst', cursc = a, pvcont = tailSeq (pvcont nst') }
                 nstf <- pvSLoop b d False nsti edges
                 let s = cursc nstf
                 pindent $ "<= " ++ show s
@@ -702,7 +701,8 @@ pvZeroW !nst !b !d !lastnull redu = do
                                  else isPruneFutil d bGrain	-- was a
                      -- Loop thru the moves
                      let !nsti = nst0 { crtnt = nxtnt nst', nxtnt = deepNodeType (nxtnt nst'),
-                                        cursc = bGrain, pvcont = tailSeq (pvcont nst') }
+                                        cursc = bGrain, iniid = iniid nst',
+                                        pvcont = tailSeq (pvcont nst') }
                      nstf <- pvZLoop b d prune redu nsti edges
                      let s = cursc nstf
                      -- Here we expect bGrain <= s < b -- this must be checked
@@ -1196,7 +1196,7 @@ bestMoveFromIID nst d
     | otherwise =  return []
     where d' = min maxIIDDepth (iidNewDepth d)
           nt = nxtnt nst
-          nst' = nst0 { killer = killer nst, iniid = True }
+          nst' = nst0 { iniid = True }
 
 {-# INLINE timeToAbort #-}
 timeToAbort :: Search Bool
