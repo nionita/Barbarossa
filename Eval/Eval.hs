@@ -13,7 +13,7 @@ module Eval.Eval (
 
 import Prelude hiding ((++), head, foldl, map, concat, filter, takeWhile, iterate, sum, minimum,
                        zip, zipWith, foldr, concatMap, length, replicate, lookup, repeat, null,
-                       unzip, drop)
+                       unzip, drop, elem)
 import Data.Array.Base (unsafeAt)
 import Data.Bits hiding (popCount)
 import Data.List.Stream
@@ -246,6 +246,7 @@ gamePhase p = g
 evalSideNoPawns :: MyPos -> EvalState -> (Int, [Int])
 evalSideNoPawns p sti
     | npwin && insufficient = (0, zeroFeats)
+    | npwin && lessRook p   = (nsc `div` 8, feats)
     | otherwise             = (nsc, feats)
     where (nsc, feats) = normalEval p sti
           npside = if pawns p .&. me p == 0 then me p else yo p
@@ -263,7 +264,7 @@ evalNoPawns p sti = (sc, zeroFeats)
               | kbbk        = mateKBBK p kaloneyo	-- 2 bishops
               | kbnk        = mateKBNK p kaloneyo	-- bishop + knight
               | kMxk        = mateKMajxK p kaloneyo	-- simple mate with at least one major
-              -- | kqkx        = mateQRest p kaloneb	-- queen against minor or rook
+              | lessRook p  = fst (normalEval p sti) `div` 4
               | otherwise   = fst $ normalEval p sti
           kaloneme = me p `less` kings p == 0
           kaloneyo = yo p `less` kings p == 0
@@ -277,6 +278,21 @@ evalNoPawns p sti = (sc, zeroFeats)
           minorcnt = popCount1 minor
           major    = queens p .|. rooks p
           majorcnt = popCount1 major
+
+-- Has one player less then one rook advantage (without pawns)?
+-- In this case is drawish (if the winning part has no pawns)
+-- This is aprimitive first approach
+lessRook :: MyPos -> Bool
+lessRook p | mq == yq && mr == yr = mb + mn - yb - yn `elem` [-1, 0, 1]
+           | otherwise = False
+    where mq = popCount1 $ queens  p .&. me p
+          yq = popCount1 $ queens  p .&. yo p
+          mr = popCount1 $ rooks   p .&. me p
+          yr = popCount1 $ rooks   p .&. yo p
+          mb = popCount1 $ bishops p .&. me p
+          yb = popCount1 $ bishops p .&. yo p
+          mn = popCount1 $ knights p .&. me p
+          yn = popCount1 $ knights p .&. yo p
 
 winBonus :: Int
 winBonus = 200	-- when it's known win

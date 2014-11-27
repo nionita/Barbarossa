@@ -38,7 +38,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.2.0"
-progVerSuff = "enpr1c"
+progVerSuff = "corint"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -511,7 +511,7 @@ searchTheTree tief mtief timx tim tpm mtg lsc lpv rmvs = do
     ctx <- ask
     chg <- readChanging
     ctxLog LogInfo $ "Time = " ++ show tim ++ " Timx = " ++ show timx
-    (path, sc, rmvsf, stfin) <- bestMoveCont tief timx (crtStatus chg) lsc lpv rmvs
+    (path, sc, rmvsf, timint, stfin) <- bestMoveCont tief timx (crtStatus chg) lsc lpv rmvs
     case length path of _ -> return () -- because of lazyness!
     storeBestMove path sc	-- write back in status
     modifyChanging (\c -> c { crtStatus = stfin })
@@ -529,7 +529,7 @@ searchTheTree tief mtief timx tim tpm mtg lsc lpv rmvs = do
                 ++ " path " ++ show path
     ctxLog LogInfo mes
     ctxLog LogInfo $ "compTime: " ++ show ms' ++ " / " ++ show mx
-    if depthmax || halfover || onlyone
+    if depthmax || timint || halfover || onlyone
         then do
             when depthmax $ ctxLog LogInfo "in searchTheTree: max depth reached"
             giveBestMove path
