@@ -289,7 +289,7 @@ stt0 = SStats { sNodes = 0, sNodesQS = 0, sRetr = 0, sRSuc = 0,
 pvro00 :: PVReadOnly
 pvro00 = PVReadOnly { draft = 0, albest = False, timeli = False, abmili = 0 }
 
-alphaBeta :: ABControl -> Game (Int, [Move], [Move])
+alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool)
 alphaBeta abc =  do
     let !d = maxdepth abc
         rmvs = Alt $ rootmvs abc
@@ -319,6 +319,7 @@ alphaBeta abc =  do
                         else runCState (searchFull es1) pvs0
              Nothing ->  runCState (searchFull lpv) pvs0
          else  runCState (searchFull lpv) pvs0
+    let timint = abort (snd r)
     -- when aborted, return the last found good move
     -- we have to trust that abort is never done in draft 1!
     -- if abort (snd r)
@@ -326,8 +327,8 @@ alphaBeta abc =  do
     --    else return $! case fst r of (s, Seq path, Alt rmvs') -> (s, path, rmvs')
     case fst r of
         (s, Seq path, Alt rmvs') -> if null path
-           then return (fromMaybe 0 $ lastscore abc, lastpv abc, [])
-           else return (s, path, rmvs')
+           then return (fromMaybe 0 $ lastscore abc, lastpv abc, [], timint)
+           else return (s, path, rmvs', timint)
 
 {--
 aspirWin :: Int -> Int -> Int -> Seq Move -> Alt Move -> Int -> m (Int, Seq Move, Alt Move)

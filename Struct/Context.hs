@@ -110,7 +110,7 @@ data Changing = Chg {
 type CtxIO = ReaderT Context IO
 
 -- Result of a search
-type IterResult = ([Move], Int, [Move], MyState)
+type IterResult = ([Move], Int, [Move], Bool, MyState)
 
 readChanging :: CtxIO Changing
 readChanging = do
