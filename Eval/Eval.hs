@@ -246,7 +246,7 @@ gamePhase p = g
 evalSideNoPawns :: MyPos -> EvalState -> (Int, [Int])
 evalSideNoPawns p sti
     | npwin && insufficient = (0, zeroFeats)
-    | npwin && lessRook p   = (nsc `div` 8, feats)
+    | npwin && lessRook p   = (nsc `div` 4, feats)
     | otherwise             = (nsc, feats)
     where (nsc, feats) = normalEval p sti
           npside = if pawns p .&. me p == 0 then me p else yo p
@@ -264,7 +264,7 @@ evalNoPawns p sti = (sc, zeroFeats)
               | kbbk        = mateKBBK p kaloneyo	-- 2 bishops
               | kbnk        = mateKBNK p kaloneyo	-- bishop + knight
               | kMxk        = mateKMajxK p kaloneyo	-- simple mate with at least one major
-              | lessRook p  = fst (normalEval p sti) `div` 4
+              | lessRook p  = fst (normalEval p sti) `div` 2
               | otherwise   = fst $ normalEval p sti
           kaloneme = me p `less` kings p == 0
           kaloneyo = yo p `less` kings p == 0
@@ -279,20 +279,20 @@ evalNoPawns p sti = (sc, zeroFeats)
           major    = queens p .|. rooks p
           majorcnt = popCount1 major
 
--- Has one player less then one rook advantage (without pawns)?
--- In this case is drawish (if the winning part has no pawns)
--- This is aprimitive first approach
+-- Has one of the players less then one rook advantage (without pawns)?
+-- In this case it is drawish (if the winning part has no pawns)
+-- This is a primitive first approach
 lessRook :: MyPos -> Bool
 lessRook p | mq == yq && mr == yr = mb + mn - yb - yn `elem` [-1, 0, 1]
            | otherwise = False
-    where mq = popCount1 $ queens  p .&. me p
-          yq = popCount1 $ queens  p .&. yo p
-          mr = popCount1 $ rooks   p .&. me p
-          yr = popCount1 $ rooks   p .&. yo p
-          mb = popCount1 $ bishops p .&. me p
-          yb = popCount1 $ bishops p .&. yo p
-          mn = popCount1 $ knights p .&. me p
-          yn = popCount1 $ knights p .&. yo p
+    where !mq = popCount1 $ queens  p .&. me p
+          !yq = popCount1 $ queens  p .&. yo p
+          !mr = popCount1 $ rooks   p .&. me p
+          !yr = popCount1 $ rooks   p .&. yo p
+          !mb = popCount1 $ bishops p .&. me p
+          !yb = popCount1 $ bishops p .&. yo p
+          !mn = popCount1 $ knights p .&. me p
+          !yn = popCount1 $ knights p .&. yo p
 
 winBonus :: Int
 winBonus = 200	-- when it's known win
@@ -510,12 +510,13 @@ kingMaterBonus c !myp !mat !ksq
     | otherwise  = matFactor mat * prxb
     where !prxw = prxWA + prxWH
           !prxb = prxBA + prxBH
-          !prxWA = (unsafeShiftL (opawns shWA2) 1 + opawns shWA3) * (prxBo wa + prxBo wb)
-          !prxWH = (unsafeShiftL (opawns shWH2) 1 + opawns shWH3) * (prxBo wg + prxBo wh)
-          !prxBA = (unsafeShiftL (opawns shBA7) 1 + opawns shBA6) * (prxBo ba + prxBo bb)
-          !prxBH = (unsafeShiftL (opawns shBH7) 1 + opawns shBH6) * (prxBo bg + prxBo bh)
+          !prxWA = (unsafeShiftL (opawns shWA2) 1 + opawns shWA3) * (prxBoQ wa + prxBo wb)
+          !prxWH = (unsafeShiftL (opawns shWH2) 1 + opawns shWH3) * (prxBoQ wh + prxBo wg)
+          !prxBA = (unsafeShiftL (opawns shBA7) 1 + opawns shBA6) * (prxBoQ ba + prxBo bb)
+          !prxBH = (unsafeShiftL (opawns shBH7) 1 + opawns shBH6) * (prxBoQ bh + prxBo bg)
           opawns = popCount1 . (.&. myp)
           prxBo  = proxyBonus . squareDistance ksq
+          prxBoQ = flip unsafeShiftR 2 . prxBo
           matFactor = unsafeAt matKCArr
           -- The interesting squares and bitboards about king placement
           wa = 0

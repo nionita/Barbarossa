@@ -140,7 +140,7 @@ data Pvsl = Pvsl {
     } deriving Show
 
 data Killer = NoKiller | OneKiller !Move | TwoKillers !Move !Move
-                  deriving Show
+                  deriving (Eq, Show)
 
 -- Read only parameters of the search, so that we can change them programatically
 data PVReadOnly
@@ -153,12 +153,11 @@ data PVReadOnly
 
 data PVState
     = PVState {
-          ronly :: !PVReadOnly,	-- read only parameters
-          absdp :: !Int,	-- absolute depth (root = 0)
+          ronly   :: PVReadOnly,	-- read only parameters
+          stats   :: SStats,	-- search statistics
+          absdp   :: !Int,	-- absolute depth (root = 0)
           usedext :: !Int,	-- used extension
-          abort :: !Bool,	-- search aborted (time)
-          short :: !Bool,	-- for check path (shorter than depth in pv)
-          stats :: !SStats	-- search statistics
+          abort   :: !Bool	-- search aborted (time)
       } deriving Show
 
 -- This is a state which reflects the status of alpha beta in a node while going through the edges
@@ -169,7 +168,6 @@ data NodeState
           cursc  :: !Path,	-- current alpha value (now plus path & depth)
           movno  :: !Int,	-- current move number
           killer :: !Killer,	-- the current killer moves
-          iniid  :: !Bool,	-- are we in IID?
           pvsl   :: [Pvsl],	-- principal variation list (at root) with node statistics
           pvcont :: Seq Move	-- a pv continuation from the previous iteration, if available
       } deriving Show
@@ -273,11 +271,10 @@ tailSeq es
     | otherwise  = Seq $ tail $ unseq es
 
 pvsInit :: PVState
-pvsInit = PVState { ronly = pvro00, absdp = 0, usedext = 0,
-                    abort = False, short = False, stats = stt0 }
+pvsInit = PVState { ronly = pvro00, absdp = 0, usedext = 0, abort = False, stats = stt0 }
 nst0 :: NodeState
 nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore "Zero" 0,
-             movno = 1, killer = NoKiller, iniid = False, pvsl = [], pvcont = emptySeq }
+             movno = 1, killer = NoKiller, pvsl = [], pvcont = emptySeq }
 
 stt0 :: SStats
 stt0 = SStats { sNodes = 0, sNodesQS = 0, sRetr = 0, sRSuc = 0,
@@ -1018,7 +1015,7 @@ newKiller d s nst
 genAndSort :: NodeState -> Path -> Path -> Int -> Search (Alt Move)
 genAndSort nst a b d = do
     let path' = unseq $ pvcont nst
-    path <- if null path' && useIID && not (iniid nst)
+    path <- if null path' && useIID
                then bestMoveFromIID nst a b d	-- it will do nothing for AllNode
                else return path'	-- which is null
     adp <- gets absdp
@@ -1192,8 +1189,8 @@ pvQInnerLoop !b c !a e = do
 bestMoveFromIID :: NodeState -> Path -> Path -> Int -> Search [Move]
 bestMoveFromIID nst a b d
     | nt == PVNode  && d >= minIIDPV ||
-      nt == CutNode && d >= minIIDCut
-          = do s <- pvSearch nst { iniid = True } a b d'
+      nt == CutNode && d >= minIIDCut && killer nst == NoKiller
+          = do s <- pvSearch nst a b d'
                return $! unseq $ pathMoves s
     | otherwise =  return []
     where d' = min maxIIDDepth (iidNewDepth d)
