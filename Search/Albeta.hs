@@ -194,9 +194,6 @@ nextNodeType t      = t
 newtype Alt e = Alt { unalt :: [e] } deriving Show
 newtype Seq e = Seq { unseq :: [e] } deriving Show
 
--- firstMove :: Seq Move -> Move
--- firstMove = head . unseq
-
 data Path
     = Path {
          pathScore :: !Int,
@@ -364,8 +361,8 @@ pvRootSearch a b d lastpath rmvs aspir = do
     reportStats
     let failedlow = (a, emptySeq, edges)	-- just to permit aspiration to retry
         sc | d > 1            = pathScore (cursc nstf)
-           | null (pvsl nstf) = a
-           | otherwise        = pathScore $ pvPath $ head $ pvsl nstf
+           | p:_ <- pvsl nstf = pathScore $ pvPath p
+           | otherwise        = a
     -- Root is pv node, cannot fail low, except when aspiration fails!
     if sc <= a	-- failed low
          then do
@@ -638,7 +635,7 @@ pvSearch nst !a !b !d = do
                        -- here we failed low
                        let de = max d $ pathDepth s
                            es = unalt edges
-                       when (de >= minToStore) $ do
+                       when (de >= minToStore && not (null es)) $ do	-- what if es is null?
                            nodes1 <- gets (sNodes . stats)
                            -- store as upper score, and as move, the first one generated
                            lift $ do
@@ -713,8 +710,8 @@ pvZeroW !nst !b !d !lastnull redu = do
                      pindent $ "<: " ++ show s
                      let !de = max d $ pathDepth s
                          es = unalt edges
-                     when (de >= minToStore && s < b) $ do	-- we failed low
-                         !nodes1 <- gets (sNodes . stats)
+                     when (de >= minToStore && s < b && not (null es)) $ do	-- we failed low
+                         !nodes1 <- gets (sNodes . stats)	-- what if es is null?
                          -- store as upper score, and as move the first one (generated)
                          lift $ do
                              let typ = 0
@@ -1286,9 +1283,12 @@ incReBe n = modStat $ \s -> s { sReBe = sReBe s + n }
 incReMi :: Search ()
 incReMi = modStat $ \s -> s { sReMi = sReMi s + 1 }
 
-pindent, qindent :: String -> Search ()
+pindent :: String -> Search ()
 pindent = indentPassive
-qindent = indentPassive
+
+-- activate when used
+-- qindent :: String -> Search ()
+-- qindent = indentPassive
 
 -- Uncomment this when using it above (pindent, qindent):
 {--

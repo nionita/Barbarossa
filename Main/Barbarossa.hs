@@ -517,7 +517,7 @@ searchTheTree tief mtief timx tim tpm mtg lsc lpv rmvs = do
     modifyChanging (\c -> c { crtStatus = stfin })
     currms <- lift $ currMilli (startSecond ctx)
     let (ms', mx, urg) = compTime tim tpm mtg sc
-    ms <- if urg then return ms' else correctTime tief ms' sc path
+    ms <- if urg || null path then return ms' else correctTime tief ms' sc path
     let strtms = srchStrtMs chg
         delta = strtms + ms - currms
         ms2 = ms `div` 2
@@ -548,6 +548,8 @@ searchTheTree tief mtief timx tim tpm mtg lsc lpv rmvs = do
 -- We assume here that we always have at least the first move of the PV (our best)
 -- If not (which is a fatal error) we will get an exception (head of empty list)
 -- which will be catched somewhere else and reported
+-- This is changed now in an attemption to catch the head exception: if the path
+-- is empty, this function will not be called
 correctTime :: Int -> Int -> Int -> [Move] -> CtxIO Int
 correctTime draft ms sc path = do
     tp <- asks tipars
@@ -562,10 +564,14 @@ correctTime draft ms sc path = do
         Just (PrevMvInfo { pmiBestSc = osc, pmiChanged = ok, pmiBMSoFar = obsf }) -> do
             -- We have previous moves, update and calculate time factor
             let pmi = PrevMvInfo { pmiBestSc = sc, pmiChanged = k, pmiBMSoFar = bsf }
-                bm = head path
-                (k, bsf, cha) = if bm == head obsf	-- same best move?
-                                   then (ok, obsf, False)
-                                   else (ok + 1, bm : delete bm obsf, True)
+                (k, bsf, cha) =
+                    case path of
+                        bm:_ -> case obsf of
+                                    om:_ -> if bm == om	-- same best move?
+                                               then (ok, obsf, False)
+                                               else (ok + 1, bm : delete bm obsf, True)
+                                    []   -> (ok + 1, [bm], True)
+                        []   -> (ok, obsf, False)	-- this cant happen!
                 func = \c -> c { prvMvInfo = Just pmi }
                 ms'  = timeFactor tp cha draft ms osc sc k bsf
             ctxLog LogInfo $ "timeFactor: " ++ show cha

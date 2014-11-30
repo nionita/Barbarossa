@@ -15,8 +15,8 @@ module Moves.Board (
 import Prelude hiding ((++), foldl, filter, map, concatMap, concat, head, tail, repeat, zip,
                        zipWith, null, words, foldr, elem, lookup, any, takeWhile, iterate)
 -- import Control.Exception (assert)
-import Data.Array.Base (unsafeAt)
-import Data.Array.Unboxed
+-- import Data.Array.Base (unsafeAt)
+-- import Data.Array.Unboxed
 import Data.Bits
 import Data.List.Stream
 import Data.Char
@@ -261,6 +261,7 @@ genMoveFCheck !p
           !excl = foldl' (.|.) 0 $ map chkAtt chklist
           chkAtt (NormalCheck f s) = fAttacs s f ocp1
           chkAtt (QueenCheck f s)  = fAttacs s f ocp1
+          -- This head is safe becase chklist is first checked in the pattern of the function
           (r1, r2) = case head chklist of	-- this is needed only when simple check
                  NormalCheck Pawn sq   -> (beatAtP p (bit sq), [])  -- cannot block pawn
                  NormalCheck Knight sq -> (beatAt  p (bit sq), [])  -- or knight check
@@ -693,7 +694,7 @@ moveAndClearEp bb = bb `xor` (bb .&. epMask) `xor` mvMask
 epClrZob :: BBoard -> BBoard
 epClrZob bb
     | epLastBB == 0 = 0
-    | otherwise     = epSetZob $ head $ bbToSquares epLastBB
+    | otherwise     = epSetZob $ head $ bbToSquares epLastBB	-- safe because epLastBB /= 0
     where epLastBB  = bb .&. epMask
 
 {-# INLINE epSetZob #-}
@@ -757,7 +758,7 @@ doFromToMove m !p | moveIsEnPas m
           tdiag  = mvBit src dst (diag p) .&. nbdel
           tepcas = reset50Moves $ moveAndClearEp $ epcas p
           Busy col fig  = tabla p src	-- identify the moving piece
-          Busy _   Pawn = tabla p del	-- identify the captured piece (pawn)
+          -- Busy _   Pawn = tabla p del	-- identify the captured piece (pawn)
           !epcl = epClrZob $ epcas p
           !zk = zobkey p `xor` epcl
           CA tzobkey tmater = chainAccum (CA zk (mater p)) [
@@ -998,7 +999,7 @@ genEPCapts !pos
     | epBB == 0 = []
     | otherwise = map (\s -> makeEnPas s dst del) $ bbToSquares srcBB
     where !epBB = epcas pos .&. epMask
-          dst = head $ bbToSquares epBB
+          dst = head $ bbToSquares epBB	-- safe because epBB /= 0
           srcBB = pAttacs (other $ moving pos) dst .&. me pos .&. pawns pos
           del = if moving pos == White then dst - 8 else dst + 8
 

@@ -198,9 +198,9 @@ inLimits :: Limits -> (DWeights, DWeights) -> (DWeights, DWeights)
 inLimits ls (psm, pse) = (map inlim $ zip ls psm, map inlim $ zip ls pse)
     where inlim ((mi, ma), p) = max mi $ min ma p
 
-(<*>) :: Num a => [a] -> [a] -> a
-a <*> b = sum $ zipWith (*) a b
-{-# SPECIALIZE (<*>) :: [Int] -> [Int] -> Int #-}
+(<!>) :: Num a => [a] -> [a] -> a
+a <!> b = sum $ zipWith (*) a b
+{-# SPECIALIZE (<!>) :: [Int] -> [Int] -> Int #-}
 
 matesc :: Int
 matesc = 20000 - 255	-- warning, this is also defined in Base.hs!!
@@ -229,8 +229,8 @@ normalEval :: MyPos -> EvalState -> (Int, [Int])
 normalEval p !sti = (sc, feat)
     where feat = concatMap (itemEval gph ep p) evalItems
           ep   = esEParams sti
-          scm  = feat <*> esIWeightsM sti
-          sce  = feat <*> esIWeightsE sti
+          scm  = feat <!> esIWeightsM sti
+          sce  = feat <!> esIWeightsE sti
           gph  = gamePhase p
           !sc = ((scm + epMovingMid ep) * gph + (sce + epMovingEnd ep) * (256 - gph))
                    `unsafeShiftR` (shift2Cp + 8)
@@ -341,14 +341,6 @@ centerDistance sq = max (r - 4) (3 - r) + max (c - 4) (3 - c)
 bnMateDistance :: Bool -> Square -> Int
 bnMateDistance wbish sq = min (squareDistance sq ocor1) (squareDistance sq ocor2)
     where (ocor1, ocor2) = if wbish then (0, 63) else (7, 56)
-
--- Some helper functions:
-
-{-# INLINE zoneAttacs #-}
-zoneAttacs :: MyPos -> BBoard -> (Int, Int)
-zoneAttacs p zone = (m, y)
-    where m = popCount $ zone .&. myAttacs p
-          y = popCount $ zone .&. yoAttacs p
 
 ----------------------------------------------------------------------------
 -- Here we have the implementation of the evaluation items
@@ -797,6 +789,7 @@ evalRedundance p = [bp, rr]
           !brr = popCount1 bro `unsafeShiftR` 1	-- and here
           !rr  = wrr - brr
 
+{--
 ------ Knight & Rook correction according to own pawns ------
 data NRCorrection = NRCorrection
 
@@ -814,6 +807,7 @@ evalNRCorrection p = [md]
           !wrp = - popCount1 (rooks p .&. me p) * wpc * 12	-- 1/8 for each pawn under 5
           !brp = - popCount1 (rooks p .&. yo p) * bpc * 12	-- 1/8 for each pawn under 5
           !md = wnp + wrp - bnp - brp
+--}
 
 ------ Rook pawn weakness ------
 data RookPawn = RookPawn
@@ -870,11 +864,11 @@ cntPaBlo !ps !op !ofi !afi = (f op, f ofi, f afi)
     where f = popCount1 . (ps .&.)
 
 pawnBloWhite :: BBoard -> BBoard -> BBoard -> (Int, Int, Int)
-pawnBloWhite !pa !op !ap = cntPaBlo p1 pa op ap
+pawnBloWhite !pa !op !tp = cntPaBlo p1 pa op tp
     where !p1 = pa `unsafeShiftL` 8
 
 pawnBloBlack :: BBoard -> BBoard -> BBoard -> (Int, Int, Int)
-pawnBloBlack !pa !op !ap = cntPaBlo p1 pa op ap
+pawnBloBlack !pa !op !tp = cntPaBlo p1 pa op tp
     where !p1 = pa `unsafeShiftR` 8
 
 ------ Pass pawns ------

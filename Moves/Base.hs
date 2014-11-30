@@ -229,6 +229,7 @@ doNullMove = do
     -- bigCheckPos "doNullMove" p0 Nothing p'
     put s { stack = p : stack s }
 
+{-- Activae when used:
 bigCheckPos :: String -> MyPos -> Maybe Move -> MyPos -> Game ()
 bigCheckPos loc pin mmv pou = do
     let fpou = posToFen pou
@@ -245,6 +246,7 @@ bigCheckPos loc pin mmv pou = do
         logMes $ "Outget: " ++ fpou
         logMes $ "MyPos pou: " ++ show pou
         logMes $ "MyPos p:   " ++ show p
+--}
 
 checkRemisRules :: MyPos -> Game Bool
 checkRemisRules p = do
@@ -323,7 +325,9 @@ finNode str force = do
     when (printEvalInt /= 0 && (force || nodes (stats s) .&. printEvalInt == 0)) $ do
         let (p:_) = stack s	-- we never saw an empty stack error until now
             fen = posToFen p
-            mv = head . tail $ words fen
+            mv = case tail $ words fen of
+                     mv':_ -> mv'
+                     _     -> error "Wrong fen in finNode"
         logMes $ str ++ " Fen: " ++ fen
         logMes $ "Eval info " ++ mv ++ ":"
                       ++ concatMap (\(n, v) -> " " ++ n ++ "=" ++ show v)
