@@ -113,10 +113,11 @@ nulSubAct   = True
 useIID :: Bool
 useIID      = True
 
-minIIDPV, minIIDCut, maxIIDDepth :: Int
+minIIDPV, minIIDCut, minIIDCutNK, maxIIDDepth :: Int
 minIIDPV    = 5
-minIIDCut   = 7
-maxIIDDepth = 3
+minIIDCutNK = 6
+minIIDCut   = 8
+maxIIDDepth = 4
 
 iidNewDepth :: Int -> Int
 iidNewDepth = subtract 1
@@ -1188,9 +1189,11 @@ pvQInnerLoop !b c !a e = do
 {-# INLINE bestMoveFromIID #-}
 bestMoveFromIID :: NodeState -> Path -> Path -> Int -> Search [Move]
 bestMoveFromIID nst a b d
-    | nt == PVNode  && d >= minIIDPV ||
-      nt == CutNode && d >= minIIDCut && killer nst == NoKiller
+    | nt == PVNode  && d >= minIIDPV
           = do s <- pvSearch nst a b d'
+               return $! unseq $ pathMoves s
+    | nt == CutNode && (d >= minIIDCut || (d >= minIIDCutNK && killer nst == NoKiller))
+          = do s <- pvZeroW nst b d' nulMoves False
                return $! unseq $ pathMoves s
     | otherwise =  return []
     where d' = min maxIIDDepth (iidNewDepth d)
