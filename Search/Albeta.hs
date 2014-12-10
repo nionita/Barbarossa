@@ -117,7 +117,7 @@ minIIDPV, minIIDCut, minIIDCutNK, maxIIDDepth :: Int
 minIIDPV    = 5
 minIIDCutNK = 6
 minIIDCut   = 8
-maxIIDDepth = 4
+maxIIDDepth = 2
 
 iidNewDepth :: Int -> Int
 iidNewDepth = subtract 1
