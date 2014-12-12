@@ -1015,10 +1015,15 @@ newKiller d s nst
 -- and the killers
 genAndSort :: NodeState -> Path -> Path -> Int -> Search (Alt Move)
 genAndSort nst a b d = do
+    {--
+    path <- if useIID
+               then bestMoveFromIID nst a b d	-- it will do nothing for AllNode
+               else return []
+    --}
     let path' = unseq $ pvcont nst
     path <- if null path' && useIID
                then bestMoveFromIID nst a b d	-- it will do nothing for AllNode
-               else return path'	-- which is null
+               else return path'		-- if not null
     adp <- gets absdp
     esp <- lift $ genMoves d adp True
     kl  <- lift $ filterM isMoveLegal $ killerToList (killer nst)

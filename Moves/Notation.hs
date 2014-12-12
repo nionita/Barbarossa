@@ -2,11 +2,8 @@
 
 module Moves.Notation where
 
--- import Data.Array.Unboxed
 import Data.Bits
 import Data.Char (ord, chr, toUpper, toLower)
--- import Data.List
--- import Data.Word
 import qualified Text.ParserCombinators.Parsec as P
 import Text.ParserCombinators.Parsec ((<|>))
 
@@ -15,28 +12,6 @@ import Moves.BitBoard
 import Moves.Muster
 import Moves.Moves
 import Moves.Board
-
-{--
-showc :: UArray Int Char
-showc = array (0, 15) $ zip [0..] [
-             '.', 'P', 'N', 'K', 'x', 'B', 'R', 'Q',
-             '.', 'p', 'n', 'k', 'y', 'b', 'r', 'q'
-        ]
-
-showLine :: Word8 -> Word8 -> Word8 -> Word8 -> String
-showLine w1 w2 w3 w4 = go w1 w2 w3 w4 8 ""
-    where go :: Word8 -> Word8 -> Word8 -> Word8 -> Int -> String -> String
-          go _ _ _ _ 0 cs = cs
-          go x y z t n cs
-                   = go (x `shift` 1) (y `shift` 1) (z `shift` 1) (t `shift` 1) (n-1) (c:' ':cs)
-               where c = showc ! cap x y z t
-
-cap x y z t = fromIntegral $ (x' .|. shiftR y' 1 .|. shiftR z' 2 .|. shiftR t' 3) `shiftR` 4
-    where x' = x .&. 0x80
-          y' = y .&. 0x80
-          z' = z .&. 0x80
-          t' = t .&. 0x80
---}
 
 -- Given a position and a move, write the move in nice human readable form
 toNiceNotation :: MyPos -> Move -> String
@@ -60,7 +35,7 @@ toNiceNotation p m
               | fig == Queen  = desamb (queens p)
               | otherwise     = ""	-- king
           dst = col dc : row dr : ""
-          transf = if moveIsTransf m then pcToCh False (moveTransfPiece m) else ""
+          transf = if moveIsPromo m then pcToCh False (movePromoPiece m) else ""
           p' = doFromToMove m p
           chk = if isCheck p' (other fcol) then "+" else ""
           orda = ord 'a'
@@ -127,7 +102,7 @@ parsePawnCapt p x sqdst _ = do
         target = me p .&. pawns p
         att  = pAttacs (other fcol) sqdst
     sqsrc <- bbToSingleSquare (target .&. att .&. colBB x)
-    return $ moveFromTo sqsrc sqdst
+    return $ moveAddColor (moving p) $ moveAddPiece Pawn $ moveFromTo sqsrc sqdst
 
 -- Todo here: promotion and en passant!
 parsePawnMove :: MyPos -> Int -> Int -> Maybe Piece -> P.Parser Move
@@ -136,7 +111,7 @@ parsePawnMove p x sqdst _ = do
         target = me p .&. pawns p
         att  = pAttacs (other fcol) sqdst
     sqsrc <- bbToSingleSquare (target .&. att .&. colBB x)
-    return $ moveFromTo sqsrc sqdst
+    return $ moveAddColor (moving p) $ moveAddPiece Pawn $ moveFromTo sqsrc sqdst
 
 parseFigureMove :: MyPos -> Piece -> Maybe SrcDest -> Int -> P.Parser Move
 parseFigureMove p piece msrc sqdst = do
@@ -153,7 +128,7 @@ parseFigureMove p piece msrc sqdst = do
                  Just (SDColRow x y) -> return $ colRowToSquare x y
                  Nothing        -> bbToSingleSquare (target .&. att)
     -- we don't check if it's really check
-    return $ moveFromTo sqsrc sqdst
+    return $ moveAddColor (moving p) $ moveAddPiece piece $ moveFromTo sqsrc sqdst
 
 parsePiece :: P.Parser Piece
 parsePiece = parseFigure <|> return Pawn

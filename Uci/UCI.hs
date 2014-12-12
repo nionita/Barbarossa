@@ -179,7 +179,7 @@ parseMove = do
     pr <- parsePromo `orElse` return Nothing
     let m = moveFromTo sf ef
     case pr of
-        Just b  -> return $ activateTransf b m
+        Just b  -> return $ activatePromo b m
         Nothing -> return m
 
 parseFeld :: Parser Square

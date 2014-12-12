@@ -117,7 +117,7 @@ inCheck = (/= 0) . check
 
 goPromo :: MyPos -> Move -> Bool
 goPromo p m
-    | moveIsTransf m = True
+    | moveIsPromo m = True
     | movePassed p m = True
     | otherwise      = False
     -- where !t = toSquare m
@@ -154,51 +154,27 @@ hasMoves !p c
           pcapt = (.&. yopiep)
           legal = (`less` yoAttacs p)
 
-{--
--- This one is not used anymore - see genMoveCaptWL
--- Move generation generates pseudo-legal moves
-genMoveCapt :: MyPos -> [(Square, Square)]
-genMoveCapt !p = sortByMVVLVA p allp
-    where !pGenC = concatMap (srcDests (pcapt . pAttacs (moving p)))
-                     $ bbToSquares $ pawns p .&. me p `less` traR
-          !nGenC = concatMap (srcDests (capt . nAttacs)) 
-                     $ bbToSquares $ knights p .&. me p
-          !bGenC = concatMap (srcDests (capt . bAttacs (occup p)))
-                     $ bbToSquares $ bishops p .&. me p
-          !rGenC = concatMap (srcDests (capt . rAttacs (occup p)))
-                     $ bbToSquares $ rooks p .&. me p
-          !qGenC = concatMap (srcDests (capt . qAttacs (occup p)))
-                     $ bbToSquares $ queens p .&. me p
-          !kGenC =            srcDests (capt . legal . kAttacs)
-                     $ firstOne $ kings p .&. me p
-          allp = concat [ pGenC, nGenC, bGenC, rGenC, qGenC, kGenC ]
-          !yopiep = yo p .|. (epcas p .&. epMask)
-          capt = (.&. yo p)
-          pcapt = (.&. yopiep)
-          legal = (`less` yoAttacs p)
-          !traR = if moving p == White then 0x00FF000000000000 else 0xFF00
---}
-
 genMoveNCapt :: MyPos -> [Move]
--- genMoveNCapt p c = concat [ pGenNC2, qGenNC, rGenNC, bGenNC, nGenNC, pGenNC1, kGenNC ]
--- genMoveNCapt p c = concat [ pGenNC1, nGenNC, bGenNC, rGenNC, qGenNC, pGenNC2, kGenNC ]
-genMoveNCapt !p = map (uncurry moveFromTo)
+genMoveNCapt !p = map (moveAddColor c)
                       $ concat [ nGenNC, bGenNC, rGenNC, qGenNC, pGenNC1, pGenNC2, kGenNC ]
-    -- where pGenNCT = concatMap (srcDests True (ncapt . \s -> pMovs s c ocp)) 
-    --                  $ bbToSquares $ pawns p .&. mypc .&. traR
-    --       pGenNC = concatMap (srcDests False (ncapt . \s -> pMovs s c ocp)) 
-    --                  $ bbToSquares $ pawns p .&. mypc `less` traR
-    where pGenNC1 = pAll1Moves c (pawns p .&. me p `less` traR) (occup p)
-          pGenNC2 = pAll2Moves c (pawns p .&. me p) (occup p)
-          nGenNC = concatMap (srcDests (ncapt . nAttacs))
+    where pGenNC1 = map (moveAddPiece Pawn . uncurry moveFromTo)
+                      $ pAll1Moves c (pawns p .&. me p `less` traR) (occup p)
+          pGenNC2 = map (moveAddPiece Pawn . uncurry moveFromTo)
+                      $ pAll2Moves c (pawns p .&. me p) (occup p)
+          nGenNC = map (moveAddPiece Knight . uncurry moveFromTo)
+                      $ concatMap (srcDests (ncapt . nAttacs))
                       $ bbToSquares $ knights p .&. me p
-          bGenNC = concatMap (srcDests (ncapt . bAttacs (occup p)))
+          bGenNC = map (moveAddPiece Bishop . uncurry moveFromTo)
+                      $ concatMap (srcDests (ncapt . bAttacs (occup p)))
                       $ bbToSquares $ bishops p .&. me p
-          rGenNC = concatMap (srcDests (ncapt . rAttacs (occup p)))
+          rGenNC = map (moveAddPiece Rook   . uncurry moveFromTo)
+                      $ concatMap (srcDests (ncapt . rAttacs (occup p)))
                       $ bbToSquares $ rooks p .&. me p
-          qGenNC = concatMap (srcDests (ncapt . qAttacs (occup p)))
+          qGenNC = map (moveAddPiece Queen  . uncurry moveFromTo)
+                      $ concatMap (srcDests (ncapt . qAttacs (occup p)))
                       $ bbToSquares $ queens p .&. me p
-          kGenNC =            srcDests (ncapt . legal . kAttacs)
+          kGenNC = map (moveAddPiece King   . uncurry moveFromTo)
+                      $            srcDests (ncapt . legal . kAttacs)
                       $ firstOne $ kings p .&. me p
           ncapt = (`less` occup p)
           legal = (`less` yoAttacs p)
@@ -207,12 +183,11 @@ genMoveNCapt !p = map (uncurry moveFromTo)
 
 -- Generate only promotions (now only to queen) - captures and non captures
 genMoveTransf :: MyPos -> [Move]
-genMoveTransf !p = map (uncurry (makeTransf Queen)) $ pGenC ++ pGenNC
+genMoveTransf !p = map (uncurry (makePromo Queen)) $ pGenC ++ pGenNC
     where pGenC = concatMap (srcDests (pcapt . pAttacs c))
                      $ bbToSquares $ pawns p .&. myfpc
           pGenNC = pAll1Moves c (pawns p .&. myfpc) (occup p)
           !myfpc = me p .&. traR
-          -- !yopiep = yo p .|. (epcas p .&. epMask)	-- e.p. cannot promote
           pcapt = (.&. yo p)
           !traR = if c == White then 0x00FF000000000000 else 0xFF00
           !c = moving p
@@ -252,7 +227,8 @@ genMoveFCheck !p
     | null $ tail chklist = r1 ++ kGen ++ r2	-- simple check
     | otherwise = kGen				-- double check, only king moves help
     where !chklist = findChecking p
-          !kGen = map (uncurry moveFromTo) $ srcDests (legal . kAttacs) ksq
+          !kGen = map (moveAddColor (moving p) . moveAddPiece King . uncurry moveFromTo)
+                      $ srcDests (legal . kAttacs) ksq
           !ksq = firstOne kbb
           !kbb = kings p .&. me p
           !ocp1 = occup p `less` kbb
@@ -273,24 +249,28 @@ genMoveFCheck !p
 -- Generate moves ending on a given square (used to defend a check by capture or blocking)
 -- This part is only for queens, rooks, bishops and knights (no pawns and, of course, no kings)
 defendAt :: MyPos -> BBoard -> [Move]
-defendAt p !bb = map (uncurry moveFromTo) $ concat [ nGenC, bGenC, rGenC, qGenC ]
-    where nGenC = concatMap (srcDests (target . nAttacs))
+defendAt p !bb = map (moveAddColor $ moving p) $ concat [ nGenC, bGenC, rGenC, qGenC ]
+    where nGenC = map (moveAddPiece Knight . uncurry moveFromTo)
+                     $ concatMap (srcDests (target . nAttacs))
                      $ bbToSquares $ knights p .&. me p
-          bGenC = concatMap (srcDests (target . bAttacs (occup p)))
+          bGenC = map (moveAddPiece Bishop . uncurry moveFromTo)
+                     $ concatMap (srcDests (target . bAttacs (occup p)))
                      $ bbToSquares $ bishops p .&. me p
-          rGenC = concatMap (srcDests (target . rAttacs (occup p)))
+          rGenC = map (moveAddPiece Rook   . uncurry moveFromTo)
+                     $ concatMap (srcDests (target . rAttacs (occup p)))
                      $ bbToSquares $ rooks p .&. me p
-          qGenC = concatMap (srcDests (target . qAttacs (occup p)))
+          qGenC = map (moveAddPiece Queen  . uncurry moveFromTo)
+                     $ concatMap (srcDests (target . qAttacs (occup p)))
                      $ bbToSquares $ queens p .&. me p
           target = (.&. bb)
 
 -- Generate capture pawn moves ending on a given square (used to defend a check by capture)
 pawnBeatAt :: MyPos -> BBoard -> [Move]
-pawnBeatAt !p bb = map (uncurry (makeTransf Queen))
+pawnBeatAt !p bb = map (uncurry (makePromo Queen))
                        (concatMap
                            (srcDests (pcapt . pAttacs (moving p)))
                            (bbToSquares promo))
-                ++ map (uncurry moveFromTo)
+                ++ map (moveAddColor (moving p) . moveAddPiece Pawn . uncurry moveFromTo)
                        (concatMap
                            (srcDests (pcapt . pAttacs (moving p)))
                            (bbToSquares rest))
@@ -300,11 +280,11 @@ pawnBeatAt !p bb = map (uncurry (makeTransf Queen))
 
 -- Generate blocking pawn moves ending on given squares (used to defend a check by blocking)
 pawnBlockAt :: MyPos -> BBoard -> [Move]
-pawnBlockAt p !bb = map (uncurry (makeTransf Queen))
+pawnBlockAt p !bb = map (uncurry (makePromo Queen))
                         (concatMap
                               (srcDests (block . \s -> pMovs s (moving p) (occup p)))
                               (bbToSquares promo))
-                 ++ map (uncurry moveFromTo)
+                 ++ map (moveAddColor (moving p) . moveAddPiece Pawn . uncurry moveFromTo)
                         (concatMap
                               (srcDests (block . \s -> pMovs s (moving p) (occup p)))
                               (bbToSquares rest))
@@ -470,11 +450,8 @@ updatePosCheck p = p {
           !tcheck = mecheck .|. yocheck
 
 -- Generate the castle moves
--- Here we could optimize a bit by defining constants separately for White and Black
--- and test anyway kingmoved first (or even a more general pattern for all moved)
 genMoveCast :: MyPos -> [Move]
 genMoveCast p
-    -- | inCheck p || kingMoved p c = []
     | inCheck p = []
     | otherwise = kingside ++ queenside
     where (cmidk, cmidq) = if c == White then (caRMKw, caRMQw)
@@ -635,28 +612,23 @@ alternateMoves p m1 m2
 -- because they are more complex
 legalMove :: MyPos -> Move -> Bool
 legalMove p m
+    | moveColor m /= mc = False
     | Busy col fig <- tabla p src,
-      colp <- moving p =
-        let mtype = if moveIsNormal m
-                       then not owndst && canMove fig p src dst
-                       else not owndst && specialMoveIsLegal p m
-            owndst = me p `uTestBit` dst
-        in colp == col && mtype
+      col == mc,
+      fig == movePiece m =
+        let owndst = me p `uTestBit` dst
+        in if moveIsNormal m
+              then not owndst && canMove fig p src dst
+              else not owndst && specialMoveIsLegal p m
     | otherwise = False
     where src = fromSquare m
           dst = toSquare m
+          !mc  = moving p
 
 -- currently we assume for simplicity that special moves coming from killers or hash
 -- are illegal, so they will be tried after the regular generation, and not as killers
 specialMoveIsLegal :: MyPos -> Move -> Bool
 specialMoveIsLegal _ _ = False
-
-{-
-nonCapt :: MyPos -> Move -> Bool
-nonCapt p m
-    | Busy _ _ <- tabla p (toSquare m) = False
-    | otherwise                        = True
--}
 
 {-# INLINE moveIsCapture #-}
 moveIsCapture :: MyPos -> Move -> Bool
@@ -702,7 +674,6 @@ epSetZob :: Square -> BBoard
 epSetZob = zobEP . (.&. 0x7)
 
 -- Copy one square to another and clear the source square
--- doFromToMove :: Square -> Square -> MyPos -> Maybe MyPos
 doFromToMove :: Move -> MyPos -> MyPos
 doFromToMove m !p | moveIsNormal m
     = updatePos p {
@@ -738,7 +709,7 @@ doFromToMove m !p | moveIsNormal m
                                    accumSetPiece dst col fig p,
                                    accumMoving p
                                ]
-               _ -> error $ "Src field empty: " ++ show src ++ " dst " ++ show dst ++ " in pos\n"
+               _ -> error $ "Src field empty: " ++ show m ++ " in pos\n"
                                  ++ showTab (black p) (slide p) (kkrq p) (diag p)
                                  ++ "resulting pos:\n"
                                  ++ showTab tblack tslide tkkrq tdiag
@@ -766,30 +737,6 @@ doFromToMove m !p | moveIsEnPas m
                                 accumClearSq del p,
                                 accumSetPiece dst col fig p,
                                 accumMoving p
-                            ]
-doFromToMove m !p | moveIsTransf m
-    = updatePos p0 {
-          black = tblack, slide = tslide, kkrq = tkkrq, diag = tdiag,
-          epcas = tepcas, zobkey = tzobkey, mater = tmater
-      }
-    where src = fromSquare m
-          dst = toSquare m
-          Busy col Pawn = tabla p src	-- identify the moving color (piece must be pawn)
-          !pie = moveTransfPiece m
-          p0 = setPiece src (moving p) pie p
-          tblack = mvBit src dst $ black p0
-          tslide = mvBit src dst $ slide p0
-          tkkrq  = mvBit src dst $ kkrq p0
-          tdiag  = mvBit src dst $ diag p0
-          !dstbb = uBit dst	-- destination could clear cast rights!
-          (clearcast, zobcast) = clearCast (epcas p) dstbb
-          tepcas = reset50Moves $ moveAndClearEp $ epcas p `less` clearcast
-          !epcl = epClrZob $ epcas p0
-          !zk = zobkey p0 `xor` epcl `xor` zobcast
-          CA tzobkey tmater = chainAccum (CA zk (mater p0)) [
-                                accumClearSq src p0,
-                                accumSetPiece dst col pie p0,
-                                accumMoving p0
                             ]
 doFromToMove m !p | moveIsCastle m
     = updatePos p {
@@ -825,6 +772,30 @@ doFromToMove m !p | moveIsCastle m
                                 accumClearSq csr p,
                                 accumSetPiece cds co1 Rook p,
                                 accumMoving p
+                            ]
+doFromToMove m !p | moveIsPromo m
+    = updatePos p0 {
+          black = tblack, slide = tslide, kkrq = tkkrq, diag = tdiag,
+          epcas = tepcas, zobkey = tzobkey, mater = tmater
+      }
+    where src = fromSquare m
+          dst = toSquare m
+          Busy col Pawn = tabla p src	-- identify the moving color (piece must be pawn)
+          !pie = movePromoPiece m
+          p0 = setPiece src (moving p) pie p
+          tblack = mvBit src dst $ black p0
+          tslide = mvBit src dst $ slide p0
+          tkkrq  = mvBit src dst $ kkrq p0
+          tdiag  = mvBit src dst $ diag p0
+          !dstbb = uBit dst	-- destination could clear cast rights!
+          (clearcast, zobcast) = clearCast (epcas p) dstbb
+          tepcas = reset50Moves $ moveAndClearEp $ epcas p `less` clearcast
+          !epcl = epClrZob $ epcas p0
+          !zk = zobkey p0 `xor` epcl `xor` zobcast
+          CA tzobkey tmater = chainAccum (CA zk (mater p0)) [
+                                accumClearSq src p0,
+                                accumSetPiece dst col pie p0,
+                                accumMoving p0
                             ]
 doFromToMove _ _ = error "doFromToMove: wrong move type"
 
@@ -989,24 +960,25 @@ seeMoveValue pos attacks sqfirstmv sqto gain0 = v
 
 -- This function can produce illegal captures with the king!
 genMoveCaptWL :: MyPos -> ([Move], [Move])
-genMoveCaptWL !pos
-    = foldr (perCaptFieldWL pos (me pos) (yoAttacs pos)) (epcs,[]) $ squaresByMVV pos capts
+genMoveCaptWL !pos = (map (moveAddColor c) ws, map (moveAddColor c) ls)
     where capts = myAttacs pos .&. yo pos
           epcs  = genEPCapts pos
+          c     = moving pos
+          (ws, ls) = foldr (perCaptFieldWL pos (me pos) (yoAttacs pos)) (epcs,[])
+                         $ squaresByMVV pos capts
 
 genEPCapts :: MyPos -> [Move]
 genEPCapts !pos
     | epBB == 0 = []
-    | otherwise = map (\s -> makeEnPas s dst del) $ bbToSquares srcBB
+    | otherwise = map (\s -> makeEnPas s dst) $ bbToSquares srcBB
     where !epBB = epcas pos .&. epMask
           dst = head $ bbToSquares epBB	-- safe because epBB /= 0
           srcBB = pAttacs (other $ moving pos) dst .&. me pos .&. pawns pos
-          del = if moving pos == White then dst - 8 else dst + 8
 
 perCaptFieldWL :: MyPos -> BBoard -> BBoard -> Square -> ([Move], [Move]) -> ([Move], [Move])
 perCaptFieldWL pos mypc advdefence sq mvlst
-    | hanging   = let mvlst1 = foldr (addHanging  sq) mvlst  reAgrsqs
-                  in           foldr (addHangingP sq) mvlst1 prAgrsqs	-- for promotions
+    | hanging   = let mvlst1 = foldr (addHanging  pos sq) mvlst  reAgrsqs
+                  in           foldr (addHangingP     sq) mvlst1 prAgrsqs	-- for promotions
     | otherwise = let mvlst1 = foldr (perCaptWL pos myAttRec False valto sq) mvlst  reAgrsqs
                   in           foldr (perCaptWL pos myAttRec True  valto sq) mvlst1 prAgrsqs
     where myAttRec = theAttacs pos sq
@@ -1032,21 +1004,22 @@ approximateEasyCapts = True	-- when capturing a better piece: no SEE, it is alwa
 
 perCaptWL :: MyPos -> Attacks -> Bool -> Int -> Square -> Square -> ([Move], [Move]) -> ([Move], [Move])
 perCaptWL pos attacks promo gain0 sq sqfa (wsqs, lsqs)
-    | promo = (makeTransf Queen sqfa sq : wsqs, lsqs)
+    | promo = (makePromo Queen sqfa sq : wsqs, lsqs)
     | approx || adv <= gain0 = (ss:wsqs, lsqs)
     | otherwise = (wsqs, ss:lsqs)
-    where ss = moveFromTo sqfa sq
+    where ss = moveAddPiece pcfa $ moveFromTo sqfa sq
           approx = approximateEasyCapts && gain0 >= v0
           Busy _ pcfa = tabla pos sqfa
-          v0 = value pcfa
+          v0  = value pcfa
           adv = seeMoveValue pos attacks sqfa sq v0
 
 -- Captures of hanging pieces are always winning
-addHanging :: Square -> Square -> ([Move], [Move]) -> ([Move], [Move])
-addHanging to from (wsqs, lsqs) = (moveFromTo from to : wsqs, lsqs)
+addHanging :: MyPos -> Square -> Square -> ([Move], [Move]) -> ([Move], [Move])
+addHanging pos to from (wsqs, lsqs) = (moveAddPiece piece (moveFromTo from to) : wsqs, lsqs)
+    where Busy _ piece = tabla pos from
 
 addHangingP :: Square -> Square -> ([Move], [Move]) -> ([Move], [Move])
-addHangingP to from (wsqs, lsqs) = (makeTransf Queen from to : wsqs, lsqs)
+addHangingP to from (wsqs, lsqs) = (makePromo Queen from to : wsqs, lsqs)
 
 squaresByMVV :: MyPos -> BBoard -> [Square]
 squaresByMVV pos bb = map snd $ sortBy (comparing fst)

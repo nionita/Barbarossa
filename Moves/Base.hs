@@ -17,14 +17,12 @@ module Moves.Base (
     nearmate	-- , special
 ) where
 
--- import Data.Array.IArray
--- import Debug.Trace
--- import Control.Exception (assert)
 import Data.Bits
 import Data.List
 import Control.Monad.State
 import Control.Monad.Reader (ask)
 import Data.Ord (comparing)
+import Numeric
 import System.Random
 
 import Moves.BaseTypes
@@ -94,29 +92,23 @@ loosingLast = False
 genMoves :: Int -> Int -> Bool -> Game ([Move], [Move])
 genMoves depth absdp pv = do
     p <- getPos
-    -- when debugGen $ do
-    --     lift $ ctxLog "Debug" $ "--> genMoves:\n" ++ showTab (black p) (slide p) (kkrq p) (diag p)
     let !c = moving p
-        -- lc = map (genmv True p) $ genMoveFCheck p
         lc = genMoveFCheck p
     if isCheck p c
        then return (lc, [])
        else do
             let l0 = genMoveCast p
-                -- l1 = map (genmvT p) $ genMoveTransf p
                 l1 = genMoveTransf p
-                -- l2 = map (genmv True p) $ genMoveCapt p
                 (l2w, l2l) = genMoveCaptWL p
-                -- l2w = map (genmv True p) pl2w
-                -- l2l = map (genmv True p) pl2l
                 l3'= genMoveNCapt p
-                -- l3'= map (genmv False p) $ genMoveNCapt p
             l3 <- if pv && depth >= depthForMovesSortPv
                      || not pv && depth >= depthForMovesSort
                      -- then sortMovesFromHash l3'
                      then sortMovesFromHist absdp l3'
                      else return l3'
             return $! if loosingLast
+                         -- then (checkGenMoves p $ l1 ++ l2w, checkGenMoves p $ l0 ++ l3 ++ l2l)
+                         -- else (checkGenMoves p $ l1 ++ l2w ++ l2l, checkGenMoves p $ l0 ++ l3)
                          then (l1 ++ l2w, l0 ++ l3 ++ l2l)
                          else (l1 ++ l2w ++ l2l, l0 ++ l3)
 
@@ -125,20 +117,36 @@ genTactMoves :: Game [Move]
 genTactMoves = do
     p <- getPos
     let !c = moving p
-        -- l1 = map (genmvT p) $ genMoveTransf p
         l1 = genMoveTransf p
-        -- l2 = map (genmv True p) $ genMoveCapt p
-        -- lnc = map (genmv True p) $ genMoveNCaptToCheck p c
         (l2w, _) = genMoveCaptWL p
-        -- l2w = map (genmv True p) pl2
-        -- l2w = map (genmv True p) $ genMoveCaptSEE p c
-        -- lc = map (genmv True p) $ genMoveFCheck p
         lc = genMoveFCheck p
-        -- the non capturing check moves have to be at the end (tested!)
-        -- else if onlyWinningCapts then l1 ++ l2w ++ lnc else l1 ++ l2 ++ lnc
         !mvs | isCheck p c = lc
              | otherwise   = l1 ++ l2w
+    -- return $ checkGenMoves p mvs
     return mvs
+
+{--
+checkGenMoves :: MyPos -> [Move] -> [Move]
+checkGenMoves p = map $ toError . checkGenMove p
+    where toError (Left str) = error str
+          toError (Right m)  = m
+
+checkGenMove :: MyPos -> Move -> Either String Move
+checkGenMove p m@(Move w)
+    = case tabla p f of
+          Empty     -> wrong "empty src"
+          Busy c pc -> if moveColor m /= c
+                          then if mc == c
+                                  then wrong $ "wrong move color (should be " ++ show mc ++ ")"
+                                  else wrong $ "wrong pos src color (should be " ++ show mc ++ ")"
+                          else if movePiece m /= pc
+                                  then wrong $ "wrong move piece (should be " ++ show pc ++ ")"
+                                  else Right m
+    where f  = fromSquare m
+          mc = moving p
+          wrong mes = Left $ "checkGenMove: " ++ mes ++ " for move "
+                            ++ showHex w (" in pos\n" ++ showMyPos p)
+--}
 
 sortMovesFromHist :: Int -> [Move] -> Game [Move]
 sortMovesFromHist d mvs = do
@@ -357,19 +365,16 @@ ttRead = if not useHash then return empRez else do
     mhr <- liftIO $ do
         let ptr = retrieveEntry (hash s) (zobkey p)
         readCache ptr
-    -- let (r, sc) = case mhr of
-               -- Just t@(_, _, sco, _, _) -> (t, sco)
-               -- _      -> (empRez, 0)
-    let r = case mhr of
-               Just t -> t
-               _      -> empRez
-    --     (_, _, sc, _, _) = r
-    -- if (sc `mod` 4 /= 0)
-    --     then do
-    --         logMes $ "*** ttRead " ++ show r ++ " zkey " ++ show (zobkey p)
-    --         return empRez
-    --     else return r
-    return r
+    case mhr of
+        Nothing -> return empRez
+        Just t@(_, _, _, m, _) ->
+            {--
+            case checkGenMove p m of
+               Right _  -> return t
+               Left str -> do
+                   lift $ ctxLog LogWarning $ "ttRead move check" ++ str
+            --}
+                   return t
     where empRez = (-1, 0, 0, Move 0, 0)
 
 {-# INLINE ttStore #-}
@@ -401,9 +406,9 @@ betaCut good _ absdp m = do	-- dummy: depth
 -- Will not be pruned nor LMR reduced
 moveIsSpecial :: MyPos -> Move -> Bool
 moveIsSpecial p m
-    | moveIsTransf m || moveIsEnPas m = True
-    | check p /= 0                    = True
-    | otherwise                       = moveIsCapture p m
+    | moveIsPromo m || moveIsEnPas m = True
+    | check p /= 0                   = True
+    | otherwise                      = moveIsCapture p m
 
 {--
 showChoose :: [] -> Game ()

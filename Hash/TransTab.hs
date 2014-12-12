@@ -9,7 +9,7 @@ module Hash.TransTab (
 
 import Control.Applicative ((<$>))
 import Data.Bits
-import Data.Maybe (fromMaybe)
+-- import Data.Maybe (fromMaybe)
 import Data.Int
 import Data.Word
 import Foreign.Marshal.Array
@@ -95,7 +95,7 @@ part3Mask :: Mask
 part3Mask = 0x03 :: Mask	-- the cell has 4 entries (other option: 8)
 
 minEntries :: Int
-minEntries = 2 ^ 18
+minEntries = 0x40000	-- 2 ^ 18
 
 -- Create a new transposition table with a number of entries
 -- corresponding to the given (integral) number of MB
@@ -119,6 +119,7 @@ generMsk = 0xFF00000000000000	-- to mask all except generation
 newGener :: Cache -> Cache
 newGener c = c { gener = gener c + generInc }
 
+{--
 -- This computes the adress of the first entry of the cell where an entry given by the key
 -- should be stored, and the (ideal) index of that entry
 -- The (low) mask of the transposition table is also used - this determines the size of the index
@@ -140,10 +141,7 @@ getZKey tt !idx (PCacheEn {hi = w1}) = zkey
     where !zkey =  w1   .&. zemask tt	-- the first part of the stored ZKey
                .|. widx .&. mimask tt	-- the second part of the stored ZKey
           widx = fromIntegral idx
-
--- Given a ZKey, an index and a packed cache entry, determine if that entry has the same ZKey
-isSameEntry :: Cache -> ZKey -> Index -> PCacheEn -> Bool
-isSameEntry tt zkey idx pCE = zkey == getZKey tt idx pCE
+--}
 
 -- This computes the adress of the first entry of the cell where an entry given by the key
 -- should be stored - see the remarks from zKeyToCellIndex for the calculations
@@ -220,6 +218,7 @@ writeCache !tt !zkey !depth !tp !score !move !nodes = do
                                                 then poke (castPtr r) pCE
                                                 else go (crt0 `plusPtr` pCacheEnSize) r s)
 
+lastaAmount :: Int
 lastaAmount = 3 * pCacheEnSize	-- for computation of the last address in the cell
 
 -- Here we implement the logic which decides which entry is weaker
@@ -300,7 +299,8 @@ testIt = do
 ----------- QuickCheck -------------
 newtype Quint = Q (Int, Int, Int, Move, Int) deriving Show
 
-mvm = (1 `shiftL` 16) - 1 :: Word32
+mvm :: Word16
+mvm = (1 `shiftL` 16) - 1
 
 instance Arbitrary Quint where
     arbitrary = do

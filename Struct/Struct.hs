@@ -2,27 +2,22 @@
 module Struct.Struct (
          BBoard, Square, ZKey, ShArray, MaArray, DbArray, Move(..),
          Piece(..), Color(..), TabCont(..), MyPos(..),
-         black, slide, kkrq, diag, epcas, other, moving,
-         epMask, fyMask, fyIncr, fyZero, mvMask, caRiMa,
+         other, moving, epMask, fyMask, fyIncr, fyZero, mvMask, caRiMa,
          caRKiw, caRQuw, caRMKw, caRMQw, caRKib, caRQub, caRMKb, caRMQb,
          tabla, emptyPos, isReversible, remis50Moves, set50Moves, reset50Moves, addHalfMove,
          fromSquare, toSquare, isSlide, isDiag, isKkrq,
-         moveIsNormal, moveIsCastle, moveIsTransf, moveIsEnPas,
-         moveColor, moveTransfPiece, moveEnPasDel, makeEnPas,
-         makeCastleFor, makeTransf, moveFromTo, showWord64,
-         activateTransf, fromColRow, checkCastle, checkEnPas, toString
-         -- isPawnMoving, isKingMoving
+         moveIsNormal, moveIsCastle, moveIsPromo, moveIsEnPas, moveColor, movePiece,
+         movePromoPiece, moveEnPasDel, makeEnPas, moveAddColor, moveAddPiece,
+         makeCastleFor, makePromo, moveFromTo, showWord64,
+         activatePromo, fromColRow, checkCastle, checkEnPas, toString
     ) where
 
 import Data.Array.Unboxed
 import Data.Array.Base
-import Data.Char (ord, chr)
-import Data.List (unfoldr)
+import Data.Char (ord, chr, toUpper)
 import Data.Word
 import Data.Bits
-import Data.Ix
-import qualified Data.Vector.Storable as V
-import Foreign
+import Numeric
 
 -- The very basic data types used in the modules
 type BBoard = Word64
@@ -36,7 +31,8 @@ type DbArray = UArray Int BBoard
 data Piece = Pawn | Knight | Bishop | Rook | Queen | King
     deriving (Eq, Ord, Enum, Ix, Show)
 
-data Color = White | Black deriving (Eq, Show, Ord, Enum, Ix)
+-- data Color = White | Black deriving (Eq, Show, Ord, Enum, Ix)
+data Color = White | Black deriving (Eq, Show)
 
 data TabCont = Empty
              | Busy !Color !Piece
@@ -104,7 +100,6 @@ Rook   = 1     1    0
 Queen  = 1     1    1
 -}
 
-{-# INLINE pieceAt #-}
 pieceAt :: MyPos -> BBoard -> Piece
 pieceAt !p bsq
     = case bsq .&. diag p of
@@ -119,7 +114,7 @@ pieceAt !p bsq
                       0 -> King
                       _ -> Queen
 
-{-# INLINE tabla #-}
+-- {-# INLINE tabla #-}
 tabla :: MyPos -> Square -> TabCont
 tabla p sq
     | occup p .&. bsq == 0 = Empty
@@ -128,14 +123,14 @@ tabla p sq
           f = pieceAt p bsq
           bsq = 1 `unsafeShiftL` sq
 
-newtype Move = Move Word32 deriving Eq
+newtype Move = Move Word16 deriving Eq
 
 instance Show Move where
     show = toString
 
 -- some constant bitboards for additional conditions like
 -- en-passant, castle rights and 50 moves rule
-epMask, fyMask, fyIncr, fyZero, mvMask, caRiMa :: BBoard
+epMask, fyMask, fyIncr, fyZero, fyMaxi, mvMask, caRiMa :: BBoard
 caRKiw, caRQuw, caRMKw, caRMQw :: BBoard
 caRKib, caRQub, caRMKb, caRMQb :: BBoard
 epMask = 0x0000FF0000FF0000	-- en passant mask
@@ -154,6 +149,7 @@ caRQub = 0x1100000000000000	-- black: king & rook position for queenside castle
 caRMKb = 0x6000000000000000	-- black: empty fields for kingside castle
 caRMQb = 0x0E00000000000000	-- black: empty fields for queenside castle
 
+emptyPos :: MyPos
 emptyPos = MyPos {
         black = 0, slide = 0, kkrq = 0, diag = 0, epcas = 0,
         zobkey = 0, mater = 0,
@@ -187,11 +183,6 @@ set50Moves i b = reset50Moves b .|. (fromIntegral i `shift` 8 .&. fyMask)
 addHalfMove :: BBoard -> BBoard
 addHalfMove b = b + fyIncr
 
-{-# INLINE linco #-}
--- Gives all pieces with line/column move (rooks, queens)
-linco :: MyPos -> BBoard
-linco !p = slide p .&. kkrq p
-
 {-# INLINE isSlide #-}
 isSlide :: Piece -> Bool
 isSlide Bishop = True
@@ -211,15 +202,6 @@ isDiag Knight = False
 isDiag Rook   = False
 isDiag _      = True
 
-{-# INLINE pieceBB #-}
-pieceBB :: Piece -> MyPos -> BBoard
-pieceBB Pawn   !p = diag p .&. complement (slide p .|. kkrq p)
-pieceBB Knight !p = kkrq p .&. complement (slide p .|. diag p)
-pieceBB Bishop !p = slide p .&. diag p .&. complement (kkrq p)
-pieceBB Rook   !p = slide p .&. kkrq p .&. complement (diag p)
-pieceBB Queen  !p = slide p .&. kkrq p .&. diag p
-pieceBB King   !p = kkrq p .&. diag p .&. complement (slide p)
-
 isKingAt :: Square -> MyPos -> Bool
 isKingAt !sq !p = kkrq p `testBit` sq
     && diag p `testBit` sq
@@ -238,6 +220,7 @@ isPawnMoving :: Move -> MyPos -> Bool
 isPawnMoving m !p = isPawnAt src p
     where src = fromSquare m
 
+{-# INLINE moveFromTo #-}
 moveFromTo :: Square -> Square -> Move
 moveFromTo f t = Move $ encodeFromTo f t
 
@@ -262,111 +245,158 @@ showWord64 x = reverse $ take 16 (map f xs)
           hex :: UArray Int Char
           hex = listArray (0, 15) "0123456789ABCDEF"
 
--- The move is coded in currently 19 bits (the lower of a Word32)
--- So we need a few functions to handle them
--- With the new coding we actually need only 16 bits, but
--- the "special" attribute does not fit it, so we keep it
--- (on the same place, bit 18)
--- It can be replaced in the future with some function
-
--- Normal move (from - to)
+-- The move is now coded in 16 bits
+-- Normal moves are coded:
+-- c<pie> <frsq> <tosq>
+-- where:
+--   c = 0 for white, 1 for black (1 bit)
+--   pie = 0 - pawn, 1 - knight, 2 - bishop, 3 - rook, 4 - queen, 5 - king (3 bits)
+--   frsq - from square (6 bits)
+--   tosq - to square (6 bits)
+{-# INLINE moveIsNormal #-}
 moveIsNormal :: Move -> Bool
-moveIsNormal (Move m) = m .&. 0xE000 == 0
+moveIsNormal (Move m) = m .&. 0x6000 /= 0x6000
 
 -- For which color is the move:
--- But, as for now, we don't set the move color! (And don't use it too)
+{-# INLINE moveColor #-}
 moveColor :: Move -> Color
-moveColor (Move m) = if testBit m 12 then Black else White
-{-
-moveColor (Move m) = case testBit m 12 of
-                         False -> White
-                         _     -> Black
--}
+moveColor (Move m)
+    | m .&. 0x8000 == 0 = White
+    | otherwise         = Black
 
--- Castles
-moveIsCastle :: Move -> Bool
-moveIsCastle (Move w) = w .&. 0xE000 == 0x8000
-
-makeCastleFor :: Color -> Bool -> Move
-makeCastleFor White True  = makeCastle 0
-makeCastleFor White False = makeCastle 1
-makeCastleFor Black True  = makeCastle 2
-makeCastleFor Black False = makeCastle 3
-
--- Codes are: 0 - kingside, white, 1 - queenside, white,
---            2 - kingside, black, 3 - queenside, black
-castleKing :: UArray Int Word32
-castleKing  = listArray (0, 3)
-                [uncurry encodeFromTo ft `setBit` 15 | ft <- [(4, 6), (4, 2), (60, 62), (60, 58)]]
-
-{-# INLINE makeCastle #-}
-makeCastle :: Int -> Move
-makeCastle = Move . unsafeAt castleKing
-
--- En passant:
+-- En passant is coded:
+-- c110 <frsq><tosq>
+-- where:
+--   c = 0 for white, 1 for black (1 bit)
+--   frsq - from square (6 bits)
+--   tosq - to square (6 bits)
+{-# INLINE moveIsEnPas #-}
 moveIsEnPas :: Move -> Bool
-moveIsEnPas (Move w) = w .&. 0x6000 == 0x4000
+moveIsEnPas (Move w) = w .&. 0x7000 == 0x6000
 
 -- The location of the adverse pawn to delete:
 {-# INLINE moveEnPasDel #-}
 moveEnPasDel :: Move -> Square
-moveEnPasDel m@(Move w) = if testBit w 15 then dst + 8 else dst - 8	-- set means +
+moveEnPasDel m
+    | moveColor m == White = dst - 8
+    | otherwise            = dst + 8
     where dst = toSquare m
 
 {-# INLINE makeEnPas #-}
-makeEnPas f t del = Move w2
-    where w1 = encodeFromTo f t `setBit` 14
-          w2 = if del == t + 8 then w1 `setBit` 15 else w1	-- set when +
+makeEnPas :: Square -> Square -> Move
+makeEnPas f t
+    | f < t     = Move $ 0x6000 .|. encodeFromTo f t	-- white
+    | otherwise = Move $ 0xE000 .|. encodeFromTo f t	-- black
 
--- Promotions:
-transfCodes :: Array Int Piece
-transfCodes = listArray (0, 3) [Knight, Bishop, Rook, Queen]
--- transfRev :: Array Piece Word32
--- transfRev   = array (Knight, Queen)
---                     [(Knight, 0), (Bishop, 0x4000), (Rook, 0x8000), (Queen, 0xC000)]
+-- Promotions are coded:
+-- c111 <pro><frf><tosq>
+-- where:
+--   c = 0 for white, 1 for black (1 bit)
+--   pro = 1 - knight, 2 - bishop, 3 - rook, 4 - queen (3 bits)
+--   frf = from files (3 bits)
+--   tosq = to square (6 bits)
+-- {-#INLINE moveIsPromo #-}
+moveIsPromo :: Move -> Bool
+moveIsPromo (Move w)
+    = w .&. 0x7000 == 0x7000 && (s == tcQueen || s == tcRook || s == tcBishop || s == tcKnight)
+    where s = w .&. 0x0E00
 
-moveIsTransf :: Move -> Bool
-moveIsTransf (Move w) = testBit w 13
+{-# INLINE movePromoPiece #-}
+movePromoPiece :: Move -> Piece
+movePromoPiece (Move w)
+    | r >= 1 && r <= 4 = toEnum r
+    | otherwise        = error $ "Wrong promo piece in move: " ++ showHex w ""
+    where r = fromIntegral $ (w `unsafeShiftR` 9) .&. 0x07
 
-moveTransfPiece (Move w) = transfCodes `unsafeAt` fromIntegral x
-    where x = (w `shiftR` 14) .&. 0x03
+-- {-# INLINE makePromo #-}
+makePromo :: Piece -> Square -> Square -> Move
+makePromo p f t
+    | f < t     = Move $ 0x7000 .|. w	-- white
+    | otherwise = Move $ 0xF000 .|. w	-- black
+    where !w = tc p .|. (encodeFromTo f t .&. 0x01FF)
+          tc Queen  = tcQueen
+          tc Rook   = tcRook
+          tc Bishop = tcBishop
+          tc Knight = tcKnight
 
-{-# INLINE makeTransf #-}
-makeTransf :: Piece -> Square -> Square -> Move
-makeTransf p f t = Move w
-    where !w = tc p .|. encodeFromTo f t .|. b13
-          b13 = 1 `unsafeShiftL` 13	-- bit 13
-          tc Queen  = 0xC000
-          tc Rook   = 0x8000
-          tc Bishop = 0x4000
-          tc _      = 0
+tcQueen, tcRook, tcBishop, tcKnight :: Word16
+tcQueen  = (fromIntegral $ fromEnum Queen ) `shiftL` 9
+tcRook   = (fromIntegral $ fromEnum Rook  ) `shiftL` 9
+tcBishop = (fromIntegral $ fromEnum Bishop) `shiftL` 9
+tcKnight = (fromIntegral $ fromEnum Knight) `shiftL` 9
+
+-- Castles are coded:
+-- c111 <frsq> <tosq>
+-- where:
+--   c = 0 for white, 1 for black (1 bit)
+--   frsq - from square, 4 for white, 60 for black (6 bits)
+--   tosq - to square, 6 or 2 for white, 62 or 58 for black (6 bits)
+{-# INLINE moveIsCastle #-}
+moveIsCastle :: Move -> Bool
+moveIsCastle (Move w) = s == 0x7E00 || s == 0x7000
+    where s = w .&. 0x7E00
+
+{-# INLINE makeCastleFor #-}
+makeCastleFor :: Color -> Bool -> Move
+makeCastleFor White True  = Move 0x7106	-- white, kingside
+makeCastleFor White False = Move 0x7102	-- white, queenside
+makeCastleFor Black True  = Move 0xFF3E	-- black, kingside
+makeCastleFor Black False = Move 0xFF3A	-- black, queenside
 
 -- General functions for move encoding / decoding
-encodeFromTo :: Square -> Square -> Word32
-encodeFromTo f t = fromIntegral t .|. (fromIntegral f `shiftL` 6)
+encodeFromTo :: Square -> Square -> Word16
+encodeFromTo f t = fromIntegral t .|. (fromIntegral f `unsafeShiftL` 6)
 
--- The type have to be only 2 bits (i.e. 0 to 3)
-movetype :: Int -> Word32 -> Word32
-movetype t w = fromIntegral (t `shiftL` 12) .|. w
+-- {-# INLINE movePiece #-}
+movePiece :: Move -> Piece
+movePiece m@(Move w)
+    | moveIsNormal m
+        = if r >= 0 && r <= 5 then toEnum r else error ("Wrong moving piece in move: " ++ showHex w "")
+    | moveIsEnPas  m ||
+      moveIsPromo  m = Pawn
+    | moveIsCastle m = King
+    | otherwise      = error $ "Wrong move type: " ++ showHex w ""
+    where r = fromIntegral $ (w `unsafeShiftR` 12) .&. 0x7
 
--- code :: Word32 -> Word32 -> Word32
--- code c w = (c `shiftL` 14) .|. w
+{--
+moveHasFromSquare :: Move -> Bool
+moveHasFromSquare (Move w) = w .&. 0x7000 == 0x7000
+--}
 
+-- {-# INLINE fromSquare #-}
 fromSquare :: Move -> Square
-fromSquare (Move m) = fromIntegral (m `shiftR` 6) .&. 0x3F
+fromSquare m@(Move w)
+    | moveIsPromo m       = let !ffl = (w `unsafeShiftR` 6) .&. 0x7
+                            in case moveColor m of
+                                   White -> fromIntegral $ 0x30 .|. ffl
+                                   Black -> fromIntegral $ 0x08 .|. ffl
+    | otherwise           = fromIntegral (w `unsafeShiftR` 6) .&. 0x3F
 
+{-# INLINE toSquare #-}
 toSquare :: Move -> Square
 toSquare (Move m) = fromIntegral (m .&. 0x3F)
+
+-- {-# INLINE moveAddColor #-}
+moveAddColor :: Color -> Move -> Move
+moveAddColor White (Move w) = Move $ w .&. 0x7FFF
+moveAddColor Black (Move w) = Move $ w .|. 0x8000
+
+-- {-# INLINE moveAddPiece #-}
+moveAddPiece :: Piece -> Move -> Move
+moveAddPiece piece (Move w)
+    = Move $ (fromIntegral (fromEnum piece) `unsafeShiftL` 12) .|. (w .&. 0x8FFF)
+-- moveAddPiece piece m@(Move w) = Move $ (fromIntegral (fromEnum piece) `unsafeShiftL` 12) .|. w
+    -- | moveIsNormal m = Move $ (fromIntegral (fromEnum piece) `unsafeShiftL` 12) .|. w
+    -- | otherwise      = m
 
 checkCastle :: Move -> MyPos -> Move
 checkCastle m p
     | moveIsNormal m && isKingMoving m p
-        = if ds == 2
-             then makeCastleFor c True
-             else if ds == -2
-                     then makeCastleFor c False
-                     else m
-    | otherwise        = m
+        = case ds of
+            2  -> makeCastleFor c True
+            -2 -> makeCastleFor c False
+            _  -> m
+    | otherwise = m
     where s = fromSquare m
           d = toSquare m
           ds = d - s
@@ -375,14 +405,13 @@ checkCastle m p
 checkEnPas :: Move -> MyPos -> Move
 checkEnPas m p
     | moveIsNormal m && isPawnMoving m p
-         = if (epcas p .&. epMask) `testBit` t then makeEnPas f t del else m
+         = if (epcas p .&. epMask) `testBit` t then makeEnPas f t else m
     | otherwise        = m
     where f = fromSquare m
           t = toSquare m
-          del = t + if moving p == White then -8 else 8
 
-activateTransf :: Char -> Move -> Move
-activateTransf b m = makeTransf p f t
+activatePromo :: Char -> Move -> Move
+activatePromo b m = makePromo p f t
     where f = fromSquare m
           t = toSquare m
           p = chToPc b
@@ -390,8 +419,10 @@ activateTransf b m = makeTransf p f t
           chToPc 'r' = Rook
           chToPc 'b' = Bishop
           chToPc 'n' = Knight
+          chToPc _   = King	-- to eliminate warnings
 
 toString :: Move -> String
+-- toString m = mvpiece : col sc : row sr : col dc : row dr : transf
 toString m = col sc : row sr : col dc : row dr : transf
     where s = fromSquare m
           d = toSquare m
@@ -401,8 +432,13 @@ toString m = col sc : row sr : col dc : row dr : transf
           ord1 = ord '1'
           col x = chr (orda + x)
           row x = chr (ord1 + x)
-          transf = [pcToCh (moveTransfPiece m) | moveIsTransf m ]
+          transf = [pcToCh (movePromoPiece m) | moveIsPromo m ]
           pcToCh Queen  = 'q'
           pcToCh Rook   = 'r'
           pcToCh Bishop = 'b'
           pcToCh Knight = 'n'
+          pcToCh Pawn   = 'p'	-- is used not only for promotion!
+          pcToCh King   = 'k'
+          -- mvpc = pcToCh (movePiece m)
+          -- mvpiece | moveColor m == White = toUpper mvpc
+          --         | otherwise            = mvpc
