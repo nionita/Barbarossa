@@ -10,12 +10,16 @@ import Struct.Struct
 type History = V.IOVector Int
 
 rows, cols, vsize :: Int
-rows = 64
+rows = 12
 cols = 64
 vsize = rows * cols
 
-adr :: Int -> Int -> Int
-adr !f !t = rows * f + t
+adr :: Move -> Int
+adr m = cols * f + t
+    where f | moveColor m == White = e
+            | otherwise            = 6 + e
+          e = fromEnum $ movePiece m
+          t = toSquare m
 
 newHist :: IO History
 newHist = V.replicate vsize 0
@@ -25,12 +29,13 @@ histw !d = 1 `unsafeShiftL` dm
     where !dm = maxd - d
           maxd = 20
 
-toHist :: History -> Bool -> Square -> Square -> Int -> IO ()
-toHist h True  f t d = addHist h (adr f t) (histw d)
-toHist h False f t d = subHist h (adr f t) (histw d)
+toHist :: History -> Bool -> Move -> Int -> IO ()
+toHist h True  m d = addHist h (adr m) (histw d)
+toHist h False m d = subHist h (adr m) (histw d)
 
-valHist :: History -> Square -> Square -> Int -> IO Int
-valHist !h !f !t _ = V.unsafeRead h $! adr f t
+{-# INLINE valHist #-}
+valHist :: History -> Move -> IO Int
+valHist !h = V.unsafeRead h . adr
 
 addHist :: History -> Int -> Int -> IO ()
 addHist h !ad !p = do
