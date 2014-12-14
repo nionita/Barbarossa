@@ -610,24 +610,26 @@ alternateMoves p m1 m2
 -- This is used to filter the illegal moves coming from killers or hash table
 -- but we must treat special moves (en-passant, castle and promotion) differently,
 -- because they are more complex
+-- This legality is still incomplete, as it does not take pinned pieces into consideration
 legalMove :: MyPos -> Move -> Bool
 legalMove p m
-    | moveColor m /= mc = False
+    | moveColor m /= mc   = False
+    | me p `uTestBit` dst = False
     | Busy col fig <- tabla p src,
       col == mc,
       fig == movePiece m =
-        let owndst = me p `uTestBit` dst
-        in if moveIsNormal m
-              then not owndst && canMove fig p src dst
-              else not owndst && specialMoveIsLegal p m
+         if moveIsNormal m
+            then canMove fig p src dst
+            else specialMoveIsLegal p m
     | otherwise = False
     where src = fromSquare m
           dst = toSquare m
           !mc  = moving p
 
--- currently we assume for simplicity that special moves coming from killers or hash
--- are illegal, so they will be tried after the regular generation, and not as killers
 specialMoveIsLegal :: MyPos -> Move -> Bool
+specialMoveIsLegal p m | moveIsCastle m = elem m $ genMoveCast p
+specialMoveIsLegal p m | moveIsPromo  m = canMove Pawn p (fromSquare m) (toSquare m)
+specialMoveIsLegal p m | moveIsEnPas  m = elem m $ genEPCapts p
 specialMoveIsLegal _ _ = False
 
 {-# INLINE moveIsCapture #-}

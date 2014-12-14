@@ -368,13 +368,7 @@ ttRead = if not useHash then return empRez else do
     case mhr of
         Nothing -> return empRez
         Just t@(_, _, _, m, _) ->
-            {--
-            case checkGenMove p m of
-               Right _  -> return t
-               Left str -> do
-                   lift $ ctxLog LogWarning $ "ttRead move check" ++ str
-            --}
-                   return t
+            if legalMove p m then return t else return empRez	-- we should count...
     where empRez = (-1, 0, 0, Move 0, 0)
 
 {-# INLINE ttStore #-}
