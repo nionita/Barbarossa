@@ -362,8 +362,8 @@ instance EvalItem KingSafe where
 kingSafe :: MyPos -> [Int]
 kingSafe !p = [ksafe]
     where !ksafe = mattacs - yattacs
-          !freem = popCount1 $ myKAttacs p .&. yoAttacs p `less` me p
-          !freey = popCount1 $ yoKAttacs p .&. myAttacs p `less` yo p
+          !freem = popCount1 $ myKAttacs p `less` (yoAttacs p .&. me p)
+          !freey = popCount1 $ yoKAttacs p `less` (myAttacs p .&. yo p)
           flag k a = if k .&. a /= 0 then 1 else 0
           qual k a = popCount1 $ k .&. a
           flagYo = flag (myKAttacs p)
@@ -372,12 +372,12 @@ kingSafe !p = [ksafe]
           qualMe = qual (yoKAttacs p)
           ($:) = flip ($)
           attsm = map (p $:) [ myPAttacs, myNAttacs, myBAttacs, myRAttacs, myQAttacs, myKAttacs ]
-          !ixm = max 0 $ min 63 $ fm * cm - freey
+          !ixm = max 0 $ min 63 $ (fm * cm) `unsafeShiftR` 2 - freey
           attsy = map (p $:) [ yoPAttacs, yoNAttacs, yoBAttacs, yoRAttacs, yoQAttacs, yoKAttacs ]
-          !ixy = max 0 $ min 63 $ fy * cy - freem
+          !ixy = max 0 $ min 63 $ (fy * cy) `unsafeShiftR` 2 - freem
           !mattacs = attCoef `unsafeAt` ixm
           !yattacs = attCoef `unsafeAt` ixy
-          qualWeights = [1, 1, 1, 2, 3, 1]
+          qualWeights = [1, 2, 2, 4, 7, 2]
           !(Flc fm cm) = sumCount flagMe qualMe $ zip attsm qualWeights
           !(Flc fy cy) = sumCount flagYo qualYo $ zip attsy qualWeights
 
