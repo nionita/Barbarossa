@@ -104,7 +104,7 @@ genMoves depth absdp pv = do
             l3 <- if pv && depth >= depthForMovesSortPv
                      || not pv && depth >= depthForMovesSort
                      -- then sortMovesFromHash l3'
-                     then sortMovesFromHist absdp l3'
+                     then sortMovesFromHist l3'
                      else return l3'
             return $! if loosingLast
                          -- then (checkGenMoves p $ l1 ++ l2w, checkGenMoves p $ l0 ++ l3 ++ l2l)
@@ -148,12 +148,10 @@ checkGenMove p m@(Move w)
                             ++ showHex w (" in pos\n" ++ showMyPos p)
 --}
 
-sortMovesFromHist :: Int -> [Move] -> Game [Move]
-sortMovesFromHist d mvs = do
+sortMovesFromHist :: [Move] -> Game [Move]
+sortMovesFromHist mvs = do
     s <- get
-    -- mvsc <- liftIO $ mapM (\m -> fmap negate $ valHist (hist s) (fromSquare m) (toSquare m) d) mvs
-    mvsc <- liftIO $ mapM (\m -> valHist (hist s) (fromSquare m) (toSquare m) d) mvs
-    -- return $ map fst $ sortBy (comparing snd) $ zip mvs mvsc
+    mvsc <- liftIO $ mapM (\m -> valHist (hist s) m) mvs
     let (posi, zero) = partition ((/=0) . snd) $ zip mvs mvsc
     return $! map fst $ sortBy (comparing snd) posi ++ zero
 
@@ -388,14 +386,18 @@ ttStore !deep !tp !sc !bestm !nds = if not useHash then return () else do
     -- return ()
 
 -- History heuristic table update when beta cut
-betaCut :: Bool -> Int -> Int -> Move -> Game ()
-betaCut good _ absdp m = do	-- dummy: depth
-    s <- get
-    t <- getPos
-    -- liftIO $ toHist (hist s) good (fromSquare m) (toSquare m) absdp
-    case tabla t (toSquare m) of
-        Empty -> liftIO $ toHist (hist s) good (fromSquare m) (toSquare m) absdp
-        _     -> return ()
+betaCut :: Bool -> Int -> Move -> Game ()
+betaCut good absdp m
+    | moveIsCastle m = do
+        s <- get
+        liftIO $ toHist (hist s) good m absdp
+    | moveIsNormal m = do
+        s <- get
+        t <- getPos
+        case tabla t (toSquare m) of
+            Empty -> liftIO $ toHist (hist s) good m absdp
+            _     -> return ()
+    | otherwise = return ()
 
 -- Will not be pruned nor LMR reduced
 moveIsSpecial :: MyPos -> Move -> Bool
