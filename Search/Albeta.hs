@@ -459,7 +459,7 @@ pvInnerRootExten b d !exd nst =  do
               ++ " mvn " ++ show (movno nst) ++ " next depth " ++ show d1
     let nega = negatePath a
         negb = negatePath b
-    if inPv	-- search of principal variation
+    if inPv || d <= 2	-- search of principal variation
        then do
            viztreeABD (pathScore negb) (pathScore nega) d1
            fmap pnextlev (pvSearch nst negb nega d1)
@@ -863,7 +863,7 @@ pvInnerLoopExten b d !exd nst = do
            ++ " exd' = " ++ show exd' ++ " mvn " ++ show (movno nst) ++ " next depth " ++ show d1
     let nega = negatePath a
         negb = negatePath b
-    if inPv
+    if inPv || d <= 2
        then do
           viztreeABD (pathScore negb) (pathScore nega) d1
           fmap pnextlev (pvSearch nst negb nega d1)
