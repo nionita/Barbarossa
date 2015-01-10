@@ -168,6 +168,7 @@ data NodeState
           nxtnt  :: !NodeType,	-- expected child node type
           cursc  :: !Path,	-- current alpha value (now plus path & depth)
           movno  :: !Int,	-- current move number
+          spcno  :: !Int,	-- last move number of a special move
           killer :: !Killer,	-- the current killer moves
           pvsl   :: [Pvsl],	-- principal variation list (at root) with node statistics
           pvcont :: Seq Move	-- a pv continuation from the previous iteration, if available
@@ -275,7 +276,9 @@ pvsInit :: PVState
 pvsInit = PVState { ronly = pvro00, absdp = 0, usedext = 0, abort = False, stats = stt0 }
 nst0 :: NodeState
 nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore "Zero" 0,
-             movno = 1, killer = NoKiller, pvsl = [], pvcont = emptySeq }
+             movno = 1, spcno = 1, killer = NoKiller, pvsl = [], pvcont = emptySeq }
+             -- we start with spcno = 1 as we consider the first move as special
+             -- to avoid in any way reducing the tt move
 
 stt0 :: SStats
 stt0 = SStats { sNodes = 0, sNodesQS = 0, sRetr = 0, sRSuc = 0,
@@ -831,7 +834,9 @@ pvInnerLoopZ b d prune nst e redu = do
                          Exten exd' spc -> do
                            if prune && exd' == 0 && not spc -- don't prune special or extended
                               then return $! onlyScore $! cursc nst	-- prune, return a
-                              else pvInnerLoopExtenZ b d spc exd' nst redu
+                              else if spc
+                                      then pvInnerLoopExtenZ b d spc exd' (resetSpc nst) redu
+                                      else pvInnerLoopExtenZ b d spc exd'           nst  redu
                          Final sco -> do
                              viztreeScore $ "Final: " ++ show sco
                              return $! pathFromScore "Final" (-sco)
@@ -843,6 +848,9 @@ pvInnerLoopZ b d prune nst e redu = do
                 pindent $ "<- " ++ show e ++ " (" ++ show s' ++ ")"
                 checkFailOrPVLoopZ (stats old) b d e s' nst
             else return (False, nst)
+
+resetSpc :: NodeState -> NodeState
+resetSpc nst = nst { spcno = movno nst }
 
 reserveExtension :: Int -> Int -> Search Int
 reserveExtension !uex !exd
@@ -897,7 +905,7 @@ pvInnerLoopExtenZ b d spec !exd nst redu = do
     let !d1 = d + exd' - 1	-- this is the normal (unreduced) depth for next search
         -- !d' = if redu && crtnt nst == AllNode
         !d' = if redu
-                 then reduceLmr d1 (pnearmate b) spec exd (movno nst)
+                 then reduceLmr d1 (pnearmate b) spec exd (movno nst - spcno nst)
                  else d1
     pindent $ "depth " ++ show d ++ " nt " ++ show (nxtnt nst)
               ++ " exd' = " ++ show exd' ++ " mvn " ++ show (movno nst) ++ " next depth " ++ show d'
@@ -1040,10 +1048,10 @@ reduceLmr !d nearmatea !spec !exd !w
     | d <= 3 || w <= lmrMvs3 = d - 2
     | d <= 4 || w <= lmrMvs4 = d - 3
     | otherwise              = d - 4
-    where lmrMvs1  =  5	-- unreduced quiet moves
-          lmrMvs2  =  9	-- reduced by max 1 (2xprev-1)
-          lmrMvs3  = 17	-- reduced by max 2
-          lmrMvs4  = 33	-- reduced by max 3
+    where lmrMvs1  =  4	-- unreduced quiet moves
+          lmrMvs2  =  8	-- reduced by max 1 (2xprev-1)
+          lmrMvs3  = 16	-- reduced by max 2
+          lmrMvs4  = 32	-- reduced by max 3
 
 {--
 -- The UnsafeIx inspired from GHC.Arr (class Ix)
