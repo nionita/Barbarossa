@@ -538,9 +538,11 @@ checkFailOrPVRoot xstats b d e s nst =  do
                         let sc = pathScore s
                             pa = unseq $ pathMoves s
                         informBest (scoreToExtern sc de) (draft $ ronly sst) pa
-                        when (de >= minToStore) $ lift $ do
-                            let typ = 2	-- best move so far (score is exact)
-                            ttStore de typ sc e nodes'
+                        lift $ do
+                            when (de >= minToStore) $ do
+                                let typ = 2	-- best move so far (score is exact)
+                                ttStore de typ sc e nodes'
+                            betaCut True d (absdp sst) e	-- not really cut, but good move
                         let xpvslg = insertToPvs d pvg (pvsl nst)	-- the good
                             nst1 = nst { cursc = s, nxtnt = nextNodeType (nxtnt nst),
                                          movno = mn + 1, pvsl = xpvslg, pvcont = emptySeq }
@@ -973,9 +975,11 @@ checkFailOrPVLoop xstats b d e s nst = do
               return (True, nst1)
             else do	-- means: > a && < b
               -- when (nxtnt nst == PVNode || de >= minToStore) $	-- why this || with node type?
-              when (de >= minToStore) $	lift $ do
-                  let typ = 2	-- score is exact
-                  ttStore de typ (pathScore s) e nodes'
+              lift $ do
+                  when (de >= minToStore) $ do
+                      let typ = 2	-- score is exact
+                      ttStore de typ (pathScore s) e nodes'
+                  betaCut True d (absdp sst) e -- not really a cut, but good move here
               let !nst1 = nst { cursc = s, nxtnt = nextNodeType (nxtnt nst),
                                 movno = mn+1, pvcont = emptySeq }
               return (False, nst1)
