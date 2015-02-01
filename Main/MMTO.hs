@@ -8,12 +8,12 @@ module Main where
 import Control.Monad
 import Control.Monad.Reader
 import Control.Concurrent
+import Control.Applicative ((<$>))
 -- import Control.Exception
--- import Data.Array.Unboxed
 import Data.Foldable (foldrM)
 import Data.List (intersperse, delete)
 import Data.Maybe
--- import Data.Typeable
+import Numeric (showHex)
 import System.Console.GetOpt
 import System.Environment (getArgs)
 -- import System.IO
@@ -28,7 +28,6 @@ import Uci.UCI
 import Moves.BaseTypes
 import Search.AlbetaTypes
 import Moves.Base
--- import Moves.Moves (movesInit)
 import Moves.Board (posFromFen, initPos)
 import Moves.History
 import Search.CStateMonad (runCState)
@@ -170,25 +169,18 @@ fileReader fi = do
         -- "Reference" : "depth" : sdepth : _ = words header
     lift $ putStrLn $ "Start analysing from: " ++ header
     agr <- foldrM perFenLine (Agreg 0 0) fens
+    -- agr <- foldrM perFenLine (Agreg 0 0) [head fens]	-- for test we take only one
     lift $ putStrLn $ show agr
 
 perFenLine :: String -> Agreg -> CtxIO Agreg
 perFenLine fenLine agr = do
     let (refmv, fen') = break ((==) '\t') fenLine
         fen = tail fen'	-- it has the \t in front
---    let pstr = "position fen " ++ fen ++ " moves " ++ refmv ++ "<<--"
     lift $ putStrLn $ "Move: " ++ refmv ++ " fen " ++ fen
-{--
-    let euci = parseUciStr pstr
-        mv = case euci of
-                 Left s    -> error $ "Wrong fen & move: " ++ show s
-                 Right (Position _ mvs) -> head mvs
-                 Right _   -> error "Wrong fen & move, unexpected!"
---}
     let euci = parseMoveStr refmv
         mv = case euci of
-                 Left s   -> error $ "Wrong move: " ++ show s
-                 Right mv -> mv
+                 Left s  -> error $ "Wrong move: " ++ show s
+                 Right m -> m
     chg <- readChanging
     let crts = crtStatus chg
         mystate = stateFromFen (Pos fen) (hash crts) (hist crts) (evalst crts)
@@ -210,14 +202,35 @@ newThread a = do
     ctx <- ask
     liftIO $ forkIO $ runReaderT a ctx
 
+-- Some utilities:
+debugMes, logmes :: String -> Game ()
+logmes = lift . lift . putStrLn
+-- debugMes = lift . lift . putStrLn
+debugMes _ = return ()
+
+dumpMove :: Move -> String
+dumpMove m@(Move w) = show m ++ " (0x" ++ showHex w ")"
+
 heaviside :: Int -> Double
 heaviside x = 1 / (1 + exp (a * fromIntegral x))
     where a = 0.0273
 
+correctMove :: MyPos -> Move -> Move
+correctMove p m'
+    | moveIsNormal m = moveAddPiece pc m
+    | otherwise      = m
+    where m = moveAddColor c $ checkCastle (checkEnPas m' p) p
+          f = fromSquare m
+          Busy _ pc = tabla p f
+          c = moving p
+
 searchTestPos :: Move -> Game Double
-searchTestPos m = do
-    (mvs', mvs'') <- genMoves 0 0 False	-- don't need sort
-    let mvs = delete m $ mvs' ++ mvs''
+searchTestPos m' = do
+    m <- flip correctMove m' <$> getPos	-- conform new coding
+    mvs' <- uncurry (++) <$> genMoves 0 0 False	-- don't need sort
+    let mvs = delete m mvs'
+    -- logmes $ "Pref move: " ++ dumpMove m
+    -- forM_ mvs $ \e -> logmes $ "rest move: " ++ dumpMove e
     s' <- searchAB m
     let s = fromJust s'
     ss <- mapM searchAB mvs
@@ -225,72 +238,87 @@ searchTestPos m = do
 
 searchAB :: Move -> Game (Maybe Int)
 searchAB m = do
-    lift . lift $ putStrLn $ "--> SearchAB move: " ++ show m
+    debugMes $ "--> SearchAB move: " ++ show m
     r <- doMove False m False
     case r of
         Illegal -> return Nothing
         _       -> do
-            (mvs1, mvs2) <- genMoves 0 0 False
-            s <- foldM searchQ minBound $ mvs1 ++ mvs2
+            -- (mvs1, mvs2) <- uncurry (++) <$> genMoves 0 0 False
+            -- s <- negate <$> foldM searchQ minBound $ mvs1 ++ mvs2
+            mvs <- uncurry (++) <$> genMoves 0 0 False
+            s <- negate <$> foldM searchQ minBound mvs
             undoMove
-            lift . lift $ putStrLn $ "<-- SearchAB: " ++ show (-s)
-            return $! Just (-s)
+            debugMes $ "--> SearchAB move: " ++ show m ++ " score = " ++ show s
+            return $! Just s
 
 searchQ :: Int -> Move -> Game Int
 searchQ a m = do
+    debugMes $ "  --> SearchQ move: " ++ show m ++ " (" ++ show a ++ ")"
     r <- doMove False m False
     case r of
         Illegal -> return a
         _       -> do
-            s <- pvQSearch minBound (-a)
+            s <- negate <$> pvQSearch 3 minBound maxBound
             undoMove
-            return (-s)
+            let a' = if s > a then s else a
+            debugMes $ "  <-- SearchQ: " ++ show a'
+            return a'
 
-pvQLoop :: Int -> Int -> [Move] -> Game Int
-pvQLoop b = go
+pvQLoop :: Int -> Int -> Int -> [Move] -> Game Int
+pvQLoop lev b = go
     where go !s []     = return s
           go !s (m:ms) = do
-             (!cut, !s') <- pvQInnerLoop b s m
+             (!cut, !s') <- pvQInnerLoop lev b s m
              if cut then return s'
                     else go s' ms
 
-pvQInnerLoop :: Int -> Int -> Move -> Game (Bool, Int)
-pvQInnerLoop b a m = do
+spaces :: Int -> String
+spaces n = take n $ repeat ' '
+
+pvQInnerLoop :: Int -> Int -> Int -> Move -> Game (Bool, Int)
+pvQInnerLoop lev b a m = do
+    debugMes $ spaces lev ++ "--> pvQInnerLoop a = " ++ show a ++ " b = " ++ show b ++ " move: " ++ show m
     r <- doMove False m True
     case r of
         Illegal -> return (False, a)
         Final s -> do
             undoMove
-            return $ trimax (-s) b a
+            debugMes $ spaces lev ++ "<-- pvQInnerLoop s = -" ++ show s
+            return $ trimaxCut (-s) b a
         _       -> do
-            s <- pvQSearch (-b) (-a)
+            s <- negate <$> pvQSearch (lev+1) (-b) (-a)
             undoMove
-            return $ trimax (-s) b a
+            debugMes $ spaces lev ++ "<-- pvQInnerLoop s = " ++ show s
+            return $ trimaxCut s b a
 
-pvQSearch :: Int -> Int -> Game Int
-pvQSearch a b = do
+pvQSearch :: Int -> Int -> Int -> Game Int
+pvQSearch !lev a b = do
+    debugMes $ spaces lev ++ "--> pvQSearch a = " ++ show a ++ " b = " ++ show b
     sta <- staticVal
     tact <- tacticalPos
     if tact
        then do
            mvs <- genTactMoves
            if null mvs
-              then return minBound	-- mated
-              else pvQLoop b a mvs
+              then return $ trimax minBound a b	-- mated
+              else pvQLoop lev b a mvs
        else if sta >= b
                then return b
                else do	-- no delta cut
                    mvs <- genTactMoves
                    if null mvs
-                      then return sta
+                      then return $ trimax sta a b
                       else if sta > a
-                              then pvQLoop b sta mvs
-                              else pvQLoop b a   mvs
+                              then pvQLoop lev b sta mvs
+                              else pvQLoop lev b a   mvs
 
-trimax :: Int -> Int -> Int -> (Bool, Int)
-trimax s b a = if s >= b
-                  then (True, b)
-                  else if s > a then (False, s) else (False, a)
+trimaxCut :: Int -> Int -> Int -> (Bool, Int)
+trimaxCut s b a = if s >= b
+                     then (True, b)
+                     else if s > a then (False, s) else (False, a)
+
+trimax :: Int -> Int -> Int -> Int
+trimax s a b = if s > b then b else if s > a then s else a
 
 {--
 type ABPos = (Move, MyPos)
