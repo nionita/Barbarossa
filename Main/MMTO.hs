@@ -198,10 +198,18 @@ makeMovePos crts mh fenLine = do
             return Nothing
         Right m -> do
             let mystate = posToState pos (hash crts) (hist crts) (evalst crts)
-            case mh of
-                Nothing -> return ()
-                Just h  -> lift $ hPutStrLn h fenLine
-            return $ Just (m, mystate)
+            (ok, _) <- runCState (canDoMove m) mystate
+            if ok
+               then do
+                  case mh of
+                      Nothing -> return ()
+                      Just h  -> lift $ hPutStrLn h fenLine
+                  return $ Just (m, mystate)
+               else do
+                   lift $ do
+                       putStrLn $ "Move: " ++ refmv ++ " fen " ++ fen
+                       putStrLn $ "Illegal move"
+                   return Nothing
 
 agregAll :: [(Move, MyState)] -> CtxIO Agreg
 agregAll = foldM agregPos Agreg { agrCumErr = 0 }
@@ -221,10 +229,6 @@ agregMVar mvar mss = do
 
 aggregateError :: Agreg -> Double -> Agreg
 aggregateError agr e = agr { agrCumErr = agrCumErr agr + e }
-
--- Some parameters (until we have a good solution)
-clearHash :: Bool
-clearHash = False
 
 newThread :: CtxIO () -> CtxIO ThreadId
 newThread a = do
@@ -252,6 +256,13 @@ correctMove p m'
           f = fromSquare m
           Busy _ pc = tabla p f
           c = moving p
+
+canDoMove :: Move -> Game Bool
+canDoMove m = do
+    r <- doMove False m False
+    case r of
+        Illegal -> return False
+        _       -> return True
 
 searchTestPos :: Move -> Game Double
 searchTestPos m = do
