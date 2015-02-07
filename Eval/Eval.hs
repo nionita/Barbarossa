@@ -604,7 +604,7 @@ instance EvalItem Mobility where
     evalItemNDL _  = [ ("mobilityKnight", ((50, 56), (50, 120))),
                        ("mobilityBishop", ((45, 55), (50, 120))),
                        ("mobilityRook",   ((24, 25), ( 0, 100))),
-                       ("mobilityQueen",  (( 1,  7), (-5,  50))) ]
+                       ("mobilityQueen",  (( 4,  7), (-5,  50))) ]
 
 -- Here we do not calculate pawn mobility (which, calculated as attacs, is useless)
 mobDiff :: MyPos -> IWeights
@@ -669,7 +669,7 @@ data Izolan = Izolan
 instance EvalItem Izolan where
     evalItem _ _ p _ = isolDiff p
     evalItemNDL _  = [
-                      ("isolPawns",  ((-42,  -80), (-300, 0))),
+                      ("isolPawns",  ((-42, -120), (-300, 0))),
                       ("isolPassed", ((-57, -150), (-500, 0)))
                      ]
 
@@ -771,7 +771,7 @@ data Redundance = Redundance
 
 instance EvalItem Redundance where
     evalItem _ _ p _ = evalRedundance p
-    evalItemNDL _  = [("bishopPair",       ((240,  240), ( 100, 400))),
+    evalItemNDL _  = [("bishopPair",       ((400,  400), ( 100, 500))),
                       ("redundanceRook",   ((  0, -104), (-150,   0))) ]
 
 -- This function is optimised
