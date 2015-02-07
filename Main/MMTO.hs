@@ -16,7 +16,7 @@ import Data.Maybe
 import Numeric (showHex)
 import System.Console.GetOpt
 import System.Environment (getArgs)
--- import System.IO
+import System.IO
 import System.Time
 
 import Struct.Struct
@@ -30,15 +30,17 @@ import Search.AlbetaTypes
 import Moves.Base
 import Moves.Board (posFromFen, initPos)
 import Moves.History
+import Moves.Notation
 import Search.CStateMonad (runCState)
--- import Eval.Eval (weightNames)
 import Eval.FileParams (makeEvalState)
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
         optParams   :: [String],	-- list of eval parameter assignements
         optLogging  :: LogLevel,	-- logging level
-        optAFenFile :: Maybe FilePath	-- annotated fen file for self analysis
+        optNThreads :: Int,		-- number of threads
+        optAFenFile :: Maybe FilePath,	-- annotated fen file for self analysis
+        optFOutFile :: Maybe FilePath	-- output file for filter option
     }
 
 defaultOptions :: Options
@@ -46,7 +48,9 @@ defaultOptions = Options {
         optConfFile = Nothing,
         optParams   = [],
         optLogging  = DebugUci,
-        optAFenFile = Nothing
+        optNThreads = 1,
+        optAFenFile = Nothing,
+        optFOutFile = Nothing
     }
 
 setConfFile :: String -> Options -> Options
@@ -66,15 +70,23 @@ setLogging lev opt = opt { optLogging = llev }
                    _ -> if levi < 0 then DebugSearch else LogNever
           levi = read lev :: Int
 
+addNThrds :: String -> Options -> Options
+addNThrds ns opt = opt { optNThreads = read ns }
+
 addAFile :: FilePath -> Options -> Options
 addAFile fi opt = opt { optAFenFile = Just fi }
+
+addOFile :: FilePath -> Options -> Options
+addOFile fi opt = opt { optFOutFile = Just fi }
 
 options :: [OptDescr (Options -> Options)]
 options = [
         Option "c" ["config"] (ReqArg setConfFile "STRING") "Configuration file",
         Option "l" ["loglev"] (ReqArg setLogging "STRING")  "Logging level from 0 (debug) to 5 (never)",
         Option "p" ["param"]  (ReqArg addParam "STRING")    "Eval/search/time parameters: name=value,...",
-        Option "a" ["analyse"] (ReqArg addAFile "STRING")   "Analysis file"
+        Option "a" ["analyse"] (ReqArg addAFile "STRING")   "Analysis file",
+        Option "t" ["threads"] (ReqArg addNThrds "STRING")  "Number of threads",
+        Option "f" ["filter"] (ReqArg addOFile "STRING")    "Filter output file"
     ]
 
 theOptions :: IO (Options, [String])
@@ -83,7 +95,7 @@ theOptions = do
     case getOpt Permute options args of
         (o, n, []) -> return (foldr ($) defaultOptions o, n)
         (_, _, es) -> ioError (userError (concat es ++ usageInfo header options))
-    where header = "Usage: " ++ idName ++ " [-c CONF] [-l LEV] [-p name=val[,...]] [-a AFILE]"
+    where header = "Usage: " ++ idName ++ " [-c CONF] [-l LEV] [-p name=val[,...]] [-a AFILE [-f OFILE]]"
           idName = "MMTO"
 
 initContext :: Options -> IO Context
@@ -125,73 +137,90 @@ main = do
     ctx <- initContext opts
     case optAFenFile opts of
         Nothing -> error "Analyse file have to be give as parameter"
-        Just fi -> runReaderT (analysingMachine fi) ctx	-- the analysis mode
+        Just fi -> case optFOutFile opts of
+                       Nothing -> runReaderT (optFromFile fi (optNThreads opts)) ctx	-- optimise mode
+                       Just fo -> runReaderT (filterFile fi fo) ctx
 
-analysingMachine :: FilePath -> CtxIO ()
-analysingMachine fi = do
-    -- ctx <- ask
-    -- let logFileName = progLogName ++ "-" ++ show (startSecond ctx) ++ ".log"
-    -- startLogger logFileName
-    -- startWriter False
-    -- startInformer
-    -- beforeReadLoop
-    fileReader fi
-    -- whatever to do when ending:
-    -- beforeProgExit
-
-stateFromFen :: Pos -> Cache -> History -> EvalState -> MyState
-stateFromFen StartPos  c h es = posToState initPos c h es
-stateFromFen (Pos fen) c h es = posToState (posFromFen fen) c h es
-
-movingColor :: Pos -> Color
-movingColor fen
-    | Pos str <- fen
-        = case words str of
-              _ : (c:_) : _ -> case c of
-                                 'w' -> White
-                                 'b' -> Black
-                                 _   -> error $ "Wrong fen: " ++ str
-              _ -> error $ "Wrong fen: " ++ str
-    | otherwise = White     -- startposition
-
-data Agreg = Agreg {
-         agrCumErr :: !Double,	-- accumulated error
-         agrFenOk  :: !Int	-- number of fens analysed
-     } deriving Show
-
--- The file reader reads an annotated analysis file
--- and analyses every fen, cummulating the error
--- and reporting it
-fileReader :: FilePath -> CtxIO ()
-fileReader fi = do
+filterFile :: FilePath -> FilePath -> CtxIO ()
+filterFile fi fo = do
     inp <- liftIO $ readFile fi
-    let header : fens = lines inp
-        -- "Reference" : "depth" : sdepth : _ = words header
-    lift $ putStrLn $ "Start analysing from: " ++ header
-    agr <- foldrM perFenLine (Agreg 0 0) fens
-    -- agr <- foldrM perFenLine (Agreg 0 0) [head fens]	-- for test we take only one
-    lift $ putStrLn $ show agr
-
-perFenLine :: String -> Agreg -> CtxIO Agreg
-perFenLine fenLine agr = do
-    let (refmv, fen') = break ((==) '\t') fenLine
-        fen = tail fen'	-- it has the \t in front
-    lift $ putStrLn $ "Move: " ++ refmv ++ " fen " ++ fen
-    let euci = parseMoveStr refmv
-        mv = case euci of
-                 Left s  -> error $ "Wrong move: " ++ show s
-                 Right m -> m
+    lift $ putStrLn $ "Filtering " ++ fi
     chg <- readChanging
     let crts = crtStatus chg
-        mystate = stateFromFen (Pos fen) (hash crts) (hist crts) (evalst crts)
-    -- modifyChanging $ \c -> c { working = True }
-    -- sc <- searchTheTree 1 dpt 0 0 0 0 Nothing [] []
-    (e, _) <- runCState (searchTestPos mv) mystate
-    return $ aggregateError agr e
+    h <- liftIO $ openFile fo WriteMode
+    mapM_ (makeMovePos crts (Just h)) $ lines inp
+    liftIO $ hClose h
+
+optFromFile :: FilePath -> Int -> CtxIO ()
+optFromFile fi n = do
+    inp <- liftIO $ readFile fi
+    lift $ putStrLn $ "Optimizing over " ++ fi
+    chg <- readChanging
+    let crts = crtStatus chg
+    mss <- catMaybes <$> mapM (makeMovePos crts Nothing) (lines inp)
+    if n > 1
+       then do
+           liftIO $ setNumCapabilities $ n + 1
+           vs <- forM (spread n mss) $ \ts -> do
+               v <- lift $ newEmptyMVar
+               newThread $ agregMVar v ts
+               return v
+           as <- forM vs $ \v -> liftIO $ takeMVar v
+           let a = foldr (\(Agreg { agrCumErr = e }) s -> s + e) 0 as
+           liftIO $ putStrLn $ "Error: " ++ show a
+       else do
+           liftIO $ setNumCapabilities 2
+           liftIO $ putStrLn $ "Optimise with 1 thread"
+           agr <- agregAll mss
+           liftIO $ putStrLn $ "Error: " ++ show (agrCumErr agr)
+
+-- Spread a list over many lists
+spread :: Int -> [a] -> [[a]]
+spread n = go $ take n $ repeat []
+    where go acc [] = acc
+          go (l:ls) (a:as) = go (ls ++ [a:l]) as
+
+data Agreg = Agreg {
+         agrCumErr :: !Double	-- accumulated error
+     } deriving Show
+
+makeMovePos :: MyState -> Maybe Handle -> String -> CtxIO (Maybe (Move, MyState))
+makeMovePos crts mh fenLine = do
+    let (refmv, fen') = break ((==) '\t') fenLine
+        fen = tail fen'	-- it has the \t in front
+        pos  = posFromFen fen
+        euci = fromNiceNotation pos refmv
+    case euci of
+        Left s  -> do
+            lift $ do
+                putStrLn $ "Move: " ++ refmv ++ " fen " ++ fen
+                putStrLn $ "Wrong move: " ++ show s
+            return Nothing
+        Right m -> do
+            let mystate = posToState pos (hash crts) (hist crts) (evalst crts)
+            case mh of
+                Nothing -> return ()
+                Just h  -> lift $ hPutStrLn h fenLine
+            return $ Just (m, mystate)
+
+agregAll :: [(Move, MyState)] -> CtxIO Agreg
+agregAll = foldM agregPos Agreg { agrCumErr = 0 }
+
+agregPos :: Agreg -> (Move, MyState) -> CtxIO Agreg
+agregPos agr (m, mystate) = do
+    (e, _) <- runCState (searchTestPos m) mystate
+    return $! aggregateError agr e
+
+agregMVar :: MVar Agreg -> [(Move, MyState)] -> CtxIO ()
+agregMVar mvar mss = do
+    myd <- liftIO $ myThreadId
+    liftIO $ putStrLn $ "Thread " ++ show myd ++ " started"
+    agr <- agregAll mss
+    liftIO $ putMVar mvar agr
+    liftIO $ putStrLn $ "Thread " ++ show myd ++ " ended"
 
 aggregateError :: Agreg -> Double -> Agreg
-aggregateError agr e
-    = agr { agrCumErr = agrCumErr agr + e, agrFenOk = agrFenOk agr + 1 }
+aggregateError agr e = agr { agrCumErr = agrCumErr agr + e }
 
 -- Some parameters (until we have a good solution)
 clearHash :: Bool
@@ -225,8 +254,8 @@ correctMove p m'
           c = moving p
 
 searchTestPos :: Move -> Game Double
-searchTestPos m' = do
-    m <- flip correctMove m' <$> getPos	-- conform new coding
+searchTestPos m = do
+    -- m <- flip correctMove m' <$> getPos	-- conform new coding
     mvs' <- uncurry (++) <$> genMoves 0 0 False	-- don't need sort
     let mvs = delete m mvs'
     -- logmes $ "Pref move: " ++ dumpMove m
@@ -252,15 +281,15 @@ searchAB m = do
             return $! Just s
 
 searchQ :: Int -> Move -> Game Int
-searchQ a m = do
+searchQ !a m = do
     debugMes $ "  --> SearchQ move: " ++ show m ++ " (" ++ show a ++ ")"
     r <- doMove False m False
     case r of
         Illegal -> return a
         _       -> do
-            s <- negate <$> pvQSearch 3 minBound maxBound
+            !s <- negate <$> pvQSearch 3 minBound maxBound
             undoMove
-            let a' = if s > a then s else a
+            let !a' = if s > a then s else a
             debugMes $ "  <-- SearchQ: " ++ show a'
             return a'
 
@@ -276,7 +305,7 @@ spaces :: Int -> String
 spaces n = take n $ repeat ' '
 
 pvQInnerLoop :: Int -> Int -> Int -> Move -> Game (Bool, Int)
-pvQInnerLoop lev b a m = do
+pvQInnerLoop lev !b !a m = do
     debugMes $ spaces lev ++ "--> pvQInnerLoop a = " ++ show a ++ " b = " ++ show b ++ " move: " ++ show m
     r <- doMove False m True
     case r of
@@ -292,7 +321,7 @@ pvQInnerLoop lev b a m = do
             return $ trimaxCut s b a
 
 pvQSearch :: Int -> Int -> Int -> Game Int
-pvQSearch !lev a b = do
+pvQSearch !lev !a !b = do
     debugMes $ spaces lev ++ "--> pvQSearch a = " ++ show a ++ " b = " ++ show b
     sta <- staticVal
     tact <- tacticalPos
@@ -313,12 +342,12 @@ pvQSearch !lev a b = do
                               else pvQLoop lev b a   mvs
 
 trimaxCut :: Int -> Int -> Int -> (Bool, Int)
-trimaxCut s b a = if s >= b
+trimaxCut !s !b !a = if s >= b
                      then (True, b)
                      else if s > a then (False, s) else (False, a)
 
 trimax :: Int -> Int -> Int -> Int
-trimax s a b = if s > b then b else if s > a then s else a
+trimax !s !a !b = if s > b then b else if s > a then s else a
 
 {--
 type ABPos = (Move, MyPos)
