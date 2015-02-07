@@ -261,9 +261,13 @@ searchTestPos m = do
     -- logmes $ "Pref move: " ++ dumpMove m
     -- forM_ mvs $ \e -> logmes $ "rest move: " ++ dumpMove e
     s' <- searchAB m
-    let s = fromJust s'
-    ss <- mapM searchAB mvs
-    return $! sum $ map (\x -> heaviside (s - x)) $ catMaybes ss
+    case s' of
+        Just s -> do
+            ss <- mapM searchAB mvs
+            return $! sum $ map (\x -> heaviside (s - x)) $ catMaybes ss
+        Nothing -> do
+            liftIO $ putStrLn $ "Prefered mov is illegal? " ++ show m
+            return 0
 
 searchAB :: Move -> Game (Maybe Int)
 searchAB m = do
