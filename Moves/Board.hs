@@ -20,7 +20,7 @@ import Prelude hiding ((++), foldl, filter, map, concatMap, concat, head, tail, 
 import Data.Bits
 import Data.List.Stream
 import Data.Char
-import Data.Maybe
+-- import Data.Maybe
 import Data.Ord (comparing)
 
 import Struct.Struct

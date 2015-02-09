@@ -10,9 +10,12 @@ import Control.Monad.Reader
 import Control.Concurrent
 import Control.Applicative ((<$>))
 -- import Control.Exception
-import Data.Foldable (foldrM)
-import Data.List (intersperse, delete)
+-- import Data.Foldable (foldrM)
+import Data.List (intersperse, delete, isPrefixOf, stripPrefix)
+import Data.List.Split (splitOn)
 import Data.Maybe
+import Data.Monoid
+import Network
 import Numeric (showHex)
 import System.Console.GetOpt
 import System.Environment (getArgs)
@@ -24,7 +27,7 @@ import Struct.Status
 import Struct.Context
 import Struct.Config
 import Hash.TransTab
-import Uci.UCI
+-- import Uci.UCI
 import Moves.BaseTypes
 import Search.AlbetaTypes
 import Moves.Base
@@ -40,7 +43,9 @@ data Options = Options {
         optLogging  :: LogLevel,	-- logging level
         optNThreads :: Int,		-- number of threads
         optAFenFile :: Maybe FilePath,	-- annotated fen file for self analysis
-        optFOutFile :: Maybe FilePath	-- output file for filter option
+        optFOutFile :: Maybe FilePath,	-- output file for filter option
+        optServMode :: Bool,		-- run as server
+        optClientOf :: [String]		-- run as client with given servers
     }
 
 defaultOptions :: Options
@@ -50,7 +55,9 @@ defaultOptions = Options {
         optLogging  = DebugUci,
         optNThreads = 1,
         optAFenFile = Nothing,
-        optFOutFile = Nothing
+        optFOutFile = Nothing,
+        optServMode = False,
+        optClientOf = []
     }
 
 setConfFile :: String -> Options -> Options
@@ -79,6 +86,12 @@ addAFile fi opt = opt { optAFenFile = Just fi }
 addOFile :: FilePath -> Options -> Options
 addOFile fi opt = opt { optFOutFile = Just fi }
 
+addServ :: Options -> Options
+addServ opt = opt { optServMode = True }
+
+addHost :: String -> Options -> Options
+addHost cl opt = opt { optClientOf = cl : optClientOf opt }
+
 options :: [OptDescr (Options -> Options)]
 options = [
         Option "c" ["config"] (ReqArg setConfFile "STRING") "Configuration file",
@@ -86,7 +99,9 @@ options = [
         Option "p" ["param"]  (ReqArg addParam "STRING")    "Eval/search/time parameters: name=value,...",
         Option "a" ["analyse"] (ReqArg addAFile "STRING")   "Analysis file",
         Option "t" ["threads"] (ReqArg addNThrds "STRING")  "Number of threads",
-        Option "f" ["filter"] (ReqArg addOFile "STRING")    "Filter output file"
+        Option "f" ["filter"] (ReqArg addOFile "STRING")    "Filter output file",
+        Option "s" ["server"] (NoArg  addServ          )    "Run as server",
+        Option "h" ["hosts"]  (ReqArg addHost "STRING")     "Run as client with this list of servers, comma separated"
     ]
 
 theOptions :: IO (Options, [String])
@@ -95,7 +110,8 @@ theOptions = do
     case getOpt Permute options args of
         (o, n, []) -> return (foldr ($) defaultOptions o, n)
         (_, _, es) -> ioError (userError (concat es ++ usageInfo header options))
-    where header = "Usage: " ++ idName ++ " [-c CONF] [-l LEV] [-p name=val[,...]] [-a AFILE [-f OFILE]]"
+    where header = "Usage: " ++ idName
+              ++ " [-c CONF] [-l LEV] [-p name=val[,...]] [-a AFILE [-f OFILE | -s | h host,host,...]"
           idName = "MMTO"
 
 initContext :: Options -> IO Context
@@ -131,15 +147,21 @@ initContext opts = do
          }
     return context
 
+-- Client/server works only for analysis, filter is always local
 main :: IO ()
-main = do
+main = withSocketsDo $ do
     (opts, _) <- theOptions
     ctx <- initContext opts
-    case optAFenFile opts of
-        Nothing -> error "Analyse file have to be give as parameter"
-        Just fi -> case optFOutFile opts of
-                       Nothing -> runReaderT (optFromFile fi (optNThreads opts)) ctx	-- optimise mode
-                       Just fo -> runReaderT (filterFile fi fo) ctx
+    let action = case optAFenFile opts of
+            Nothing -> if null (optClientOf opts)
+                then error "Analyse file (-a) or host list (-h) is required"
+                else clientMode (optClientOf opts) (optParams opts)
+            Just fi -> case optFOutFile opts of
+                Just fo -> filterFile fi fo
+                Nothing -> if optServMode opts
+                    then serverMode fi (optNThreads opts)
+                    else optFromFile fi (optNThreads opts)
+    runReaderT action ctx
 
 filterFile :: FilePath -> FilePath -> CtxIO ()
 filterFile fi fo = do
@@ -161,28 +183,103 @@ optFromFile fi n = do
     if n > 1
        then do
            liftIO $ setNumCapabilities $ n + 1
-           vs <- forM (spread n mss) $ \ts -> do
-               v <- lift $ newEmptyMVar
-               newThread $ agregMVar v ts
-               return v
-           as <- forM vs $ \v -> liftIO $ takeMVar v
-           let a = foldr (\(Agreg { agrCumErr = e }) s -> s + e) 0 as
-           liftIO $ putStrLn $ "Error: " ++ show a
+           r <- parallelAgregate (spread n mss) (agregMVar Nothing)
+           liftIO $ putStrLn $ "Function value: " ++ show r
        else do
            liftIO $ setNumCapabilities 2
            liftIO $ putStrLn $ "Optimise with 1 thread"
-           agr <- agregAll mss
-           liftIO $ putStrLn $ "Error: " ++ show (agrCumErr agr)
+           agr <- agregAll Nothing mss
+           liftIO $ putStrLn $ "Function value: " ++ show (agrCumErr agr)
+
+-- Agregate function values in parallel by many threads
+parallelAgregate :: [a] -> (MVar Agreg -> a -> CtxIO ()) -> CtxIO Double
+parallelAgregate es act = do
+    vs <- forM es $ \e -> do
+        v <- lift $ newEmptyMVar
+        void $ newThread $ act v e
+        return v
+    as <- forM vs $ \v -> liftIO $ takeMVar v
+    return $! sum $ map agrCumErr as
+
+-- For client mode we need to know which hosts & port we should use
+myServerPort :: PortID
+myServerPort = PortNumber 4321
+
+serverPrefix :: String
+serverPrefix = "Server value: "
+
+endOfParams :: String
+endOfParams = "EOP"
+
+clientMode :: [String] -> [String] -> CtxIO ()
+clientMode hostsstrs params = do
+    let hosts = splitOn "," $ concat $ intersperse "," hostsstrs
+    liftIO $ setNumCapabilities $ length hosts + 1
+    r <- parallelAgregate hosts (askServer params)
+    liftIO $ putStrLn $ "Function value: " ++ show r
+
+-- Currently only parameters on command line will be sent over
+-- Config file is not supported over network!!
+askServer :: [String] -> MVar Agreg -> HostName -> CtxIO ()
+askServer params mvar host = liftIO $ do
+    h <- connectTo host myServerPort
+    hSetBuffering h LineBuffering
+    forM_ params $ \ps -> hPutStrLn h ps
+    hPutStrLn h endOfParams
+    resline <- lineUntil False h (isPrefixOf serverPrefix)
+    let !r = maybe 0 read $ stripPrefix serverPrefix resline
+    putMVar mvar $ Agreg { agrCumErr = r }
+
+serverMode :: FilePath -> Int -> CtxIO ()
+serverMode fi n = do
+    lift $ putStrLn $ "Optimizing over " ++ fi
+    liftIO $ setNumCapabilities $ n + 1
+    chg <- readChanging
+    let crts = crtStatus chg
+    ts <- (spread n . catMaybes) <$> (liftIO (readFile fi) >>= mapM (makeMovePos crts Nothing) . lines)
+    sock <- liftIO $ listenOn myServerPort
+    forever $ do
+        (h, es) <- liftIO $ do
+            (h, host, _) <- accept sock
+            putStrLn $ "Accepting request from host " ++ host
+            (params, _) <- accumLines False h (== endOfParams) (:) []
+            let paramList = stringToParams $ concat $ intersperse "," params
+            (_, evs) <- makeEvalState Nothing paramList "progver" "progsuf"	-- no config file
+            return (h, evs)
+        r <- parallelAgregate ts (agregMVar $ Just es)
+        liftIO $ hPutStrLn h $ serverPrefix ++ show r
+
+-- Read lines until one condition occurs
+lineUntil :: Bool -> Handle -> (String -> Bool) -> IO String
+lineUntil verb h p = go
+    where go = do l <- hGetLine h
+                  when verb $ putStrLn $ "lU: " ++ l
+                  if p l then return l
+                         else go
+
+-- Read lines until one condition occurs, accumulating some information from the read lines
+-- (except the one with the condition, which is returned together with the accumulator)
+accumLines :: Bool -> Handle -> (String -> Bool) -> (String -> a -> a) -> a -> IO (a, String)
+accumLines verb h p f = go
+    where go a = do
+             l <- hGetLine h
+             when verb $ putStrLn $ "aL: " ++ l
+             if p l then return (a, l)
+                    else go $! f l a
 
 -- Spread a list over many lists
 spread :: Int -> [a] -> [[a]]
 spread n = go $ take n $ repeat []
-    where go acc [] = acc
-          go (l:ls) (a:as) = go (ls ++ [a:l]) as
+    where go (l:ls) (a:as) = go (ls ++ [a:l]) as
+          go acc    _      = acc
 
 data Agreg = Agreg {
          agrCumErr :: !Double	-- accumulated error
      } deriving Show
+
+instance Monoid Agreg where
+    mempty = Agreg { agrCumErr = 0 }
+    a `mappend` b = Agreg { agrCumErr = agrCumErr a + agrCumErr b }
 
 makeMovePos :: MyState -> Maybe Handle -> String -> CtxIO (Maybe (Move, MyState))
 makeMovePos crts mh fenLine = do
@@ -211,19 +308,21 @@ makeMovePos crts mh fenLine = do
                        putStrLn $ "Illegal move"
                    return Nothing
 
-agregAll :: [(Move, MyState)] -> CtxIO Agreg
-agregAll = foldM agregPos Agreg { agrCumErr = 0 }
+agregAll :: Maybe EvalState -> [(Move, MyState)] -> CtxIO Agreg
+agregAll mest = case mest of
+    Nothing -> foldM agregPos mempty
+    Just es -> foldM agregPos mempty . map (\(m, ms) -> (m, ms { evalst = es }))
 
 agregPos :: Agreg -> (Move, MyState) -> CtxIO Agreg
 agregPos agr (m, mystate) = do
     (e, _) <- runCState (searchTestPos m) mystate
     return $! aggregateError agr e
 
-agregMVar :: MVar Agreg -> [(Move, MyState)] -> CtxIO ()
-agregMVar mvar mss = do
+agregMVar :: Maybe EvalState -> MVar Agreg -> [(Move, MyState)] -> CtxIO ()
+agregMVar mest mvar mss = do
     myd <- liftIO $ myThreadId
     liftIO $ putStrLn $ "Thread " ++ show myd ++ " started"
-    agr <- agregAll mss
+    agr <- agregAll mest mss
     liftIO $ putMVar mvar agr
     liftIO $ putStrLn $ "Thread " ++ show myd ++ " ended"
 

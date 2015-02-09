@@ -3,9 +3,9 @@
 module Moves.Notation where
 
 import Data.Bits
-import Data.Char (ord, chr, toUpper, toLower)
-import qualified Text.ParserCombinators.Parsec as P
-import Text.ParserCombinators.Parsec ((<|>))
+import Data.Char (ord, chr, toLower)
+-- import qualified Text.ParserCombinators.Parsec as P
+-- import Text.ParserCombinators.Parsec ((<|>))
 
 import Struct.Struct
 import Moves.BitBoard
