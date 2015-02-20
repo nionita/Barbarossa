@@ -365,19 +365,31 @@ canDoMove m = do
 
 searchTestPos :: Move -> Game Double
 searchTestPos m = do
-    -- m <- flip correctMove m' <$> getPos	-- conform new coding
     mvs' <- uncurry (++) <$> genMoves 0 0 False	-- don't need sort
     let mvs = delete m mvs'
-    -- logmes $ "Pref move: " ++ dumpMove m
-    -- forM_ mvs $ \e -> logmes $ "rest move: " ++ dumpMove e
-    s' <- searchAB m
-    case s' of
-        Just s -> do
-            ss <- mapM searchAB mvs
-            return $! sum $ map (\x -> heaviside (s - x)) $ catMaybes ss
+    debugMes $ "Pref move: " ++ dumpMove m
+    forM_ mvs $ \e -> debugMes $ "rest move: " ++ dumpMove e
+    when (length mvs == length mvs') $ do
+            p <- getPos
+            liftIO $ do
+                putStrLn $ "Prefered move not in move list"
+                putStrLn $ "  Position: " ++ posToFen p
+                putStrLn $ "  Prf.move: " ++ dumpMove m
+                forM_ mvs $ \e -> putStrLn
+                         $ "  nrm move: " ++ dumpMove e
+    ms <- searchAB m
+    case ms of
         Nothing -> do
-            liftIO $ putStrLn $ "Prefered mov is illegal? " ++ show m
+            liftIO $ putStrLn $ "Prefered move is illegal? " ++ dumpMove m
             return 0
+        Just s  -> do
+           ss <- mapM searchAB mvs
+           return $! sum $ map (\x -> heaviside (s - x)) $ catMaybes ss
+
+-- We need this so that we can negate safely:
+minScore, maxScore :: Int
+minScore = minBound + 2000
+maxScore = maxBound - 2000
 
 searchAB :: Move -> Game (Maybe Int)
 searchAB m = do
@@ -386,13 +398,11 @@ searchAB m = do
     case r of
         Illegal -> return Nothing
         _       -> do
-            -- (mvs1, mvs2) <- uncurry (++) <$> genMoves 0 0 False
-            -- s <- negate <$> foldM searchQ minBound $ mvs1 ++ mvs2
             mvs <- uncurry (++) <$> genMoves 0 0 False
-            s <- negate <$> foldM searchQ minBound mvs
+            !s <- negate <$> foldM searchQ minScore mvs
             undoMove
-            debugMes $ "--> SearchAB move: " ++ show m ++ " score = " ++ show s
-            return $! Just s
+            debugMes $ "<-- SearchAB move: " ++ show m ++ " score = " ++ show s
+            return $ Just s
 
 searchQ :: Int -> Move -> Game Int
 searchQ !a m = do
@@ -401,12 +411,13 @@ searchQ !a m = do
     case r of
         Illegal -> return a
         _       -> do
-            !s <- negate <$> pvQSearch 3 minBound maxBound
+            !s <- negate <$> pvQSearch 3 minScore (-a)
             undoMove
-            let !a' = if s > a then s else a
-            debugMes $ "  <-- SearchQ: " ++ show a'
-            return a'
+            -- let !a' = if s > a then s else a	-- this is already so
+            debugMes $ "  <-- SearchQ move: " ++ show m ++ " score = " ++ show s
+            return $! s
 
+{-# INLINE pvQLoop #-}
 pvQLoop :: Int -> Int -> Int -> [Move] -> Game Int
 pvQLoop lev b = go
     where go !s []     = return s
@@ -416,7 +427,8 @@ pvQLoop lev b = go
                     else go s' ms
 
 spaces :: Int -> String
-spaces n = take n $ repeat ' '
+spaces l = take n $ repeat ' '
+    where n = l * 2
 
 pvQInnerLoop :: Int -> Int -> Int -> Move -> Game (Bool, Int)
 pvQInnerLoop lev !b !a m = do
@@ -443,25 +455,29 @@ pvQSearch !lev !a !b = do
        then do
            mvs <- genTactMoves
            if null mvs
-              then return $ trimax minBound a b	-- mated
+              then return $ trimax minScore a b	-- mated
               else pvQLoop lev b a mvs
        else if sta >= b
                then return b
                else do	-- no delta cut
                    mvs <- genTactMoves
                    if null mvs
-                      then return $ trimax sta a b
+                      then return sta
                       else if sta > a
                               then pvQLoop lev b sta mvs
                               else pvQLoop lev b a   mvs
 
 trimaxCut :: Int -> Int -> Int -> (Bool, Int)
-trimaxCut !s !b !a = if s >= b
-                     then (True, b)
-                     else if s > a then (False, s) else (False, a)
+trimaxCut !s !b !a
+    | s >= b    = (True,  b)
+    | s >  a    = (False, s)
+    | otherwise = (False, a)
 
 trimax :: Int -> Int -> Int -> Int
-trimax !s !a !b = if s > b then b else if s > a then s else a
+trimax !s !a !b
+    | s >= b    = b
+    | s >  a    = s
+    | otherwise = a
 
 {--
 type ABPos = (Move, MyPos)
