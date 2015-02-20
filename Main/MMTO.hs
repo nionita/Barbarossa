@@ -283,8 +283,7 @@ instance Monoid Agreg where
 
 makeMovePos :: MyState -> Maybe Handle -> String -> CtxIO (Maybe (Move, MyState))
 makeMovePos crts mh fenLine = do
-    let (refmv, fen') = break ((==) '\t') fenLine
-        fen = tail fen'	-- it has the \t in front
+    let (refmv:fen:_) = splitOn "\t" fenLine
         pos  = posFromFen fen
         euci = fromNiceNotation pos refmv
     case euci of
@@ -369,22 +368,27 @@ searchTestPos m = do
     let mvs = delete m mvs'
     debugMes $ "Pref move: " ++ dumpMove m
     forM_ mvs $ \e -> debugMes $ "rest move: " ++ dumpMove e
-    when (length mvs == length mvs') $ do
-            p <- getPos
-            liftIO $ do
-                putStrLn $ "Prefered move not in move list"
-                putStrLn $ "  Position: " ++ posToFen p
-                putStrLn $ "  Prf.move: " ++ dumpMove m
-                forM_ mvs $ \e -> putStrLn
-                         $ "  nrm move: " ++ dumpMove e
-    ms <- searchAB m
-    case ms of
-        Nothing -> do
-            liftIO $ putStrLn $ "Prefered move is illegal? " ++ dumpMove m
+    -- We do not generate all promotions, and now have also some seldom bugs
+    -- about castle, so we will ignore those cases:
+    if length mvs == length mvs'
+       then do
+            -- p <- getPos
+            -- liftIO $ do
+            --     putStrLn $ "Prefered move not in move list"
+            --     putStrLn $ "  Position: " ++ posToFen p
+            --     putStrLn $ "  Prf.move: " ++ dumpMove m
+            --     forM_ mvs $ \e -> putStrLn
+            --              $ "  nrm move: " ++ dumpMove e
             return 0
-        Just s  -> do
-           ss <- mapM searchAB mvs
-           return $! sum $ map (\x -> heaviside (s - x)) $ catMaybes ss
+       else do
+           ms <- searchAB m
+           case ms of
+               Nothing -> do
+                   -- liftIO $ putStrLn $ "Prefered move is illegal? " ++ dumpMove m
+                   return 0
+               Just s  -> do
+                  ss <- mapM searchAB mvs
+                  return $! sum $ map (\x -> heaviside (s - x)) $ catMaybes ss
 
 -- We need this so that we can negate safely:
 minScore, maxScore :: Int
