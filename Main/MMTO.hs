@@ -124,7 +124,10 @@ initContext opts = do
     ha <- newCache 1	-- it will take the minimum number of entries
     hi <- newHist
     let paramList = stringToParams $ concat $ intersperse "," $ optParams opts
+    -- putStrLn "Before eval state"
     (parc, evs) <- makeEvalState (optConfFile opts) paramList "progver" "progsuf"
+    -- putStrLn "eval state:"
+    -- putStrLn $ show evs
     let chg = Chg {
             working = False,
             compThread = Nothing,
@@ -161,6 +164,7 @@ main = withSocketsDo $ do
                 Nothing -> if optServMode opts
                     then serverMode fi (optNThreads opts)
                     else optFromFile fi (optNThreads opts)
+    -- hSetBuffering stdout LineBuffering
     runReaderT action ctx
 
 filterFile :: FilePath -> FilePath -> CtxIO ()
@@ -183,23 +187,29 @@ optFromFile fi n = do
     if n > 1
        then do
            liftIO $ setNumCapabilities $ n + 1
-           r <- parallelAgregate (spread n mss) (agregMVar Nothing)
-           liftIO $ putStrLn $ "Function value: " ++ show r
+           agr <- parallelAgregate (spread n mss) (agregMVar Nothing)
+           liftIO $ showAgr agr
+           -- liftIO $ putStrLn $ "Function value: " ++ show r
        else do
            liftIO $ setNumCapabilities 2
            liftIO $ putStrLn $ "Optimise with 1 thread"
            agr <- agregAll Nothing mss
-           liftIO $ putStrLn $ "Function value: " ++ show (agrCumErr agr)
+           liftIO $ showAgr agr
+
+showAgr :: Agreg -> IO ()
+showAgr agr = do
+    putStrLn $ "Function value: " ++ show (agrCumErr agr)
+    putStrLn $ "Total nodes:    " ++ show (agrCumNds agr)
 
 -- Agregate function values in parallel by many threads
-parallelAgregate :: [a] -> (MVar Agreg -> a -> CtxIO ()) -> CtxIO Double
+parallelAgregate :: [a] -> (MVar Agreg -> a -> CtxIO ()) -> CtxIO Agreg
 parallelAgregate es act = do
     vs <- forM es $ \e -> do
         v <- lift $ newEmptyMVar
         void $ newThread $ act v e
         return v
     as <- forM vs $ \v -> liftIO $ takeMVar v
-    return $! sum $ map agrCumErr as
+    return $! foldr mappend mempty as
 
 -- For client mode we need to know which hosts & port we should use
 myServerPort :: PortID
@@ -215,8 +225,9 @@ clientMode :: [String] -> [String] -> CtxIO ()
 clientMode hostsstrs params = do
     let hosts = splitOn "," $ concat $ intersperse "," hostsstrs
     liftIO $ setNumCapabilities $ length hosts + 1
-    r <- parallelAgregate hosts (askServer params)
-    liftIO $ putStrLn $ "Function value: " ++ show r
+    agr <- parallelAgregate hosts (askServer params)
+    liftIO $ showAgr agr
+    -- liftIO $ putStrLn $ "Function value: " ++ show r
 
 -- Currently only parameters on command line will be sent over
 -- Config file is not supported over network!!
@@ -227,8 +238,12 @@ askServer params mvar host = liftIO $ do
     forM_ params $ \ps -> hPutStrLn h ps
     hPutStrLn h endOfParams
     resline <- lineUntil False h (isPrefixOf serverPrefix)
-    let !r = maybe 0 read $ stripPrefix serverPrefix resline
-    putMVar mvar $ Agreg { agrCumErr = r }
+    let vs = maybe nl (splitOn " ") $ stripPrefix serverPrefix resline
+        vd:vn:_ = vs ++ nl
+        nl = ["0", "0"]
+        !d = read vd
+        !n = read vn
+    putMVar mvar $! Agreg { agrCumErr = d, agrCumNds = n }
 
 serverMode :: FilePath -> Int -> CtxIO ()
 serverMode fi n = do
@@ -246,8 +261,8 @@ serverMode fi n = do
             let paramList = stringToParams $ concat $ intersperse "," params
             (_, evs) <- makeEvalState Nothing paramList "progver" "progsuf"	-- no config file
             return (h, evs)
-        r <- parallelAgregate ts (agregMVar $ Just es)
-        liftIO $ hPutStrLn h $ serverPrefix ++ show r
+        agr <- parallelAgregate ts (agregMVar $ Just es)
+        liftIO $ hPutStrLn h $ serverPrefix ++ show (agrCumErr agr) ++ " " ++ show (agrCumNds agr)
 
 -- Read lines until one condition occurs
 lineUntil :: Bool -> Handle -> (String -> Bool) -> IO String
@@ -274,12 +289,14 @@ spread n = go $ take n $ repeat []
           go acc    _      = acc
 
 data Agreg = Agreg {
-         agrCumErr :: !Double	-- accumulated error
+         agrCumErr :: !Double,	-- accumulated error
+         agrCumNds :: !Int
      } deriving Show
 
 instance Monoid Agreg where
-    mempty = Agreg { agrCumErr = 0 }
-    a `mappend` b = Agreg { agrCumErr = agrCumErr a + agrCumErr b }
+    mempty = Agreg { agrCumErr = 0, agrCumNds = 0 }
+    a `mappend` b = Agreg { agrCumErr = agrCumErr a + agrCumErr b,
+                            agrCumNds = agrCumNds a + agrCumNds b }
 
 makeMovePos :: MyState -> Maybe Handle -> String -> CtxIO (Maybe (Move, MyState))
 makeMovePos crts mh fenLine = do
@@ -314,8 +331,8 @@ agregAll mest = case mest of
 
 agregPos :: Agreg -> (Move, MyState) -> CtxIO Agreg
 agregPos agr (m, mystate) = do
-    (e, _) <- runCState (searchTestPos m) mystate
-    return $! aggregateError agr e
+    (e, s) <- runCState (searchTestPos m) mystate
+    return $! aggregateError agr e (nodes $ stats s)
 
 agregMVar :: Maybe EvalState -> MVar Agreg -> [(Move, MyState)] -> CtxIO ()
 agregMVar mest mvar mss = do
@@ -325,8 +342,8 @@ agregMVar mest mvar mss = do
     liftIO $ putMVar mvar agr
     liftIO $ putStrLn $ "Thread " ++ show myd ++ " ended"
 
-aggregateError :: Agreg -> Double -> Agreg
-aggregateError agr e = agr { agrCumErr = agrCumErr agr + e }
+aggregateError :: Agreg -> Double -> Int -> Agreg
+aggregateError agr e n = agr { agrCumErr = agrCumErr agr + e, agrCumNds = agrCumNds agr + n }
 
 newThread :: CtxIO () -> CtxIO ThreadId
 newThread a = do
@@ -366,6 +383,7 @@ searchTestPos :: Move -> Game Double
 searchTestPos m = do
     mvs' <- uncurry (++) <$> genMoves 0 0 False	-- don't need sort
     let mvs = delete m mvs'
+    -- liftIO $ putStrLn $ "Pref move: " ++ dumpMove m
     debugMes $ "Pref move: " ++ dumpMove m
     forM_ mvs $ \e -> debugMes $ "rest move: " ++ dumpMove e
     -- We do not generate all promotions, and now have also some seldom bugs
