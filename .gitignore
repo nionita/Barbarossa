@@ -1,0 +1,11 @@
+*.o
+*.hi
+*.hcr
+*~
+*.dump-simpl
+*.dump-opt-cmm
+*.dump-asm
+dist
+*.ods
+*.swp
+*.log

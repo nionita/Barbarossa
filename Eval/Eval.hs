@@ -414,17 +414,16 @@ data KingOpen = KingOpen
 
 instance EvalItem KingOpen where
     evalItem _ _ p _ = kingOpen p
-    evalItemNDL _  = [ ("kingOpenOwn", ((-9, 0), (-48, 0))), ("kingOpenAdv", ((9, 0), (0, 48)))] 
+    evalItemNDL _  = [ ("kingOpen", ((9, 0), (-48, 0))) ] 
 
 -- Openness can be tought only with pawns (like we take) or all pieces
 kingOpen :: MyPos -> IWeights
-kingOpen p = [own, adv]
-    where -- mopbishops = popCount1 $ bishops p .&. yo p
+kingOpen p = [kop]
+    where !kop = adv - own
           moprooks   = popCount1 $ rooks p .&. yo p
           mopqueens  = popCount1 $ queens p .&. yo p
           mwb = popCount $ bAttacs paw msq `less` paw
           mwr = popCount $ rAttacs paw msq `less` (paw .|. lastrs)
-          -- yopbishops = popCount1 $ bishops p .&. me p
           yoprooks   = popCount1 $ rooks p .&. me p
           yopqueens  = popCount1 $ queens p .&. me p
           ywb = popCount $ bAttacs paw ysq `less` paw
@@ -433,8 +432,8 @@ kingOpen p = [own, adv]
           msq = kingSquare (kings p) $ me p
           ysq = kingSquare (kings p) $ yo p
           comb !oR !oQ !wb !wr = let !v = oR * wr + 2 * oQ * (wb + wr) in v
-          !own = comb moprooks mopqueens mwb mwr
-          !adv = comb yoprooks yopqueens ywb ywr
+          own = comb moprooks mopqueens mwb mwr
+          adv = comb yoprooks yopqueens ywb ywr
           lastrs = 0xFF000000000000FF	-- approx: take out last row which cant be covered by pawns
 
 ------ King placement ------
@@ -601,30 +600,46 @@ data Mobility = Mobility	-- "safe" moves
 
 instance EvalItem Mobility where
     evalItem _ _ p _ = mobDiff p
-    evalItemNDL _  = [ ("mobilityKnight", ((50, 56), (50, 120))),
-                       ("mobilityBishop", ((45, 55), (50, 120))),
-                       ("mobilityRook",   ((24, 25), ( 0, 100))),
-                       ("mobilityQueen",  (( 4,  7), (-5,  50))) ]
+    evalItemNDL _  = [ ("mobilityKnightS", ((44, 49), (0,  120))),
+                       ("mobilityKnightA", (( 6,  7), (0,  120))),
+                       ("mobilityBishopS", ((39, 48), (0,  120))),
+                       ("mobilityBishopA", (( 6,  7), (0,  120))),
+                       ("mobilityRookS",   ((21, 22), (0,  100))),
+                       ("mobilityRookA",   (( 3,  3), (0,  100))),
+                       ("mobilityQueenS",  (( 3,  6), (-5,  50))),
+                       ("mobilityQueenA",  (( 1,  1), (-5,  50))) ]
 
 -- Here we do not calculate pawn mobility (which, calculated as attacs, is useless)
 mobDiff :: MyPos -> IWeights
-mobDiff p = [n, b, r, q]
-    where !myN = popCount1 $ myNAttacs p `less` (me p .|. yoPAttacs p)
-          !myB = popCount1 $ myBAttacs p `less` (me p .|. yoPAttacs p)
-          !myR = popCount1 $ myRAttacs p `less` (me p .|. yoA1)
-          !myQ = popCount1 $ myQAttacs p `less` (me p .|. yoA2)
+mobDiff p = [ns, nu, bs, bu, rs, ru, qs, qu]
+    where (myNs, myNu) = mobSafeAll (myNAttacs p) (me p) (yoPAttacs p)
+          (myBs, myBu) = mobSafeAll (myBAttacs p) (me p) (yoPAttacs p)
+          (myRs, myRu) = mobSafeAll (myRAttacs p) (me p) yoA1
+          (myQs, myQu) = mobSafeAll (myQAttacs p) (me p) yoA2
           !yoA1 = yoPAttacs p .|. yoNAttacs p .|. yoBAttacs p
           !yoA2 = yoA1 .|. yoRAttacs p
-          !yoN = popCount1 $ yoNAttacs p `less` (yo p .|. myPAttacs p)
-          !yoB = popCount1 $ yoBAttacs p `less` (yo p .|. myPAttacs p)
-          !yoR = popCount1 $ yoRAttacs p `less` (yo p .|. myA1)
-          !yoQ = popCount1 $ yoQAttacs p `less` (yo p .|. myA2)
+          (yoNs, yoNu) = mobSafeAll (yoNAttacs p) (yo p) (myPAttacs p)
+          (yoBs, yoBu) = mobSafeAll (yoBAttacs p) (yo p) (myPAttacs p)
+          (yoRs, yoRu) = mobSafeAll (yoRAttacs p) (yo p) myA1
+          (yoQs, yoQu) = mobSafeAll (yoQAttacs p) (yo p) myA2
           !myA1 = myPAttacs p .|. myNAttacs p .|. myBAttacs p
           !myA2 = myA1 .|. myRAttacs p
-          !n = myN - yoN
-          !b = myB - yoB
-          !r = myR - yoR
-          !q = myQ - yoQ
+          !ns = myNs - yoNs
+          !nu = myNu - yoNu
+          !bs = myBs - yoBs
+          !bu = myBu - yoBu
+          !rs = myRs - yoRs
+          !ru = myRu - yoRu
+          !qs = myQs - yoQs
+          !qu = myQu - yoQu
+
+{-# INLINE mobSafeAll #-}
+mobSafeAll :: BBoard -> BBoard -> BBoard -> (Int, Int)
+mobSafeAll mob mep yoa = (as, aa)
+    where !ataBB = mob   `less` mep
+          !atsBB = ataBB `less` yoa
+          !aa = popCount1 ataBB
+          !as = popCount1 atsBB
 
 ------ Center control ------
 data Center = Center
