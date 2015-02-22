@@ -600,46 +600,57 @@ data Mobility = Mobility	-- "safe" moves
 
 instance EvalItem Mobility where
     evalItem _ _ p _ = mobDiff p
-    evalItemNDL _  = [ ("mobilityKnightS", ((44, 49), (0,  120))),
-                       ("mobilityKnightA", (( 6,  7), (0,  120))),
-                       ("mobilityBishopS", ((39, 48), (0,  120))),
-                       ("mobilityBishopA", (( 6,  7), (0,  120))),
-                       ("mobilityRookS",   ((21, 22), (0,  100))),
-                       ("mobilityRookA",   (( 3,  3), (0,  100))),
-                       ("mobilityQueenS",  (( 3,  6), (-5,  50))),
-                       ("mobilityQueenA",  (( 1,  1), (-5,  50))) ]
+    evalItemNDL _  = [ ("mobilityKnightS", ((66, 75), (0,  120))),
+                       ("mobilityKnightU", ((33, 37), (0,  120))),
+                       ("mobilityKnightR", (( 6,  7), (0,  120))),
+                       ("mobilityBishopS", ((60, 72), (0,  120))),
+                       ("mobilityBishopU", ((30, 36), (0,  120))),
+                       ("mobilityBishopR", (( 6,  7), (0,  120))),
+                       ("mobilityRookS",   ((28, 33), (0,  100))),
+                       ("mobilityRookU",   ((14, 16), (0,  100))),
+                       ("mobilityRookR",   (( 3,  3), (0,  100))),
+                       ("mobilityQueenS",  (( 6, 12), (-5,  50))),
+                       ("mobilityQueenU",  (( 2,  5), (-5,  50))),
+                       ("mobilityQueenR",  (( 0,  1), (-5,  50))) ]
 
 -- Here we do not calculate pawn mobility (which, calculated as attacs, is useless)
 mobDiff :: MyPos -> IWeights
-mobDiff p = [ns, nu, bs, bu, rs, ru, qs, qu]
-    where (myNs, myNu) = mobSafeAll (myNAttacs p) (me p) (yoPAttacs p)
-          (myBs, myBu) = mobSafeAll (myBAttacs p) (me p) (yoPAttacs p)
-          (myRs, myRu) = mobSafeAll (myRAttacs p) (me p) yoA1
-          (myQs, myQu) = mobSafeAll (myQAttacs p) (me p) yoA2
+mobDiff p = [ns, nu, nr, bs, bu, br, rs, ru, rr, qs, qu, qr]
+    where (myNs, myNu, myNr) = mobSUR (myNAttacs p) (me p) (yoAttacs p) (yoPAttacs p)
+          (myBs, myBu, myBr) = mobSUR (myBAttacs p) (me p) (yoAttacs p) (yoPAttacs p)
+          (myRs, myRu, myRr) = mobSUR (myRAttacs p) (me p) (yoAttacs p) yoA1
+          (myQs, myQu, myQr) = mobSUR (myQAttacs p) (me p) (yoAttacs p) yoA2
           !yoA1 = yoPAttacs p .|. yoNAttacs p .|. yoBAttacs p
           !yoA2 = yoA1 .|. yoRAttacs p
-          (yoNs, yoNu) = mobSafeAll (yoNAttacs p) (yo p) (myPAttacs p)
-          (yoBs, yoBu) = mobSafeAll (yoBAttacs p) (yo p) (myPAttacs p)
-          (yoRs, yoRu) = mobSafeAll (yoRAttacs p) (yo p) myA1
-          (yoQs, yoQu) = mobSafeAll (yoQAttacs p) (yo p) myA2
+          (yoNs, yoNu, yoNr) = mobSUR (yoNAttacs p) (yo p) (myAttacs p) (myPAttacs p)
+          (yoBs, yoBu, yoBr) = mobSUR (yoBAttacs p) (yo p) (myAttacs p) (myPAttacs p)
+          (yoRs, yoRu, yoRr) = mobSUR (yoRAttacs p) (yo p) (myAttacs p) myA1
+          (yoQs, yoQu, yoQr) = mobSUR (yoQAttacs p) (yo p) (myAttacs p) myA2
           !myA1 = myPAttacs p .|. myNAttacs p .|. myBAttacs p
           !myA2 = myA1 .|. myRAttacs p
           !ns = myNs - yoNs
           !nu = myNu - yoNu
+          !nr = myNr - yoNr
           !bs = myBs - yoBs
           !bu = myBu - yoBu
+          !br = myBr - yoBr
           !rs = myRs - yoRs
           !ru = myRu - yoRu
+          !rr = myRr - yoRr
           !qs = myQs - yoQs
           !qu = myQu - yoQu
+          !qr = myQr - yoQr
 
-{-# INLINE mobSafeAll #-}
-mobSafeAll :: BBoard -> BBoard -> BBoard -> (Int, Int)
-mobSafeAll mob mep yoa = (as, aa)
-    where !ataBB = mob   `less` mep
-          !atsBB = ataBB `less` yoa
-          !aa = popCount1 ataBB
-          !as = popCount1 atsBB
+{-# INLINE mobSUR #-}
+mobSUR :: BBoard -> BBoard -> BBoard -> BBoard -> (Int, Int, Int)
+mobSUR mob mep yoa yos = (as, au, ar)
+    where !allBB = mob   `less` mep
+          !safBB = allBB `less` yoa
+          !resBB = allBB .&.    yos
+          !unsBB = allBB `less` (safBB .|. resBB)
+          !as = popCount1 safBB
+          !au = popCount1 unsBB
+          !ar = popCount1 resBB
 
 ------ Center control ------
 data Center = Center
