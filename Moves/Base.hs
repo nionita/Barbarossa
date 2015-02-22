@@ -22,7 +22,7 @@ import Data.List
 import Control.Monad.State
 import Control.Monad.Reader (ask)
 import Data.Ord (comparing)
-import Numeric
+-- import Numeric
 import System.Random
 
 import Moves.BaseTypes
@@ -90,7 +90,7 @@ loosingLast :: Bool
 loosingLast = False
 
 genMoves :: Int -> Int -> Bool -> Game ([Move], [Move])
-genMoves depth absdp pv = do
+genMoves depth _ pv = do	-- absdp not used
     p <- getPos
     let !c = moving p
         lc = genMoveFCheck p

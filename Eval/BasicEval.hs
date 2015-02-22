@@ -2,9 +2,9 @@ module Eval.BasicEval (
     matPiece
 ) where
 
-import Data.Array.Unboxed
-import Data.Array.Base
-import GHC.Arr (unsafeIndex)
+-- import Data.Array.Unboxed
+-- import Data.Array.Base
+-- import GHC.Arr (unsafeIndex)
 
 import Struct.Struct
 

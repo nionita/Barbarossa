@@ -27,9 +27,11 @@ confToBB offs dir len sq conf
     where setIf w ((_, False), _) = w
           setIf w ((i, True), f) = w `setBit` (dir*i + f)
 
+bitList :: Word8 -> Int -> [(Int, Bool)]
 bitList c l = zip [0..] [ c `testBit` i | i <- [0..l-1]]
 
 -- Bring the configuration to different positions relative to a square
+toEast, toNorth, toWest, toSouth, toNoEa, toNoWe, toSoWe, toSoEa :: Int -> Square -> Word8 -> BBoard
 toEast len  = confToBB len (-1) len
 toNorth len = confToBB (8*len) (-8) len
 toWest len  = confToBB (-len) 1 len
@@ -143,6 +145,7 @@ dlis rook sq = do
 
 -- Return a list of partial input given a direction function, the square
 -- the length of the quarter and the length of the attacs in that direction
+partLi :: (Int -> Square -> Word8 -> BBoard) -> Square -> Int -> Int -> [(BBoard, (BBoard, [BBoard]))]
 partLi f sq 0 a = [(0, (f a sq 0xff, [0]))]
 partLi f sq q a = do
     ql <- qleader q

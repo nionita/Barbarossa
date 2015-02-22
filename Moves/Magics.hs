@@ -6,6 +6,7 @@ import Data.Array.Unboxed
 
 import Struct.Struct
 
+sixtyfour :: Int -> Int
 sixtyfour x = 64 - x
 
 -- The magics and shifts for every square and sliding type are
