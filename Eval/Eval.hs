@@ -600,12 +600,12 @@ data Mobility = Mobility	-- "safe" moves
 
 instance EvalItem Mobility where
     evalItem _ _ p _ = mobDiff p
-    evalItemNDL _  = [ ("mobilityKnightS", ((46, 60), (0,  120))),
-                       ("mobilityKnightU", ((30, 33), (0,  120))),
-                       ("mobilityKnightR", (( 7,  8), (0,  120))),
-                       ("mobilityBishopS", ((71, 55), (0,  120))),
-                       ("mobilityBishopU", ((24, 34), (0,  120))),
-                       ("mobilityBishopR", (( 6,  7), (0,  120))),
+    evalItemNDL _  = [ ("mobilityKnightS", ((44, 70), (0,  120))),
+                       ("mobilityKnightU", ((32, 26), (0,  120))),
+                       ("mobilityKnightR", (( 8,  7), (0,  120))),
+                       ("mobilityBishopS", ((68, 53), (0,  120))),
+                       ("mobilityBishopU", ((25, 33), (0,  120))),
+                       ("mobilityBishopR", (( 8,  9), (0,  120))),
                        ("mobilityRookS",   ((28, 33), (0,  100))),
                        ("mobilityRookU",   ((14, 16), (0,  100))),
                        ("mobilityRookR",   (( 3,  3), (0,  100))),
