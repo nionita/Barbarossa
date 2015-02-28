@@ -16,6 +16,7 @@ import Prelude hiding ((++), foldl, filter, map, concatMap, concat, head, tail, 
 import Data.Bits
 import Data.List.Stream
 import Data.Ord (comparing)
+import Data.Word
 
 import Struct.Struct
 import Moves.Moves
@@ -754,12 +755,35 @@ seeMoveValue pos !attacks sqfirstmv sqto gain0 = v
 
 -- This function can produce illegal captures with the king!
 genMoveCaptWL :: MyPos -> ([Move], [Move])
-genMoveCaptWL !pos = (map (moveAddColor c) ws, map (moveAddColor c) ls)
+genMoveCaptWL !pos = (map f $ sort ws, map f $ sort ls)
     where !capts = myAttacs pos .&. yo pos
           epcs  = genEPCapts pos
           c     = moving pos
-          (ws, ls) = foldr (perCaptFieldWL pos (me pos) (yoAttacs pos)) (epcs,[])
+          (ws, ls) = foldr (perCaptFieldWL pos (me pos) (yoAttacs pos)) (lepcs,[])
                          $ squaresByMVV pos capts
+          lepcs = map (moveToLMove Pawn Pawn) epcs
+          f = moveAddColor c . lmoveToMove
+
+type LMove = Word32
+
+-- We want to sort MVVLVA, which means first victim, then attacker
+-- Victim is "negate" so that the normal sort will pick higher victims first
+-- We rely here on the fact that the piece type enumeration
+-- is from low to high value (i.e. pawn, knight, bishop, rook, queen, king)
+-- Otherwise this will not work!
+{-# INLINE moveToLMove #-}
+moveToLMove :: Piece -> Piece -> Move -> LMove
+moveToLMove attacker victim (Move w)
+    =   (vicval `unsafeShiftL` 24)
+    .|. (attval `unsafeShiftL` 16)
+    .|. fromIntegral w
+    where kingval  = fromEnum King
+          !vicval  = fromIntegral $ kingval - fromEnum victim	-- pseudo negate
+          !attval  = fromIntegral $ fromEnum attacker
+
+{-# INLINE lmoveToMove #-}
+lmoveToMove :: LMove -> Move
+lmoveToMove = Move . fromIntegral . (.&. 0xFFFF)
 
 genEPCapts :: MyPos -> [Move]
 genEPCapts !pos
@@ -769,12 +793,12 @@ genEPCapts !pos
           dst = head $ bbToSquares epBB	-- safe because epBB /= 0
           srcBB = pAttacs (other $ moving pos) dst .&. me pos .&. pawns pos
 
-perCaptFieldWL :: MyPos -> BBoard -> BBoard -> Square -> ([Move], [Move]) -> ([Move], [Move])
+perCaptFieldWL :: MyPos -> BBoard -> BBoard -> Square -> ([LMove], [LMove]) -> ([LMove], [LMove])
 perCaptFieldWL pos mypc advdefence sq mvlst
-    | hanging   = let mvlst1 = foldr (addHanging  pos sq) mvlst  reAgrsqs
-                  in           foldr (addHangingP     sq) mvlst1 prAgrsqs	-- for promotions
-    | otherwise = let mvlst1 = foldr (perCaptWL pos myAttRec False valto sq) mvlst  reAgrsqs
-                  in           foldr (perCaptWL pos myAttRec True  valto sq) mvlst1 prAgrsqs
+    | hanging   = let mvlst1 = foldr (addHanging  pos pcto sq) mvlst  reAgrsqs
+                  in           foldr (addHangingP     pcto sq) mvlst1 prAgrsqs	-- for promotions
+    | otherwise = let mvlst1 = foldr (perCaptWL pos myAttRec False pcto valto sq) mvlst  reAgrsqs
+                  in           foldr (perCaptWL pos myAttRec True  pcto valto sq) mvlst1 prAgrsqs
     where !myAttRec = theAttacs pos sq
           myattacs = mypc .&. atAtt myAttRec
           Busy _ pcto = tabla pos sq
@@ -796,24 +820,26 @@ perCaptFieldWL pos mypc advdefence sq mvlst
 approximateEasyCapts :: Bool
 approximateEasyCapts = True	-- when capturing a better piece: no SEE, it is always winning
 
-perCaptWL :: MyPos -> Attacks -> Bool -> Int -> Square -> Square -> ([Move], [Move]) -> ([Move], [Move])
-perCaptWL !pos !attacks promo !gain0 !sq !sqfa (wsqs, lsqs)
-    | promo = (makePromo Queen sqfa sq : wsqs, lsqs)
+perCaptWL :: MyPos -> Attacks -> Bool -> Piece -> Int -> Square -> Square
+          -> ([LMove], [LMove]) -> ([LMove], [LMove])
+perCaptWL !pos !attacks promo vict !gain0 !sq !sqfa (wsqs, lsqs)
+    | promo = ((moveToLMove Pawn vict $ makePromo Queen sqfa sq) : wsqs, lsqs)
     | approx || adv <= gain0 = (ss:wsqs, lsqs)
     | otherwise = (wsqs, ss:lsqs)
-    where ss = moveAddPiece pcfa $ moveFromTo sqfa sq
+    where ss = moveToLMove attc vict $ moveAddPiece attc $ moveFromTo sqfa sq
           approx = approximateEasyCapts && gain0 >= v0
-          Busy _ pcfa = tabla pos sqfa
-          v0  = value pcfa
+          Busy _ attc = tabla pos sqfa
+          v0  = value attc
           adv = seeMoveValue pos attacks sqfa sq v0
 
 -- Captures of hanging pieces are always winning
-addHanging :: MyPos -> Square -> Square -> ([Move], [Move]) -> ([Move], [Move])
-addHanging pos to from (wsqs, lsqs) = (moveAddPiece piece (moveFromTo from to) : wsqs, lsqs)
-    where Busy _ piece = tabla pos from
+addHanging :: MyPos -> Piece -> Square -> Square -> ([LMove], [LMove]) -> ([LMove], [LMove])
+addHanging pos vict to from (wsqs, lsqs)
+    = ((moveToLMove apiece vict $ moveAddPiece apiece (moveFromTo from to)) : wsqs, lsqs)
+    where Busy _ apiece = tabla pos from
 
-addHangingP :: Square -> Square -> ([Move], [Move]) -> ([Move], [Move])
-addHangingP to from (wsqs, lsqs) = (makePromo Queen from to : wsqs, lsqs)
+addHangingP :: Piece -> Square -> Square -> ([LMove], [LMove]) -> ([LMove], [LMove])
+addHangingP vict to from (wsqs, lsqs) = ((moveToLMove Pawn vict $ makePromo Queen from to) : wsqs, lsqs)
 
 squaresByMVV :: MyPos -> BBoard -> [Square]
 squaresByMVV pos bb = map snd $ sortBy (comparing fst)
