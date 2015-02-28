@@ -414,17 +414,16 @@ data KingOpen = KingOpen
 
 instance EvalItem KingOpen where
     evalItem _ _ p _ = kingOpen p
-    evalItemNDL _  = [ ("kingOpenOwn", ((-9, 0), (-48, 0))), ("kingOpenAdv", ((9, 0), (0, 48)))] 
+    evalItemNDL _  = [ ("kingOpen", ((10, 0), (0, 20))) ] 
 
 -- Openness can be tought only with pawns (like we take) or all pieces
 kingOpen :: MyPos -> IWeights
-kingOpen p = [own, adv]
-    where -- mopbishops = popCount1 $ bishops p .&. yo p
+kingOpen p = [ ko ]
+    where !ko = adv - own
           moprooks   = popCount1 $ rooks p .&. yo p
           mopqueens  = popCount1 $ queens p .&. yo p
           mwb = popCount $ bAttacs paw msq `less` paw
           mwr = popCount $ rAttacs paw msq `less` (paw .|. lastrs)
-          -- yopbishops = popCount1 $ bishops p .&. me p
           yoprooks   = popCount1 $ rooks p .&. me p
           yopqueens  = popCount1 $ queens p .&. me p
           ywb = popCount $ bAttacs paw ysq `less` paw
@@ -433,8 +432,8 @@ kingOpen p = [own, adv]
           msq = kingSquare (kings p) $ me p
           ysq = kingSquare (kings p) $ yo p
           comb !oR !oQ !wb !wr = let !v = oR * wr + 2 * oQ * (wb + wr) in v
-          !own = comb moprooks mopqueens mwb mwr
-          !adv = comb yoprooks yopqueens ywb ywr
+          own = comb moprooks mopqueens mwb mwr
+          adv = comb yoprooks yopqueens ywb ywr
           lastrs = 0xFF000000000000FF	-- approx: take out last row which cant be covered by pawns
 
 ------ King placement ------
@@ -443,8 +442,8 @@ data KingPlace = KingPlace
 instance EvalItem KingPlace where
     evalItem _ ep p _  = kingPlace ep p
     evalItemNDL _ = [
-                      ("kingPlaceCent", ((5,  0), (0, 400))),
-                      ("kingPlacePwns", ((0, 30), (0, 400)))
+                      ("kingPlaceCent", ((5,  0), (0, 20))),
+                      ("kingPlacePwns", ((0, 30), (0, 40)))
                     ]
 
 
@@ -566,8 +565,6 @@ instance EvalItem RookPlc where
     evalItemNDL _  = [ ("rookHOpen", ((171, 196), (0, 500))),
                        ("rookOpen",  ((221, 221), (0, 800))),
                        ("rookConn",  (( 98,  75), (0, 300))) ]
-                  --   ("rook7th",   ((400, 500), (0, 900))),
-                  --   ("rookBhnd",  ((100, 800), (0, 900))) ]
 
 evalRookPlc :: MyPos -> [Int]
 evalRookPlc p = [ ho, op, rc ]
@@ -601,8 +598,8 @@ data Mobility = Mobility	-- "safe" moves
 
 instance EvalItem Mobility where
     evalItem _ _ p _ = mobDiff p
-    evalItemNDL _  = [ ("mobilityKnight", ((50, 56), (50, 120))),
-                       ("mobilityBishop", ((45, 55), (50, 120))),
+    evalItemNDL _  = [ ("mobilityKnight", ((50, 56), (40, 120))),
+                       ("mobilityBishop", ((50, 55), (40, 120))),
                        ("mobilityRook",   ((24, 25), ( 0, 100))),
                        ("mobilityQueen",  (( 4,  7), (-5,  50))) ]
 
@@ -632,12 +629,12 @@ data Center = Center
 instance EvalItem Center where
     evalItem _ _ p _ = centerDiff p
     evalItemNDL _  = [
-                      ("centerPAtts", ((64, 60), (0, 200))),
+                      ("centerPAtts", ((70, 60), (0, 200))),
                       ("centerNAtts", ((57, 45), (0, 200))),
                       ("centerBAtts", ((57, 45), (0, 200))),
                       ("centerRAtts", ((17, 30), (0, 200))),
                       ("centerQAtts", (( 4, 60), (0, 200))),
-                      ("centerKAtts", (( 1, 69), (0, 200)))
+                      ("centerKAtts", (( 0, 70), (0, 200)))
                      ]
 
 -- This function is already optimised
@@ -754,7 +751,7 @@ data LastLine = LastLine
 
 instance EvalItem LastLine where
     evalItem _ _ p _ = lastline p
-    evalItemNDL _  = [("lastLinePenalty", ((100, -11), (-100, 300)))]
+    evalItemNDL _  = [("lastLinePenalty", ((120, 0), (-100, 300)))]
 
 -- Only for minor figures (queen is free to stay where it wants)
 -- Negative at the end: so that it falls stronger
@@ -771,7 +768,7 @@ data Redundance = Redundance
 
 instance EvalItem Redundance where
     evalItem _ _ p _ = evalRedundance p
-    evalItemNDL _  = [("bishopPair",       ((400,  400), ( 100, 500))),
+    evalItemNDL _  = [("bishopPair",       ((360,  380), ( 100, 500))),
                       ("redundanceRook",   ((  0, -104), (-150,   0))) ]
 
 -- This function is optimised
@@ -834,8 +831,6 @@ instance EvalItem PaBlo where
                      ("pawnBlockO", (( -24,  -26), (-300, 0))),	-- blocked by own piece
                      ("pawnBlockA", (( -13,  -75), (-300, 0)))	-- blocked by adverse piece
                      ]
-               --    ("passBlockO", ((-130, -138), (-500, 0))),	-- passed blocked by own piece (was 300)
-               --    ("passBlockA", (( -68, -300), (-500, 0)))	-- passed blocked by adverse piece (was 300)
 
 pawnBl :: MyPos -> IWeights
 pawnBl p

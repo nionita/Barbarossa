@@ -1,5 +1,5 @@
 Name:                Barbarossa
-Version:             0.2.0
+Version:             0.3.0
 Synopsis:            UCI chess engine written in Haskell
 License:             BSD3
 License-file:        LICENSE
@@ -22,9 +22,9 @@ Executable Barbarossa
                -funbox-strict-fields -threaded -rtsopts
                -fspec-constr-count=24
                -funfolding-use-threshold=32
-               -msse4.2
-               -- -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques
-               -- -ddump-opt-cmm -ddump-asm
+               -- -msse4.2
+               -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques
+               -ddump-opt-cmm -ddump-asm
   if flag(profile)
     GHC-Options: -auto-all -with-rtsopts="-p"
   else
