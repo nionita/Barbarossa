@@ -43,9 +43,9 @@ toNiceNotation p m
           col x = chr (orda + x)
           row x = chr (ord1 + x)
           desamb b
-              | popCount1 b0 == 1 = ""
-              | popCount1 (b0 .&. colBB sc) == 1 = col sc : ""
-              | popCount1 (b0 .&. rowBB sr) == 1 = row sr : ""
+              | popCount b0 == 1 = ""
+              | popCount (b0 .&. colBB sc) == 1 = col sc : ""
+              | popCount (b0 .&. rowBB sr) == 1 = row sr : ""
               | otherwise         = col sc : row sr : ""
               where b0 = b .&. att .&. me p
 

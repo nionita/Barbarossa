@@ -15,7 +15,7 @@ import Prelude hiding ((++), head, foldl, map, concat, filter, takeWhile, iterat
                        zip, zipWith, foldr, concatMap, length, replicate, lookup, repeat, null,
                        unzip, drop, elem)
 import Data.Array.Base (unsafeAt)
-import Data.Bits hiding (popCount)
+import Data.Bits
 import Data.List.Stream
 import Control.Monad.State.Lazy
 import Data.Array.Unboxed
@@ -237,10 +237,10 @@ normalEval p !sti = (sc, feat)
 
 gamePhase :: MyPos -> Int
 gamePhase p = g
-    where qs = popCount1 $ queens p
-          rs = popCount1 $ rooks p
-          bs = popCount1 $ bishops p
-          ns = popCount1 $ knights p
+    where qs = popCount $ queens p
+          rs = popCount $ rooks p
+          bs = popCount $ bishops p
+          ns = popCount $ knights p
           !g = qs * 39 + rs * 20 + (bs + ns) * 12	-- opening: 254, end: 0
 
 evalSideNoPawns :: MyPos -> EvalState -> (Int, [Int])
@@ -252,9 +252,9 @@ evalSideNoPawns p sti
           npside = if pawns p .&. me p == 0 then me p else yo p
           npwin = npside == me p && nsc > 0 || npside == yo p && nsc < 0
           insufficient = majorcnt == 0 && (minorcnt == 1 || minorcnt == 2 && bishopcnt == 0)
-          bishopcnt = popCount1 $ bishops p .&. npside
-          minorcnt  = popCount1 $ (bishops p .|. knights p) .&. npside
-          majorcnt  = popCount1 $ (queens p .|. rooks p) .&. npside
+          bishopcnt = popCount $ bishops p .&. npside
+          minorcnt  = popCount $ (bishops p .|. knights p) .&. npside
+          majorcnt  = popCount $ (queens p .|. rooks p) .&. npside
 
 -- These evaluation function distiguishes between some known finals with no pawns
 evalNoPawns :: MyPos -> EvalState -> (Int, [Int])
@@ -275,9 +275,9 @@ evalNoPawns p sti = (sc, zeroFeats)
           kbnk = (kaloneme || kaloneyo) && minorcnt == 2 && not (knnk || kbbk)
           kMxk = (kaloneme || kaloneyo) && majorcnt > 0
           minor   = bishops p .|. knights p
-          minorcnt = popCount1 minor
+          minorcnt = popCount minor
           major    = queens p .|. rooks p
-          majorcnt = popCount1 major
+          majorcnt = popCount major
 
 -- Has one of the players less then one rook advantage (without pawns)?
 -- In this case it is drawish (if the winning part has no pawns)
@@ -285,14 +285,14 @@ evalNoPawns p sti = (sc, zeroFeats)
 lessRook :: MyPos -> Bool
 lessRook p | mq == yq && mr == yr = mb + mn - yb - yn `elem` [-1, 0, 1]
            | otherwise = False
-    where !mq = popCount1 $ queens  p .&. me p
-          !yq = popCount1 $ queens  p .&. yo p
-          !mr = popCount1 $ rooks   p .&. me p
-          !yr = popCount1 $ rooks   p .&. yo p
-          !mb = popCount1 $ bishops p .&. me p
-          !yb = popCount1 $ bishops p .&. yo p
-          !mn = popCount1 $ knights p .&. me p
-          !yn = popCount1 $ knights p .&. yo p
+    where !mq = popCount $ queens  p .&. me p
+          !yq = popCount $ queens  p .&. yo p
+          !mr = popCount $ rooks   p .&. me p
+          !yr = popCount $ rooks   p .&. yo p
+          !mb = popCount $ bishops p .&. me p
+          !yb = popCount $ bishops p .&. yo p
+          !mn = popCount $ knights p .&. me p
+          !yn = popCount $ knights p .&. yo p
 
 winBonus :: Int
 winBonus = 200	-- when it's known win
@@ -362,10 +362,10 @@ instance EvalItem KingSafe where
 kingSafe :: MyPos -> [Int]
 kingSafe !p = [ksafe]
     where !ksafe = mattacs - yattacs
-          !freem = popCount1 $ myKAttacs p `less` (yoAttacs p .&. me p)
-          !freey = popCount1 $ yoKAttacs p `less` (myAttacs p .&. yo p)
+          !freem = popCount $ myKAttacs p `less` (yoAttacs p .&. me p)
+          !freey = popCount $ yoKAttacs p `less` (myAttacs p .&. yo p)
           flag k a = if k .&. a /= 0 then 1 else 0
-          qual k a = popCount1 $ k .&. a
+          qual k a = popCount $ k .&. a
           flagYo = flag (myKAttacs p)
           flagMe = flag (yoKAttacs p)
           qualYo = qual (myKAttacs p)
@@ -420,12 +420,12 @@ instance EvalItem KingOpen where
 kingOpen :: MyPos -> IWeights
 kingOpen p = [ ko ]
     where !ko = adv - own
-          moprooks   = popCount1 $ rooks p .&. yo p
-          mopqueens  = popCount1 $ queens p .&. yo p
+          moprooks   = popCount $ rooks p .&. yo p
+          mopqueens  = popCount $ queens p .&. yo p
           mwb = popCount $ bAttacs paw msq `less` paw
           mwr = popCount $ rAttacs paw msq `less` (paw .|. lastrs)
-          yoprooks   = popCount1 $ rooks p .&. me p
-          yopqueens  = popCount1 $ queens p .&. me p
+          yoprooks   = popCount $ rooks p .&. me p
+          yopqueens  = popCount $ queens p .&. me p
           ywb = popCount $ bAttacs paw ysq `less` paw
           ywr = popCount $ rAttacs paw ysq `less` (paw .|. lastrs)
           paw = pawns p
@@ -470,13 +470,13 @@ kingPlace ep p = [ kcd, kpd ]
                                     , kingPawnsBonus yks (passed p) ypassed mpassed
                                     )
           !mro     = rooks p .&. me p
-          !mrooks  = popCount1 mro
-          !mqueens = popCount1 $ queens p .&. me p
-          !mminor  = popCount1 $ (bishops p .|. knights p) .&. me p
+          !mrooks  = popCount mro
+          !mqueens = popCount $ queens p .&. me p
+          !mminor  = popCount $ (bishops p .|. knights p) .&. me p
           !yro     = rooks p .&. yo p
-          !yrooks  = popCount1 yro
-          !yqueens = popCount1 $ queens p .&. yo p
-          !yminor  = popCount1 $ (bishops p .|. knights p) .&. yo p
+          !yrooks  = popCount yro
+          !yqueens = popCount $ queens p .&. yo p
+          !yminor  = popCount $ (bishops p .|. knights p) .&. yo p
           !mpawns  = pawns p .&. me p
           !ypawns  = pawns p .&. yo p
           !mpassed = passed p .&. me p
@@ -513,7 +513,7 @@ kingMaterBonus c !myp !mat !ksq
           !prxWH = (unsafeShiftL (opawns shWH2) 1 + opawns shWH3) * (prxBoQ wh + prxBo wg)
           !prxBA = (unsafeShiftL (opawns shBA7) 1 + opawns shBA6) * (prxBoQ ba + prxBo bb)
           !prxBH = (unsafeShiftL (opawns shBH7) 1 + opawns shBH6) * (prxBoQ bh + prxBo bg)
-          opawns = popCount1 . (.&. myp)
+          opawns = popCount . (.&. myp)
           prxBo  = proxyBonus . squareDistance ksq
           prxBoQ = flip unsafeShiftR 2 . prxBo
           matFactor = unsafeAt matKCArr
@@ -606,16 +606,16 @@ instance EvalItem Mobility where
 -- Here we do not calculate pawn mobility (which, calculated as attacs, is useless)
 mobDiff :: MyPos -> IWeights
 mobDiff p = [n, b, r, q]
-    where !myN = popCount1 $ myNAttacs p `less` (me p .|. yoPAttacs p)
-          !myB = popCount1 $ myBAttacs p `less` (me p .|. yoPAttacs p)
-          !myR = popCount1 $ myRAttacs p `less` (me p .|. yoA1)
-          !myQ = popCount1 $ myQAttacs p `less` (me p .|. yoA2)
+    where !myN = popCount $ myNAttacs p `less` (me p .|. yoPAttacs p)
+          !myB = popCount $ myBAttacs p `less` (me p .|. yoPAttacs p)
+          !myR = popCount $ myRAttacs p `less` (me p .|. yoA1)
+          !myQ = popCount $ myQAttacs p `less` (me p .|. yoA2)
           !yoA1 = yoPAttacs p .|. yoNAttacs p .|. yoBAttacs p
           !yoA2 = yoA1 .|. yoRAttacs p
-          !yoN = popCount1 $ yoNAttacs p `less` (yo p .|. myPAttacs p)
-          !yoB = popCount1 $ yoBAttacs p `less` (yo p .|. myPAttacs p)
-          !yoR = popCount1 $ yoRAttacs p `less` (yo p .|. myA1)
-          !yoQ = popCount1 $ yoQAttacs p `less` (yo p .|. myA2)
+          !yoN = popCount $ yoNAttacs p `less` (yo p .|. myPAttacs p)
+          !yoB = popCount $ yoBAttacs p `less` (yo p .|. myPAttacs p)
+          !yoR = popCount $ yoRAttacs p `less` (yo p .|. myA1)
+          !yoQ = popCount $ yoQAttacs p `less` (yo p .|. myA2)
           !myA1 = myPAttacs p .|. myNAttacs p .|. myBAttacs p
           !myA2 = myA1 .|. myRAttacs p
           !n = myN - yoN
@@ -640,23 +640,23 @@ instance EvalItem Center where
 -- This function is already optimised
 centerDiff :: MyPos -> IWeights
 centerDiff p = [pd, nd, bd, rd, qd, kd]
-    where !mpa = popCount1 $ myPAttacs p .&. center
-          !ypa = popCount1 $ yoPAttacs p .&. center
+    where !mpa = popCount $ myPAttacs p .&. center
+          !ypa = popCount $ yoPAttacs p .&. center
           !pd  = mpa - ypa
-          !mna = popCount1 $ myNAttacs p .&. center
-          !yna = popCount1 $ yoNAttacs p .&. center
+          !mna = popCount $ myNAttacs p .&. center
+          !yna = popCount $ yoNAttacs p .&. center
           !nd  = mna - yna
-          !mba = popCount1 $ myBAttacs p .&. center
-          !yba = popCount1 $ yoBAttacs p .&. center
+          !mba = popCount $ myBAttacs p .&. center
+          !yba = popCount $ yoBAttacs p .&. center
           !bd  = mba - yba
-          !mra = popCount1 $ myRAttacs p .&. center
-          !yra = popCount1 $ yoRAttacs p .&. center
+          !mra = popCount $ myRAttacs p .&. center
+          !yra = popCount $ yoRAttacs p .&. center
           !rd  = mra - yra
-          !mqa = popCount1 $ myQAttacs p .&. center
-          !yqa = popCount1 $ yoQAttacs p .&. center
+          !mqa = popCount $ myQAttacs p .&. center
+          !yqa = popCount $ yoQAttacs p .&. center
           !qd  = mqa - yqa
-          !mka = popCount1 $ myKAttacs p .&. center
-          !yka = popCount1 $ yoKAttacs p .&. center
+          !mka = popCount $ myKAttacs p .&. center
+          !yka = popCount $ yoKAttacs p .&. center
           !kd  = mka - yka
           center = 0x0000001818000000
 
@@ -685,8 +685,8 @@ isol ps pp = (ris, pis)
           !myu = myf `unsafeShiftL` 8
           !myd = myf `unsafeShiftR` 8
           !myc = myf .|. myu .|. myd
-          !ris = popCount1 $ myr `less` myc
-          !pis = popCount1 $ myp `less` myc
+          !ris = popCount $ myr `less` myc
+          !pis = popCount $ myp `less` myc
           notA = 0xFEFEFEFEFEFEFEFE
           notH = 0x7F7F7F7F7F7F7F7F
 
@@ -739,12 +739,12 @@ enPrise p = [ha, ep, at]
           !epQ = (atQ `less` haQ) .&. yoA2
           !yoA1 = yoPAttacs p .|. yoNAttacs p .|. yoBAttacs p
           !yoA2 = yoA1 .|. yoRAttacs p
-          !ha = popCount1 haP + 3 * (popCount1 haN + popCount1 haB)
-              + 5 * popCount1 haR + 9 * popCount1 haQ
-          !ep =                 3 * (popCount1 epN + popCount1 epB)
-              + 5 * popCount1 epR + 9 * popCount1 epQ
-          !at = popCount1 atP + 3 * (popCount1 atN + popCount1 atB)
-              + 5 * popCount1 atR + 9 * popCount1 atQ
+          !ha = popCount haP + 3 * (popCount haN + popCount haB)
+              + 5 * popCount haR + 9 * popCount haQ
+          !ep =                 3 * (popCount epN + popCount epB)
+              + 5 * popCount epR + 9 * popCount epQ
+          !at = popCount atP + 3 * (popCount atN + popCount atB)
+              + 5 * popCount atR + 9 * popCount atQ
 
 ------ Last Line ------
 data LastLine = LastLine
@@ -757,8 +757,8 @@ instance EvalItem LastLine where
 -- Negative at the end: so that it falls stronger
 lastline :: MyPos -> IWeights
 lastline p = [cdiff]
-    where !whl = popCount1 $ me p .&. cb
-          !bll = popCount1 $ yo p .&. cb
+    where !whl = popCount $ me p .&. cb
+          !bll = popCount $ yo p .&. cb
           !cb = (knights p .|. bishops p) .&. lali
           lali = 0xFF000000000000FF	-- approximation!
           !cdiff = bll - whl
@@ -778,13 +778,13 @@ evalRedundance p = [bp, rr]
           !wbd = bishops p .&. me p .&. darkSquares
           !bbl = bishops p .&. yo p .&. lightSquares
           !bbd = bishops p .&. yo p .&. darkSquares
-          !bpw = popCount1 wbl .&. popCount1 wbd	-- tricky here: exact 1 and 1 is ok
-          !bpb = popCount1 bbl .&. popCount1 bbd	-- and here
+          !bpw = popCount wbl .&. popCount wbd	-- tricky here: exact 1 and 1 is ok
+          !bpb = popCount bbl .&. popCount bbd	-- and here
           !bp  = bpw - bpb
           !wro = rooks p .&. me p
           !bro = rooks p .&. yo p
-          !wrr = popCount1 wro `unsafeShiftR` 1	-- tricky here: 2, 3 are the same...
-          !brr = popCount1 bro `unsafeShiftR` 1	-- and here
+          !wrr = popCount wro `unsafeShiftR` 1	-- tricky here: 2, 3 are the same...
+          !brr = popCount bro `unsafeShiftR` 1	-- and here
           !rr  = wrr - brr
 
 {--
@@ -798,12 +798,12 @@ instance EvalItem NRCorrection where
 -- This function seems to be already optimised
 evalNRCorrection :: MyPos -> [Int]
 evalNRCorrection p = [md]
-    where !wpc = popCount1 (pawns p .&. me p) - 5
-          !bpc = popCount1 (pawns p .&. yo p) - 5
-          !wnp = popCount1 (knights p .&. me p) * wpc * 6	-- 1/16 for each pawn over 5
-          !bnp = popCount1 (knights p .&. yo p) * bpc * 6	-- 1/16 for each pawn over 5
-          !wrp = - popCount1 (rooks p .&. me p) * wpc * 12	-- 1/8 for each pawn under 5
-          !brp = - popCount1 (rooks p .&. yo p) * bpc * 12	-- 1/8 for each pawn under 5
+    where !wpc = popCount (pawns p .&. me p) - 5
+          !bpc = popCount (pawns p .&. yo p) - 5
+          !wnp = popCount (knights p .&. me p) * wpc * 6	-- 1/16 for each pawn over 5
+          !bnp = popCount (knights p .&. yo p) * bpc * 6	-- 1/16 for each pawn over 5
+          !wrp = - popCount (rooks p .&. me p) * wpc * 12	-- 1/8 for each pawn under 5
+          !brp = - popCount (rooks p .&. yo p) * bpc * 12	-- 1/8 for each pawn under 5
           !md = wnp + wrp - bnp - brp
 --}
 
@@ -817,8 +817,8 @@ instance EvalItem RookPawn where
 -- This function is already optimised
 evalRookPawn :: MyPos -> [Int]
 evalRookPawn p = [rps]
-    where !wrp = popCount1 $ pawns p .&. me p .&. rookFiles
-          !brp = popCount1 $ pawns p .&. yo p .&. rookFiles
+    where !wrp = popCount $ pawns p .&. me p .&. rookFiles
+          !brp = popCount $ pawns p .&. yo p .&. rookFiles
           !rps = wrp - brp
 
 ------ Blocked pawns ------
@@ -857,7 +857,7 @@ pawnBl p
 
 cntPaBlo :: BBoard -> BBoard -> BBoard -> BBoard -> (Int, Int, Int)
 cntPaBlo !ps !op !ofi !afi = (f op, f ofi, f afi)
-    where f = popCount1 . (ps .&.)
+    where f = popCount . (ps .&.)
 
 pawnBloWhite :: BBoard -> BBoard -> BBoard -> (Int, Int, Int)
 pawnBloWhite !pa !op !tp = cntPaBlo p1 pa op tp
@@ -910,8 +910,8 @@ perPassedPawnOk gph ep p c sq sqbb moi toi moia toia = val
     where
           (!way, !behind) | c == White = (shadowUp sqbb, shadowDown sqbb)
                           | otherwise  = (shadowDown sqbb, shadowUp sqbb)
-          !mblo = popCount1 $ moi .&. way
-          !yblo = popCount1 $ toi .&. way
+          !mblo = popCount $ moi .&. way
+          !yblo = popCount $ toi .&. way
           !rookBehind = behind .&. (rooks p .|. queens p)
           !mebehind = rookBehind .&. moi /= 0
                    && rookBehind .&. toi == 0
@@ -922,9 +922,9 @@ perPassedPawnOk gph ep p c sq sqbb moi toi moia toia = val
           !bbyoctrl | yobehind  = way `less` bbmyctrl
                     | otherwise = toia .&. (way `less` bbmyctrl)
           !bbfree   = way `less` (bbmyctrl .|. bbyoctrl)
-          !myctrl = popCount1 bbmyctrl
-          !yoctrl = popCount1 bbyoctrl
-          !free   = popCount1 bbfree
+          !myctrl = popCount bbmyctrl
+          !yoctrl = popCount bbyoctrl
+          !free   = popCount bbfree
           !x = myctrl + yoctrl + free
           a0 = 10
           b0 = -120
@@ -990,7 +990,7 @@ pawnEndGame p
           -- But now we consider only the material difference (which consists only of pawns)
           withQueens = maDiff
           -- This one is for prunning: so match we can win at most
-          -- yoPawnCount = popCount1 $ pawns p .&. yo p
+          -- yoPawnCount = popCount $ pawns p .&. yo p
           -- speg = simplePawnEndGame p	-- just to see how it works...
  
 escMeWhite :: Square -> Square -> (Bool, (Square, Int))
@@ -1030,22 +1030,22 @@ simplePawnEndGame p = d
 simplePvWhite :: BBoard -> Int
 simplePvWhite !bb = pv
     where !pv = 100 * pc
-          !pc0 = popCount1 $ bb  .&. band
+          !pc0 = popCount $ bb  .&. band
           !bb1 = bb  `unsafeShiftL` 16
-          !pc1 = popCount1 $ bb1 .&. band
+          !pc1 = popCount $ bb1 .&. band
           !bb2 = bb1 `unsafeShiftL` 16
-          !pc2 = popCount1 $ bb2 .&. band
+          !pc2 = popCount $ bb2 .&. band
           !pc  = (pc0 `unsafeShiftL` 2) + (pc1 `unsafeShiftL` 1) + pc2
           band = 0x00FFFF0000000000	-- row 6 and 7
 
 simplePvBlack :: BBoard -> Int
 simplePvBlack !bb = pv
     where !pv = 100 * pc
-          !pc0 = popCount1 $ bb  .&. band
+          !pc0 = popCount $ bb  .&. band
           !bb1 = bb  `unsafeShiftR` 16
-          !pc1 = popCount1 $ bb1 .&. band
+          !pc1 = popCount $ bb1 .&. band
           !bb2 = bb1 `unsafeShiftR` 16
-          !pc2 = popCount1 $ bb2 .&. band
+          !pc2 = popCount $ bb2 .&. band
           !pc  = (pc0 `unsafeShiftL` 2) + (pc1 `unsafeShiftL` 1) + pc2
           band = 0x0000000000FFFF00	-- row 2 and 3
 

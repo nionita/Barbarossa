@@ -1,16 +1,12 @@
 {-# LANGUAGE BangPatterns #-}
 module Moves.BitBoard (
-    popCount, popCount1, lsb, bbToSquares, less, firstOne, exactOne, bbToSquaresBB,
-    bbFoldr, shadowDown, shadowUp, uTestBit
+    lsb, bbToSquares, less, firstOne, exactOne, bbToSquaresBB,
+    bbFoldr, shadowDown, shadowUp, uTestBit, uBit
 ) where
 
--- import Control.Exception (assert)
 import Data.Array.Base
-import Data.Array.Unboxed
-import Data.Bits hiding (popCount)
-import qualified Data.Bits as B
+import Data.Bits
 import Data.List.Stream (unfoldr)
-import Data.Word
 
 import Struct.Struct
 
@@ -22,7 +18,7 @@ lsb b = b .&. (-b)
 
 {-# INLINE exactOne #-}
 exactOne :: BBoard -> Bool
-exactOne = (==1) . B.popCount
+exactOne = (==1) . popCount
 
 {-# INLINE less #-}
 less :: BBoard -> BBoard -> BBoard
@@ -42,7 +38,7 @@ bitScanMagic = 0x07EDD5E59A4E28C2
 bitScanDatabase :: UArray Int Int
 bitScanDatabase = array (0, 63) paar
     where ones = take 64 $ zip [0..] $ iterate (`unsafeShiftL` 1) 1
-          paar = [(mbsm bit, i) | (i, bit) <- ones]
+          paar = [(mbsm ibit, i) | (i, ibit) <- ones]
 
 {-# INLINE mbsm #-}
 mbsm :: BBoard -> Int
@@ -78,22 +74,16 @@ bbFoldr f = go
           go !r b = let lsbb = lsb b
                     in go (f lsbb r) (b .&. complement lsbb)
 
--- Population count function, good for bigger populations:
-{-# INLINE popCount #-}
-popCount :: BBoard -> Int
-popCount = B.popCount
-
--- Population count function, good for small populations:
-{-# INLINE popCount1 #-}
-popCount1 :: BBoard -> Int
-popCount1 = B.popCount
-
 -- Because the normal Bits operations are all safe
 -- we define here the unsafe versions specialized for BBoard
 {-# INLINE uTestBit #-}
 uTestBit :: BBoard -> Int -> Bool
 uTestBit w b = let bb = 1 `unsafeShiftL` b
                in w .&. bb /= 0
+
+{-# INLINE uBit #-}
+uBit :: Square -> BBoard
+uBit = unsafeShiftL 1
 
 {-# INLINE shadowDown #-}
 shadowDown :: BBoard -> BBoard
