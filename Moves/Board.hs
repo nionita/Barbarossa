@@ -15,7 +15,6 @@ import Prelude hiding ((++), foldl, filter, map, concatMap, concat, head, tail, 
                        zipWith, null, words, foldr, elem, lookup, any, takeWhile, iterate)
 import Data.Bits
 import Data.List.Stream
-import Data.Ord (comparing)
 import Data.Word
 
 import Struct.Struct
@@ -759,8 +758,7 @@ genMoveCaptWL !pos = (map f $ sort ws, map f $ sort ls)
     where !capts = myAttacs pos .&. yo pos
           epcs  = genEPCapts pos
           c     = moving pos
-          (ws, ls) = foldr (perCaptFieldWL pos (me pos) (yoAttacs pos)) (lepcs,[])
-                         $ squaresByMVV pos capts
+          (ws, ls) = foldr (perCaptFieldWL pos (me pos) (yoAttacs pos)) (lepcs,[]) $ bbToSquares capts
           lepcs = map (moveToLMove Pawn Pawn) epcs
           f = moveAddColor c . lmoveToMove
 
@@ -805,7 +803,7 @@ perCaptFieldWL pos mypc advdefence sq mvlst
           valto = value pcto
           hanging = not (advdefence `testBit` sq)
           prAgrsqs = bbToSquares prPawns
-          reAgrsqs = squaresByLVA pos $ reAtts
+          reAgrsqs = bbToSquares reAtts
           (prPawns, reAtts)
               | sq >= 56 && moving pos == White
                   = let prp = myattacs .&. pawns pos .&. 0x00FF000000000000
@@ -840,21 +838,3 @@ addHanging pos vict to from (wsqs, lsqs)
 
 addHangingP :: Piece -> Square -> Square -> ([LMove], [LMove]) -> ([LMove], [LMove])
 addHangingP vict to from (wsqs, lsqs) = ((moveToLMove Pawn vict $ makePromo Queen from to) : wsqs, lsqs)
-
-squaresByMVV :: MyPos -> BBoard -> [Square]
-squaresByMVV pos bb = map snd $ sortBy (comparing fst)
-                              $ map (mostValuableFirst pos) $ bbToSquares bb
-
-squaresByLVA :: MyPos -> BBoard -> [Square]
-squaresByLVA pos bb = map snd $ sortBy (comparing fst)
-                              $ map (mostValuableLast pos) $ bbToSquares bb
-
--- Sort by value in order to get the most valuable last
-mostValuableLast :: MyPos -> Square -> (Int, Square)
-mostValuableLast pos sq | Busy _ f <- tabla pos sq = let !v = value f in (v, sq)
-mostValuableLast _   _                             = error "mostValuableLast: Empty"
-
--- Sort by negative value in order to get the most valuable first
-mostValuableFirst :: MyPos -> Square -> (Int, Square)
-mostValuableFirst pos sq | Busy _ f <- tabla pos sq = let !v = - value f in (v, sq)
-mostValuableFirst _   _                             = error "mostValuableFirst: Empty"
