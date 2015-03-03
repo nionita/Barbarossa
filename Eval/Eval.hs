@@ -121,6 +121,7 @@ evalItems = [ EvIt Material,	-- material balance (i.e. white - black material
               -- EvIt NRCorrection,	-- material correction for knights & rooks
               EvIt PaBlo,	-- pawn blocking
               EvIt Izolan,	-- isolated pawns
+              EvIt Backward,	-- backward pawns
               EvIt PassPawns	-- pass pawns
             ]
 
@@ -671,7 +672,7 @@ instance EvalItem Izolan where
                      ]
 
 isolDiff :: MyPos -> IWeights
-isolDiff p = [ nd, pd]
+isolDiff p = [ nd, pd ]
     where (!myr, !myp) = isol (pawns p .&. me p) (passed p)
           (!yor, !yop) = isol (pawns p .&. yo p) (passed p)
           !nd = myr - yor
@@ -681,14 +682,65 @@ isol :: BBoard -> BBoard -> (Int, Int)
 isol ps pp = (ris, pis)
     where !myp = ps .&. pp
           !myr = ps `less` myp
-          !myf = ((ps .&. notA) `unsafeShiftR` 1) .|. ((ps .&. notH) `unsafeShiftL` 1)
+          !myf = ((ps .&. notFileA) `unsafeShiftR` 1) .|. ((ps .&. notFileH) `unsafeShiftL` 1)
           !myu = myf `unsafeShiftL` 8
           !myd = myf `unsafeShiftR` 8
           !myc = myf .|. myu .|. myd
           !ris = popCount $ myr `less` myc
           !pis = popCount $ myp `less` myc
-          notA = 0xFEFEFEFEFEFEFEFE
-          notH = 0x7F7F7F7F7F7F7F7F
+
+-------- Backward pawns --------
+data Backward = Backward
+
+instance EvalItem Backward where
+    evalItem _ _ p _ = backDiff p
+    evalItemNDL _  = [
+                      ("backPawns", ((-40, -120), (-300, 0))),	-- malus for backward pawns
+                      ("backPOpen", ((-40, -120), (-300, 0)))	-- even more on open files
+                     ]
+
+backDiff :: MyPos -> IWeights
+backDiff p
+    | moving p == White
+    = let wp = pawns p .&. me p
+          bp = pawns p .&. yo p
+          (bpw, bpow) = backPawns White wp bp (yoPAttacs p)
+          (bpb, bpob) = backPawns Black bp wp (myPAttacs p)
+          !bpd  = popCount bpw  - popCount bpb
+          !bpod = popCount bpow - popCount bpob
+      in [ bpd, bpod ]
+    | otherwise
+    = let bp = pawns p .&. me p
+          wp = pawns p .&. yo p
+          (bpw, bpow) = backPawns White wp bp (myPAttacs p)
+          (bpb, bpob) = backPawns Black bp wp (yoPAttacs p)
+          !bpd  = popCount bpb  - popCount bpw
+          !bpod = popCount bpob - popCount bpow
+      in [ bpd, bpod ]
+
+backPawns :: Color -> BBoard -> BBoard -> BBoard -> (BBoard, BBoard)
+backPawns White !mp !op !opa = (bp, bpo)
+    where fa = frontAttacksWhite mp
+          stops = mp `unsafeShiftL` 8
+          !bp  = stops .&. opa .&. complement fa;
+          !bpo = bp `less` shadowDown op
+backPawns Black !mp !op !opa = (bp, bpo)
+    where fa = frontAttacksBlack mp
+          stops = mp `unsafeShiftR` 8
+          !bp = stops .&. opa .&. complement fa;
+          !bpo = bp `less` shadowUp op
+
+frontAttacksWhite :: BBoard -> BBoard
+frontAttacksWhite !b = fa
+    where fal = (b .&. notFileA) `unsafeShiftR` 1
+          far = (b .&. notFileH) `unsafeShiftL` 1
+          !fa = shadowUp (fal .|. far)	-- shadowUp is exclusive the original!
+
+frontAttacksBlack :: BBoard -> BBoard
+frontAttacksBlack !b = fa
+    where fal = (b .&. notFileA) `unsafeShiftR` 1
+          far = (b .&. notFileH) `unsafeShiftL` 1
+          !fa = shadowDown (fal .|. far)	-- shadowUp is exclusive the original!
 
 ------ En prise ------
 -- enpHanging and enpEnPrise optimised (only mean) with Clop by running 4222

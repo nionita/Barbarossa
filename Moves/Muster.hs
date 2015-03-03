@@ -2,6 +2,7 @@ module Moves.Muster (
         genArray,
         row1,  row2,  row3,  row4,  row5,  row6,  row7,  row8,
         fileA, fileB, fileC, fileD, fileE, fileF, fileG, fileH,
+        notFileA, notFileH,
         rowBB, colBB,
         rookFiles, lightSquares, darkSquares
     ) where
@@ -34,6 +35,10 @@ fileH = 0x8080808080808080
 
 rookFiles :: BBoard
 rookFiles = fileA .|. fileH
+
+notFileA, notFileH :: BBoard
+notFileA = complement fileA
+notFileH = complement fileH
 
 lightSquares, darkSquares :: BBoard
 lightSquares = 0xAA55AA55AA55AA55
