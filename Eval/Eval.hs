@@ -695,8 +695,8 @@ data Backward = Backward
 instance EvalItem Backward where
     evalItem _ _ p _ = backDiff p
     evalItemNDL _  = [
-                      ("backPawns", ((-120, -40), (-300, 0))),	-- malus for backward pawns
-                      ("backPOpen", ((-120, -40), (-300, 0)))	-- even more on open files
+                      ("backPawns", ((-154, -148), (-300, 0))),	-- malus for backward pawns
+                      ("backPOpen", ((-195, -163), (-300, 0)))	-- even more on open files
                      ]
 
 backDiff :: MyPos -> IWeights
