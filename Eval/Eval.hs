@@ -120,8 +120,10 @@ evalItems = [ EvIt Material,	-- material balance (i.e. white - black material
               EvIt EnPrise,	-- when not quiescent - pieces en prise
               -- EvIt NRCorrection,	-- material correction for knights & rooks
               EvIt PaBlo,	-- pawn blocking
-              EvIt Izolan,	-- isolated pawns
+              EvIt Isolan,	-- isolated pawns
+              EvIt FarPawns,	-- far pawns
               EvIt Backward,	-- backward pawns
+              EvIt Chains,	-- pawn chains
               EvIt PassPawns	-- pass pawns
             ]
 
@@ -662,24 +664,58 @@ centerDiff p = [pd, nd, bd, rd, qd, kd]
           center = 0x0000001818000000
 
 -------- Isolated pawns --------
-data Izolan = Izolan
+data Isolan = Isolan
 
-instance EvalItem Izolan where
+instance EvalItem Isolan where
     evalItem _ _ p _ = isolDiff p
     evalItemNDL _  = [
-                      ("isolPawns",  ((-42, -120), (-300, 0))),
-                      ("isolPassed", ((-57, -150), (-500, 0)))
+                      ("isolPawns",  ((-50, -140), (-300, 0))),
+                      ("isolPassed", ((-65, -175), (-500, 0)))	-- even more malus
                      ]
 
-isolDiff :: MyPos -> IWeights
-isolDiff p = [ nd, pd ]
-    where (!myr, !myp) = isol (pawns p .&. me p) (passed p)
-          (!yor, !yop) = isol (pawns p .&. yo p) (passed p)
+isolDiff :: MyPos -> [Int]
+isolDiff p = [ dic, dpc ]
+    where !mis = isolCol (pawns p .&. me p)
+          !yis = isolCol (pawns p .&. yo p)
+          !mic = popCount mis
+          !yic = popCount yis
+          !mip = mis .&. passed p
+          !yip = yis .&. passed p
+          !mpc = popCount mip
+          !ypc = popCount yip
+          !dic = mic - yic
+          !dpc = mpc - ypc
+
+isolCol :: BBoard -> BBoard
+isolCol ps = ip
+    where !psL = (ps .&. notFileA) `unsafeShiftR` 1	-- left
+          !psR = (ps .&. notFileH) `unsafeShiftL` 1	-- and right
+          !pLR = psL .|. psR
+          !su  = shadowUp pLR
+          !sd  = shadowDown pLR
+          !ip  = ps `less` (su .|. sd)
+
+-------- Far pawns --------
+-- When pawns are too far it's also not good
+
+data FarPawns = FarPawns
+
+instance EvalItem FarPawns where
+    evalItem _ _ p _ = farDiff p
+    evalItemNDL _  = [
+                      ("farPawns",  ((-42, -120), (-300, 0))),
+                      ("farPassed", ((-57, -150), (-500, 0)))
+                     ]
+
+farDiff :: MyPos -> IWeights
+farDiff p = [ nd, pd ]
+    where (!myr, !myp) = farp (pawns p .&. me p) (passed p)
+          (!yor, !yop) = farp (pawns p .&. yo p) (passed p)
           !nd = myr - yor
           !pd = myp - yop
 
-isol :: BBoard -> BBoard -> (Int, Int)
-isol ps pp = (ris, pis)
+farp :: BBoard -> BBoard -> (Int, Int)
+farp ps pp = (ris, pis)
     where !myp = ps .&. pp
           !myr = ps `less` myp
           !myf = ((ps .&. notFileA) `unsafeShiftR` 1) .|. ((ps .&. notFileH) `unsafeShiftL` 1)
@@ -741,6 +777,58 @@ frontAttacksBlack !b = fa
     where fal = (b .&. notFileA) `unsafeShiftR` 1
           far = (b .&. notFileH) `unsafeShiftL` 1
           !fa = shadowDown (fal .|. far)	-- shadowUp is exclusive the original!
+
+-------- Long pawn chain --------
+data Chains = Chains
+
+instance EvalItem Chains where
+    evalItem _ _ p _ = chainDiff p
+    evalItemNDL _  = [
+                      ("pawnChains2", ((10, 20), (0, 200))),
+                      ("pawnChains3", ((20, 40), (0, 400))),
+                      ("pawnChains4", ((40, 80), (0, 800)))
+                     ]
+
+chainDiff :: MyPos -> [Int]
+chainDiff p
+    | moving p == White
+    = let (!cw2, !cw3, !cw4) = chainsWhite (pawns p .&. me p)
+          (!cb2, !cb3, !cb4) = chainsBlack (pawns p .&. yo p)
+          !c2 = cw2 - cb2
+          !c3 = cw3 - cb3
+          !c4 = cw4 - cb4
+      in [c2, c3, c4]
+    | otherwise
+    = let (!cw2, !cw3, !cw4) = chainsWhite (pawns p .&. yo p)
+          (!cb2, !cb3, !cb4) = chainsBlack (pawns p .&. me p)
+          !c2 = cb2 - cw2
+          !c3 = cb3 - cw3
+          !c4 = cb4 - cw4
+      in [c2, c3, c4]
+
+chainsWhite :: BBoard -> (Int, Int, Int)
+chainsWhite ps = (c2, c3, c4)
+    where !ps2r = ps   .&. ((ps   .&. notFileH) `unsafeShiftL` 9)
+          !ps3r = ps2r .&. ((ps2r .&. notFileH) `unsafeShiftL` 9)
+          !ps4r = ps3r .&. ((ps3r .&. notFileH) `unsafeShiftL` 9)
+          !ps2l = ps   .&. ((ps   .&. notFileA) `unsafeShiftL` 7)
+          !ps3l = ps2l .&. ((ps2l .&. notFileA) `unsafeShiftL` 7)
+          !ps4l = ps3l .&. ((ps3l .&. notFileA) `unsafeShiftL` 7)
+          !c2 = popCount ps2r + popCount ps2l
+          !c3 = popCount ps3r + popCount ps3l
+          !c4 = popCount ps4r + popCount ps4l
+
+chainsBlack :: BBoard -> (Int, Int, Int)
+chainsBlack ps = (c2, c3, c4)
+    where !ps2r = ps   .&. ((ps   .&. notFileH) `unsafeShiftR` 7)
+          !ps3r = ps2r .&. ((ps2r .&. notFileH) `unsafeShiftR` 7)
+          !ps4r = ps3r .&. ((ps3r .&. notFileH) `unsafeShiftR` 7)
+          !ps2l = ps   .&. ((ps   .&. notFileA) `unsafeShiftR` 9)
+          !ps3l = ps2l .&. ((ps2l .&. notFileA) `unsafeShiftR` 9)
+          !ps4l = ps3l .&. ((ps3l .&. notFileA) `unsafeShiftR` 9)
+          !c2 = popCount ps2r + popCount ps2l
+          !c3 = popCount ps3r + popCount ps3l
+          !c4 = popCount ps4r + popCount ps4l
 
 ------ En prise ------
 -- enpHanging and enpEnPrise optimised (only mean) with Clop by running 4222
