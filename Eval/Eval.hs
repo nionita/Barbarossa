@@ -670,7 +670,7 @@ instance EvalItem Isolan where
     evalItem _ _ p _ = isolDiff p
     evalItemNDL _  = [
                       ("isolPawns",  ((-50, -140), (-300, 0))),
-                      ("isolPassed", ((-65, -175), (-500, 0)))	-- even more malus
+                      ("isolPassed", ((-15,  -35), (-500, 0)))	-- even more malus
                      ]
 
 isolDiff :: MyPos -> [Int]
@@ -693,7 +693,7 @@ isolCol ps = ip
           !pLR = psL .|. psR
           !su  = shadowUp pLR
           !sd  = shadowDown pLR
-          !ip  = ps `less` (su .|. sd)
+          !ip  = ps `less` (su .|. sd .|. pLR)
 
 -------- Far pawns --------
 -- When pawns are too far it's also not good
