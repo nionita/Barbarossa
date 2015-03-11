@@ -784,7 +784,6 @@ data Chains = Chains
 instance EvalItem Chains where
     evalItem _ _ p _ = chainDiff p
     evalItemNDL _  = [
-                      ("pawnChains2", ((10, 20), (0, 200))),
                       ("pawnChains3", ((20, 40), (0, 400))),
                       ("pawnChains4", ((40, 80), (0, 800)))
                      ]
@@ -792,41 +791,37 @@ instance EvalItem Chains where
 chainDiff :: MyPos -> [Int]
 chainDiff p
     | moving p == White
-    = let (!cw2, !cw3, !cw4) = chainsWhite (pawns p .&. me p)
-          (!cb2, !cb3, !cb4) = chainsBlack (pawns p .&. yo p)
-          !c2 = cw2 - cb2
+    = let (!cw3, !cw4) = chainsWhite (pawns p .&. me p)
+          (!cb3, !cb4) = chainsBlack (pawns p .&. yo p)
           !c3 = cw3 - cb3
           !c4 = cw4 - cb4
-      in [c2, c3, c4]
+      in [c3, c4]
     | otherwise
-    = let (!cw2, !cw3, !cw4) = chainsWhite (pawns p .&. yo p)
-          (!cb2, !cb3, !cb4) = chainsBlack (pawns p .&. me p)
-          !c2 = cb2 - cw2
+    = let (!cw3, !cw4) = chainsWhite (pawns p .&. yo p)
+          (!cb3, !cb4) = chainsBlack (pawns p .&. me p)
           !c3 = cb3 - cw3
           !c4 = cb4 - cw4
-      in [c2, c3, c4]
+      in [c3, c4]
 
-chainsWhite :: BBoard -> (Int, Int, Int)
-chainsWhite ps = (c2, c3, c4)
+chainsWhite :: BBoard -> (Int, Int)
+chainsWhite ps = (c3, c4)
     where !ps2r = ps   .&. ((ps   .&. notFileH) `unsafeShiftL` 9)
           !ps3r = ps2r .&. ((ps2r .&. notFileH) `unsafeShiftL` 9)
           !ps4r = ps3r .&. ((ps3r .&. notFileH) `unsafeShiftL` 9)
           !ps2l = ps   .&. ((ps   .&. notFileA) `unsafeShiftL` 7)
           !ps3l = ps2l .&. ((ps2l .&. notFileA) `unsafeShiftL` 7)
           !ps4l = ps3l .&. ((ps3l .&. notFileA) `unsafeShiftL` 7)
-          !c2 = popCount ps2r + popCount ps2l
           !c3 = popCount ps3r + popCount ps3l
           !c4 = popCount ps4r + popCount ps4l
 
-chainsBlack :: BBoard -> (Int, Int, Int)
-chainsBlack ps = (c2, c3, c4)
+chainsBlack :: BBoard -> (Int, Int)
+chainsBlack ps = (c3, c4)
     where !ps2r = ps   .&. ((ps   .&. notFileH) `unsafeShiftR` 7)
           !ps3r = ps2r .&. ((ps2r .&. notFileH) `unsafeShiftR` 7)
           !ps4r = ps3r .&. ((ps3r .&. notFileH) `unsafeShiftR` 7)
           !ps2l = ps   .&. ((ps   .&. notFileA) `unsafeShiftR` 9)
           !ps3l = ps2l .&. ((ps2l .&. notFileA) `unsafeShiftR` 9)
           !ps4l = ps3l .&. ((ps3l .&. notFileA) `unsafeShiftR` 9)
-          !c2 = popCount ps2r + popCount ps2l
           !c3 = popCount ps3r + popCount ps3l
           !c4 = popCount ps4r + popCount ps4l
 
