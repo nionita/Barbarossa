@@ -139,15 +139,15 @@ parsePosition = do
 parseFenPosition :: Parser String
 parseFenPosition = do
     s <- P.many1 $ P.oneOf "/12345678rnbqkpRNBQKP"
-    _ <- P.space
+    P.spaces
     c <- P.oneOf "wb"
-    _ <- P.space
+    P.spaces
     cr <- P.many1 $ P.oneOf "-QKqk"
-    _ <- P.space
+    P.spaces
     ep <- P.many1 (P.oneOf "-abcdefgh36")
-    _ <- P.space
+    P.spaces
     h <- P.many1 P.digit
-    _ <- P.space
+    P.spaces
     _ <- P.anyChar
     return $ s ++ " " ++ [c] ++ " " ++ cr ++ " " ++ ep ++ " " ++ h
 

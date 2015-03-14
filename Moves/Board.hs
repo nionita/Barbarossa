@@ -572,11 +572,14 @@ doFromToMove m !p | moveIsPromo m
           black = tblack, slide = tslide, kkrq = tkkrq, diag = tdiag,
           epcas = tepcas, zobkey = tzobkey, mater = tmater
       }
-    where src = fromSquare m
+    where col = moving p	-- the new coding does not have correct fromSquare in promotion
+          srank = if col == White then 6 else 1
+          sfile = fromSquare m .&. 0x7	-- see new coding!
+          src = srank `unsafeShiftL` 3 .|. sfile
           dst = toSquare m
-          Busy col Pawn = tabla p src	-- identify the moving color (piece must be pawn)
+          -- Busy col Pawn = tabla p src	-- identify the moving color (piece must be pawn)
           !pie = movePromoPiece m
-          p0 = setPiece src (moving p) pie p
+          p0 = setPiece src col pie p
           tblack = mvBit src dst $ black p0
           tslide = mvBit src dst $ slide p0
           tkkrq  = mvBit src dst $ kkrq p0
