@@ -379,6 +379,15 @@ canDoMove m = do
         Illegal -> return False
         _       -> return True
 
+-- We change the error definition and do not use the heaviside function
+-- becase we dont need in our optimisation method (ASA) smooth functions
+-- So we penalize just the number of moves better then our best move
+-- by more then a threshold
+-- We have 2 possibilities:
+-- 1. the threshold can be fixed for one optimisation
+-- 2. the threshold can depend on number of nodes searched in that position
+-- When we take the number of searched nodes we can give less weight
+-- to tensioned positions, which are more probably tactical
 searchTestPos :: Move -> Game Double
 searchTestPos m = do
     mvs' <- uncurry (++) <$> genMoves 0 0 False	-- don't need sort
@@ -406,7 +415,10 @@ searchTestPos m = do
                    return 0
                Just s  -> do
                   ss <- mapM searchAB mvs
-                  return $! sum $ map (\x -> heaviside (s - x)) $ catMaybes ss
+                  -- return $! sum $ map (\x -> heaviside (s - x)) $ catMaybes ss
+                  let s' = s + bestThreshold
+                  return $! sum $ map (\x -> if x > s' then 1 else 0) $ catMaybes ss
+    where bestThreshold = 100
 
 -- We need this so that we can negate safely:
 minScore, maxScore :: Int
