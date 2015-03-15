@@ -7,6 +7,7 @@
 module Main where
 import Control.Monad
 import Control.Monad.Reader
+import Control.Monad.State
 import Control.Concurrent
 import Control.Applicative ((<$>))
 -- import Control.Exception
@@ -408,6 +409,7 @@ searchTestPos m = do
             --              $ "  nrm move: " ++ dumpMove e
             return 0
        else do
+           n0 <- gets $ nodes . stats
            ms <- searchAB m
            case ms of
                Nothing -> do
@@ -415,10 +417,14 @@ searchTestPos m = do
                    return 0
                Just s  -> do
                   ss <- mapM searchAB mvs
-                  -- return $! sum $ map (\x -> heaviside (s - x)) $ catMaybes ss
-                  let s' = s + bestThreshold
+                  n1 <- gets $ nodes . stats
+                  -- For the variable threshold:
+                  -- we search 1 ply per move, i.e. we expect 1000 nodes without QS
+                  -- for this stiuation we give a threshold of 100 * log 2 = 70 cp
+                  -- for double of that it means 100 * log 3 = 110 cp, a.s.o.
+                  let nthrs = round $ 100 * log (1 + fromIntegral (n1 - n0) / 1000)
+                      !s' = s + nthrs
                   return $! sum $ map (\x -> if x > s' then 1 else 0) $ catMaybes ss
-    where bestThreshold = 100
 
 -- We need this so that we can negate safely:
 minScore, maxScore :: Int
