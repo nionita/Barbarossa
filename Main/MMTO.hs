@@ -376,9 +376,9 @@ correctMove p m'
 canDoMove :: Move -> Game Bool
 canDoMove m = do
     r <- doMove False m False
-    case r of
-        Illegal -> return False
-        _       -> return True
+    if isDoRIllegal r
+       then return False
+       else return True
 
 -- We change the error definition and do not use the heaviside function
 -- becase we dont need in our optimisation method (ASA) smooth functions
@@ -435,9 +435,9 @@ searchAB :: Move -> Game (Maybe Int)
 searchAB m = do
     debugMes $ "--> SearchAB move: " ++ show m
     r <- doMove False m False
-    case r of
-        Illegal -> return Nothing
-        _       -> do
+    if isDoRIllegal r
+       then return Nothing
+       else do
             mvs <- uncurry (++) <$> genMoves 0 0 False
             !s <- negate <$> foldM searchQ minScore mvs
             undoMove
@@ -448,9 +448,9 @@ searchQ :: Int -> Move -> Game Int
 searchQ !a m = do
     debugMes $ "  --> SearchQ move: " ++ show m ++ " (" ++ show a ++ ")"
     r <- doMove False m False
-    case r of
-        Illegal -> return a
-        _       -> do
+    if isDoRIllegal r
+       then return a
+       else do
             !s <- negate <$> pvQSearch 3 minScore (-a)
             undoMove
             -- let !a' = if s > a then s else a	-- this is already so
@@ -474,17 +474,18 @@ pvQInnerLoop :: Int -> Int -> Int -> Move -> Game (Bool, Int)
 pvQInnerLoop lev !b !a m = do
     debugMes $ spaces lev ++ "--> pvQInnerLoop a = " ++ show a ++ " b = " ++ show b ++ " move: " ++ show m
     r <- doMove False m True
-    case r of
-        Illegal -> return (False, a)
-        Final s -> do
-            undoMove
-            debugMes $ spaces lev ++ "<-- pvQInnerLoop s = -" ++ show s
-            return $ trimaxCut (-s) b a
-        _       -> do
-            s <- negate <$> pvQSearch (lev+1) (-b) (-a)
-            undoMove
-            debugMes $ spaces lev ++ "<-- pvQInnerLoop s = " ++ show s
-            return $ trimaxCut s b a
+    if isDoRIllegal r
+        then return (False, a)
+        else if isDoRRepet r
+                then do
+                    undoMove
+                    debugMes $ spaces lev ++ "<-- pvQInnerLoop s = 0"
+                    return $ trimaxCut 0 b a
+                else do
+                    s <- negate <$> pvQSearch (lev+1) (-b) (-a)
+                    undoMove
+                    debugMes $ spaces lev ++ "<-- pvQInnerLoop s = " ++ show s
+                    return $ trimaxCut s b a
 
 pvQSearch :: Int -> Int -> Int -> Game Int
 pvQSearch !lev !a !b = do

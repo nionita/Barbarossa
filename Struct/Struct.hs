@@ -1,7 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 module Struct.Struct (
          BBoard, Square, ZKey, ShArray, MaArray, DbArray, Move(..),
-         Piece(..), Color(..), TabCont(..), MyPos(..),
+         Piece(..), Color(..), TabCont(..), MyPos(..), AttBB(..),
          other, moving, epMask, fyMask, fyIncr, fyZero, mvMask, caRiMa,
          caRKiw, caRQuw, caRMKw, caRMQw, caRKib, caRQub, caRMKb, caRMQb,
          tabla, emptyPos, isReversible, remis50Moves, set50Moves, reset50Moves, addHalfMove,
@@ -38,15 +38,17 @@ data TabCont = Empty
              | Busy !Color !Piece
              deriving (Eq, Show)
 
+data AttBB = AttBB {
+      allAttacs, pbAttacs, nbAttacs, bbAttacs, rbAttacs, qbAttacs, kbAttacs :: !BBoard
+    } deriving Eq
+
 data MyPos = MyPos {
     black, slide, kkrq, diag, epcas :: !BBoard, -- These fields completely represents of a position
+    me, yo, occup, kings, pawns :: !BBoard,	-- further heavy used bitboards computed for efficiency
+    queens, rooks, bishops, knights, check, passed :: !BBoard,
     zobkey :: !ZKey,	-- hash key
     mater :: !Int,	-- material balance
-    me, yo, occup, kings, pawns :: !BBoard,	-- further heavy used bitboards computed for efficiency
-    queens, rooks, bishops, knights, passed :: !BBoard,
-    myAttacs, yoAttacs, check :: BBoard,		-- my & yours attacs, check
-    myPAttacs, myNAttacs, myBAttacs, myRAttacs, myQAttacs, myKAttacs :: BBoard,
-    yoPAttacs, yoNAttacs, yoBAttacs, yoRAttacs, yoQAttacs, yoKAttacs :: BBoard,
+    myAttacks, yoAttacks :: AttBB,
     staticScore :: Int,
     staticFeats :: [Int]
     }
@@ -70,21 +72,20 @@ instance Show MyPos where
             (bishops, "bishops"),
             (knights, "knights"),
             (passed, "passed"),
-            (myAttacs, "myAttacs"),
-            (yoAttacs, "yoAttacs"),
-            (check, "check"),
-            (myPAttacs, "myPAttacs"),
-            (myNAttacs, "myNAttacs"),
-            (myBAttacs, "myBAttacs"),
-            (myRAttacs, "myRAttacs"),
-            (myQAttacs, "myQAttacs"),
-            (myKAttacs, "myKAttacs"),
-            (yoPAttacs, "yoPAttacs"),
-            (yoNAttacs, "yoNAttacs"),
-            (yoBAttacs, "yoBAttacs"),
-            (yoRAttacs, "yoRAttacs"),
-            (yoQAttacs, "yoQAttacs"),
-            (yoKAttacs, "yoKAttacs")
+            (allAttacs . myAttacks, "myAttacs"),
+            (allAttacs . yoAttacks, "yoAttacs"),
+            (pbAttacs . myAttacks, "myPAttacs"),
+            (nbAttacs . myAttacks, "myNAttacs"),
+            (bbAttacs . myAttacks, "myBAttacs"),
+            (rbAttacs . myAttacks, "myRAttacs"),
+            (qbAttacs . myAttacks, "myQAttacs"),
+            (kbAttacs . myAttacks, "myKAttacs"),
+            (pbAttacs . yoAttacks, "yoPAttacs"),
+            (nbAttacs . yoAttacks, "yoNAttacs"),
+            (bbAttacs . yoAttacks, "yoBAttacs"),
+            (rbAttacs . yoAttacks, "yoRAttacs"),
+            (qbAttacs . yoAttacks, "yoQAttacs"),
+            (kbAttacs . yoAttacks, "yoKAttacs")
             ]
           ++ "}"
        where showField (f, sf) = " " ++ sf ++ " = " ++ showWord64 (f p)
@@ -149,15 +150,18 @@ caRQub = 0x1100000000000000	-- black: king & rook position for queenside castle
 caRMKb = 0x6000000000000000	-- black: empty fields for kingside castle
 caRMQb = 0x0E00000000000000	-- black: empty fields for queenside castle
 
+emptyAttacks :: AttBB
+emptyAttacks = AttBB {
+        allAttacs = 0, pbAttacs = 0, nbAttacs = 0, bbAttacs = 0, rbAttacs = 0, qbAttacs = 0, kbAttacs = 0
+    }
+
 emptyPos :: MyPos
 emptyPos = MyPos {
         black = 0, slide = 0, kkrq = 0, diag = 0, epcas = 0,
-        zobkey = 0, mater = 0,
         me = 0, yo = 0, occup = 0, kings = 0, pawns = 0,
-        queens = 0, rooks = 0, bishops = 0, knights = 0,
-        myAttacs = 0, yoAttacs = 0, check = 0,
-        myPAttacs = 0, myNAttacs = 0, myBAttacs = 0, myRAttacs = 0, myQAttacs = 0, myKAttacs = 0,
-        yoPAttacs = 0, yoNAttacs = 0, yoBAttacs = 0, yoRAttacs = 0, yoQAttacs = 0, yoKAttacs = 0,
+        queens = 0, rooks = 0, bishops = 0, knights = 0, check = 0,
+        zobkey = 0, mater = 0,
+        myAttacks = emptyAttacks, yoAttacks = emptyAttacks,
         staticScore = 0, passed = 0,
         staticFeats = []
     }

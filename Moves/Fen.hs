@@ -1,6 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 module Moves.Fen (
-    posFromFen, initPos, updatePos, setPiece
+    posFromFen, initPos, updatePos, setPiece, isCheckSquare
     ) where
 
 import Data.Bits
@@ -83,20 +83,36 @@ fenFromString fen = zipWith ($) fenfuncs fentails
           getFenHalf = headOrDefault "-"
           getFenMvNo = headOrDefault "-"
 
+{-# INLINE isCheckSquare #-}
+isCheckSquare :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard
+              -> Color -> Square -> BBoard
+isCheckSquare !occ !kin !que !roo !bis !kni !paw !yop !c !sq
+    |    bAttacs occ sq .&. di  /= 0
+      || rAttacs occ sq .&. rf  /= 0
+      || nAttacs     sq .&. kn  /= 0
+      || kAttacs     sq .&. kin /= 0	-- cant attack itself
+      || pAttacs c   sq .&. ps  /= 0 = uBit sq
+    | otherwise                      = 0
+    where rf = yop .&. (roo .|. que)
+          di = yop .&. (bis .|. que)
+          kn = yop .&. kni
+          ps = yop .&. paw
+
 updatePos :: MyPos -> MyPos
-updatePos = updatePosCheck . updatePosAttacs . updatePosOccup
+updatePos = updatePosAttacs . updatePosOccup
 
 updatePosOccup :: MyPos -> MyPos
 updatePosOccup !p = p {
-                  occup = toccup, me = tme, yo = tyo, kings   = tkings,
-                  pawns = tpawns, knights = tknights, queens  = tqueens,
-                  rooks = trooks, bishops = tbishops, passed = tpassed
+                  occup = toccup, me = tme, yo = tyo, kings  = tkings,
+                  pawns = tpawns, knights = tknights, queens = tqueens,
+                  rooks = trooks, bishops = tbishops, passed = tpassed,
+                  check = tcheck1 .|. tcheck2
                }
     where !toccup = kkrq p .|. diag p
           !tkings = kkrq p .&. diag p `less` slide p
           !twhite = toccup `less` black p
-          (!tme, !tyo) | moving p == White = (twhite, black p)
-                       | otherwise         = (black p, twhite)
+          (!tme, !tyo, !c) | moving p == White = (twhite, black p, White)
+                           | otherwise         = (black p, twhite, Black)
           !tpawns   = diag p `less` (kkrq p .|. slide p)
           !tknights = kkrq p `less` (diag p .|. slide p)
           !tqueens  = slide p .&. kkrq p .&. diag p
@@ -105,6 +121,10 @@ updatePosOccup !p = p {
           !twpawns = tpawns .&. twhite
           !tbpawns = tpawns .&. black p
           !tpassed = whitePassed twpawns tbpawns .|. blackPassed twpawns tbpawns
+          !tcheck1 = isCheckSquare toccup tkings tqueens trooks tbishops tknights
+                         tpawns tyo        c  $ firstOne $ tme .&. tkings
+          !tcheck2 = isCheckSquare toccup tkings tqueens trooks tbishops tknights
+                         tpawns tme (other c) $ firstOne $ tyo .&. tkings
           -- Further ideas:
           -- 1. The old method could be faster for afew pawns! Tests!!
           -- 2. This is necessary only after a pawn move, otherwise passed remains the same
@@ -113,21 +133,19 @@ updatePosOccup !p = p {
 
 updatePosAttacs :: MyPos -> MyPos
 updatePosAttacs !p
-    | moving p == White = p {
-                      myPAttacs = twhPAtt, myNAttacs = twhNAtt, myBAttacs = twhBAtt,
-                      myRAttacs = twhRAtt, myQAttacs = twhQAtt, myKAttacs = twhKAtt,
-                      yoPAttacs = tblPAtt, yoNAttacs = tblNAtt, yoBAttacs = tblBAtt,
-                      yoRAttacs = tblRAtt, yoQAttacs = tblQAtt, yoKAttacs = tblKAtt,
-                      myAttacs = twhAttacs, yoAttacs = tblAttacs
+    | moving p == White = p { myAttacks = whAtt, yoAttacks = blAtt }
+    | otherwise         = p { myAttacks = blAtt, yoAttacks = whAtt }
+    where whAtt = AttBB {
+                      allAttacs = twhAttacs,
+                      pbAttacs = twhPAtt, nbAttacs = twhNAtt, bbAttacs = twhBAtt,
+                      rbAttacs = twhRAtt, qbAttacs = twhQAtt, kbAttacs = twhKAtt
                   }
-    | otherwise         = p {
-                      myPAttacs = tblPAtt, myNAttacs = tblNAtt, myBAttacs = tblBAtt,
-                      myRAttacs = tblRAtt, myQAttacs = tblQAtt, myKAttacs = tblKAtt,
-                      yoPAttacs = twhPAtt, yoNAttacs = twhNAtt, yoBAttacs = twhBAtt,
-                      yoRAttacs = twhRAtt, yoQAttacs = twhQAtt, yoKAttacs = twhKAtt,
-                      myAttacs = tblAttacs, yoAttacs = twhAttacs
+          blAtt = AttBB {
+                      allAttacs = tblAttacs,
+                      pbAttacs = tblPAtt, nbAttacs = tblNAtt, bbAttacs = tblBAtt,
+                      rbAttacs = tblRAtt, qbAttacs = tblQAtt, kbAttacs = tblKAtt
                   }
-    where !twhPAtt = bbToSquaresBB (pAttacs White) $ pawns p .&. white
+          !twhPAtt = bbToSquaresBB (pAttacs White) $ pawns p .&. white
           !twhNAtt = bbToSquaresBB nAttacs $ knights p .&. white
           !twhBAtt = bbToSquaresBB (bAttacs ocp) $ bishops p .&. white
           !twhRAtt = bbToSquaresBB (rAttacs ocp) $ rooks p .&. white
@@ -144,6 +162,7 @@ updatePosAttacs !p
           ocp = occup p
           white = ocp `less` black p
 
+{--
 updatePosCheck :: MyPos -> MyPos
 updatePosCheck p = p {
                   check = tcheck
@@ -151,6 +170,8 @@ updatePosCheck p = p {
     where !mecheck = me p .&. kings p .&. yoAttacs p
           !yocheck = yo p .&. kings p .&. myAttacs p
           !tcheck = mecheck .|. yocheck
+--}
+
 
 -- Small optimisation: .&. instead `less` below
 -- This one should be done in Muster.hs and used elsewhere too

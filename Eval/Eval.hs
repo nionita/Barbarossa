@@ -115,7 +115,7 @@ evalItems = [ EvIt Material,	-- material balance (i.e. white - black material
               EvIt KingPlace,	-- bonus when king is near some fields
               EvIt LastLine,	-- malus for pieces on last line (except rooks and king)
               EvIt Mobility,	-- pieces mobility
-              EvIt Center,	-- attacs of center squares
+              EvIt Center,	-- attacks of center squares
               EvIt RookPlc,	-- rooks points for placements
               EvIt EnPrise,	-- when not quiescent - pieces en prise
               -- EvIt NRCorrection,	-- material correction for knights & rooks
@@ -363,18 +363,20 @@ instance EvalItem KingSafe where
 kingSafe :: MyPos -> [Int]
 kingSafe !p = [ksafe]
     where !ksafe = mattacs - yattacs
-          !freem = popCount $ myKAttacs p `less` (yoAttacs p .&. me p)
-          !freey = popCount $ yoKAttacs p `less` (myAttacs p .&. yo p)
+          !freem = popCount $ (kbAttacs $ myAttacks p) `less` ((allAttacs $ yoAttacks p) .&. me p)
+          !freey = popCount $ (kbAttacs $ yoAttacks p) `less` ((allAttacs $ myAttacks p) .&. yo p)
           flag k a = if k .&. a /= 0 then 1 else 0
           qual k a = popCount $ k .&. a
-          flagYo = flag (myKAttacs p)
-          flagMe = flag (yoKAttacs p)
-          qualYo = qual (myKAttacs p)
-          qualMe = qual (yoKAttacs p)
+          flagYo = flag (kbAttacs $ myAttacks p)
+          flagMe = flag (kbAttacs $ yoAttacks p)
+          qualYo = qual (kbAttacs $ myAttacks p)
+          qualMe = qual (kbAttacs $ yoAttacks p)
           ($:) = flip ($)
-          attsm = map (p $:) [ myPAttacs, myNAttacs, myBAttacs, myRAttacs, myQAttacs, myKAttacs ]
+          attsm = map (p $:) [ pbAttacs . myAttacks, nbAttacs . myAttacks, bbAttacs . myAttacks,
+                    rbAttacs . myAttacks, qbAttacs . myAttacks, kbAttacs . myAttacks ]
           !ixm = max 0 $ min 63 $ (fm * cm) `unsafeShiftR` 2 - freey
-          attsy = map (p $:) [ yoPAttacs, yoNAttacs, yoBAttacs, yoRAttacs, yoQAttacs, yoKAttacs ]
+          attsy = map (p $:) [ pbAttacs . yoAttacks, nbAttacs . yoAttacks, bbAttacs . yoAttacks,
+                    rbAttacs . yoAttacks, qbAttacs . yoAttacks, kbAttacs . yoAttacks ]
           !ixy = max 0 $ min 63 $ (fy * cy) `unsafeShiftR` 2 - freem
           !mattacs = attCoef `unsafeAt` ixm
           !yattacs = attCoef `unsafeAt` ixy
@@ -577,9 +579,9 @@ evalRookPlc p = [ ho, op, rc ]
           (yho, yop) = foldr (perRook (pawns p) yPs) (0, 0) $ bbToSquares yRs
           !ho = mho - yho
           !op = mop - yop
-          !mrc | myRAttacs p .&. me p .&. rooks p == 0 = 0
+          !mrc | (rbAttacs $ myAttacks p) .&. me p .&. rooks p == 0 = 0
                | otherwise                             = 1
-          !yrc | yoRAttacs p .&. yo p .&. rooks p == 0 = 0
+          !yrc | (rbAttacs $ yoAttacks p) .&. yo p .&. rooks p == 0 = 0
                | otherwise                             = 1
           !rc = mrc - yrc
 
@@ -607,18 +609,18 @@ instance EvalItem Mobility where
 -- Here we do not calculate pawn mobility (which, calculated as attacs, is useless)
 mobDiff :: MyPos -> IWeights
 mobDiff p = [n, b, r, q]
-    where !myN = popCount $ myNAttacs p `less` (me p .|. yoPAttacs p)
-          !myB = popCount $ myBAttacs p `less` (me p .|. yoPAttacs p)
-          !myR = popCount $ myRAttacs p `less` (me p .|. yoA1)
-          !myQ = popCount $ myQAttacs p `less` (me p .|. yoA2)
-          !yoA1 = yoPAttacs p .|. yoNAttacs p .|. yoBAttacs p
-          !yoA2 = yoA1 .|. yoRAttacs p
-          !yoN = popCount $ yoNAttacs p `less` (yo p .|. myPAttacs p)
-          !yoB = popCount $ yoBAttacs p `less` (yo p .|. myPAttacs p)
-          !yoR = popCount $ yoRAttacs p `less` (yo p .|. myA1)
-          !yoQ = popCount $ yoQAttacs p `less` (yo p .|. myA2)
-          !myA1 = myPAttacs p .|. myNAttacs p .|. myBAttacs p
-          !myA2 = myA1 .|. myRAttacs p
+    where !myN = popCount $ (nbAttacs $ myAttacks p) `less` (me p .|. (pbAttacs $ yoAttacks p))
+          !myB = popCount $ (bbAttacs $ myAttacks p) `less` (me p .|. (pbAttacs $ yoAttacks p))
+          !myR = popCount $ (rbAttacs $ myAttacks p) `less` (me p .|. yoA1)
+          !myQ = popCount $ (qbAttacs $ myAttacks p) `less` (me p .|. yoA2)
+          !yoA1 = (pbAttacs $ yoAttacks p) .|. (nbAttacs $ yoAttacks p) .|. (bbAttacs $ yoAttacks p)
+          !yoA2 = yoA1 .|. (rbAttacs $ yoAttacks p)
+          !yoN = popCount $ (nbAttacs $ yoAttacks p) `less` (yo p .|. (pbAttacs $ myAttacks p))
+          !yoB = popCount $ (bbAttacs $ yoAttacks p) `less` (yo p .|. (pbAttacs $ myAttacks p))
+          !yoR = popCount $ (rbAttacs $ yoAttacks p) `less` (yo p .|. myA1)
+          !yoQ = popCount $ (qbAttacs $ yoAttacks p) `less` (yo p .|. myA2)
+          !myA1 = (pbAttacs $ myAttacks p) .|. (nbAttacs $ myAttacks p) .|. (bbAttacs $ myAttacks p)
+          !myA2 = myA1 .|. (rbAttacs $ myAttacks p)
           !n = myN - yoN
           !b = myB - yoB
           !r = myR - yoR
@@ -641,23 +643,23 @@ instance EvalItem Center where
 -- This function is already optimised
 centerDiff :: MyPos -> IWeights
 centerDiff p = [pd, nd, bd, rd, qd, kd]
-    where !mpa = popCount $ myPAttacs p .&. center
-          !ypa = popCount $ yoPAttacs p .&. center
+    where !mpa = popCount $ (pbAttacs $ myAttacks p) .&. center
+          !ypa = popCount $ (pbAttacs $ yoAttacks p) .&. center
           !pd  = mpa - ypa
-          !mna = popCount $ myNAttacs p .&. center
-          !yna = popCount $ yoNAttacs p .&. center
+          !mna = popCount $ (nbAttacs $ myAttacks p) .&. center
+          !yna = popCount $ (nbAttacs $ yoAttacks p) .&. center
           !nd  = mna - yna
-          !mba = popCount $ myBAttacs p .&. center
-          !yba = popCount $ yoBAttacs p .&. center
+          !mba = popCount $ (bbAttacs $ myAttacks p) .&. center
+          !yba = popCount $ (bbAttacs $ yoAttacks p) .&. center
           !bd  = mba - yba
-          !mra = popCount $ myRAttacs p .&. center
-          !yra = popCount $ yoRAttacs p .&. center
+          !mra = popCount $ (rbAttacs $ myAttacks p) .&. center
+          !yra = popCount $ (rbAttacs $ yoAttacks p) .&. center
           !rd  = mra - yra
-          !mqa = popCount $ myQAttacs p .&. center
-          !yqa = popCount $ yoQAttacs p .&. center
+          !mqa = popCount $ (qbAttacs $ myAttacks p) .&. center
+          !yqa = popCount $ (qbAttacs $ yoAttacks p) .&. center
           !qd  = mqa - yqa
-          !mka = popCount $ myKAttacs p .&. center
-          !yka = popCount $ yoKAttacs p .&. center
+          !mka = popCount $ (kbAttacs $ myAttacks p) .&. center
+          !yka = popCount $ (kbAttacs $ yoAttacks p) .&. center
           !kd  = mka - yka
           center = 0x0000001818000000
 
@@ -704,16 +706,16 @@ backDiff p
     | moving p == White
     = let wp = pawns p .&. me p
           bp = pawns p .&. yo p
-          (bpw, bpow) = backPawns White wp bp (yoPAttacs p)
-          (bpb, bpob) = backPawns Black bp wp (myPAttacs p)
+          (bpw, bpow) = backPawns White wp bp (pbAttacs $ yoAttacks p)
+          (bpb, bpob) = backPawns Black bp wp (pbAttacs $ myAttacks p)
           !bpd  = popCount bpw  - popCount bpb
           !bpod = popCount bpow - popCount bpob
       in [ bpd, bpod ]
     | otherwise
     = let bp = pawns p .&. me p
           wp = pawns p .&. yo p
-          (bpw, bpow) = backPawns White wp bp (myPAttacs p)
-          (bpb, bpob) = backPawns Black bp wp (yoPAttacs p)
+          (bpw, bpow) = backPawns White wp bp (pbAttacs $ myAttacks p)
+          (bpb, bpob) = backPawns Black bp wp (pbAttacs $ yoAttacks p)
           !bpd  = popCount bpb  - popCount bpw
           !bpod = popCount bpob - popCount bpow
       in [ bpd, bpod ]
@@ -775,22 +777,22 @@ enPrise p = [ha, ep, at]
           !meB = me p .&. bishops p
           !meR = me p .&. rooks   p
           !meQ = me p .&. queens  p
-          !atP = meP  .&. yoAttacs p	-- my attacked pieces
-          !atN = meN  .&. yoAttacs p
-          !atB = meB  .&. yoAttacs p
-          !atR = meR  .&. yoAttacs p
-          !atQ = meQ  .&. yoAttacs p
-          !haP = atP `less` myAttacs p	-- attacked and not defended
-          !haN = atN `less` myAttacs p
-          !haB = atB `less` myAttacs p
-          !haR = atR `less` myAttacs p
-          !haQ = atQ `less` myAttacs p
-          !epN = (atP `less` haP) .&. yoPAttacs p	-- defended, but attacked by less
-          !epB = (atB `less` haN) .&. yoPAttacs p	-- valuable opponent pieces
+          !atP = meP  .&. (allAttacs $ yoAttacks p)	-- my attacked pieces
+          !atN = meN  .&. (allAttacs $ yoAttacks p)
+          !atB = meB  .&. (allAttacs $ yoAttacks p)
+          !atR = meR  .&. (allAttacs $ yoAttacks p)
+          !atQ = meQ  .&. (allAttacs $ yoAttacks p)
+          !haP = atP `less` (allAttacs $ myAttacks p)	-- attacked and not defended
+          !haN = atN `less` (allAttacs $ myAttacks p)
+          !haB = atB `less` (allAttacs $ myAttacks p)
+          !haR = atR `less` (allAttacs $ myAttacks p)
+          !haQ = atQ `less` (allAttacs $ myAttacks p)
+          !epN = (atP `less` haP) .&. (pbAttacs $ yoAttacks p)	-- defended, but attacked by less
+          !epB = (atB `less` haN) .&. (pbAttacs $ yoAttacks p)	-- valuable opponent pieces
           !epR = (atR `less` haR) .&. yoA1
           !epQ = (atQ `less` haQ) .&. yoA2
-          !yoA1 = yoPAttacs p .|. yoNAttacs p .|. yoBAttacs p
-          !yoA2 = yoA1 .|. yoRAttacs p
+          !yoA1 = (pbAttacs $ yoAttacks p) .|. (nbAttacs $ yoAttacks p) .|. (bbAttacs $ yoAttacks p)
+          !yoA2 = yoA1 .|. (rbAttacs $ yoAttacks p)
           !ha = popCount haP + 3 * (popCount haN + popCount haB)
               + 5 * popCount haR + 9 * popCount haQ
           !ep =                 3 * (popCount epN + popCount epB)
@@ -952,8 +954,8 @@ perPassedPawn gph ep p c sq
     | otherwise          = perPassedPawnOk gph ep p c sq sqbb moi toi moia toia
     where !sqbb = 1 `unsafeShiftL` sq
           (!moi, !toi, !moia, !toia)
-               | moving p == c = (me p, yo p, myAttacs p, yoAttacs p)
-               | otherwise     = (yo p, me p, yoAttacs p, myAttacs p)
+               | moving p == c = (me p, yo p, (allAttacs $ myAttacks p), (allAttacs $ yoAttacks p))
+               | otherwise     = (yo p, me p, (allAttacs $ yoAttacks p), (allAttacs $ myAttacks p))
           !defended = moia .&. sqbb /= 0
           !attacked = toia .&. sqbb /= 0
 

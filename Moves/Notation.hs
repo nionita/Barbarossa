@@ -21,7 +21,7 @@ toNiceNotation p m
           d = toSquare m
           (sr, sc) = s `divMod` 8
           (dr, dc) = d `divMod` 8
-          (fig, fcol) | Busy c f <- tabla p s = (f, c)
+          fig    | Busy _ f <- tabla p s = f
           iscapt | Busy _ _ <- tabla p d = True
                  | otherwise             = False
           capt = if iscapt then "x" else ""
@@ -35,7 +35,7 @@ toNiceNotation p m
           dst = col dc : row dr : ""
           transf = if moveIsPromo m then pcToCh False (movePromoPiece m) else ""
           p' = doFromToMove m p
-          chk = if isCheck p' (other fcol) then "+" else ""
+          chk = if inCheck p' then "+" else ""
           orda = ord 'a'
           ord1 = ord '1'
           col x = chr (orda + x)

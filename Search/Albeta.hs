@@ -11,10 +11,9 @@ module Search.Albeta (
 
 import Control.Monad
 import Control.Monad.State hiding (gets, modify)
-import Data.Bits ((.&.))
+import Data.Bits ((.&.), unsafeShiftR)
 import Data.List (delete, sortBy)
 import Data.Ord (comparing)
--- import Data.Array.Base
 import Data.Maybe (fromMaybe)
 
 import Search.CStateMonad
@@ -73,21 +72,16 @@ futilActive :: Bool
 futilActive = True
 
 maxFutilDepth :: Int
-maxFutilDepth = 3
+maxFutilDepth = 4
 
 -- This is a linear formula for futility margin
 -- Should apply from 1 to maxFutilDepth (checked elsewehere)
--- Optimisation for futilMs:
--- A:  25
--- B:  50
--- C:  75 == n1ns
--- D: 100
--- E: 125
 futilMs, futilMv :: Int
-futilMs = 275	-- margin for depth 1
-futilMv = 150	-- suplementary margin for every further depth
+futilMs = 325	-- margin for depth 1
+futilMv = 225	-- suplementary margin for every further depth
 futilMargins :: Int -> Int
-futilMargins d = futilMs - futilMv + d*futilMv
+-- futilMargins d = futilMs - futilMv + d*futilMv
+futilMargins d = futilMs + ((d-1) `unsafeShiftR` 1) * futilMv
 
 -- Parameters for quiescent search:
 qsBetaCut, qsDeltaCut :: Bool
@@ -401,10 +395,6 @@ scoreToExtern sc de
     | nearmate sc = if sc > 0 then sc - de else sc + de
     | otherwise   = sc
 
-legalResult :: DoResult -> Bool
-legalResult Illegal = False
-legalResult _       = True
-
 -- This is the inner loop of the PV search of the root, executed at root once per possible move
 -- See the parameter
 -- Returns: ...flag if it was a beta cut and new status
@@ -422,20 +412,19 @@ pvInnerRoot b d nst e = do
          when (draft (ronly old) >= depthForCM) $ lift $ informCM e $ movno nst
          pindent $ "-> " ++ show e
          -- do the move
-         exd <-  lift $ doMove False e False
-         if legalResult exd
-            then do
+         exd <- lift $ doMove False e False
+         if isDoRIllegal exd
+            then return (False, nst)
+            else do
                 nn <- newNode
                 viztreeDown nn e
                 modify $ \s -> s { absdp = absdp s + 1 }
                 -- (s, def) <- case exd of
-                s <- case exd of
-                         Exten exd' _ -> pvInnerRootExten b d exd' nst
-                         Final sco    -> do
-                             viztreeScore $ "Final: " ++ show sco
-                             -- return (pathFromScore "Final" (-sco), d)
-                             return $! pathFromScore "Final" (-sco)
-                         Illegal -> error "Cannot be illegal here"
+                s <- if isDoRRepet exd
+                        then do
+                             viztreeScore $ "Final: 0"
+                             return $ pathFromScore "Final" 0
+                        else pvInnerRootExten b d (getDoRExten exd) nst
                 -- undo the move
                 lift undoMove
                 viztreeUp nn e (pathScore s)
@@ -443,7 +432,6 @@ pvInnerRoot b d nst e = do
                 let s' = addToPath e s
                 pindent $ "<- " ++ show e ++ " (" ++ show s' ++ ")"
                 checkFailOrPVRoot (stats old) b d e s' nst
-            else return (False, nst)
 
 -- pvInnerRootExten :: Path -> Int -> Bool -> Int -> NodeState -> Search (Path, Int)
 pvInnerRootExten :: Path -> Int -> Int -> NodeState -> Search Path
@@ -573,10 +561,10 @@ pvSearch :: NodeState -> Path -> Path -> Int -> Search Path
 pvSearch _ !a !b !d | d <= 0 = do
     -- Now that we moved the ttRead call under pvSearch we are not prepared
     -- to handle correctly the case minToRetr = 0
-    (v, ns) <- mustQSearch (pathScore a) (pathScore b)
-    when (minToStore == 0)
-        $ lift $  ttStore 0 2 v (Move 0) ns
-    let !esc = pathFromScore ("pvQSearch 1:" ++ show v) v
+    (v', ns) <- mustQSearch (pathScore a) (pathScore b)
+    -- when (minToStore == 0) $ lift $ ttStore 0 2 v' (Move 0) ns
+    let !v = trimax (pathScore a) (pathScore b) v'
+        !esc = pathFromScore ("pvQSearch 1:" ++ show v) v
     pindent $ "<> " ++ show esc
     return esc
 pvSearch nst !a !b !d = do
@@ -600,8 +588,8 @@ pvSearch nst !a !b !d = do
          || tp == 0 && hsc <= pathScore a	-- we will fail low
        )
        then  do
-           let ttpath = Path { pathScore = hsc, pathDepth = hdeep,
-                               pathMoves = Seq [e'], pathOrig = "TT" }
+           let ttpath = Path { pathScore = trimax (pathScore a) (pathScore b) hsc,
+                               pathDepth = hdeep, pathMoves = Seq [e'], pathOrig = "TT" }
            reSucc nodes' >> return ttpath
        else do
            -- Use the found TT move as best move
@@ -611,11 +599,12 @@ pvSearch nst !a !b !d = do
            edges <- genAndSort nst' a b d
            if noMove edges
               then do
-                v <- lift staticVal
+                tact <- lift tacticalPos
+                let !v = trimax (pathScore a) (pathScore b) $ if tact then -mateScore else 0
                 viztreeScore $ "noMove: " ++ show v
                 let !s = pathFromScore ("static: " ++ show v) v
                 pindent $ "<= " ++ show s
-                return s	-- shouldn't we ttStore this?
+                return s
               else do
                 nodes0 <- gets (sNodes . stats)
                 -- Loop thru the moves
@@ -632,10 +621,10 @@ pvSearch nst !a !b !d = do
                    else do
                        -- here we failed low
                        let de = max d $ pathDepth s
-                           es = unalt edges
-                       when (de >= minToStore && not (null es)) $ do	-- what if es is null?
+                           es = unalt edges	-- cant be null here: we are on else of noMove
+                       when (de >= minToStore) $ do
                            nodes1 <- gets (sNodes . stats)
-                           -- store as upper score, and as move, the first one generated
+                           -- store as upper score; move: the first one generated (could be illegal)
                            lift $ do
                                let typ = 0
                                    !deltan = nodes1 - nodes0
@@ -645,17 +634,17 @@ pvSearch nst !a !b !d = do
                            else do
                                chk <- lift tacticalPos
                                let s' = if chk then matedPath else staleMate
-                               return $! trimaxPath a b s'	-- shouldn't we ttStore this?
+                               return $! trimaxPath a b s'
 
 -- PV Zero Window
 pvZeroW :: NodeState -> Path -> Int -> Int -> Bool -> Search Path
 pvZeroW !_ !b !d !_ _ | d <= 0 = do
     -- Now that we moved the ttRead call under pvZeroW we are not prepared
     -- to handle correctly the case minToRetr = 0
-    (v, ns) <- mustQSearch (pathScore bGrain) (pathScore b)
-    when (minToStore == 0)
-        $ lift $  ttStore 0 2 v (Move 0) ns
-    let !esc = pathFromScore ("pvQSearch 21:" ++ show v) v
+    (v', ns) <- mustQSearch (pathScore bGrain) (pathScore b)
+    when (minToStore == 0) $ lift $ ttStore 0 2 v' (Move 0) ns
+    let !v = trimax (pathScore bGrain) (pathScore b) v'
+        !esc = pathFromScore ("pvQSearch 21:" ++ show v) v
     pindent $ "<> " ++ show esc
     return esc
     where bGrain = b -: scoreGrain
@@ -669,14 +658,24 @@ pvZeroW !nst !b !d !lastnull redu = do
     let bsco = pathScore b
     if hdeep >= d && (tp == 2 || tp == 1 && hsc >= bsco || tp == 0 && hsc < bsco)
        then  do
-           let ttpath = Path { pathScore = hsc, pathDepth = hdeep, pathMoves = Seq [e'], pathOrig = "TT" }
+           let ttpath = Path { pathScore = trimax (pathScore bGrain) (pathScore b) hsc,
+                               pathDepth = hdeep, pathMoves = Seq [e'], pathOrig = "TT" }
            reSucc nodes' >> return ttpath
        else do
-           nmhigh <- nullEdgeFailsHigh nst b d lastnull
-           abrt <- gets abort
-           if abrt || nmhigh
+{--
+           aborhigh <- if nxtnt nst == CutNode	-- we are here in a cut node but nst is the old one, so nxtnt
+                          then do
+                              nmhigh <- nullEdgeFailsHigh nst b d lastnull
+                              abrt <- gets abort
+                              return $ nmhigh || abrt
+                          else return False
+--}
+           aborhigh <- do nmhigh <- nullEdgeFailsHigh nst b d lastnull
+                          abrt   <- gets abort
+                          return $ nmhigh || abrt
+           if aborhigh
               then do
-                let !s = onlyScore b
+                let !s = onlyScore b	-- warum onlyScore?
                 pindent $ "<= " ++ show s
                 viztreeScore $ "nmhigh: " ++ show (pathScore s)
                 return s
@@ -688,17 +687,24 @@ pvZeroW !nst !b !d !lastnull redu = do
                 edges <- genAndSort nst' bGrain b d
                 if noMove edges
                    then do
-                     v <- lift staticVal
+                     chk <- lift tacticalPos
+                     let !v = trimax (pathScore bGrain) (pathScore b) $ if chk then -mateScore else 0
                      viztreeScore $ "noMove: " ++ show v
                      let !s = pathFromScore ("static: " ++ show v) v
                      pindent $ "<= " ++ show s
-                     return s	-- shouldn't we ttStore this?
+                     return s
                    else do
                      !nodes0 <- gets (sNodes . stats)
                      -- futility pruning?
+                     -- If we can use material diff in isPruneFutil, then this can
+                     -- remain like this here; otherwise we will have to delay this
+                     -- check after the killer moves, to avoid the static eval too early
+                     -- (in case we have a cut)
+                     -- This will probably be the case as, as futility pruning
+                     -- needs normally the full eval
                      prune <- if not futilActive
                                  then return False
-                                 else isPruneFutil d bGrain	-- was a
+                                 else isPruneFutil d bGrain
                      -- Loop thru the moves
                      let !nsti = nst0 { crtnt = nxtnt nst', nxtnt = deepNodeType (nxtnt nst'),
                                         cursc = bGrain, pvcont = tailSeq (pvcont nst') }
@@ -707,9 +713,9 @@ pvZeroW !nst !b !d !lastnull redu = do
                      -- Here we expect bGrain <= s < b -- this must be checked
                      pindent $ "<: " ++ show s
                      let !de = max d $ pathDepth s
-                         es = unalt edges
-                     when (de >= minToStore && s < b && not (null es)) $ do	-- we failed low
-                         !nodes1 <- gets (sNodes . stats)	-- what if es is null?
+                         es = unalt edges	-- this is never null (we are in else of noMove)
+                     when (de >= minToStore && s < b) $ do	-- we failed low and have to store this
+                         !nodes1 <- gets (sNodes . stats)
                          -- store as upper score, and as move the first one (generated)
                          lift $ do
                              let typ = 0
@@ -717,7 +723,7 @@ pvZeroW !nst !b !d !lastnull redu = do
                              ttStore de typ (pathScore b) (head es) deltan
                      if s > bGrain || movno nstf > 1
                         then return s
-                        else do	-- here: store exact mate or stalemate score!
+                        else do	-- all moves where illegal
                             chk <- lift tacticalPos
                             let s' = if chk then matedPath else staleMate
                             return $! trimaxPath bGrain b s'
@@ -732,7 +738,7 @@ nullEdgeFailsHigh nst b d lastnull
          if tact
             then return False
             else do
-               v <- lift staticVal
+               v <- lift staticVal	-- materVal	-- we use now material diff here
                if v < pathScore b + nulTrig * scoreGrain
                   then return False
                   else do
@@ -764,8 +770,7 @@ pvZLoop b d p redu = go
     where go !s (Alt []) = return s
           go !s (Alt (e:es)) = do
               (!cut, !s') <- pvInnerLoopZ b d p s e redu
-              if cut then return s'
-                     else go s' $ Alt es
+              if cut then return s' else go s' $ Alt es
 
 -- This is the inner loop of the PV search, executed at every level (except root) once per possible move
 -- See the parameter
@@ -783,28 +788,27 @@ pvInnerLoop b d prune nst e = do
        else do
          old <- get
          pindent $ "-> " ++ show e
-         exd <-  lift $ doMove False e False	-- do the move
-         if legalResult exd
-            then do
+         exd <- lift $ doMove False e False	-- do the move
+         if isDoRIllegal exd
+            then return (False, nst)
+            else do
                 nn <- newNode
                 viztreeDown nn e
                 modify $ \s -> s { absdp = absdp s + 1 }
-                s <- case exd of
-                         Exten exd' spc -> do
-                           if prune && exd' == 0 && not spc -- don't prune special or extended
-                              then return $! onlyScore $! cursc nst	-- prune, return a
-                              else pvInnerLoopExten b d exd' nst
-                         Final sco -> do
-                             viztreeScore $ "Final: " ++ show sco
-                             return $! pathFromScore "Final" (-sco)
-                         Illegal -> error "Cannot be illegal here"
+                s <- if isDoRRepet exd
+                        then do
+                             viztreeScore $ "Final: 0"
+                             return $ pathFromScore "Final" 0
+                        else if prune && not (isDoRInCheck exd || isDoRChecking exd
+                                           || isDoRSpecial exd || isDoRTreat exd)
+                                then return $! onlyScore $! cursc nst	-- prune, return a
+                                else pvInnerLoopExten b d (getDoRExten exd) nst
                 lift undoMove	-- undo the move
                 viztreeUp nn e (pathScore s)
                 modify $ \s' -> s' { absdp = absdp old, usedext = usedext old }
                 let s' = addToPath e s
                 pindent $ "<- " ++ show e ++ " (" ++ show s' ++ ")"
                 checkFailOrPVLoop (stats old) b d e s' nst
-            else return (False, nst)
 
 -- This part for the zero window search
 pvInnerLoopZ :: Path 	-- current beta
@@ -822,27 +826,26 @@ pvInnerLoopZ b d prune nst e redu = do
          old <- get
          pindent $ "-> " ++ show e
          exd <-  lift $ doMove False e False	-- do the move
-         if legalResult exd
-            then do
+         if isDoRIllegal exd
+            then return (False, nst)
+            else do
                 nn <- newNode
                 viztreeDown nn e
                 modify $ \s -> s { absdp = absdp s + 1 }
-                s <- case exd of
-                         Exten exd' spc -> do
-                           if prune && exd' == 0 && not spc -- don't prune special or extended
-                              then return $! onlyScore $! cursc nst	-- prune, return a
-                              else pvInnerLoopExtenZ b d spc exd' nst redu
-                         Final sco -> do
-                             viztreeScore $ "Final: " ++ show sco
-                             return $! pathFromScore "Final" (-sco)
-                         Illegal -> error "Cannot be illegal here"
+                s <- if isDoRRepet exd
+                        then do
+                             viztreeScore $ "Final: 0"
+                             return $ pathFromScore "Final" 0
+                        else if prune && not (isDoRInCheck exd || isDoRChecking exd
+                                           || isDoRSpecial exd || isDoRTreat exd)
+                                then return $! onlyScore $! cursc nst	-- prune, return a
+                                else pvInnerLoopExtenZ b d (isDoRSpecial exd) (getDoRExten exd) nst redu
                 lift undoMove	-- undo the move
                 viztreeUp nn e (pathScore s)
                 modify $ \s' -> s' { absdp = absdp old, usedext = usedext old }
                 let s' = addToPath e s
                 pindent $ "<- " ++ show e ++ " (" ++ show s' ++ ")"
                 checkFailOrPVLoopZ (stats old) b d e s' nst
-            else return (False, nst)
 
 reserveExtension :: Int -> Int -> Search Int
 reserveExtension !uex !exd
@@ -1015,11 +1018,6 @@ newKiller d s nst
 -- and the killers
 genAndSort :: NodeState -> Path -> Path -> Int -> Search (Alt Move)
 genAndSort nst a b d = do
-    {--
-    path <- if useIID
-               then bestMoveFromIID nst a b d	-- it will do nothing for AllNode
-               else return []
-    --}
     let path' = unseq $ pvcont nst
     path <- if null path' && useIID
                then bestMoveFromIID nst a b d	-- it will do nothing for AllNode
@@ -1077,34 +1075,28 @@ isPruneFutil d a
     | otherwise = do
         tact <- lift tacticalPos
         if tact then return False else do
-            -- let !margin = futilMargins ! d
             v <- lift staticVal	-- E1
-            -- v <- lift materVal	-- can we do here direct static evaluation?
             -- v <- pvQSearch a' b' 0	-- E2
-            let margin = futilMargins d
-                a' = pathScore a
-            if v + margin <= a'
-               then return True
-               else return False
+            -- v <- lift materVal	-- can we use here material diff? Theory says: no
+            let margin = futilMargins d	-- we need higher futil margins if we use material only
+            return $! v + margin <= pathScore a
 
 trimaxPath :: Path -> Path -> Path -> Path
 trimaxPath a b x
-    | x < a     = a
-    | x > b     = b
+    | x <= a    = a
+    | x >= b    = b
     | otherwise = x
 
 trimax :: Int -> Int -> Int -> Int
 trimax a b x
-    | x < a     = a
-    | x > b     = b
+    | x <= a    = a
+    | x >= b    = b
     | otherwise = x
 
 -- PV Quiescent Search
 pvQSearch :: Int -> Int -> Int -> Search Int
 pvQSearch !a !b c = do				   -- to avoid endless loops
     -- qindent $ "=> " ++ show a ++ ", " ++ show b
-    !stp <- lift staticVal				-- until we can recognize repetition
-    viztreeScore $ "Static: " ++ show stp
     !tact <- lift tacticalPos
     if tact
        then do
@@ -1113,7 +1105,8 @@ pvQSearch !a !b c = do				   -- to avoid endless loops
            if noMove edges
               then do
                   lift $ finNode "MATE" False
-                  return $! trimax a b stp
+                  -- here we are in check and have no move -> mate
+                  return $! trimax a b (-mateScore)
               else if c >= qsMaxChess
                       then do
                           viztreeScore $ "endless check: " ++ show inEndlessCheck
@@ -1127,11 +1120,14 @@ pvQSearch !a !b c = do				   -- to avoid endless loops
                           let !esc = lenmax3 $ unalt edges
                               !nc = c + esc - 2
                           pvQLoop b nc a edges
-       else if qsBetaCut && stp >= b
+       else do
+           stp <- lift staticVal
+           viztreeScore $ "Static: " ++ show stp
+           if qsBetaCut && stp >= b
                then do
                    lift $ finNode "BETA" False
                    return b
-               else if qsDeltaCut && stp + qsDelta < a
+               else if qsDeltaCut && stp < a && stp + qsDelta < a
                       then do
                           lift $ finNode "DELT" False
                           return a
@@ -1166,19 +1162,15 @@ pvQInnerLoop !b c !a e = do
          -- here: delta pruning: captured piece + 200 > a? then go on, else return
          -- qindent $ "-> " ++ show e
          r <-  lift $ doMove False e True
-         if legalResult r
-            then do
+         if isDoRIllegal r
+            then return (False, a)
+            else do
                 nn <- newNodeQS
                 viztreeDown nn e
-                !sc <- case r of
-                           Final sc -> do
-                               viztreeScore $ "Final: " ++ show sc
-                               return (-sc)
-                           _        -> do
-                             modify $ \s -> s { absdp = absdp s + 1 }
-                             !sc <- pvQSearch (-b) (-a) c
-                             modify $ \s -> s { absdp = absdp s - 1 }	-- no usedext here
-                             return (-sc)
+                !sc <- do modify $ \s -> s { absdp = absdp s + 1 }
+                          !sc <- pvQSearch (-b) (-a) c
+                          modify $ \s -> s { absdp = absdp s - 1 }	-- no usedext here
+                          return (-sc)
                 lift undoMove
                 viztreeUp nn e sc
                 -- qindent $ "<- " ++ show e ++ " (" ++ show s ++ ")"
@@ -1189,7 +1181,6 @@ pvQInnerLoop !b c !a e = do
                        if sc > a
                           then return (abrt', sc)
                           else return (abrt', a)
-            else return (False, a)
 
 {-# INLINE bestMoveFromIID #-}
 bestMoveFromIID :: NodeState -> Path -> Path -> Int -> Search [Move]

@@ -1,12 +1,12 @@
 {-# LANGUAGE TypeSynonymInstances, MultiParamTypeClasses, PatternGuards, BangPatterns #-}
 module Moves.Board (
     posFromFen, initPos,
-    isCheck, inCheck,
-    goPromo, hasMoves, moveIsCapture,
+    inCheck,
+    goPromo, moveIsCapture,
     castKingRookOk, castQueenRookOk,
     genMoveCast, genMoveNCapt, genMoveTransf, genMoveFCheck, genMoveCaptWL,
     genMoveNCaptToCheck,
-    updatePos, kingsOk, checkOk,
+    kingsOk, checkOk,
     legalMove, alternateMoves,
     doFromToMove, reverseMoving
     ) where
@@ -25,19 +25,6 @@ import Eval.BasicEval
 import Hash.Zobrist
 import Moves.Fen
 
--- Is color c in check in position p?
-{-# INLINE isCheck #-}
-isCheck :: MyPos -> Color -> Bool
-isCheck p White | check p .&. white == 0 = False
-                | otherwise              = True
-    where !white = occup p `less` black p
-isCheck p Black | check p .&. black p == 0 = False
-                | otherwise                = True
-
-{-# INLINE inCheck #-}
-inCheck :: MyPos -> Bool
-inCheck = (/= 0) . check
-
 goPromo :: MyPos -> Move -> Bool
 goPromo p m
     | moveIsPromo m = True
@@ -46,32 +33,6 @@ goPromo p m
 
 movePassed :: MyPos -> Move -> Bool
 movePassed p m = passed p .&. (uBit $ fromSquare m) /= 0
-
--- Here it seems we have a problem when we are not in check but could move
--- only a pinned piece: then we are stale mate but don't know (yet)
--- In the next ply, when we try to find a move, we see that all moves are illegal
--- In this case we should take care in search that the score is 0!
-hasMoves :: MyPos -> Color -> Bool
-hasMoves !p c
-    | chk       = not . null $ genMoveFCheck p
-    | otherwise = anyMove
-    where hasPc = any (/= 0) $ map (pcapt . pAttacs c)
-                     $ bbToSquares $ pawns p .&. me p
-          hasPm = not . null $ pAll1Moves c (pawns p .&. me p) (occup p)
-          hasN = any (/= 0) $ map (legmv . nAttacs) $ bbToSquares $ knights p .&. me p
-          hasB = any (/= 0) $ map (legmv . bAttacs (occup p))
-                     $ bbToSquares $ bishops p .&. me p
-          hasR = any (/= 0) $ map (legmv . rAttacs (occup p))
-                     $ bbToSquares $ rooks p .&. me p
-          hasQ = any (/= 0) $ map (legmv . qAttacs (occup p))
-                     $ bbToSquares $ queens p .&. me p
-          !hasK = 0 /= (legal . kAttacs $ firstOne $ kings p .&. me p)
-          !anyMove = hasK || hasN || hasPm || hasPc || hasQ || hasR || hasB
-          chk = inCheck p
-          !yopiep = yo p .|. (epcas p .&. epMask)
-          legmv = (`less` me p)
-          pcapt = (.&. yopiep)
-          legal = (`less` yoAttacs p)
 
 genMoveNCapt :: MyPos -> [Move]
 genMoveNCapt !p = map (moveAddColor c)
@@ -92,11 +53,11 @@ genMoveNCapt !p = map (moveAddColor c)
           qGenNC = map (moveAddPiece Queen  . uncurry moveFromTo)
                       $ concatMap (srcDests (ncapt . qAttacs (occup p)))
                       $ bbToSquares $ queens p .&. me p
-          kGenNC = map (moveAddPiece King   . uncurry moveFromTo)
-                      $            srcDests (ncapt . legal . kAttacs)
+          kGenNC = map (moveAddPiece King . uncurry moveFromTo)
+                      $           srcDests (ncapt . kAttacs)
                       $ firstOne $ kings p .&. me p
-          ncapt = (`less` occup p)
-          legal = (`less` yoAttacs p)
+          !notoc = complement $ occup p
+          ncapt  = (.&.) notoc
           traR = if c == White then 0x00FF000000000000 else 0xFF00
           !c = moving p
 
@@ -147,15 +108,15 @@ genMoveFCheck !p
     | otherwise = kGen				-- double check, only king moves help
     where !chklist = findChecking p
           !kGen = map (moveAddColor (moving p) . moveAddPiece King . uncurry moveFromTo)
-                      $ srcDests (legal . kAttacs) ksq
+                      $ srcDests (nocan . kAttacs) ksq
           !ksq = firstOne kbb
           !kbb = kings p .&. me p
-          !ocp1 = occup p `less` kbb
-          legal = (`less` alle)
-          !alle = me p .|. yoAttacs p .|. excl
-          !excl = foldl' (.|.) 0 $ map chkAtt chklist
-          chkAtt (NormalCheck f s) = fAttacs s f ocp1
-          chkAtt (QueenCheck f s)  = fAttacs s f ocp1
+          !notme = complement $ me p
+          nocan = (.&.) notme
+          -- !ocp1 = occup p `less` kbb
+          -- !excl = foldl' (.|.) 0 $ map chkAtt chklist
+          -- chkAtt (NormalCheck f s) = fAttacs s f ocp1
+          -- chkAtt (QueenCheck f s)  = fAttacs s f ocp1
           -- This head is safe becase chklist is first checked in the pattern of the function
           (r1, r2) = case head chklist of	-- this is needed only when simple check
                  NormalCheck Pawn sq   -> (beatAtP p (bit sq), [])  -- cannot block pawn
@@ -271,13 +232,28 @@ genMoveCast p
     | otherwise = kingside ++ queenside
     where (cmidk, cmidq) = if c == White then (caRMKw, caRMQw)
                                          else (caRMKb, caRMQb)
-          kingside  = if castKingRookOk  p c && (occup p .&. cmidk == 0) && (yoAttacs p .&. cmidk == 0)
-                        then [caks] else []
-          queenside = if castQueenRookOk p c && (occup p .&. cmidq == 0) && (yoAttacs p .&. cmidq == 0)
-                        then [caqs] else []
+          kingside
+              | castKingRookOk p c && (occup p .&. cmidk == 0)
+              = if    isCheckSquare (occup p) (kings p) (queens p) (rooks p) (bishops p)
+                          (knights p) (pawns p) (yo p) c (ksq + 1) == 0
+                   || isCheckSquare (occup p) (kings p) (queens p) (rooks p) (bishops p)
+                          (knights p) (pawns p) (yo p) c (ksq + 2) == 0
+                       then [caks]
+                       else []
+              | otherwise = []
+          queenside
+              | castQueenRookOk p c && (occup p .&. cmidq == 0)
+              = if    isCheckSquare (occup p) (kings p) (queens p) (rooks p) (bishops p)
+                          (knights p) (pawns p) (yo p) c (ksq - 1) == 0
+                   || isCheckSquare (occup p) (kings p) (queens p) (rooks p) (bishops p)
+                          (knights p) (pawns p) (yo p) c (ksq - 2) == 0
+                       then [caqs]
+                       else []
+              | otherwise = []
           caks = makeCastleFor c True
           caqs = makeCastleFor c False
           !c = moving p
+          ksq = firstOne $ kings p.&. me p
 
 {-# INLINE castKingRookOk #-}
 castKingRookOk :: MyPos -> Color -> Bool
@@ -289,12 +265,14 @@ castQueenRookOk :: MyPos -> Color -> Bool
 castQueenRookOk !p White = epcas p .&.  b0 /= 0 where b0 = 1 
 castQueenRookOk !p Black = epcas p .&. b56 /= 0 where b56 = uBit 56
 
-kingsOk, checkOk :: MyPos -> Bool
+kingsOk, checkOk, inCheck :: MyPos -> Bool
 {-# INLINE kingsOk #-}
 {-# INLINE checkOk #-}
+{-# INLINE inCheck #-}
 kingsOk p = exactOne (kings p .&. me p)
          && exactOne (kings p .&. yo p)
-checkOk p = yo p .&. kings p .&. myAttacs p == 0
+checkOk p = check p .&. yo p .&. kings p == 0
+inCheck p = check p .&. me p .&. kings p /= 0
 
 data ChangeAccum = CA !ZKey !Int
 
@@ -758,10 +736,9 @@ seeMoveValue pos !attacks sqfirstmv sqto gain0 = v
 -- This function can produce illegal captures with the king!
 genMoveCaptWL :: MyPos -> ([Move], [Move])
 genMoveCaptWL !pos = (map f $ sort ws, map f $ sort ls)
-    where !capts = myAttacs pos .&. yo pos
-          epcs  = genEPCapts pos
+    where epcs  = genEPCapts pos
           c     = moving pos
-          (ws, ls) = foldr (perCaptFieldWL pos (me pos) (yoAttacs pos)) (lepcs,[]) $ bbToSquares capts
+          (ws, ls) = foldr (perCaptFieldWL pos) (lepcs, []) $ bbToSquares $ yo pos `less` kings pos
           lepcs = map (moveToLMove Pawn Pawn) epcs
           f = moveAddColor c . lmoveToMove
 
@@ -794,17 +771,19 @@ genEPCapts !pos
           dst = head $ bbToSquares epBB	-- safe because epBB /= 0
           srcBB = pAttacs (other $ moving pos) dst .&. me pos .&. pawns pos
 
-perCaptFieldWL :: MyPos -> BBoard -> BBoard -> Square -> ([LMove], [LMove]) -> ([LMove], [LMove])
-perCaptFieldWL pos mypc advdefence sq mvlst
+perCaptFieldWL :: MyPos -> Square -> ([LMove], [LMove]) -> ([LMove], [LMove])
+perCaptFieldWL pos sq mvlst
+    | atAtt myAttRec == 0    = mvlst
     | hanging   = let mvlst1 = foldr (addHanging  pos pcto sq) mvlst  reAgrsqs
                   in           foldr (addHangingP     pcto sq) mvlst1 prAgrsqs	-- for promotions
     | otherwise = let mvlst1 = foldr (perCaptWL pos myAttRec False pcto valto sq) mvlst  reAgrsqs
                   in           foldr (perCaptWL pos myAttRec True  pcto valto sq) mvlst1 prAgrsqs
     where !myAttRec = theAttacs pos sq
-          myattacs = mypc .&. atAtt myAttRec
+          myattacs = me pos .&. atAtt myAttRec
+          yoattacs = yo pos .&. atAtt myAttRec
           Busy _ pcto = tabla pos sq
           valto = value pcto
-          hanging = not (advdefence `testBit` sq)
+          hanging = not (yoattacs `testBit` sq)
           prAgrsqs = bbToSquares prPawns
           reAgrsqs = bbToSquares reAtts
           (prPawns, reAtts)

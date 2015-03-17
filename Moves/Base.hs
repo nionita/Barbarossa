@@ -1,6 +1,7 @@
 {-# LANGUAGE TypeSynonymInstances,
              MultiParamTypeClasses,
              BangPatterns,
+             PatternGuards,
              RankNTypes, UndecidableInstances,
              FlexibleInstances
              #-}
@@ -92,15 +93,14 @@ loosingLast = False
 genMoves :: Int -> Int -> Bool -> Game ([Move], [Move])
 genMoves depth _ pv = do	-- absdp not used
     p <- getPos
-    let !c = moving p
-        lc = genMoveFCheck p
-    if isCheck p c
+    let lc = genMoveFCheck p
+    if inCheck p
        then return (lc, [])
        else do
-            let l0 = genMoveCast p
-                l1 = genMoveTransf p
+            let l0  = genMoveCast p
+                l1  = genMoveTransf p
                 (l2w, l2l) = genMoveCaptWL p
-                l3'= genMoveNCapt p
+                l3' = genMoveNCapt p
             l3 <- if pv && depth >= depthForMovesSortPv
                      || not pv && depth >= depthForMovesSort
                      -- then sortMovesFromHash l3'
@@ -116,12 +116,11 @@ genMoves depth _ pv = do	-- absdp not used
 genTactMoves :: Game [Move]
 genTactMoves = do
     p <- getPos
-    let !c = moving p
-        l1 = genMoveTransf p
+    let l1 = genMoveTransf p
         (l2w, _) = genMoveCaptWL p
         lc = genMoveFCheck p
-        !mvs | isCheck p c = lc
-             | otherwise   = l1 ++ l2w
+        !mvs | inCheck p = lc
+             | otherwise = l1 ++ l2w
     -- return $ checkGenMoves p mvs
     return mvs
 
@@ -186,7 +185,7 @@ doMove :: Bool -> Move -> Bool -> Game DoResult
 doMove real m qs = do
     -- logMes $ "** doMove " ++ show m
     statNodes   -- when counting all visited nodes
-    s  <- get
+    s <- get
     -- let pc = if null (stack s) then error "doMove" else head $ stack s
     let (pc:_) = stack s	-- we never saw an empty stack error until now
         !m1 = if real then checkCastle (checkEnPas m pc) pc else m
@@ -195,8 +194,7 @@ doMove real m qs = do
         -- Capturing one king?
         kc = kings pc `uBitSet` toSquare m1
         p' = doFromToMove m1 pc
-        kok = kingsOk p'	-- actually not needed if kc is always checkd...
-        cok = checkOk p'
+        kok = kingsOk p'	-- actually not needed if kc is always checked...
     -- If the move is real and one of those conditions occur,
     -- then we are really in trouble...
     if not real && (il || kc || not kok)
@@ -206,23 +204,34 @@ doMove real m qs = do
             unless kok $ logMes $ "Illegal position (after the move):\n" ++ showMyPos p'
             logMes $ "Stack:\n" ++ showStack 3 (stack s)
             -- After an illegal result there must be no undo!
-            return Illegal
-        else if not cok
-                then return Illegal
+            return dorIllegal
+        else if not (checkOk p')
+                then return dorIllegal
                 else do
                     -- bigCheckPos "doMove" pc (Just m) p'
-                    let (!sts, feats) | real      = (0, [])
-                                      | otherwise = evalState (posEval p') (evalst s)
-                        !p = p' { staticScore = sts, staticFeats = feats }
+                    let (sts, feats) | real      = (0, [])
+                                     | otherwise = evalState (posEval p') (evalst s)
+                        p = p' { staticScore = sts, staticFeats = feats }
                     put s { stack = p : stack s }
-                    remis <- if qs then return False else checkRemisRules p'
-                    if remis
-                       then return $ Final 0
-                       else do
-                           -- let dext = if inCheck p || goPromo p m1 || movePassed p m1 then 1 else 0
-                           -- let dext = if inCheck p || goPromo pc m1 then 1 else 0
-                           let dext = if inCheck p then 1 else 0
-                           return $ Exten dext $ moveIsSpecial pc m1
+                    if qs
+                       then return dorNormal	-- in QS we dont need extensions & co
+                       else if checkRemisRules p' (stack s)
+                               then return dorRepet
+                               else do
+                                   let !inc = inCheck pc
+                                       !spc = moveIsSpecial pc m1
+                                       !chk = inCheck p
+                                       -- we still have to set the treat!
+                                   return $ setDoRExten chk $ setDoRInCheck inc
+                                          $ setDoRChecking chk $ setDoRSpecial spc dorNormal
+
+checkRemisRules :: MyPos -> [MyPos] -> Bool
+checkRemisRules p stk
+    | remis50Moves p   = True
+    | (_:_:_) <- equal = True
+    | otherwise        = False
+    where revers = map zobkey $ takeWhile isReversible stk
+          equal  = filter (== zobkey p) revers	-- if keys are equal, pos is repeated
 
 doNullMove :: Game ()
 doNullMove = do
@@ -253,29 +262,6 @@ bigCheckPos loc pin mmv pou = do
         logMes $ "MyPos pou: " ++ show pou
         logMes $ "MyPos p:   " ++ show p
 --}
-
-checkRemisRules :: MyPos -> Game Bool
-checkRemisRules p = do
-    s <- get
-    if remis50Moves p
-       then return True
-       else do	-- check repetition rule
-         let revers = map zobkey $ takeWhile isReversible $ stack s
-             equal  = filter (== zobkey p) revers	-- if keys are equal, pos is equal
-         case equal of
-            (_:_:_)    -> return True
-            _          -> return False
-
--- checkRepeatPv :: MyPos -> Bool -> Game Bool
--- checkRepeatPv _ False = return False
--- checkRepeatPv p _ = do
---     s <- get
---     let search = map zobkey $ takeWhile imagRevers $ stack s
---         equal  = filter (== zobkey p) search	-- if keys are equal, pos is equal
---     case equal of
---         (_:_) -> return True
---         _     -> return False
---     where imagRevers t = isReversible t && not (realMove t)
 
 {-# INLINE undoMove #-}
 undoMove :: Game ()
@@ -313,7 +299,8 @@ okInSequence m1 m2 = do
 -- Static evaluation function
 {-# INLINE staticVal #-}
 staticVal :: Game Int
-staticVal = do
+staticVal = getPos >>= return . staticScore
+{--
     s <- get
     t <- getPos
     let !c = moving t
@@ -323,6 +310,7 @@ staticVal = do
         !stSc1 | check t /= 0 = if hasMoves t c then stSc else -mateScore
                | otherwise    = stSc
     return stSc1
+--}
 
 {-# INLINE finNode #-}
 finNode :: String -> Bool -> Game ()
@@ -403,7 +391,6 @@ betaCut good absdp m
 moveIsSpecial :: MyPos -> Move -> Bool
 moveIsSpecial p m
     | moveIsPromo m || moveIsEnPas m = True
-    | check p /= 0                   = True
     | otherwise                      = moveIsCapture p m
 
 {--
