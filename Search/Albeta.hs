@@ -72,16 +72,16 @@ futilActive :: Bool
 futilActive = True
 
 maxFutilDepth :: Int
-maxFutilDepth = 4
+maxFutilDepth = 3
 
 -- This is a linear formula for futility margin
 -- Should apply from 1 to maxFutilDepth (checked elsewehere)
 futilMs, futilMv :: Int
-futilMs = 325	-- margin for depth 1
-futilMv = 225	-- suplementary margin for every further depth
+futilMs = 275	-- margin for depth 1
+futilMv = 150	-- suplementary margin for every further depth
 futilMargins :: Int -> Int
--- futilMargins d = futilMs - futilMv + d*futilMv
-futilMargins d = futilMs + ((d-1) `unsafeShiftR` 1) * futilMv
+futilMargins d = futilMs - futilMv + d*futilMv
+-- futilMargins d = futilMs + ((d-1) `unsafeShiftR` 1) * futilMv
 
 -- Parameters for quiescent search:
 qsBetaCut, qsDeltaCut :: Bool
@@ -561,10 +561,9 @@ pvSearch :: NodeState -> Path -> Path -> Int -> Search Path
 pvSearch _ !a !b !d | d <= 0 = do
     -- Now that we moved the ttRead call under pvSearch we are not prepared
     -- to handle correctly the case minToRetr = 0
-    (v', ns) <- mustQSearch (pathScore a) (pathScore b)
-    -- when (minToStore == 0) $ lift $ ttStore 0 2 v' (Move 0) ns
-    let !v = trimax (pathScore a) (pathScore b) v'
-        !esc = pathFromScore ("pvQSearch 1:" ++ show v) v
+    (v, ns) <- mustQSearch (pathScore a) (pathScore b)
+    when (minToStore == 0) $ lift $ ttStore 0 2 v (Move 0) ns
+    let !esc = pathFromScore ("pvQSearch 1:" ++ show v) v
     pindent $ "<> " ++ show esc
     return esc
 pvSearch nst !a !b !d = do
@@ -588,8 +587,8 @@ pvSearch nst !a !b !d = do
          || tp == 0 && hsc <= pathScore a	-- we will fail low
        )
        then  do
-           let ttpath = Path { pathScore = trimax (pathScore a) (pathScore b) hsc,
-                               pathDepth = hdeep, pathMoves = Seq [e'], pathOrig = "TT" }
+           let ttpath = Path { pathScore = hsc, pathDepth = hdeep,
+                               pathMoves = Seq [e'], pathOrig = "TT" }
            reSucc nodes' >> return ttpath
        else do
            -- Use the found TT move as best move
@@ -600,7 +599,7 @@ pvSearch nst !a !b !d = do
            if noMove edges
               then do
                 tact <- lift tacticalPos
-                let !v = trimax (pathScore a) (pathScore b) $ if tact then -mateScore else 0
+                let !v = if tact then -mateScore else 0
                 viztreeScore $ "noMove: " ++ show v
                 let !s = pathFromScore ("static: " ++ show v) v
                 pindent $ "<= " ++ show s
@@ -633,18 +632,16 @@ pvSearch nst !a !b !d = do
                            then return $! bestPath s a
                            else do
                                chk <- lift tacticalPos
-                               let s' = if chk then matedPath else staleMate
-                               return $! trimaxPath a b s'
+                               return $! if chk then matedPath else staleMate
 
 -- PV Zero Window
 pvZeroW :: NodeState -> Path -> Int -> Int -> Bool -> Search Path
 pvZeroW !_ !b !d !_ _ | d <= 0 = do
     -- Now that we moved the ttRead call under pvZeroW we are not prepared
     -- to handle correctly the case minToRetr = 0
-    (v', ns) <- mustQSearch (pathScore bGrain) (pathScore b)
-    when (minToStore == 0) $ lift $ ttStore 0 2 v' (Move 0) ns
-    let !v = trimax (pathScore bGrain) (pathScore b) v'
-        !esc = pathFromScore ("pvQSearch 21:" ++ show v) v
+    (v, ns) <- mustQSearch (pathScore bGrain) (pathScore b)
+    when (minToStore == 0) $ lift $ ttStore 0 2 v (Move 0) ns
+    let !esc = pathFromScore ("pvQSearch 21:" ++ show v) v
     pindent $ "<> " ++ show esc
     return esc
     where bGrain = b -: scoreGrain
@@ -658,8 +655,8 @@ pvZeroW !nst !b !d !lastnull redu = do
     let bsco = pathScore b
     if hdeep >= d && (tp == 2 || tp == 1 && hsc >= bsco || tp == 0 && hsc < bsco)
        then  do
-           let ttpath = Path { pathScore = trimax (pathScore bGrain) (pathScore b) hsc,
-                               pathDepth = hdeep, pathMoves = Seq [e'], pathOrig = "TT" }
+           let ttpath = Path { pathScore = hsc, pathDepth = hdeep,
+                               pathMoves = Seq [e'], pathOrig = "TT" }
            reSucc nodes' >> return ttpath
        else do
 {--
@@ -688,7 +685,7 @@ pvZeroW !nst !b !d !lastnull redu = do
                 if noMove edges
                    then do
                      chk <- lift tacticalPos
-                     let !v = trimax (pathScore bGrain) (pathScore b) $ if chk then -mateScore else 0
+                     let !v = if chk then -mateScore else 0
                      viztreeScore $ "noMove: " ++ show v
                      let !s = pathFromScore ("static: " ++ show v) v
                      pindent $ "<= " ++ show s
@@ -725,8 +722,7 @@ pvZeroW !nst !b !d !lastnull redu = do
                         then return s
                         else do	-- all moves where illegal
                             chk <- lift tacticalPos
-                            let s' = if chk then matedPath else staleMate
-                            return $! trimaxPath bGrain b s'
+                            return $! if chk then matedPath else staleMate
     where bGrain = b -: scoreGrain
 
 nullEdgeFailsHigh :: NodeState -> Path -> Int -> Int -> Search Bool
@@ -1081,6 +1077,7 @@ isPruneFutil d a
             let margin = futilMargins d	-- we need higher futil margins if we use material only
             return $! v + margin <= pathScore a
 
+{--
 trimaxPath :: Path -> Path -> Path -> Path
 trimaxPath a b x
     | x <= a    = a
@@ -1092,6 +1089,7 @@ trimax a b x
     | x <= a    = a
     | x >= b    = b
     | otherwise = x
+--}
 
 -- PV Quiescent Search
 pvQSearch :: Int -> Int -> Int -> Search Int
@@ -1106,12 +1104,12 @@ pvQSearch !a !b c = do				   -- to avoid endless loops
               then do
                   lift $ finNode "MATE" False
                   -- here we are in check and have no move -> mate
-                  return $! trimax a b (-mateScore)
+                  return (-mateScore)
               else if c >= qsMaxChess
                       then do
                           viztreeScore $ "endless check: " ++ show inEndlessCheck
                           lift $ finNode "ENDL" False
-                          return $! trimax a b inEndlessCheck
+                          return inEndlessCheck
                       else do
                           -- for check extensions in case of very few moves (1 or 2):
                           -- if 1 move: search even deeper
@@ -1136,7 +1134,7 @@ pvQSearch !a !b c = do				   -- to avoid endless loops
                           if noMove edges
                              then do
                                  lift $ finNode "NOCA" False
-                                 return $! trimax a b stp
+                                 return stp
                              else if stp > a
                                      then pvQLoop b c stp edges
                                      else pvQLoop b c a   edges
