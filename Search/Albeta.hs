@@ -210,7 +210,7 @@ addToPath e p = p { pathDepth = pathDepth p + 1, pathMoves = Seq $ e : unseq (pa
 -- Take only the score from a path (to another), rest empty
 onlyScore :: Path -> Path
 onlyScore p = Path { pathScore = pathScore p, pathDepth = 0, pathMoves = Seq [],
-                  pathOrig = "onlyScore from " ++ pathOrig p }
+                     pathOrig = "onlyScore from " ++ pathOrig p }
 
 -- Take all from the first path, except the score, which comes from the second (for fail hard)
 combinePath :: Path -> Path -> Path
@@ -659,17 +659,17 @@ pvZeroW !nst !b !d !lastnull redu = do
                                pathMoves = Seq [e'], pathOrig = "TT" }
            reSucc nodes' >> return ttpath
        else do
-{--
            aborhigh <- if nxtnt nst == CutNode	-- we are here in a cut node but nst is the old one, so nxtnt
                           then do
                               nmhigh <- nullEdgeFailsHigh nst b d lastnull
                               abrt <- gets abort
                               return $ nmhigh || abrt
                           else return False
---}
+{--
            aborhigh <- do nmhigh <- nullEdgeFailsHigh nst b d lastnull
                           abrt   <- gets abort
                           return $ nmhigh || abrt
+--}
            if aborhigh
               then do
                 let !s = onlyScore b	-- warum onlyScore?
@@ -1174,11 +1174,8 @@ pvQInnerLoop !b c !a e = do
                 -- qindent $ "<- " ++ show e ++ " (" ++ show s ++ ")"
                 if sc >= b
                    then return (True, b)
-                   else do
-                       !abrt' <- gets abort
-                       if sc > a
-                          then return (abrt', sc)
-                          else return (abrt', a)
+                   else do let a' = if sc > a then sc else a
+                           return (False, a')
 
 {-# INLINE bestMoveFromIID #-}
 bestMoveFromIID :: NodeState -> Path -> Path -> Int -> Search [Move]
