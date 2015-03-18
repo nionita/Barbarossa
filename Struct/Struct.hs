@@ -14,7 +14,7 @@ module Struct.Struct (
 
 import Data.Array.Unboxed
 import Data.Array.Base
-import Data.Char (ord, chr, toUpper)
+import Data.Char (ord, chr)
 import Data.Word
 import Data.Bits
 import Numeric
@@ -308,7 +308,6 @@ movePromoPiece (Move w)
     | otherwise        = error $ "Wrong promo piece in move: " ++ showHex w ""
     where r = fromIntegral $ (w `unsafeShiftR` 9) .&. 0x07
 
--- {-# INLINE makePromo #-}
 makePromo :: Piece -> Square -> Square -> Move
 makePromo p f t
     | f < t     = Move $ 0x7000 .|. w	-- white
@@ -318,6 +317,7 @@ makePromo p f t
           tc Rook   = tcRook
           tc Bishop = tcBishop
           tc Knight = tcKnight
+          tc _      = tcQueen	-- to eliminate warning
 
 tcQueen, tcRook, tcBishop, tcKnight :: Word16
 tcQueen  = (fromIntegral $ fromEnum Queen ) `shiftL` 9

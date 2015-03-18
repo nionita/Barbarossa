@@ -9,7 +9,6 @@ module Hash.TransTab (
 
 import Control.Applicative ((<$>))
 import Data.Bits
--- import Data.Maybe (fromMaybe)
 import Data.Int
 import Data.Word
 import Foreign.Marshal.Array
@@ -22,7 +21,7 @@ import GHC.Exts
 
 import Struct.Struct
 
-type Index = Int
+-- type Index = Int
 type Mask = Word64
 
 cacheLineSize :: Int

@@ -10,8 +10,6 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Control.Concurrent
 import Control.Applicative ((<$>))
--- import Control.Exception
--- import Data.Foldable (foldrM)
 import Data.List (intersperse, delete, isPrefixOf, stripPrefix)
 import Data.List.Split (splitOn)
 import Data.Maybe
@@ -28,7 +26,6 @@ import Struct.Status
 import Struct.Context
 import Struct.Config
 import Hash.TransTab
--- import Uci.UCI
 import Moves.BaseTypes
 import Search.AlbetaTypes
 import Moves.Base
@@ -422,7 +419,7 @@ searchTestPos m = do
                   -- we search 1 ply per move, i.e. we expect 1000 nodes without QS
                   -- for this stiuation we give a threshold of 100 * log 2 = 70 cp
                   -- for double of that it means 100 * log 3 = 110 cp, a.s.o.
-                  let nthrs = round $ 100 * log (1 + fromIntegral (n1 - n0) / 1000)
+                  let nthrs = round $ 100 * log (1 + fromIntegral (n1 - n0) / 1000 :: Double)
                       !s' = s + nthrs
                   return $! sum $ map (\x -> if x > s' then 1 else 0) $ catMaybes ss
 
