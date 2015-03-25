@@ -87,7 +87,7 @@ posNewSearch p = p { hash = newGener (hash p) }
 -- debugGen = False
 
 loosingLast :: Bool
-loosingLast = False
+loosingLast = True
 
 genMoves :: Int -> Int -> Bool -> Game ([Move], [Move])
 genMoves depth _ pv = do	-- absdp not used
