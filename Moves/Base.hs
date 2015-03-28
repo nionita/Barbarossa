@@ -47,11 +47,9 @@ nearmate i = i >= mateScore - 255 || i <= -mateScore + 255
 useHash :: Bool
 useHash = True
 
-depthForMovesSortPv, depthForMovesSort, scoreDiffEqual, printEvalInt :: Int
-depthForMovesSortPv = 1	-- use history for sorting moves when pv or cut nodes
-depthForMovesSort   = 1	-- use history for sorting moves
-scoreDiffEqual      = 4 -- under this score difference moves are considered to be equal (choose random)
-printEvalInt        = 2 `shiftL` 12 - 1	-- if /= 0: print eval info every so many nodes
+scoreDiffEqual, printEvalInt :: Int
+scoreDiffEqual = 4 -- under this score difference moves are considered to be equal (choose random)
+printEvalInt   = 2 `shiftL` 12 - 1	-- if /= 0: print eval info every so many nodes
 
 mateScore :: Int
 mateScore = 20000
@@ -87,10 +85,10 @@ posNewSearch p = p { hash = newGener (hash p) }
 -- debugGen = False
 
 loosingLast :: Bool
-loosingLast = True
+loosingLast = False
 
-genMoves :: Int -> Int -> Bool -> Game ([Move], [Move])
-genMoves depth _ pv = do	-- absdp not used
+genMoves :: Int -> Bool -> Bool -> Game ([Move], [Move])
+genMoves _ alln lol = do	-- not used: depth
     p <- getPos
     let !c = moving p
         lc = genMoveFCheck p
@@ -101,14 +99,10 @@ genMoves depth _ pv = do	-- absdp not used
                 l1 = genMoveTransf p
                 (l2w, l2l) = genMoveCaptWL p
                 l3'= genMoveNCapt p
-            l3 <- if pv && depth >= depthForMovesSortPv
-                     || not pv && depth >= depthForMovesSort
-                     -- then sortMovesFromHash l3'
-                     then sortMovesFromHist l3'
-                     else return l3'
-            return $! if loosingLast
-                         -- then (checkGenMoves p $ l1 ++ l2w, checkGenMoves p $ l0 ++ l3 ++ l2l)
-                         -- else (checkGenMoves p $ l1 ++ l2w ++ l2l, checkGenMoves p $ l0 ++ l3)
+            l3 <- if alln
+                     then return l3'
+                     else sortMovesFromHist l3'
+            return $! if loosingLast || lol
                          then (l1 ++ l2w, l0 ++ l3 ++ l2l)
                          else (l1 ++ l2w ++ l2l, l0 ++ l3)
 

@@ -388,7 +388,7 @@ canDoMove m = do
 -- to tensioned positions, which are more probably tactical
 searchTestPos :: Move -> Game Double
 searchTestPos m = do
-    mvs' <- uncurry (++) <$> genMoves 0 0 False	-- don't need sort
+    mvs' <- uncurry (++) <$> genMoves 0 False False	-- don't need sort
     let mvs = delete m mvs'
     -- liftIO $ putStrLn $ "Pref move: " ++ dumpMove m
     debugMes $ "Pref move: " ++ dumpMove m
@@ -435,7 +435,7 @@ searchAB m = do
     case r of
         Illegal -> return Nothing
         _       -> do
-            mvs <- uncurry (++) <$> genMoves 0 0 False
+            mvs <- uncurry (++) <$> genMoves 0 False False
             !s <- negate <$> foldM searchQ minScore mvs
             undoMove
             debugMes $ "<-- SearchAB move: " ++ show m ++ " score = " ++ show s
