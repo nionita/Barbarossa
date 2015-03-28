@@ -1039,7 +1039,7 @@ genAndSort nst a b d = do
                else return path'		-- if not null
     lift $ do
         kl  <- filterM isMoveLegal $ killerToList (killer nst)
-        esp <- genMoves d (crtnt nst == AllNode) (crtnt nst == PVNode && null path && null kl)
+        esp <- genMoves d (crtnt nst == AllNode)
         let es = bestFirst path kl esp
         return $ Alt es
 
@@ -1121,7 +1121,7 @@ pvQSearch !a !b c = do				   -- to avoid endless loops
     !tact <- lift tacticalPos
     if tact
        then do
-           (es1, es2) <- lift $ genMoves 0 False False
+           (es1, es2) <- lift $ genMoves 0 False
            let edges = Alt $ es1 ++ es2
            if noMove edges
               then do

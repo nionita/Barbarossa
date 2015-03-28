@@ -85,10 +85,13 @@ posNewSearch p = p { hash = newGener (hash p) }
 -- debugGen = False
 
 loosingLast :: Bool
-loosingLast = False
+loosingLast = True
 
-genMoves :: Int -> Bool -> Bool -> Game ([Move], [Move])
-genMoves _ alln lol = do	-- not used: depth
+minDepthAllSort :: Int
+minDepthAllSort = 2
+
+genMoves :: Int -> Bool -> Game ([Move], [Move])
+genMoves d alln = do	-- not used: depth
     p <- getPos
     let !c = moving p
         lc = genMoveFCheck p
@@ -99,10 +102,10 @@ genMoves _ alln lol = do	-- not used: depth
                 l1 = genMoveTransf p
                 (l2w, l2l) = genMoveCaptWL p
                 l3'= genMoveNCapt p
-            l3 <- if alln
+            l3 <- if alln && d < minDepthAllSort
                      then return l3'
                      else sortMovesFromHist l3'
-            return $! if loosingLast || lol
+            return $! if loosingLast
                          then (l1 ++ l2w, l0 ++ l3 ++ l2l)
                          else (l1 ++ l2w ++ l2l, l0 ++ l3)
 
