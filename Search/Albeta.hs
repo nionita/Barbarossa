@@ -685,68 +685,76 @@ pvZeroW !nst !b !d !lastnull redu = do
            let ttpath = Path { pathScore = hsc, pathDepth = hdeep, pathMoves = Seq [e'], pathOrig = "TT" }
            reSucc nodes' >> return ttpath
        else do
-           nmhigh <- nullEdgeFailsHigh nst b d lastnull
+           nmhigh <- nullMoveFailsHigh nst b d lastnull
            abrt <- gets abort
-           if abrt || nmhigh
-              then do
-                let !s = onlyScore b
-                pindent $ "<= " ++ show s
-                viztreeScore $ "nmhigh: " ++ show (pathScore s)
-                return s
-              else do
-                -- Use the TT move as best move
-                let nst' = if hdeep > 0 && (tp /= 0 || nullSeq (pvcont nst))
-                              then nst { pvcont = Seq [e'] }
-                              else nst
-                edges <- genAndSort nst' bGrain b d
-                if noMove edges
-                   then do
-                     v <- lift staticVal
-                     viztreeScore $ "noMove: " ++ show v
-                     let !s = pathFromScore ("static: " ++ show v) v
-                     pindent $ "<= " ++ show s
-                     return s	-- shouldn't we ttStore this?
-                   else do
-                     !nodes0 <- gets (sNodes . stats)
-                     -- futility pruning?
-                     prune <- if not futilActive
-                                 then return False
-                                 else isPruneFutil d bGrain	-- was a
-                     -- Loop thru the moves
-                     let !nsti = resetNSt bGrain nst'
-                     nstf <- pvZLoop b d prune redu nsti edges
-                     let s = cursc nstf
-                     -- Here we expect bGrain <= s < b -- this must be checked
-                     pindent $ "<: " ++ show s
-                     let !de = max d $ pathDepth s
-                         es = unalt edges
-                     when (de >= minToStore && s < b && not (null es)) $ do	-- we failed low
-                         !nodes1 <- gets (sNodes . stats)	-- what if es is null?
-                         -- store as upper score, and as move the first one (generated)
-                         lift $ do
-                             let typ = 0
-                                 !deltan = nodes1 - nodes0
-                             ttStore de typ (pathScore b) (head es) deltan
-                     if s > bGrain || movno nstf > 1
-                        then return s
-                        else do	-- here: store exact mate or stalemate score!
-                            chk <- lift tacticalPos
-                            let s' = if chk then matedPath else staleMate
-                            return $! trimaxPath bGrain b s'
+           if abrt
+              then return b	-- when aborted: it doesnt matter
+              else case nmhigh of
+                NullMoveHigh -> do
+                    let !s = onlyScore b
+                    pindent $ "<= " ++ show s
+                    viztreeScore $ "nmhigh: " ++ show (pathScore s)
+                    return s
+                _ -> do
+                    -- Use the TT move as best move
+                    let nst' = if hdeep > 0 && (tp /= 0 || nullSeq (pvcont nst))
+                                  then nst { pvcont = Seq [e'] }
+                                  else nst
+                    nst'' <- case nmhigh of
+                                 NullMoveTreat str -> do
+                                     kill1 <- newKiller d str nst'
+                                     return nst' { killer = kill1 }
+                                 _ -> return nst'
+                    edges <- genAndSort nst'' bGrain b d
+                    if noMove edges
+                       then do
+                         v <- lift staticVal
+                         viztreeScore $ "noMove: " ++ show v
+                         let !s = pathFromScore ("static: " ++ show v) v
+                         pindent $ "<= " ++ show s
+                         return s	-- shouldn't we ttStore this?
+                       else do
+                         !nodes0 <- gets (sNodes . stats)
+                         -- futility pruning?
+                         prune <- if not futilActive
+                                     then return False
+                                     else isPruneFutil d bGrain	-- was a
+                         -- Loop thru the moves
+                         let !nsti = resetNSt bGrain nst''
+                         nstf <- pvZLoop b d prune redu nsti edges
+                         let s = cursc nstf
+                         -- Here we expect bGrain <= s < b -- this must be checked
+                         pindent $ "<: " ++ show s
+                         let !de = max d $ pathDepth s
+                             es = unalt edges
+                         when (de >= minToStore && s < b && not (null es)) $ do	-- we failed low
+                             !nodes1 <- gets (sNodes . stats)	-- what if es is null?
+                             -- store as upper score, and as move the first one (generated)
+                             lift $ do
+                                 let typ = 0
+                                     !deltan = nodes1 - nodes0
+                                 ttStore de typ (pathScore b) (head es) deltan
+                         if s > bGrain || movno nstf > 1
+                            then return s
+                            else do	-- here: store exact mate or stalemate score!
+                                chk <- lift tacticalPos
+                                let s' = if chk then matedPath else staleMate
+                                return $! trimaxPath bGrain b s'
     where bGrain = b -: scoreGrain
 
-nullEdgeFailsHigh :: NodeState -> Path -> Int -> Int -> Search Bool
-nullEdgeFailsHigh nst b d lastnull
-    -- | not nulActivate || lastnull < 1 || d1 <= 0 = return False
-    | not nulActivate || lastnull < 1 = return False	-- go smooth into QS
+data NullMoveResult = NoNullMove | NullMoveHigh | NullMoveTreat Path
+
+nullMoveFailsHigh :: NodeState -> Path -> Int -> Int -> Search NullMoveResult
+nullMoveFailsHigh nst b d lastnull
+    | not nulActivate || lastnull < 1 = return NoNullMove	-- go smooth into QS
     | otherwise = do
          tact <- lift tacticalPos
          if tact
-            then return False
+            then return NoNullMove
             else do
                v <- lift staticVal
                if v < pathScore b + nulTrig * scoreGrain
-                  then return False
+                  then return NoNullMove
                   else do
                       lift doNullMove	-- do null move
                       nn <- newNode
@@ -756,7 +764,7 @@ nullEdgeFailsHigh nst b d lastnull
                       val <- fmap pnextlev $ pvZeroW nst' negnma d1 lastnull1 True
                       lift undoMove	-- undo null move
                       viztreeUp0 nn (pathScore val)
-                      return $! val >= nmb
+                      return $ if val >= nmb then NullMoveHigh else NullMoveTreat val
     where d1  = d - (1 + nulRedux)
           nmb = if nulSubAct then b -: (nulSubmrg * scoreGrain) else b
           nma = nmb -: (nulMargin * scoreGrain)
@@ -1039,7 +1047,7 @@ genAndSort nst a b d = do
                else return path'		-- if not null
     lift $ do
         kl  <- filterM isMoveLegal $ killerToList (killer nst)
-        esp <- genMoves d (crtnt nst == AllNode)
+        esp <- genMoves
         let es = bestFirst path kl esp
         return $ Alt es
 
@@ -1121,7 +1129,7 @@ pvQSearch !a !b c = do				   -- to avoid endless loops
     !tact <- lift tacticalPos
     if tact
        then do
-           (es1, es2) <- lift $ genMoves 0 False
+           (es1, es2) <- lift genMoves
            let edges = Alt $ es1 ++ es2
            if noMove edges
               then do
