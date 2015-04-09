@@ -701,7 +701,7 @@ pvZeroW !nst !b !d !lastnull redu = do
                                   then nst { pvcont = Seq [e'] }
                                   else nst
                     nst'' <- case nmhigh of
-                                 NullMoveTreat str -> do
+                                 NullMoveThreat str -> do
                                      kill1 <- newKiller d str nst'
                                      return nst' { killer = kill1 }
                                  _ -> return nst'
@@ -742,7 +742,7 @@ pvZeroW !nst !b !d !lastnull redu = do
                                 return $! trimaxPath bGrain b s'
     where bGrain = b -: scoreGrain
 
-data NullMoveResult = NoNullMove | NullMoveHigh | NullMoveTreat Path
+data NullMoveResult = NoNullMove | NullMoveHigh | NullMoveThreat Path
 
 nullMoveFailsHigh :: NodeState -> Path -> Int -> Int -> Search NullMoveResult
 nullMoveFailsHigh nst b d lastnull
@@ -764,7 +764,9 @@ nullMoveFailsHigh nst b d lastnull
                       val <- fmap pnextlev $ pvZeroW nst' negnma d1 lastnull1 True
                       lift undoMove	-- undo null move
                       viztreeUp0 nn (pathScore val)
-                      return $ if val >= nmb then NullMoveHigh else NullMoveTreat val
+                      return $ if val >= nmb
+                                  then NullMoveHigh
+                                  else NullMoveThreat $ addToPath (Move 0) val
     where d1  = d - (1 + nulRedux)
           nmb = if nulSubAct then b -: (nulSubmrg * scoreGrain) else b
           nma = nmb -: (nulMargin * scoreGrain)
