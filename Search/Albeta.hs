@@ -687,25 +687,18 @@ pvZeroW !nst !b !d !lastnull redu = do
        else do
            nmhigh <- nullMoveFailsHigh nst b d lastnull
            abrt <- gets abort
-           if abrt
-              then return b	-- when aborted: it doesnt matter
-              else case nmhigh of
-                NullMoveHigh -> do
-                    let !s = onlyScore b
-                    pindent $ "<= " ++ show s
-                    viztreeScore $ "nmhigh: " ++ show (pathScore s)
-                    return s
-                _ -> do
+           if abrt || nmhigh
+              then do
+                  let !s = onlyScore b
+                  pindent $ "<= " ++ show s
+                  viztreeScore $ "nmhigh: " ++ show (pathScore s)
+                  return s
+              else do
                     -- Use the TT move as best move
                     let nst' = if hdeep > 0 && (tp /= 0 || nullSeq (pvcont nst))
                                   then nst { pvcont = Seq [e'] }
                                   else nst
-                    nst'' <- case nmhigh of
-                                 NullMoveTreat str -> do
-                                     kill1 <- newKiller d str nst'
-                                     return nst' { killer = kill1 }
-                                 _ -> return nst'
-                    edges <- genAndSort nst'' bGrain b d
+                    edges <- genAndSort nst' bGrain b d
                     if noMove edges
                        then do
                          v <- lift staticVal
@@ -720,7 +713,7 @@ pvZeroW !nst !b !d !lastnull redu = do
                                      then return False
                                      else isPruneFutil d bGrain	-- was a
                          -- Loop thru the moves
-                         let !nsti = resetNSt bGrain nst''
+                         let !nsti = resetNSt bGrain nst'
                          nstf <- pvZLoop b d prune redu nsti edges
                          let s = cursc nstf
                          -- Here we expect bGrain <= s < b -- this must be checked
@@ -742,19 +735,17 @@ pvZeroW !nst !b !d !lastnull redu = do
                                 return $! trimaxPath bGrain b s'
     where bGrain = b -: scoreGrain
 
-data NullMoveResult = NoNullMove | NullMoveHigh | NullMoveTreat Path
-
-nullMoveFailsHigh :: NodeState -> Path -> Int -> Int -> Search NullMoveResult
+nullMoveFailsHigh :: NodeState -> Path -> Int -> Int -> Search Bool
 nullMoveFailsHigh nst b d lastnull
-    | not nulActivate || lastnull < 1 = return NoNullMove	-- go smooth into QS
+    | not nulActivate || lastnull < 1 = return False	-- go smooth into QS
     | otherwise = do
          tact <- lift tacticalPos
          if tact
-            then return NoNullMove
+            then return False
             else do
                v <- lift staticVal
                if v < pathScore b + nulTrig * scoreGrain
-                  then return NoNullMove
+                  then return False
                   else do
                       lift doNullMove	-- do null move
                       nn <- newNode
@@ -764,7 +755,7 @@ nullMoveFailsHigh nst b d lastnull
                       val <- fmap pnextlev $ pvZeroW nst' negnma d1 lastnull1 True
                       lift undoMove	-- undo null move
                       viztreeUp0 nn (pathScore val)
-                      return $ if val >= nmb then NullMoveHigh else NullMoveTreat val
+                      return $! val >= nmb
     where d1  = d - (1 + nulRedux)
           nmb = if nulSubAct then b -: (nulSubmrg * scoreGrain) else b
           nma = nmb -: (nulMargin * scoreGrain)
