@@ -97,8 +97,9 @@ qsMaxChess :: Int
 qsMaxChess = 2		-- max number of chess for a quiet search path
 
 -- Parameters for null move pruning
-nulActivate :: Bool
+nulActivate, nulDebug :: Bool
 nulActivate = True		-- activate null move reduction
+nulDebug    = True
 nulRedux, nulMoves :: Int
 nulRedux    = 2 -- depth reduction for null move
 nulMoves    = 2	-- how many null moves in sequence are allowed (one or two)
@@ -284,9 +285,9 @@ nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore "Zero" 0,
              -- we start with spcno = 1 as we consider the first move as special
              -- to avoid in any way reducing the tt move
 
-resetNSt :: Path -> NodeState -> NodeState
-resetNSt sc nst = nst { cursc = sc, movno = 1, spcno = 1, killer = NoKiller,
-                        pvcont = tailSeq (pvcont nst) }
+resetNSt :: Path -> Killer -> NodeState -> NodeState
+resetNSt !sc !kill nst
+    = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, pvcont = tailSeq (pvcont nst) }
 
 stt0 :: SStats
 stt0 = SStats { sNodes = 0, sNodesQS = 0, sRetr = 0, sRSuc = 0,
@@ -633,7 +634,7 @@ pvSearch nst !a !b !d = do
                 nodes0 <- gets (sNodes . stats)
                 -- Here: when ab we should do futility pruning
                 -- Loop thru the moves
-                let !nsti = resetNSt a nst'
+                let !nsti = resetNSt a NoKiller nst'
                 nstf <- pvSLoop b d False nsti edges
                 let s = cursc nstf
                 pindent $ "<= " ++ show s
@@ -700,12 +701,7 @@ pvZeroW !nst !b !d !lastnull redu = do
                     let nst' = if hdeep > 0 && (tp /= 0 || nullSeq (pvcont nst))
                                   then nst { pvcont = Seq [e'] }
                                   else nst
-                    nst'' <- case nmhigh of
-                                 NullMoveThreat str -> do
-                                     kill1 <- newKiller d str nst'
-                                     return nst' { killer = kill1 }
-                                 _ -> return nst'
-                    edges <- genAndSort nst'' bGrain b d
+                    edges <- genAndSort nst' bGrain b d
                     if noMove edges
                        then do
                          v <- lift staticVal
@@ -720,7 +716,10 @@ pvZeroW !nst !b !d !lastnull redu = do
                                      then return False
                                      else isPruneFutil d bGrain	-- was a
                          -- Loop thru the moves
-                         let !nsti = resetNSt bGrain nst''
+                         kill1 <- case nmhigh of
+                                      NullMoveThreat s -> newTKiller d s
+                                      _                -> return NoKiller
+                         let !nsti = resetNSt bGrain kill1 nst'
                          nstf <- pvZLoop b d prune redu nsti edges
                          let s = cursc nstf
                          -- Here we expect bGrain <= s < b -- this must be checked
@@ -742,7 +741,7 @@ pvZeroW !nst !b !d !lastnull redu = do
                                 return $! trimaxPath bGrain b s'
     where bGrain = b -: scoreGrain
 
-data NullMoveResult = NoNullMove | NullMoveHigh | NullMoveThreat Path
+data NullMoveResult = NoNullMove | NullMoveHigh | NullMoveLow | NullMoveThreat Path
 
 nullMoveFailsHigh :: NodeState -> Path -> Int -> Int -> Search NullMoveResult
 nullMoveFailsHigh nst b d lastnull
@@ -756,6 +755,7 @@ nullMoveFailsHigh nst b d lastnull
                if v < pathScore b + nulTrig * scoreGrain
                   then return NoNullMove
                   else do
+                      when nulDebug $ incReBe 1
                       lift doNullMove	-- do null move
                       nn <- newNode
                       viztreeDown0 nn
@@ -764,9 +764,17 @@ nullMoveFailsHigh nst b d lastnull
                       val <- fmap pnextlev $ pvZeroW nst' negnma d1 lastnull1 True
                       lift undoMove	-- undo null move
                       viztreeUp0 nn (pathScore val)
-                      return $ if val >= nmb
-                                  then NullMoveHigh
-                                  else NullMoveThreat $ addToPath (Move 0) val
+                      if val >= nmb
+                         then return NullMoveHigh
+                         else do
+                              when nulDebug $ do
+                                  incReMi
+                                  when (not $ nullSeq (pathMoves val)) $ lift $ do
+                                      finNode "NMLO" True
+                                      logmes $ "fail low path: " ++ show val
+                              if nullSeq (pathMoves val)
+                                 then return $ NullMoveLow
+                                 else return $ NullMoveThreat val
     where d1  = d - (1 + nulRedux)
           nmb = if nulSubAct then b -: (nulSubmrg * scoreGrain) else b
           nma = nmb -: (nulMargin * scoreGrain)
@@ -941,10 +949,11 @@ pvInnerLoopExtenZ b d spec !exd nst redu = do
            !s1 <- if lmrDebug then fmap pnextlev (pvZeroW nst onemB d1 nulMoves False) else return sr
            nds2 <- gets $ sNodes . stats
            let nodnr = nds2 - nds1
-           incReBe (nodnr - nodre)	-- so many nodes we spare by reducing
-           when (sr < b && s1 >= b) $ do
-               incReMi	-- LMR missed the point
-               lift $ finNode "LMRM" True
+           when lmrDebug $ do
+               incReBe (nodnr - nodre)	-- so many nodes we spare by reducing
+               when (sr < b && s1 >= b) $ do
+                   incReMi	-- LMR missed the point
+                   lift $ finNode "LMRM" True
            if sr < b	-- || d' >= d1
               then return sr	-- failed low (as expected), or not reduced
               else do
@@ -1037,6 +1046,18 @@ newKiller d s nst
         if iskm then return $! pushKiller km (killer nst)
                 else return $ killer nst
     | otherwise = return $ killer nst
+
+-- Same as newKiller, but the path begins with the killer move
+-- as it is coming from null move search
+-- It is called before a NSt reset, so no neet to consider
+-- previous killer moves
+newTKiller :: Int -> Path -> Search Killer
+newTKiller d s
+    | d >= 2, (km:_) <- unseq $ pathMoves s = do
+        !iskm <- lift $ isTKillCand km
+        if iskm then return $ OneKiller km
+                else return $ NoKiller
+    | otherwise = return $ NoKiller
 
 -- We don't sort the moves here, they have to come sorted from genMoves
 -- But we consider the best moves first (from previous iteration, TT or IID)
@@ -1260,7 +1281,9 @@ reportStats = do
                  ++ ", ReSearchs: " ++ show (sReSe xst) ++ ", Re-waste: " ++ show (sReNo xst)
                  ++ ", missed: " ++ show (sReMi xst) ++ ", net benefit: "
                  ++ show (sReBe xst - sReNo xst)
-          else logmes $ "Reduced: " ++ show (sRedu xst) ++ ", ReSearchs: " ++ show (sReSe xst)
+          else if nulDebug
+                  then logmes $ "Null moves: " ++ show (sReBe xst) ++ ", Low: " ++ show (sReMi xst)
+                  else logmes $ "Reduced: " ++ show (sRedu xst) ++ ", ReSearchs: " ++ show (sReSe xst)
 
 -- Functions to keep statistics
 modStat :: (SStats -> SStats) -> Search ()

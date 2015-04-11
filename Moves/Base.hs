@@ -9,7 +9,7 @@ module Moves.Base (
     posToState, getPos, posNewSearch,
     doMove, undoMove, genMoves, genTactMoves,
     useHash,
-    staticVal, materVal, tacticalPos, isMoveLegal, isKillCand, okInSequence,
+    staticVal, materVal, tacticalPos, isMoveLegal, isKillCand, isTKillCand, okInSequence,
     betaCut, doNullMove, ttRead, ttStore, curNodes, chooseMove, isTimeout, informCtx,
     mateScore,
     finNode,
@@ -296,6 +296,11 @@ isKillCand mm ym
     | otherwise = do
         t <- getPos
         return $! not $ moveIsCapture t ym
+
+isTKillCand :: Move -> Game Bool
+isTKillCand mm = do
+    t <- getPos
+    return $! not $ moveIsCapture t mm
 
 okInSequence :: Move -> Move -> Game Bool
 okInSequence m1 m2 = do
