@@ -99,7 +99,7 @@ qsMaxChess = 2		-- max number of chess for a quiet search path
 -- Parameters for null move pruning
 nulActivate, nulDebug :: Bool
 nulActivate = True		-- activate null move reduction
-nulDebug    = True
+nulDebug    = False
 nulRedux, nulMoves :: Int
 nulRedux    = 2 -- depth reduction for null move
 nulMoves    = 2	-- how many null moves in sequence are allowed (one or two)
