@@ -632,9 +632,13 @@ pvSearch nst !a !b !d = do
               else do
                 nodes0 <- gets (sNodes . stats)
                 -- Here: when ab we should do futility pruning
+                -- futility pruning:
+                prune <- if not futilActive && ab
+                            then return False
+                            else isPruneFutil d a
                 -- Loop thru the moves
                 let !nsti = resetNSt a nst'
-                nstf <- pvSLoop b d False nsti edges
+                nstf <- pvSLoop b d prune nsti edges
                 let s = cursc nstf
                 pindent $ "<= " ++ show s
                 -- After pvSLoop ... we expect always that s >= a - this must be checked if it is so
@@ -708,10 +712,10 @@ pvZeroW !nst !b !d !lastnull redu = do
                          return s	-- shouldn't we ttStore this?
                        else do
                          !nodes0 <- gets (sNodes . stats)
-                         -- futility pruning?
+                         -- futility pruning:
                          prune <- if not futilActive
                                      then return False
-                                     else isPruneFutil d bGrain	-- was a
+                                     else isPruneFutil d bGrain
                          -- Loop thru the moves
                          let !nsti = resetNSt bGrain nst'
                          nstf <- pvZLoop b d prune redu nsti edges
