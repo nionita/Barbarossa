@@ -13,7 +13,7 @@ module Eval.Eval (
 
 import Prelude hiding ((++), head, foldl, map, concat, filter, takeWhile, iterate, sum, minimum,
                        zip, zipWith, foldr, concatMap, length, replicate, lookup, repeat, null,
-                       unzip, drop, elem)
+                       unzip, drop, elem, scanl)
 import Data.Array.Base (unsafeAt)
 import Data.Bits
 import Data.List.Stream
@@ -115,6 +115,7 @@ evalItems = [ EvIt Material,	-- material balance (i.e. white - black material
               EvIt KingPlace,	-- bonus when king is near some fields
               EvIt LastLine,	-- malus for pieces on last line (except rooks and king)
               EvIt Mobility,	-- pieces mobility
+              EvIt Control,	-- squares control (primitive)
               EvIt Center,	-- attacs of center squares
               EvIt RookPlc,	-- rooks points for placements
               EvIt EnPrise,	-- when not quiescent - pieces en prise
@@ -623,6 +624,38 @@ mobDiff p = [n, b, r, q]
           !b = myB - yoB
           !r = myR - yoR
           !q = myQ - yoQ
+
+-- Squares control --
+data Control = Control
+
+instance EvalItem Control where
+    evalItem _ _ p _ = conDiff p
+    evalItemNDL _  = [ ("con1", ((8, 0), (0, 100))),
+                       ("con2", ((6, 0), (0, 100))),
+                       ("con3", ((8, 0), (0, 100))),
+                       ("con4", ((9, 0), (0, 100))),
+                       ("con5", ((7, 0), (0, 100))),
+                       ("con6", ((9, 0), (0, 100))),
+                       ("con7", ((8, 0), (0, 100))),
+                       ("con8", ((6, 0), (0, 100))),
+                       ("con9", ((8, 0), (0, 100))) ]
+
+conDiff :: MyPos -> IWeights
+conDiff p = zipWith (-) myCoS yoCoS
+    where zones = [ 0x000000000F0F0F0F, 0x000000003C3C3C3C, 0x00000000F0F0F0F0,
+                    0x00000F0F0F0F0000, 0x00003C3C3C3C0000, 0x0000F0F0F0F00000,
+                    0x0F0F0F0F00000000, 0x3C3C3C3C00000000, 0xF0F0F0F000000000 ]
+          myKSq = kings p .&. me p
+          yoKSq = kings p .&. yo p
+          myMul = map ((1+) . popCount . (.&. myKSq)) zones
+          yoMul = map ((1+) . popCount . (.&. yoKSq)) zones
+          ouMul = zipWith (+) myMul yoMul
+          myCo0 = scanl (.|.) (myPAttacs p) [ myNAttacs p .|. myBAttacs p, myRAttacs p, myQAttacs p ]
+          yoCo0 = scanl (.|.) (yoPAttacs p) [ yoNAttacs p .|. yoBAttacs p, yoRAttacs p, yoQAttacs p ]
+          myCo  = foldr (.|.) 0 $ zipWith less myCo0 yoCo0
+          yoCo  = foldr (.|.) 0 $ zipWith less yoCo0 myCo0
+          myCoS = zipWith (*) ouMul $ map (popCount . (.&. myCo)) zones
+          yoCoS = zipWith (*) ouMul $ map (popCount . (.&. yoCo)) zones
 
 ------ Center control ------
 data Center = Center
