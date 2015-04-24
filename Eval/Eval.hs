@@ -630,15 +630,15 @@ data Control = Control
 
 instance EvalItem Control where
     evalItem _ _ p _ = conDiff p
-    evalItemNDL _  = [ ("con1", (( 8, 0), (0, 100))),
-                       ("con2", (( 8, 0), (0, 100))),
-                       ("con3", (( 8, 0), (0, 100))),
-                       ("con4", ((10, 0), (0, 100))),
-                       ("con5", ((12, 0), (0, 100))),
-                       ("con6", ((10, 0), (0, 100))),
-                       ("con7", (( 8, 0), (0, 100))),
-                       ("con8", (( 8, 0), (0, 100))),
-                       ("con9", (( 8, 0), (0, 100))) ]
+    evalItemNDL _  = [ ("con1", ((16, 0), (0, 100))),
+                       ("con2", ((16, 0), (0, 100))),
+                       ("con3", ((16, 0), (0, 100))),
+                       ("con4", ((20, 0), (0, 100))),
+                       ("con5", ((22, 0), (0, 100))),
+                       ("con6", ((20, 0), (0, 100))),
+                       ("con7", ((16, 0), (0, 100))),
+                       ("con8", ((16, 0), (0, 100))),
+                       ("con9", ((16, 0), (0, 100))) ]
 
 conDiff :: MyPos -> IWeights
 conDiff p = zipWith (-) myCoS yoCoS
@@ -647,8 +647,8 @@ conDiff p = zipWith (-) myCoS yoCoS
                     0x0F0F0F0F00000000, 0x3C3C3C3C00000000, 0xF0F0F0F000000000 ]
           !myKSq = kings p .&. me p
           !yoKSq = kings p .&. yo p
-          myMul = map (square . (1+) . popCount . (.&. myKSq)) zones
-          yoMul = map (square . (1+) . popCount . (.&. yoKSq)) zones
+          myMul = map ((1+) . popCount . (.&. myKSq)) zones
+          yoMul = map ((1+) . popCount . (.&. yoKSq)) zones
           ouMul = zipWith (+) myMul yoMul
           myCo0 = scanl (.|.) (myPAttacs p) [ myNAttacs p .|. myBAttacs p, myRAttacs p, myQAttacs p ]
           yoCo0 = scanl (.|.) (yoPAttacs p) [ yoNAttacs p .|. yoBAttacs p, yoRAttacs p, yoQAttacs p ]
@@ -656,7 +656,6 @@ conDiff p = zipWith (-) myCoS yoCoS
           !yoCo  = foldr (.|.) 0 $ zipWith less yoCo0 myCo0
           myCoS = zipWith (*) ouMul $ map (popCount . (.&. myCo)) zones
           yoCoS = zipWith (*) ouMul $ map (popCount . (.&. yoCo)) zones
-          square x = x * x
 
 ------ Center control ------
 data Center = Center
