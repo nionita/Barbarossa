@@ -101,8 +101,8 @@ genMoves = do
                 l3'= genMoveNCapt p
             l3 <- sortMovesFromHist l3'
             return $! if loosingLast
-                         then (l1 ++ l2w, l0 ++ l3 ++ l2l)
-                         else (l1 ++ l2w ++ l2l, l0 ++ l3)
+                         then (l1 ++ l2w ++ l0, l3 ++ l2l)
+                         else (l1 ++ l2w ++ l0 ++ l2l, l3)
 
 -- Generate only tactical moves, i.e. promotions, captures & check escapes
 genTactMoves :: Game [Move]
@@ -110,10 +110,11 @@ genTactMoves = do
     p <- getPos
     let !c = moving p
         l1 = genMoveTransf p
+        l0 = genMoveCast p
         (l2w, _) = genMoveCaptWL p
         lc = genMoveFCheck p
         !mvs | isCheck p c = lc
-             | otherwise   = l1 ++ l2w
+             | otherwise   = l1 ++ l2w ++ l0
     -- return $ checkGenMoves p mvs
     return mvs
 
