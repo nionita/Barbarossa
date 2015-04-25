@@ -81,15 +81,15 @@ futilMs, futilMv :: Int
 futilMs = 275	-- margin for depth 1
 futilMv = 150	-- suplementary margin for every further depth
 futilMargins :: Int -> Int -> Int
-futilMargins d s = s' - futilMv + d*futilMv
-    where !s' = s `unsafeShiftL` 1
+futilMargins d s = s - futilMv + d*futilMv
+    -- where !s' = s `unsafeShiftL` 1
 -- futilMargins d s = futilMs - futilMv + d*futilMv
 
 -- Score statistics parameters for variable futility
 futInitQmssc, futMinQmssc, futDecayRate :: Int
 futInitQmssc = futilMs
-futMinQmssc  = 25
-futDecayRate = 15
+futMinQmssc  = 100
+futDecayRate = 20
 
 -- Parameters for quiescent search:
 qsBetaCut, qsDeltaCut :: Bool
