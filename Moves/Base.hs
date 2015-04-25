@@ -11,7 +11,7 @@ module Moves.Base (
     useHash,
     staticVal, materVal, tacticalPos, isMoveLegal, isKillCand, okInSequence,
     betaCut, doNullMove, ttRead, ttStore, curNodes, chooseMove, isTimeout, informCtx,
-    mateScore,
+    mateScore, scoreDiff,
     finNode,
     showMyPos, logMes,
     nearmate	-- , special
@@ -203,18 +203,16 @@ doMove real m qs = do
                 then return Illegal
                 else do
                     -- bigCheckPos "doMove" pc (Just m) p'
-                    let (!sts, feats) | real      = (0, [])
-                                      | otherwise = evalState (posEval p') (evalst s)
-                        !p = p' { staticScore = sts, staticFeats = feats }
+                    let (sts, feats) | real      = (0, [])
+                                     | otherwise = evalState (posEval p') (evalst s)
+                        p = p' { staticScore = sts, staticFeats = feats }
                     put s { stack = p : stack s }
                     remis <- if qs then return False else checkRemisRules p'
                     if remis
                        then return $ Final 0
                        else do
-                           -- let dext = if inCheck p || goPromo p m1 || movePassed p m1 then 1 else 0
-                           -- let dext = if inCheck p || goPromo pc m1 then 1 else 0
                            let dext = if inCheck p then 1 else 0
-                           return $ Exten dext $ moveIsSpecial pc m1
+                           return $! Exten dext $ moveIsSpecial pc m1
 
 doNullMove :: Game ()
 doNullMove = do
@@ -397,6 +395,15 @@ moveIsSpecial p m
     | moveIsPromo m || moveIsEnPas m = True
     | check p /= 0                   = True
     | otherwise                      = moveIsCapture p m
+
+-- Score difference obtained by last move, from POV of the moving part
+-- It considers the fact that static score is for the part which has to move
+scoreDiff :: Game Int
+scoreDiff = do
+    s <- get
+    case stack s of
+        (p1:p2:_) -> return $! negate (staticScore p1 + staticScore p2)
+        _         -> return 0
 
 {--
 showChoose :: [] -> Game ()

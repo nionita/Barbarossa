@@ -11,7 +11,7 @@ module Search.Albeta (
 
 import Control.Monad
 import Control.Monad.State hiding (gets, modify)
-import Data.Bits ((.&.))
+import Data.Bits
 import Data.List (delete, sortBy)
 import Data.Ord (comparing)
 import Data.Maybe (fromMaybe)
@@ -77,17 +77,19 @@ maxFutilDepth = 3
 
 -- This is a linear formula for futility margin
 -- Should apply from 1 to maxFutilDepth (checked elsewehere)
--- Optimisation for futilMs:
--- A:  25
--- B:  50
--- C:  75 == n1ns
--- D: 100
--- E: 125
 futilMs, futilMv :: Int
 futilMs = 275	-- margin for depth 1
 futilMv = 150	-- suplementary margin for every further depth
-futilMargins :: Int -> Int
-futilMargins d = futilMs - futilMv + d*futilMv
+futilMargins :: Int -> Int -> Int
+futilMargins d s = s' - futilMv + d*futilMv
+    where !s' = s `unsafeShiftL` 1
+-- futilMargins d s = futilMs - futilMv + d*futilMv
+
+-- Score statistics parameters for variable futility
+futInitQmssc, futMinQmssc, futDecayRate :: Int
+futInitQmssc = futilMs
+futMinQmssc  = 25
+futDecayRate = 15
 
 -- Parameters for quiescent search:
 qsBetaCut, qsDeltaCut :: Bool
@@ -158,7 +160,8 @@ data PVState
           stats   :: SStats,	-- search statistics
           absdp   :: !Int,	-- absolute depth (root = 0)
           usedext :: !Int,	-- used extension
-          abort   :: !Bool	-- search aborted (time)
+          abort   :: !Bool,	-- search aborted (time)
+          qmssc   :: !Int	-- quet move sliding mean score
       } deriving Show
 
 -- This is a state which reflects the status of alpha beta in a node while going through the edges
@@ -277,7 +280,8 @@ tailSeq es
     | otherwise  = Seq $ tail $ unseq es
 
 pvsInit :: PVState
-pvsInit = PVState { ronly = pvro00, absdp = 0, usedext = 0, abort = False, stats = stt0 }
+pvsInit = PVState { ronly = pvro00, absdp = 0, usedext = 0, abort = False,
+                    qmssc = futInitQmssc, stats = stt0 }
 nst0 :: NodeState
 nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore "Zero" 0,
              movno = 1, spcno = 1, killer = NoKiller, albe = False, pvsl = [], pvcont = emptySeq }
@@ -305,7 +309,7 @@ alphaBeta abc =  do
         searchFull    lp  = pvRootSearch alpha0 beta0 d lp  rmvs False
         pvro = PVReadOnly { draft = d, albest = best abc,
                             timeli = stoptime abc /= 0, abmili = stoptime abc }
-        pvs0 = pvsInit { ronly = pvro } :: PVState
+        pvs0 = pvsInit { ronly = pvro }	-- :: PVState
     r <- if useAspirWin
          then case lastscore abc of
              Just sp -> do
@@ -439,7 +443,11 @@ pvInnerRoot b d nst e = do
                 viztreeDown nn e
                 modify $ \s -> s { absdp = absdp s + 1 }
                 s <- case exd of
-                         Exten exd' _ -> pvInnerRootExten b d exd' (deepNSt nst)
+                         Exten exd' spc -> do
+                             when (exd' == 0 && not spc) $ do
+                                 sdiff <- lift scoreDiff
+                                 updateFutil e sdiff
+                             pvInnerRootExten b d exd' (deepNSt nst)
                          Final sco    -> do
                              viztreeScore $ "Final: " ++ show sco
                              return $! pathFromScore "Final" (-sco)
@@ -809,7 +817,11 @@ pvInnerLoop b d prune nst e = do
                          Exten exd' spc -> do
                            if prune && exd' == 0 && not spc -- don't prune special or extended
                               then return $! onlyScore $! cursc nst	-- prune, return a
-                              else pvInnerLoopExten b d exd' (deepNSt nst)
+                              else do
+                                  when (exd' == 0 && not spc) $ do
+                                      sdiff <- lift scoreDiff
+                                      updateFutil e sdiff
+                                  pvInnerLoopExten b d exd' (deepNSt nst)
                          Final sco -> do
                              viztreeScore $ "Final: " ++ show sco
                              return $! pathFromScore "Final" (-sco)
@@ -849,7 +861,11 @@ pvInnerLoopZ b d prune nst e redu = do
                               then return $! onlyScore $! cursc nst	-- prune, return a
                               else if spc
                                       then pvInnerLoopExtenZ b d spc exd' (deepNSt $ resetSpc nst) redu
-                                      else pvInnerLoopExtenZ b d spc exd' (deepNSt   nst)          redu
+                                      else do
+                                          when (exd' == 0) $ do
+                                              sdiff <- lift scoreDiff
+                                              updateFutil e sdiff
+                                          pvInnerLoopExtenZ b d spc exd' (deepNSt   nst)          redu
                          Final sco -> do
                              viztreeScore $ "Final: " ++ show sco
                              return $! pathFromScore "Final" (-sco)
@@ -1093,15 +1109,33 @@ isPruneFutil d a
     | otherwise = do
         tact <- lift tacticalPos
         if tact then return False else do
-            -- let !margin = futilMargins ! d
             v <- lift staticVal	-- E1
-            -- v <- lift materVal	-- can we do here direct static evaluation?
-            -- v <- pvQSearch a' b' 0	-- E2
-            let margin = futilMargins d
+            m <- gets qmssc	-- current quiet move average score
+            let margin = futilMargins d m
                 a' = pathScore a
             if v + margin <= a'
                then return True
                else return False
+
+updateFutil :: Move -> Int -> Search ()
+updateFutil e sd = do
+    so <- gets qmssc
+    if sd > so
+       then do
+           -- let str = "SCOD (" ++ show e ++ "): old = " ++ show so ++ ", new = " ++ show sd
+           -- lift $ finNode str True
+           modify $ \s -> s { qmssc = sd }
+       else modify $ \s -> s { qmssc = forgetScore so }
+
+forgetScore :: Int -> Int
+forgetScore x = max futMinQmssc $ (x * futQmsscSamps) `unsafeShiftR` futDecayRate
+    where futQmsscSamps = 1 `unsafeShiftL` futDecayRate - 1
+
+{--
+slidingScore :: Int -> Int -> Int
+slidingScore !ssc !x = (ssc * futQmsscSamps + x) `unsafeShiftR` futDecayRate
+    where futQmsscSamps = 1 `unsafeShiftL` futDecayRate - 1
+--}
 
 trimaxPath :: Path -> Path -> Path -> Path
 trimaxPath a b x
@@ -1248,6 +1282,7 @@ reportStats = do
                   ++ ", retrieve: " ++ show (sRetr xst) ++ ", succes: " ++ show (sRSuc xst)
        let r = fromIntegral (sBMNo xst) / fromIntegral (sBeta xst) :: Double
        logmes $ "Beta cuts: " ++ show (sBeta xst) ++ ", beta factor: " ++ show r
+       logmes $ "Sliding score: " ++ show (qmssc s)
        if lmrDebug
           then logmes $ "Reduced: " ++ show (sRedu xst) ++ ", Re-benefits: " ++ show (sReBe xst)
                  ++ ", ReSearchs: " ++ show (sReSe xst) ++ ", Re-waste: " ++ show (sReNo xst)
