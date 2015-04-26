@@ -73,7 +73,7 @@ futilActive :: Bool
 futilActive = True
 
 maxFutilDepth :: Int
-maxFutilDepth = 2
+maxFutilDepth = 3
 
 -- This is a linear formula for futility margin
 -- Should apply from 1 to maxFutilDepth (checked elsewehere)
@@ -82,14 +82,15 @@ maxFutilDepth = 2
 -- futilMv = 150	-- suplementary margin for every further depth
 -- Ignore depth (it is 1 or 2) and use a 25% safety margin
 futilMargins :: Int -> Int -> Int
+futilMargins 3 s = 4 * s
 futilMargins _ s = s + (s `unsafeShiftR` 2)
 -- futilMargins d s = futilMs - futilMv + d*futilMv
 
 -- Score statistics parameters for variable futility
 futIniVal, futMinVal, futDecayB, futDecayW :: Int
 futIniVal = 100
-futMinVal = 25
-futDecayB = 15
+futMinVal = 30
+futDecayB = 10
 futDecayW = (1 `unsafeShiftL` futDecayB) - 1
 
 -- Parameters for quiescent search:
