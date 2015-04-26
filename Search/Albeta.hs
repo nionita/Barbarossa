@@ -73,23 +73,24 @@ futilActive :: Bool
 futilActive = True
 
 maxFutilDepth :: Int
-maxFutilDepth = 3
+maxFutilDepth = 2
 
 -- This is a linear formula for futility margin
 -- Should apply from 1 to maxFutilDepth (checked elsewehere)
-futilMs, futilMv :: Int
-futilMs = 275	-- margin for depth 1
-futilMv = 150	-- suplementary margin for every further depth
+-- futilMs, futilMv :: Int
+-- futilMs = 275	-- margin for depth 1
+-- futilMv = 150	-- suplementary margin for every further depth
+-- Ignore depth (it is 1 or 2) and use a 25% safety margin
 futilMargins :: Int -> Int -> Int
-futilMargins d s = s' - futilMv + d*futilMv
-    where !s' = s `unsafeShiftL` 1
+futilMargins _ s = s + (s `unsafeShiftR` 2)
 -- futilMargins d s = futilMs - futilMv + d*futilMv
 
 -- Score statistics parameters for variable futility
-futInitQmssc, futMinQmssc, futDecayRate :: Int
-futInitQmssc = futilMs
-futMinQmssc  = 25
-futDecayRate = 15
+futIniVal, futMinVal, futDecayB, futDecayW :: Int
+futIniVal = 100
+futMinVal = 25
+futDecayB = 15
+futDecayW = (1 `unsafeShiftL` futDecayB) - 1
 
 -- Parameters for quiescent search:
 qsBetaCut, qsDeltaCut :: Bool
@@ -161,7 +162,10 @@ data PVState
           absdp   :: !Int,	-- absolute depth (root = 0)
           usedext :: !Int,	-- used extension
           abort   :: !Bool,	-- search aborted (time)
-          qmssc   :: !Int	-- quet move sliding mean score
+          futme   :: !Int,	-- variable futility score - me
+          forme   :: !Int,	-- variable futility forgetnes - me
+          futyo   :: !Int,	-- variable futility score - you
+          foryo   :: !Int	-- variable futility forgetnes - you
       } deriving Show
 
 -- This is a state which reflects the status of alpha beta in a node while going through the edges
@@ -280,8 +284,8 @@ tailSeq es
     | otherwise  = Seq $ tail $ unseq es
 
 pvsInit :: PVState
-pvsInit = PVState { ronly = pvro00, absdp = 0, usedext = 0, abort = False,
-                    qmssc = futInitQmssc, stats = stt0 }
+pvsInit = PVState { ronly = pvro00, stats = stt0, absdp = 0, usedext = 0, abort = False,
+                    futme = futIniVal, forme = futDecayW, futyo = futIniVal, foryo = futDecayW }
 nst0 :: NodeState
 nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore "Zero" 0,
              movno = 1, spcno = 1, killer = NoKiller, albe = False, pvsl = [], pvcont = emptySeq }
@@ -447,7 +451,10 @@ pvInnerRoot b d nst e = do
                              when (exd' == 0 && not spc) $ do
                                  sdiff <- lift scoreDiff
                                  updateFutil e sdiff
-                             pvInnerRootExten b d exd' (deepNSt nst)
+                             xchangeFutil
+                             s <- pvInnerRootExten b d exd' (deepNSt nst)
+                             xchangeFutil
+                             return s
                          Final sco    -> do
                              viztreeScore $ "Final: " ++ show sco
                              return $! pathFromScore "Final" (-sco)
@@ -763,9 +770,11 @@ nullMoveFailsHigh nst b d lastnull
                       nn <- newNode
                       viztreeDown0 nn
                       viztreeABD (pathScore negnmb) (pathScore negnma) d1
+                      xchangeFutil
                       let nst' = deepNSt $ nst { pvcont = emptySeq }
                       val <- fmap pnextlev $ pvZeroW nst' negnma d1 lastnull1 True
                       lift undoMove	-- undo null move
+                      xchangeFutil
                       viztreeUp0 nn (pathScore val)
                       return $! val >= nmb
     where d1  = d - (1 + nulRedux)
@@ -821,7 +830,10 @@ pvInnerLoop b d prune nst e = do
                                   when (exd' == 0 && not spc) $ do
                                       sdiff <- lift scoreDiff
                                       updateFutil e sdiff
-                                  pvInnerLoopExten b d exd' (deepNSt nst)
+                                  xchangeFutil
+                                  s <- pvInnerLoopExten b d exd' (deepNSt nst)
+                                  xchangeFutil
+                                  return s
                          Final sco -> do
                              viztreeScore $ "Final: " ++ show sco
                              return $! pathFromScore "Final" (-sco)
@@ -860,12 +872,19 @@ pvInnerLoopZ b d prune nst e redu = do
                            if prune && exd' == 0 && not spc -- don't prune special or extended
                               then return $! onlyScore $! cursc nst	-- prune, return a
                               else if spc
-                                      then pvInnerLoopExtenZ b d spc exd' (deepNSt $ resetSpc nst) redu
+                                      then do
+                                          xchangeFutil
+                                          s <- pvInnerLoopExtenZ b d spc exd' (deepNSt $ resetSpc nst) redu
+                                          xchangeFutil
+                                          return s
                                       else do
                                           when (exd' == 0) $ do
                                               sdiff <- lift scoreDiff
                                               updateFutil e sdiff
-                                          pvInnerLoopExtenZ b d spc exd' (deepNSt   nst)          redu
+                                          xchangeFutil
+                                          s <- pvInnerLoopExtenZ b d spc exd' (deepNSt nst) redu
+                                          xchangeFutil
+                                          return s
                          Final sco -> do
                              viztreeScore $ "Final: " ++ show sco
                              return $! pathFromScore "Final" (-sco)
@@ -1110,7 +1129,7 @@ isPruneFutil d a
         tact <- lift tacticalPos
         if tact then return False else do
             v <- lift staticVal	-- E1
-            m <- gets qmssc	-- current quiet move average score
+            m <- varFutVal	-- variable futility value
             let margin = futilMargins d m
                 a' = pathScore a
             if v + margin <= a'
@@ -1119,23 +1138,26 @@ isPruneFutil d a
 
 updateFutil :: Move -> Int -> Search ()
 updateFutil e sd = do
-    so <- gets qmssc
+    s <- get
+    let !so = futme s
     if sd > so
        then do
            -- let str = "SCOD (" ++ show e ++ "): old = " ++ show so ++ ", new = " ++ show sd
            -- lift $ finNode str True
-           modify $ \s -> s { qmssc = sd }
-       else modify $ \s -> s { qmssc = forgetScore so }
+           put s { futme = sd, forme = futDecayW }
+       else put s { forme = forgetScore (forme s) }
 
 forgetScore :: Int -> Int
-forgetScore x = max futMinQmssc $ (x * futQmsscSamps) `unsafeShiftR` futDecayRate
-    where futQmsscSamps = 1 `unsafeShiftL` futDecayRate - 1
+forgetScore x = (x * futDecayW) `unsafeShiftR` futDecayB
 
-{--
-slidingScore :: Int -> Int -> Int
-slidingScore !ssc !x = (ssc * futQmsscSamps + x) `unsafeShiftR` futDecayRate
-    where futQmsscSamps = 1 `unsafeShiftL` futDecayRate - 1
---}
+xchangeFutil :: Search ()
+xchangeFutil
+    = modify $ \s -> s { futme = futyo s, forme = foryo s, futyo = futme s, foryo = forme s }
+
+varFutVal :: Search Int
+varFutVal = do
+    s <- get
+    return $! max futMinVal ((futme s * forme s) `unsafeShiftR` futDecayB)
 
 trimaxPath :: Path -> Path -> Path -> Path
 trimaxPath a b x
@@ -1282,7 +1304,8 @@ reportStats = do
                   ++ ", retrieve: " ++ show (sRetr xst) ++ ", succes: " ++ show (sRSuc xst)
        let r = fromIntegral (sBMNo xst) / fromIntegral (sBeta xst) :: Double
        logmes $ "Beta cuts: " ++ show (sBeta xst) ++ ", beta factor: " ++ show r
-       logmes $ "Sliding score: " ++ show (qmssc s)
+       logmes $ "Variable futility params: me = " ++ show (futme s) ++ "/" ++ show (forme s)
+                  ++ ", yo = " ++ show (futyo s) ++ "/" ++ show (foryo s)
        if lmrDebug
           then logmes $ "Reduced: " ++ show (sRedu xst) ++ ", Re-benefits: " ++ show (sReBe xst)
                  ++ ", ReSearchs: " ++ show (sReSe xst) ++ ", Re-waste: " ++ show (sReNo xst)
