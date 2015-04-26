@@ -415,27 +415,44 @@ data KingOpen = KingOpen
 
 instance EvalItem KingOpen where
     evalItem _ _ p _ = kingOpen p
-    evalItemNDL _  = [ ("kingOpen", ((10, 0), (0, 20))) ] 
+    evalItemNDL _  = [ ("kingMid",  ((-220, 0), (-1400, 20))),
+                       ("kingSide", (( -90, 0), (-1400, 20))) ] 
 
 -- Openness can be tought only with pawns (like we take) or all pieces
 kingOpen :: MyPos -> IWeights
-kingOpen p = [ ko ]
-    where !ko = adv - own
-          moprooks   = popCount $ rooks p .&. yo p
-          mopqueens  = popCount $ queens p .&. yo p
-          mwb = popCount $ bAttacs paw msq `less` paw
-          mwr = popCount $ rAttacs paw msq `less` (paw .|. lastrs)
-          yoprooks   = popCount $ rooks p .&. me p
-          yopqueens  = popCount $ queens p .&. me p
-          ywb = popCount $ bAttacs paw ysq `less` paw
-          ywr = popCount $ rAttacs paw ysq `less` (paw .|. lastrs)
-          paw = pawns p
+kingOpen p = [ dm, ds ]
+    where !dm = mm - ym
+          !ds = ms - ys
           msq = kingSquare (kings p) $ me p
           ysq = kingSquare (kings p) $ yo p
-          comb !oR !oQ !wb !wr = let !v = oR * wr + 2 * oQ * (wb + wr) in v
-          own = comb moprooks mopqueens mwb mwr
-          adv = comb yoprooks yopqueens ywb ywr
-          lastrs = 0xFF000000000000FF	-- approx: take out last row which cant be covered by pawns
+          mep = pawns p .&. me p
+          yop = pawns p .&. yo p
+          (mm, ms) = openFileScore msq mep yop
+          (ym, ys) = openFileScore ysq yop mep
+
+openFileScore :: Square -> BBoard -> BBoard -> (Int, Int)
+openFileScore ksq mep yop
+    | mfg == 7  = (m, l)
+    | mfg == 0  = (m, r)
+    | otherwise = (m, l+r)
+    where mfg = ksq .&. 0x7
+          mff = mfg - 1
+          mfh = mfg + 1
+          m = colorsPerFile mfg mep yop
+          l = colorsPerFile mff mep yop
+          r = colorsPerFile mfh mep yop
+
+-- Returns:
+-- 0 if the file is closed
+-- 1 if semi open on your side
+-- 2 if semi open on my side
+-- 3 if open
+colorsPerFile :: Int -> BBoard -> BBoard -> Int
+colorsPerFile file mep yop
+    | gm == 0   = if gy == 0 then 3 else 2
+    | otherwise = if gy == 0 then 1 else 0
+    where gm = colBB file .&. mep
+          gy = colBB file .&. yop
 
 ------ King placement ------
 data KingPlace = KingPlace
@@ -599,8 +616,8 @@ data Mobility = Mobility	-- "safe" moves
 
 instance EvalItem Mobility where
     evalItem _ _ p _ = mobDiff p
-    evalItemNDL _  = [ ("mobilityKnight", ((50, 56), (40, 120))),
-                       ("mobilityBishop", ((50, 55), (40, 120))),
+    evalItemNDL _  = [ ("mobilityKnight", ((48, 56), (40, 120))),
+                       ("mobilityBishop", ((48, 55), (40, 120))),
                        ("mobilityRook",   ((24, 25), ( 0, 100))),
                        ("mobilityQueen",  (( 4,  7), (-5,  50))) ]
 
@@ -631,8 +648,8 @@ instance EvalItem Center where
     evalItem _ _ p _ = centerDiff p
     evalItemNDL _  = [
                       ("centerPAtts", ((70, 60), (0, 200))),
-                      ("centerNAtts", ((57, 45), (0, 200))),
-                      ("centerBAtts", ((57, 45), (0, 200))),
+                      ("centerNAtts", ((55, 45), (0, 200))),
+                      ("centerBAtts", ((55, 45), (0, 200))),
                       ("centerRAtts", ((17, 30), (0, 200))),
                       ("centerQAtts", (( 4, 60), (0, 200))),
                       ("centerKAtts", (( 0, 70), (0, 200)))
@@ -754,9 +771,9 @@ data EnPrise = EnPrise
 instance EvalItem EnPrise where
     evalItem _ _ p _ = enPrise p
     evalItemNDL _  = [
-                       ("enpHanging",  ((-23, -30), (-800, 0))),
-                       ("enpEnPrise",  ((-23, -19), (-800, 0))),
-                       ("enpAttacked", (( -8, -12), (-800, 0)))
+                       ("enpHanging",  ((-22, -30), (-800, 0))),
+                       ("enpEnPrise",  ((-22, -19), (-800, 0))),
+                       ("enpAttacked", (( -7, -12), (-800, 0)))
                      ]
 
 -- Here we should only take at least the opponent attacks! When we evaluate,
