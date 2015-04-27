@@ -563,9 +563,9 @@ data RookPlc = RookPlc
 
 instance EvalItem RookPlc where
     evalItem _ _ p _ = evalRookPlc p
-    evalItemNDL _  = [ ("rookHOpen", ((171, 196), (0, 500))),
-                       ("rookOpen",  ((221, 221), (0, 800))),
-                       ("rookConn",  (( 98,  75), (0, 300))) ]
+    evalItemNDL _  = [ ("rookHOpen", ((128, 152), (0, 500))),
+                       ("rookOpen",  ((166, 166), (0, 800))),
+                       ("rookConn",  (( 73,  62), (0, 300))) ]
 
 evalRookPlc :: MyPos -> [Int]
 evalRookPlc p = [ ho, op, rc ]
@@ -599,10 +599,10 @@ data Mobility = Mobility	-- "safe" moves
 
 instance EvalItem Mobility where
     evalItem _ _ p _ = mobDiff p
-    evalItemNDL _  = [ ("mobilityKnight", ((50, 56), (40, 120))),
-                       ("mobilityBishop", ((50, 55), (40, 120))),
-                       ("mobilityRook",   ((24, 25), ( 0, 100))),
-                       ("mobilityQueen",  (( 4,  7), (-5,  50))) ]
+    evalItemNDL _  = [ ("mobilityKnight", ((43, 47), (20, 120))),
+                       ("mobilityBishop", ((43, 47), (20, 120))),
+                       ("mobilityRook",   ((20, 21), ( 0, 100))),
+                       ("mobilityQueen",  (( 3,  6), (-5,  50))) ]
 
 -- Here we do not calculate pawn mobility (which, calculated as attacs, is useless)
 mobDiff :: MyPos -> IWeights
@@ -630,11 +630,11 @@ data Center = Center
 instance EvalItem Center where
     evalItem _ _ p _ = centerDiff p
     evalItemNDL _  = [
-                      ("centerPAtts", ((70, 60), (0, 200))),
-                      ("centerNAtts", ((57, 45), (0, 200))),
-                      ("centerBAtts", ((57, 45), (0, 200))),
-                      ("centerRAtts", ((17, 30), (0, 200))),
-                      ("centerQAtts", (( 4, 60), (0, 200))),
+                      ("centerPAtts", ((56, 48), (0, 200))),
+                      ("centerNAtts", ((46, 37), (0, 200))),
+                      ("centerBAtts", ((46, 37), (0, 200))),
+                      ("centerRAtts", ((14, 24), (0, 200))),
+                      ("centerQAtts", (( 3, 48), (0, 200))),
                       ("centerKAtts", (( 0, 70), (0, 200)))
                      ]
 
@@ -754,9 +754,9 @@ data EnPrise = EnPrise
 instance EvalItem EnPrise where
     evalItem _ _ p _ = enPrise p
     evalItemNDL _  = [
-                       ("enpHanging",  ((-23, -30), (-800, 0))),
-                       ("enpEnPrise",  ((-23, -19), (-800, 0))),
-                       ("enpAttacked", (( -8, -12), (-800, 0)))
+                       ("enpHanging",  ((-17, -22), (-800, 0))),
+                       ("enpEnPrise",  ((-17, -15), (-800, 0))),
+                       ("enpAttacked", (( -6,  -9), (-800, 0)))
                      ]
 
 -- Here we should only take at least the opponent attacks! When we evaluate,
@@ -803,7 +803,7 @@ data LastLine = LastLine
 
 instance EvalItem LastLine where
     evalItem _ _ p _ = lastline p
-    evalItemNDL _  = [("lastLinePenalty", ((120, 0), (-100, 300)))]
+    evalItemNDL _  = [("lastLinePenalty", ((96, 0), (-100, 300)))]
 
 -- Only for minor figures (queen is free to stay where it wants)
 -- Negative at the end: so that it falls stronger
@@ -880,8 +880,8 @@ instance EvalItem PaBlo where
     evalItem _ _ p _ = pawnBl p
     evalItemNDL _  = [
                      ("pawnBlockP", ((-116, -109), (-300, 0))),	-- blocked by own pawn
-                     ("pawnBlockO", (( -24,  -26), (-300, 0))),	-- blocked by own piece
-                     ("pawnBlockA", (( -13,  -75), (-300, 0)))	-- blocked by adverse piece
+                     ("pawnBlockO", (( -18,  -20), (-300, 0))),	-- blocked by own piece
+                     ("pawnBlockA", (( -10,  -57), (-300, 0)))	-- blocked by adverse piece
                      ]
 
 pawnBl :: MyPos -> IWeights
