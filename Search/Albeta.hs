@@ -69,9 +69,6 @@ lmrActive   = True
 lmrDebug    = False
 
 -- Parameters for futility pruning:
-futilActive :: Bool
-futilActive = True
-
 maxFutilDepth :: Int
 maxFutilDepth = 3
 
@@ -244,10 +241,11 @@ negatePath p = p { pathScore = - pathScore p, pathDepth = 0, pathMoves = Seq [],
 
 -- This should be used only when scores are equal
 -- Then it takes the longer path
-bestPath :: Path -> Path -> Path
-bestPath a b
+bestPath :: Path -> Path -> String -> Path
+bestPath a b s
     | a == b    = if pathDepth b > pathDepth a then b else a
-    | otherwise = error $ "bestPath on unequal scores: " ++ show a ++ " versus " ++ show b
+    | otherwise = error $ "bestPath on unequal scores case " ++ s
+                          ++ ": " ++ show a ++ " versus " ++ show b
 
 (-:) :: Path -> Int -> Path
 p -: s = p { pathScore = pathScore p - s, pathOrig = pathOrig p ++ " <-:> " ++ show s }
@@ -439,7 +437,7 @@ pvInnerRoot b d nst e = do
        else do
          pindent $ "-> " ++ show e
          -- do the move
-         exd <-  lift $ doMove False e False
+         exd <-  lift $ doMove e False
          if legalResult exd
             then do
                 old <- get
@@ -451,7 +449,7 @@ pvInnerRoot b d nst e = do
                          Exten exd' spc -> do
                              when (exd' == 0 && not spc) $ do
                                  sdiff <- lift scoreDiff
-                                 updateFutil e sdiff
+                                 updateFutil sdiff	-- e
                              xchangeFutil
                              s <- pvInnerRootExten b d exd' (deepNSt nst)
                              xchangeFutil
@@ -552,7 +550,7 @@ checkFailOrPVRoot xstats b d e s nst =  do
                                 ttStore de typ (pathScore b) e nodes'
                             betaCut True (absdp sst) e
                         let xpvslg = insertToPvs d pvg (pvsl nst)	-- the good
-                            !csc = if s > b then combinePath s b else bestPath s b
+                            !csc = if s > b then combinePath s b else bestPath s b "1"
                         pindent $ "beta cut: " ++ show csc
                         let nst1 = nst { cursc = csc, pvsl = xpvslg, pvcont = emptySeq }
                         return (True, nst1)
@@ -622,12 +620,12 @@ pvSearch nst !a !b !d = do
     --    Idea: return only if better than beta, else search for exact score
     -- tp == 0 => score <= hsc, so if hsc <= asco then we fail low and
     --    can terminate the search
-    if (useTTinPv || ab) && hdeep >= d && (
+    if (useTTinPv || (not inPv && ab)) && hdeep >= d && (
             tp == 2				-- exact score: always good
          || tp == 1 && hsc >= pathScore b	-- we will fail high
          || tp == 0 && hsc <= pathScore a	-- we will fail low
        )
-       then  do
+       then do
            let ttpath = Path { pathScore = hsc, pathDepth = hdeep,
                                pathMoves = Seq [e'], pathOrig = "TT" }
            reSucc nodes' >> return ttpath
@@ -637,26 +635,31 @@ pvSearch nst !a !b !d = do
            let nst' = if hdeep > 0 && (tp /= 0 || nullSeq (pvcont nst))
                          then nst { pvcont = Seq [e'] }
                          else nst
+               -- If we got a lower bound score from TT which is greater than
+               -- our current score, we can proceed with a smaller search window
+               -- Maybe this helps
+               --a' = if tp == 1 && hdeep >= d && hsc > pathScore a
+               --        then Path { pathScore = hsc, pathDepth = hdeep,
+               --                    pathMoves = Seq [e'], pathOrig = "TT" }
+               --        else a
            edges <- genAndSort nst' a b d
            if noMove edges
               then do
-                v <- lift staticVal
-                viztreeScore $ "noMove: " ++ show v
-                let !s = pathFromScore ("static: " ++ show v) v
-                pindent $ "<= " ++ show s
-                return s	-- shouldn't we ttStore this?
+                chk <- lift tacticalPos
+                let s' = if chk then matedPath else staleMate
+                viztreeScore $ "noMove: " ++ show (pathScore s')
+                pindent $ "<= " ++ show s'
+                return $! trimaxPath a b s'	-- why trimax??
               else do
                 nodes0 <- gets (sNodes . stats)
                 -- Here: when ab we should do futility pruning
                 -- futility pruning:
-                prune <- if not futilActive && ab
-                            then return False
-                            else isPruneFutil d a
+                prune <- isPruneFutil d a
                 -- Loop thru the moves
                 let !nsti = resetNSt a nst'
                 nstf <- pvSLoop b d prune nsti edges
                 let s = cursc nstf
-                pindent $ "<= " ++ show s
+                pindent $ "<= " ++ show s	-- not really...
                 -- After pvSLoop ... we expect always that s >= a - this must be checked if it is so
                 -- then it makes sense below to take bestPath when failed low (s == a)
                 abrt' <- gets abort
@@ -674,11 +677,11 @@ pvSearch nst !a !b !d = do
                                    !deltan = nodes1 - nodes0
                                ttStore de typ (pathScore a) (head es) deltan	-- should be d or de?
                        if movno nstf > 1
-                           then return $! bestPath s a
+                           then return $! bestPath s a "2"
                            else do
                                chk <- lift tacticalPos
                                let s' = if chk then matedPath else staleMate
-                               return $! trimaxPath a b s'	-- shouldn't we ttStore this?
+                               return $! trimaxPath a b s'	-- why trimax??
 
 -- PV Zero Window
 pvZeroW :: NodeState -> Path -> Int -> Int -> Bool -> Search Path
@@ -721,17 +724,15 @@ pvZeroW !nst !b !d !lastnull redu = do
                     edges <- genAndSort nst' bGrain b d
                     if noMove edges
                        then do
-                         v <- lift staticVal
-                         viztreeScore $ "noMove: " ++ show v
-                         let !s = pathFromScore ("static: " ++ show v) v
-                         pindent $ "<= " ++ show s
-                         return s	-- shouldn't we ttStore this?
+                         chk <- lift tacticalPos
+                         let s' = if chk then matedPath else staleMate
+                         viztreeScore $ "noMove: " ++ show (pathScore s')
+                         pindent $ "<= " ++ show s'
+                         return $! trimaxPath bGrain b s'
                        else do
                          !nodes0 <- gets (sNodes . stats)
                          -- futility pruning:
-                         prune <- if not futilActive
-                                     then return False
-                                     else isPruneFutil d bGrain
+                         prune <- isPruneFutil d bGrain
                          -- Loop thru the moves
                          let !nsti = resetNSt bGrain nst'
                          nstf <- pvZLoop b d prune redu nsti edges
@@ -815,37 +816,41 @@ pvInnerLoop b d prune nst e = do
     if abrt
        then return (True, nst)
        else do
-         old <- get
-         pindent $ "-> " ++ show e
-         exd <-  lift $ doMove False e False	-- do the move
-         if legalResult exd
+         -- What about TT & killer moves???
+         willPrune <- if not prune then return False else lift $ canPruneMove e
+         if willPrune
             then do
-                nn <- newNode
-                viztreeDown nn e
-                modify $ \s -> s { absdp = absdp s + 1 }
-                s <- case exd of
-                         Exten exd' spc -> do
-                           if prune && exd' == 0 && not spc -- don't prune special or extended
-                              then return $! onlyScore $! cursc nst	-- prune, return a
-                              else do
-                                  when (exd' == 0 && not spc) $ do
-                                      sdiff <- lift scoreDiff
-                                      updateFutil e sdiff
-                                  xchangeFutil
-                                  s <- pvInnerLoopExten b d exd' (deepNSt nst)
-                                  xchangeFutil
-                                  return s
-                         Final sco -> do
-                             viztreeScore $ "Final: " ++ show sco
-                             return $! pathFromScore "Final" (-sco)
-                         Illegal -> error "Cannot be illegal here"
-                lift undoMove	-- undo the move
-                viztreeUp nn e (pathScore s)
-                modify $ \s' -> s' { absdp = absdp old, usedext = usedext old }
-                let s' = addToPath e s
-                pindent $ "<- " ++ show e ++ " (" ++ show s' ++ ")"
-                checkFailOrPVLoop (stats old) b d e s' nst
-            else return (False, nst)
+                let !nst1 = nst { movno = movno nst + 1, pvcont = emptySeq }
+                return (False, nst1)
+            else do
+                old <- get
+                pindent $ "-> " ++ show e
+                exd <- lift $ doMove e False	-- do the move
+                if legalResult exd
+                   then do
+                       nn <- newNode
+                       viztreeDown nn e
+                       modify $ \s -> s { absdp = absdp s + 1 }
+                       s <- case exd of
+                           Exten exd' spc -> do
+                               when (exd' == 0 && not spc) $ do	-- not quite ok here
+                                   sdiff <- lift scoreDiff	-- cause spc has a slighty
+                                   updateFutil sdiff	-- e	-- different meaning...
+                               xchangeFutil
+                               s <- pvInnerLoopExten b d exd' (deepNSt nst)
+                               xchangeFutil
+                               return s
+                           Final sco -> do
+                               viztreeScore $ "Final: " ++ show sco
+                               return $! pathFromScore "Final" (-sco)
+                           Illegal -> error "Cannot be illegal here"
+                       lift undoMove	-- undo the move
+                       viztreeUp nn e (pathScore s)
+                       modify $ \s' -> s' { absdp = absdp old, usedext = usedext old }
+                       let s' = addToPath e s
+                       pindent $ "<- " ++ show e ++ " (" ++ show s' ++ ")"
+                       checkFailOrPVLoop (stats old) b d e s' nst
+                   else return (False, nst)
 
 -- This part for the zero window search
 pvInnerLoopZ :: Path 	-- current beta
@@ -860,43 +865,49 @@ pvInnerLoopZ b d prune nst e redu = do
     if abrt
        then return (True, nst)
        else do
-         old <- get
-         pindent $ "-> " ++ show e
-         exd <-  lift $ doMove False e False	-- do the move
-         if legalResult exd
+         -- What about TT & killer moves???
+         willPrune <- if not prune then return False else lift $ canPruneMove e
+         if willPrune
             then do
-                nn <- newNode
-                viztreeDown nn e
-                modify $ \s -> s { absdp = absdp s + 1 }
-                s <- case exd of
+                let !nst1 = nst { movno = movno nst + 1, pvcont = emptySeq }
+                return (False, nst1)
+            else do
+                old <- get
+                pindent $ "-> " ++ show e
+                exd <-  lift $ doMove e False	-- do the move
+                -- even the legality could be checked before, maybe much cheaper
+                if legalResult exd
+                   then do
+                       nn <- newNode
+                       viztreeDown nn e
+                       modify $ \s -> s { absdp = absdp s + 1 }
+                       s <- case exd of
                          Exten exd' spc -> do
-                           if prune && exd' == 0 && not spc -- don't prune special or extended
-                              then return $! onlyScore $! cursc nst	-- prune, return a
-                              else if spc
-                                      then do
-                                          xchangeFutil
-                                          s <- pvInnerLoopExtenZ b d spc exd' (deepNSt $ resetSpc nst) redu
-                                          xchangeFutil
-                                          return s
-                                      else do
-                                          when (exd' == 0) $ do
-                                              sdiff <- lift scoreDiff
-                                              updateFutil e sdiff
-                                          xchangeFutil
-                                          s <- pvInnerLoopExtenZ b d spc exd' (deepNSt nst) redu
-                                          xchangeFutil
-                                          return s
+                             if spc
+                                then do
+                                    xchangeFutil
+                                    s <- pvInnerLoopExtenZ b d spc exd' (deepNSt $ resetSpc nst) redu
+                                    xchangeFutil
+                                    return s
+                                else do
+                                    when (exd' == 0) $ do
+                                        sdiff <- lift scoreDiff
+                                        updateFutil sdiff	-- e
+                                    xchangeFutil
+                                    s <- pvInnerLoopExtenZ b d spc exd' (deepNSt nst) redu
+                                    xchangeFutil
+                                    return s
                          Final sco -> do
                              viztreeScore $ "Final: " ++ show sco
                              return $! pathFromScore "Final" (-sco)
                          Illegal -> error "Cannot be illegal here"
-                lift undoMove	-- undo the move
-                viztreeUp nn e (pathScore s)
-                modify $ \s' -> s' { absdp = absdp old, usedext = usedext old }
-                let s' = addToPath e s
-                pindent $ "<- " ++ show e ++ " (" ++ show s' ++ ")"
-                checkFailOrPVLoopZ (stats old) b d e s' nst
-            else return (False, nst)
+                       lift undoMove	-- undo the move
+                       viztreeUp nn e (pathScore s)
+                       modify $ \s' -> s' { absdp = absdp old, usedext = usedext old }
+                       let s' = addToPath e s
+                       pindent $ "<- " ++ show e ++ " (" ++ show s' ++ ")"
+                       checkFailOrPVLoopZ (stats old) b d e s' nst
+                   else return (False, nst)
 
 resetSpc :: NodeState -> NodeState
 resetSpc nst = nst { spcno = movno nst }
@@ -1015,7 +1026,7 @@ checkFailOrPVLoop xstats b d e s nst = do
                   betaCut True (absdp sst) e -- anounce a beta move (for example, update history)
               incBeta mn
               -- when debug $ logmes $ "<-- pvInner: beta cut: " ++ show s ++ ", return " ++ show b
-              let !csc = if s > b then combinePath s b else bestPath s b
+              let !csc = if s > b then combinePath s b else bestPath s b "3"
               pindent $ "beta cut: " ++ show csc
               let !nst1 = nst { cursc = csc, pvcont = emptySeq }
               return (True, nst1)
@@ -1054,7 +1065,7 @@ checkFailOrPVLoopZ xstats b d e s nst = do
                  ttStore de typ (pathScore b) e nodes'
              betaCut True (absdp sst) e -- anounce a beta move (for example, update history)
          incBeta mn
-         let !csc = if s > b then combinePath s b else bestPath s b
+         let !csc = if s > b then combinePath s b else bestPath s b "4"
          pindent $ "beta cut: " ++ show csc
          let !nst1 = nst { cursc = csc, pvcont = emptySeq }
          return (True, nst1)
@@ -1125,7 +1136,9 @@ pvLoop f s (Alt (e:es)) = do
 
 isPruneFutil :: Int -> Path -> Search Bool
 isPruneFutil d a
-    | d <= 0 || d > maxFutilDepth || nearmate (pathScore a) = return False
+    -- | d <= 0 || d > maxFutilDepth || nearmate (pathScore a) = return False
+    -- why not for d == 0? It will spare the QS
+    | d > maxFutilDepth || nearmate (pathScore a) = return False
     | otherwise = do
         tact <- lift tacticalPos
         if tact then return False else do
@@ -1133,12 +1146,12 @@ isPruneFutil d a
             m <- varFutVal	-- variable futility value
             let margin = futilMargins d m
                 a' = pathScore a
-            if v + margin <= a'
-               then return True
-               else return False
+            return $! v + margin <= a'
 
-updateFutil :: Move -> Int -> Search ()
-updateFutil e sd = do
+-- updateFutil :: Int -> Move -> Search ()
+-- updateFutil sd e = do
+updateFutil :: Int -> Search ()
+updateFutil sd = do
     s <- get
     let !so = futme s
     if sd > so
@@ -1238,7 +1251,7 @@ pvQInnerLoop !b c !a e = do
        else do
          -- here: delta pruning: captured piece + 200 > a? then go on, else return
          -- qindent $ "-> " ++ show e
-         r <-  lift $ doMove False e True
+         r <-  lift $ doMove e True
          if legalResult r
             then do
                 nn <- newNodeQS

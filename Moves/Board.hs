@@ -6,7 +6,7 @@ module Moves.Board (
     castKingRookOk, castQueenRookOk,
     genMoveCast, genMoveNCapt, genMoveTransf, genMoveFCheck, genMoveCaptWL,
     genMoveNCaptToCheck,
-    updatePos, kingsOk, checkOk,
+    updatePos, checkOk, moveChecks,
     legalMove, alternateMoves,
     doFromToMove, reverseMoving
     ) where
@@ -115,6 +115,42 @@ genMoveTransf !p = map (uncurry (makePromo Queen)) $ pGenC ++ pGenNC
 srcDests :: (Square -> BBoard) -> Square -> [(Square, Square)]
 srcDests f !s = zip (repeat s) $ bbToSquares $ f s
 
+-- This one should be called only for normal moves
+{-# INLINE moveChecksDirect #-}
+moveChecks :: MyPos -> Move -> Bool
+moveChecks !p !m = moveChecksDirect p m || moveChecksIndirect p m
+
+moveChecksDirect :: MyPos -> Move -> Bool
+moveChecksDirect !p !m
+    | fig == Pawn   = pAttacs (moving p) t .&. yok /= 0
+    | fig == Knight = nAttacs t .&. yok /= 0
+    | fig == Bishop = ba .&. yok /= 0
+    | fig == Rook   = ra .&. yok /= 0
+    | fig == Queen  = ba .&. yok /= 0 || ra .&. yok /= 0
+    | otherwise     = False	-- king can't check directly
+    where !fig = movePiece m
+          !t   = toSquare m
+          !yok = kings p .&. yo p
+          occ = occup p
+          ba  = bAttacs occ t
+          ra  = rAttacs occ t
+
+-- This one can be further optimised by using two bitboard arrays
+-- for the attacks on empty table
+moveChecksIndirect :: MyPos -> Move -> Bool
+moveChecksIndirect !p !m = ba .&. bq /= 0 || ra .&. rq /= 0
+    where !ksq = firstOne $ kings p .&. yo p
+          !b   = bishops p .&. me p
+          !r   = rooks p   .&. me p
+          !q   = queens p  .&. me p
+          !bq  = b .|. q
+          !rq  = r .|. q
+          !fb  = uBit $ fromSquare m
+          !tb  = uBit $ toSquare m
+          !occ = (occup p .|. tb) `less` fb
+          ba   = bAttacs occ ksq
+          ra   = rAttacs occ ksq
+
 -- Because finding the blocking square for a queen check is so hard,
 -- we define a data type and, in case of a queen check, we give also
 -- the piece type (rook or bishop) in which direction the queen checks
@@ -123,21 +159,21 @@ data CheckInfo = NormalCheck Piece !Square
 
 -- Finds pieces which check
 findChecking :: MyPos -> [CheckInfo]
-findChecking !p = concat [ pChk, nChk, bChk, rChk, qbChk, qrChk ]
-    where pChk = map (NormalCheck Pawn) $ filter ((/= 0) . kattac . pAttacs (other $ moving p))
-                               $ bbToSquares $ pawns p .&. yo p
-          nChk = map (NormalCheck Knight) $ filter ((/= 0) . kattac . nAttacs)
-                               $ bbToSquares $ knights p .&. yo p
-          bChk = map (NormalCheck Bishop) $ filter ((/= 0) . kattac . bAttacs (occup p))
-                               $ bbToSquares $ bishops p .&. yo p
-          rChk = map (NormalCheck Rook) $ filter ((/= 0) . kattac . rAttacs (occup p))
-                               $ bbToSquares $ rooks p .&. yo p
-          qbChk = map (QueenCheck Bishop) $ filter ((/= 0) . kattac . bAttacs (occup p))
-                               $ bbToSquares $ queens p .&. yo p
-          qrChk = map (QueenCheck Rook) $ filter ((/= 0) . kattac . rAttacs (occup p))
-                               $ bbToSquares $ queens p .&. yo p
-          !myk = kings p .&. me p
-          kattac = (.&. myk)
+findChecking !pos = concat [ pChk, nChk, bChk, rChk, qbChk, qrChk ]
+    where pChk  = map (NormalCheck Pawn)   $ bbToSquares $ pAttacs (moving pos) ksq .&. p
+          nChk  = map (NormalCheck Knight) $ bbToSquares $ nAttacs ksq .&. n
+          bChk  = map (NormalCheck Bishop) $ bbToSquares $ bAttacs occ ksq .&. b
+          rChk  = map (NormalCheck Rook)   $ bbToSquares $ rAttacs occ ksq .&. r
+          qbChk = map (QueenCheck Bishop)  $ bbToSquares $ bAttacs occ ksq .&. q
+          qrChk = map (QueenCheck Rook)    $ bbToSquares $ rAttacs occ ksq .&. q
+          !myk = kings pos .&. me pos
+          !ksq = firstOne myk
+          !occ = occup pos
+          !b = bishops pos .&. yo pos
+          !r = rooks pos   .&. yo pos
+          !q = queens pos  .&. yo pos
+          !n = knights pos .&. yo pos
+          !p = pawns pos   .&. yo pos
 
 -- Generate move when in check
 genMoveFCheck :: MyPos -> [Move]

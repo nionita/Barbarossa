@@ -38,7 +38,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.3.0"
-progVerSuff = "fuvv3"
+progVerSuff = "fus"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -326,7 +326,7 @@ doPosition fen mvs = do
             ns <- newState fen mvs (hash . crtStatus $ chg) hi es
             modifyChanging (\c -> c { crtStatus = ns, myColor = myCol })
     where newState fpos ms c h es = foldM execMove (stateFromFen fpos c h es) ms
-          execMove p m = execCState (doMove True m False) p
+          execMove p m = execCState (doRealMove m) p
           fenColor = movingColor fen
           myCol = if even (length mvs) then fenColor else other fenColor
 

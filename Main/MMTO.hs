@@ -372,7 +372,7 @@ correctMove p m'
 
 canDoMove :: Move -> Game Bool
 canDoMove m = do
-    r <- doMove False m False
+    r <- doMove m False
     case r of
         Illegal -> return False
         _       -> return True
@@ -431,7 +431,7 @@ maxScore = maxBound - 2000
 searchAB :: Move -> Game (Maybe Int)
 searchAB m = do
     debugMes $ "--> SearchAB move: " ++ show m
-    r <- doMove False m False
+    r <- doMove m False
     case r of
         Illegal -> return Nothing
         _       -> do
@@ -444,7 +444,7 @@ searchAB m = do
 searchQ :: Int -> Move -> Game Int
 searchQ !a m = do
     debugMes $ "  --> SearchQ move: " ++ show m ++ " (" ++ show a ++ ")"
-    r <- doMove False m False
+    r <- doMove m False
     case r of
         Illegal -> return a
         _       -> do
@@ -470,7 +470,7 @@ spaces l = take n $ repeat ' '
 pvQInnerLoop :: Int -> Int -> Int -> Move -> Game (Bool, Int)
 pvQInnerLoop lev !b !a m = do
     debugMes $ spaces lev ++ "--> pvQInnerLoop a = " ++ show a ++ " b = " ++ show b ++ " move: " ++ show m
-    r <- doMove False m True
+    r <- doMove m True
     case r of
         Illegal -> return (False, a)
         Final s -> do
