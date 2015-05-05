@@ -60,7 +60,7 @@ minToRetr   = 1 -- minimum remaining depth to retrieve
 maxDepthExt = 3 -- maximum depth extension
 useNegHist  = False	-- when not cutting - negative history
 negHistMNo  = 1		-- how many moves get negative history
-useTTinPv   = False	-- retrieve from TT in PV?
+useTTinPv   = True	-- retrieve from TT in PV?
 minPvDepth  = 2		-- from this depth we use alpha beta search
 
 -- Parameters for late move reduction:
@@ -603,7 +603,7 @@ pvSearch _ !a !b !d | d <= 0 = do
         $ lift $  ttStore 0 2 v (Move 0) ns
     let !esc = pathFromScore ("pvQSearch 1:" ++ show v) v
     pindent $ "<> " ++ show esc
-    return esc
+    return $ trimaxPath a b esc
 pvSearch nst !a !b !d = do
     pindent $ "=> " ++ show a ++ ", " ++ show b
     let !inPv = crtnt nst == PVNode
@@ -620,28 +620,21 @@ pvSearch nst !a !b !d = do
     --    Idea: return only if better than beta, else search for exact score
     -- tp == 0 => score <= hsc, so if hsc <= asco then we fail low and
     --    can terminate the search
-    if (useTTinPv || (not inPv && ab)) && hdeep >= d && (
-            tp == 2				-- exact score: always good
-         || tp == 1 && hsc >= pathScore b	-- we will fail high
-         || tp == 0 && hsc <= pathScore a	-- we will fail low
-       )
+    if (hdeep >= d && (
+        (inPv && useTTinPv || not inPv && ab) && tp == 2
+        || tp == 1 && hsc >= pathScore b	-- we will fail high
+        || tp == 0 && hsc <= pathScore a	-- we will fail low
+       ))
        then do
            let ttpath = Path { pathScore = hsc, pathDepth = hdeep,
                                pathMoves = Seq [e'], pathOrig = "TT" }
-           reSucc nodes' >> return ttpath
+           reSucc nodes' >> return (trimaxPath a b ttpath)
        else do
            -- Here: when ab we should do null move search
            -- Use the found TT move as best move
            let nst' = if hdeep > 0 && (tp /= 0 || nullSeq (pvcont nst))
                          then nst { pvcont = Seq [e'] }
                          else nst
-               -- If we got a lower bound score from TT which is greater than
-               -- our current score, we can proceed with a smaller search window
-               -- Maybe this helps
-               --a' = if tp == 1 && hdeep >= d && hsc > pathScore a
-               --        then Path { pathScore = hsc, pathDepth = hdeep,
-               --                    pathMoves = Seq [e'], pathOrig = "TT" }
-               --        else a
            edges <- genAndSort nst' a b d
            if noMove edges
               then do
@@ -664,7 +657,7 @@ pvSearch nst !a !b !d = do
                 -- then it makes sense below to take bestPath when failed low (s == a)
                 abrt' <- gets abort
                 if abrt' || s > a
-                   then return s
+                   then return $ trimaxPath a b s
                    else do
                        -- here we failed low
                        let de = max d $ pathDepth s
@@ -693,7 +686,7 @@ pvZeroW !_ !b !d !_ _ | d <= 0 = do
         $ lift $  ttStore 0 2 v (Move 0) ns
     let !esc = pathFromScore ("pvQSearch 21:" ++ show v) v
     pindent $ "<> " ++ show esc
-    return esc
+    return $ trimaxPath bGrain b esc
     where bGrain = b -: scoreGrain
 pvZeroW !nst !b !d !lastnull redu = do
     pindent $ ":> " ++ show b
@@ -706,7 +699,7 @@ pvZeroW !nst !b !d !lastnull redu = do
     if hdeep >= d && (tp == 2 || tp == 1 && hsc >= bsco || tp == 0 && hsc < bsco)
        then  do
            let ttpath = Path { pathScore = hsc, pathDepth = hdeep, pathMoves = Seq [e'], pathOrig = "TT" }
-           reSucc nodes' >> return ttpath
+           reSucc nodes' >> return (trimaxPath bGrain b ttpath)
        else do
            nmhigh <- nullMoveFailsHigh nst b d lastnull
            abrt <- gets abort
@@ -715,7 +708,7 @@ pvZeroW !nst !b !d !lastnull redu = do
                   let !s = onlyScore b
                   pindent $ "<= " ++ show s
                   viztreeScore $ "nmhigh: " ++ show (pathScore s)
-                  return s
+                  return $ trimaxPath bGrain b s
               else do
                     -- Use the TT move as best move
                     let nst' = if hdeep > 0 && (tp /= 0 || nullSeq (pvcont nst))
@@ -749,7 +742,7 @@ pvZeroW !nst !b !d !lastnull redu = do
                                      !deltan = nodes1 - nodes0
                                  ttStore de typ (pathScore b) (head es) deltan
                          if s > bGrain || movno nstf > 1
-                            then return s
+                            then return $ trimaxPath bGrain b s
                             else do	-- here: store exact mate or stalemate score!
                                 chk <- lift tacticalPos
                                 let s' = if chk then matedPath else staleMate
