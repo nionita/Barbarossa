@@ -120,7 +120,8 @@ evalItems = [ EvIt Material,	-- material balance (i.e. white - black material
               EvIt EnPrise,	-- when not quiescent - pieces en prise
               -- EvIt NRCorrection,	-- material correction for knights & rooks
               EvIt PaBlo,	-- pawn blocking
-              EvIt Izolan,	-- isolated pawns
+              -- EvIt FarPawns,	-- far pawns
+              EvIt Isolan,	-- isolated pawns - even more malus then isolated
               EvIt Backward,	-- backward pawns
               EvIt PassPawns	-- pass pawns
             ]
@@ -662,6 +663,71 @@ centerDiff p = [pd, nd, bd, rd, qd, kd]
           center = 0x0000001818000000
 
 -------- Isolated pawns --------
+--- Really isolated
+
+data Isolan = Isolan
+
+instance EvalItem Isolan where
+    evalItem _ _ p _ = isolDiff p
+    evalItemNDL _  = [
+                      ("isolPawns",  ((-46, -132), (-300, 0))),
+                      ("isolPassed", ((-17,  -33), (-500, 0)))	-- this is relative to isolPawns
+                     ]
+
+isolDiff :: MyPos -> [Int]
+isolDiff p = [ dic, dpc ]
+    where !mis = isolCol (pawns p .&. me p)
+          !yis = isolCol (pawns p .&. yo p)
+          !mic = popCount mis
+          !yic = popCount yis
+          !mip = mis .&. passed p
+          !yip = yis .&. passed p
+          !mpc = popCount mip
+          !ypc = popCount yip
+          !dic = mic - yic
+          !dpc = mpc - ypc
+
+isolCol :: BBoard -> BBoard
+isolCol ps = ip
+    where !psL = (ps .&. notFileA) `unsafeShiftR` 1	-- left
+          !psR = (ps .&. notFileH) `unsafeShiftL` 1	-- and right
+          !pLR = psL .|. psR
+          !su  = shadowUp pLR
+          !sd  = shadowDown pLR
+          !ip  = ps `less` (su .|. sd .|. pLR)
+
+-------- Far pawns --------
+-- When pawns are too far it's also not good
+
+data FarPawns = FarPawns
+
+instance EvalItem FarPawns where
+    evalItem _ _ p _ = farDiff p
+    evalItemNDL _  = [
+                      ("farPawns",  ((-42, -120), (-300, 0))),
+                      ("farPassed", ((-57, -150), (-500, 0)))
+                     ]
+
+farDiff :: MyPos -> IWeights
+farDiff p = [ nd, pd ]
+    where (!myr, !myp) = farP (pawns p .&. me p) (passed p)
+          (!yor, !yop) = farP (pawns p .&. yo p) (passed p)
+          !nd = myr - yor
+          !pd = myp - yop
+
+farP :: BBoard -> BBoard -> (Int, Int)
+farP ps pp = (ris, pis)
+    where !myp = ps .&. pp
+          !myr = ps `less` myp
+          !myf = ((ps .&. notFileA) `unsafeShiftR` 1) .|. ((ps .&. notFileH) `unsafeShiftL` 1)
+          !myu = myf `unsafeShiftL` 8
+          !myd = myf `unsafeShiftR` 8
+          !myc = myf .|. myu .|. myd
+          !ris = popCount $ myr `less` myc
+          !pis = popCount $ myp `less` myc
+
+{--
+-------- Isolated pawns --------
 data Izolan = Izolan
 
 instance EvalItem Izolan where
@@ -688,6 +754,7 @@ isol ps pp = (ris, pis)
           !myc = myf .|. myu .|. myd
           !ris = popCount $ myr `less` myc
           !pis = popCount $ myp `less` myc
+--}
 
 -------- Backward pawns --------
 data Backward = Backward
