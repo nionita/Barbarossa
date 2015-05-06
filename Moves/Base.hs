@@ -7,11 +7,11 @@
 
 module Moves.Base (
     posToState, getPos, posNewSearch,
-    doMove, undoMove, genMoves, genTactMoves,
+    doRealMove, doMove, undoMove, genMoves, genTactMoves, canPruneMove,
     useHash,
     staticVal, materVal, tacticalPos, isMoveLegal, isKillCand, isTKillCand, okInSequence,
     betaCut, doNullMove, ttRead, ttStore, curNodes, chooseMove, isTimeout, informCtx,
-    mateScore,
+    mateScore, scoreDiff,
     finNode,
     showMyPos, logMes,
     nearmate	-- , special
@@ -173,48 +173,71 @@ uBitSet bb sq = bb .&. (1 `unsafeShiftL` sq) /= 0
 uBitClear :: BBoard -> Int -> Bool
 uBitClear bb sq = bb .&. (1 `unsafeShiftL` sq) == 0
 
--- move from a node to a descendent
-doMove :: Bool -> Move -> Bool -> Game DoResult
-doMove real m qs = do
-    -- logMes $ "** doMove " ++ show m
-    statNodes   -- when counting all visited nodes
+-- Move from a node to a descendent - the real move version
+doRealMove :: Move -> Game DoResult
+doRealMove m = do
     s  <- get
-    -- let pc = if null (stack s) then error "doMove" else head $ stack s
     let (pc:_) = stack s	-- we never saw an empty stack error until now
-        !m1 = if real then checkCastle (checkEnPas m pc) pc else m
+        !m1 = checkCastle (checkEnPas m pc) pc
         -- Moving a non-existent piece?
         il = occup pc `uBitClear` fromSquare m1
         -- Capturing one king?
         kc = kings pc `uBitSet` toSquare m1
         p' = doFromToMove m1 pc
-        kok = kingsOk p'	-- actually not needed if kc is always checkd...
         cok = checkOk p'
     -- If the move is real and one of those conditions occur,
     -- then we are really in trouble...
-    if not real && (il || kc || not kok)
-        then do
-            logMes $ "Illegal move or position: move = " ++ show m
-                     ++ ", il = " ++ show il ++ ", kc = " ++ show kc ++ "\n"
-            unless kok $ logMes $ "Illegal position (after the move):\n" ++ showMyPos p'
-            logMes $ "Stack:\n" ++ showStack 3 (stack s)
-            -- After an illegal result there must be no undo!
-            return Illegal
-        else if not cok
-                then return Illegal
-                else do
-                    -- bigCheckPos "doMove" pc (Just m) p'
-                    let (!sts, feats) | real      = (0, [])
-                                      | otherwise = evalState (posEval p') (evalst s)
-                        !p = p' { staticScore = sts, staticFeats = feats }
-                    put s { stack = p : stack s }
-                    remis <- if qs then return False else checkRemisRules p'
-                    if remis
-                       then return $ Final 0
-                       else do
-                           -- let dext = if inCheck p || goPromo p m1 || movePassed p m1 then 1 else 0
-                           -- let dext = if inCheck p || goPromo pc m1 then 1 else 0
-                           let dext = if inCheck p then 1 else 0
-                           return $ Exten dext $ moveIsSpecial pc m1
+    if (il || kc)
+       then do
+           logMes $ "Illegal REAL move or position: move = " ++ show m
+                    ++ ", il = " ++ show il ++ ", kc = " ++ show kc ++ "\n"
+           logMes $ "Illegal position (after the move):\n" ++ showMyPos p'
+           logMes $ "Stack:\n" ++ showStack 3 (stack s)
+           -- After an illegal result there must be no undo!
+           return Illegal
+       else if not cok
+               then return Illegal
+               else do
+                   put s { stack = p' : stack s }
+                   return $ Exten 0 False
+
+-- Move from a node to a descendent - the search version
+doMove :: Move -> Bool -> Game DoResult
+doMove m qs = do
+    -- logMes $ "** doMove " ++ show m
+    statNodes   -- when counting all visited nodes
+    s  <- get
+    -- let pc = if null (stack s) then error "doMove" else head $ stack s
+    let (pc:_) = stack s	-- we never saw an empty stack error until now
+        -- Moving a non-existent piece?
+        il = occup pc `uBitClear` fromSquare m
+        -- Capturing one king?
+        kc = kings pc `uBitSet` toSquare m
+        p' = doFromToMove m pc
+        cok = checkOk p'
+    -- If the move is real and one of those conditions occur,
+    -- then we are really in trouble...
+    if (il || kc)
+       then do
+           logMes $ "Illegal move or position: move = " ++ show m
+                    ++ ", il = " ++ show il ++ ", kc = " ++ show kc ++ "\n"
+           logMes $ "Illegal position (after the move):\n" ++ showMyPos p'
+           logMes $ "Stack:\n" ++ showStack 3 (stack s)
+           -- After an illegal result there must be no undo!
+           return Illegal
+       else if not cok
+               then return Illegal
+               else do
+                   -- bigCheckPos "doMove" pc (Just m) p'
+                   let (sts, feats) = evalState (posEval p') (evalst s)
+                       p = p' { staticScore = sts, staticFeats = feats }
+                   put s { stack = p : stack s }
+                   remis <- if qs then return False else checkRemisRules p'
+                   if remis
+                      then return $ Final 0
+                      else do
+                          let dext = if inCheck p then 1 else 0
+                          return $! Exten dext $ moveIsCaptPromo pc m
 
 doNullMove :: Game ()
 doNullMove = do
@@ -308,18 +331,14 @@ okInSequence m1 m2 = do
     return $! alternateMoves t m1 m2
 
 -- Static evaluation function
+-- This does not detect a mate or stale mate, it only returns the calculated
+-- static score from a position which has already to be valid
+-- Mate/stale mate has to be detected by search!
 {-# INLINE staticVal #-}
 staticVal :: Game Int
 staticVal = do
-    s <- get
     t <- getPos
-    let !c = moving t
-        !stSc = if not (checkOk t && kingsOk t)
-                   then error $ "Wrong position, pos stack:\n" ++ concatMap showMyPos (stack s)
-                   else staticScore t
-        !stSc1 | check t /= 0 = if hasMoves t c then stSc else -mateScore
-               | otherwise    = stSc
-    return stSc1
+    return $ staticScore t
 
 {-# INLINE finNode #-}
 finNode :: String -> Bool -> Game ()
@@ -397,11 +416,31 @@ betaCut good absdp m
     | otherwise = return ()
 
 -- Will not be pruned nor LMR reduced
-moveIsSpecial :: MyPos -> Move -> Bool
-moveIsSpecial p m
+-- Now: only for captures or promotions (but check that with LMR!!!)
+moveIsCaptPromo :: MyPos -> Move -> Bool
+moveIsCaptPromo p m
     | moveIsPromo m || moveIsEnPas m = True
-    | check p /= 0                   = True
     | otherwise                      = moveIsCapture p m
+
+-- We will call this function before we do the move
+-- This will spare a heavy operation for pruned moved
+canPruneMove :: Move -> Game Bool
+canPruneMove m
+    | not (moveIsNormal m) = return False
+    | otherwise = do
+        p <- getPos
+        return $! if moveIsCapture p m
+                     then False
+                     else not $ moveChecks p m
+
+-- Score difference obtained by last move, from POV of the moving part
+-- It considers the fact that static score is for the part which has to move
+scoreDiff :: Game Int
+scoreDiff = do
+    s <- get
+    case stack s of
+        (p1:p2:_) -> return $! negate (staticScore p1 + staticScore p2)
+        _         -> return 0
 
 {--
 showChoose :: [] -> Game ()
