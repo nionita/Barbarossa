@@ -77,17 +77,16 @@ maxFutilDepth = 3
 
 -- This is a linear formula for futility margin
 -- Should apply from 1 to maxFutilDepth (checked elsewehere)
-futilMs, futilMv :: Int
-futilMs = 275	-- margin for depth 1
-futilMv = 150	-- suplementary margin for every further depth
+--futilMs, futilMv :: Int
+--futilMs = 275	-- margin for depth 1
+--futilMv = 150	-- suplementary margin for every further depth
 futilMargins :: Int -> Int -> Int
-futilMargins d s = s' - futilMv + d*futilMv
-    where !s' = s `unsafeShiftL` 1
--- futilMargins d s = futilMs - futilMv + d*futilMv
+futilMargins 3 s = s `unsafeShiftL` 2		-- i.e. * 4
+futilMargins _ s = s + (s `unsafeShiftR` 2)	-- i.e. * 1.25
 
 -- Score statistics parameters for variable futility
 futInitQmssc, futMinQmssc, futDecayRate :: Int
-futInitQmssc = futilMs
+futInitQmssc = 275
 futMinQmssc  = 25
 futDecayRate = 15
 
@@ -1111,11 +1110,7 @@ isPruneFutil d a
         if tact then return False else do
             v <- lift staticVal	-- E1
             m <- gets qmssc	-- current quiet move average score
-            let margin = futilMargins d m
-                a' = pathScore a
-            if v + margin <= a'
-               then return True
-               else return False
+            return $! v + futilMargins d m <= pathScore a
 
 updateFutil :: Move -> Int -> Search ()
 updateFutil e sd = do
