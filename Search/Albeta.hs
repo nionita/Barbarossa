@@ -91,9 +91,10 @@ futDecayB = 10
 futDecayW = (1 `unsafeShiftL` futDecayB) - 1
 
 -- Razoring parameter:
-razMargin1, razMargin3 :: Int
+razMargin1, razMargin3, razMargin5 :: Int
 razMargin1 = 124
 razMargin3 = 300
+razMargin5 = 720
 
 -- Parameters for quiescent search:
 qsBetaCut, qsDeltaCut :: Bool
@@ -707,7 +708,7 @@ pvZeroW !nst !b !d !lastnull redu = do
            let ttpath = Path { pathScore = hsc, pathDepth = hdeep, pathMoves = Seq [e'], pathOrig = "TT" }
            reSucc nodes' >> return ttpath
        else do
-           mr <- isRazor (pathScore b) d
+           mr <- if crtnt nst == AllNode then isRazor (pathScore b) d else return Nothing
            case mr of
                Just s  -> return $ Path { pathScore = s, pathDepth = 0, pathMoves = Seq [],
                                           pathOrig = "Razor" }
@@ -767,9 +768,10 @@ pvZeroW !nst !b !d !lastnull redu = do
 
 isRazor :: Int -> Int -> Search (Maybe Int)
 isRazor !b !d
-    | d >  3    = return Nothing
+    | d >  5    = return Nothing
     | d == 1    = razor1 b
-    | otherwise = razor3 b
+    | d <= 3    = razor35 razMargin3 b
+    | otherwise = razor35 razMargin5 b
 
 razor1 :: Int -> Search (Maybe Int)
 razor1 !b = do
@@ -780,9 +782,9 @@ razor1 !b = do
            n <- pvQSearch (b - scoreGrain) b 0
            return $! Just $ max n v
 
-razor3 :: Int -> Search (Maybe Int)
-razor3 !b = do
-    v <- lift staticVal >>= \v -> return $! v + razMargin3
+razor35 :: Int -> Int -> Search (Maybe Int)
+razor35 !rm !b = do
+    v <- lift staticVal >>= \v -> return $! v + rm
     if v >= b
        then return Nothing
        else do
