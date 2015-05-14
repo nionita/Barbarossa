@@ -708,12 +708,15 @@ pvZeroW !nst !b !d !lastnull redu = do
            let ttpath = Path { pathScore = hsc, pathDepth = hdeep, pathMoves = Seq [e'], pathOrig = "TT" }
            reSucc nodes' >> return ttpath
        else do
-           mr <- if crtnt nst == AllNode then isRazor (pathScore b) d else return Nothing
+           mr <- isRazor (pathScore b) d
            case mr of
-               Just s  -> return $ Path { pathScore = s, pathDepth = 0, pathMoves = Seq [],
-                                          pathOrig = "Razor" }
-               Nothing -> do
-                   nmhigh <- nullMoveFailsHigh nst b d lastnull
+               RCut s -> return $ Path { pathScore = s, pathDepth = 0, pathMoves = Seq [],
+                                         pathOrig = "Razor" }
+               _      -> do
+                   let d' = case mr of
+                               NoRazor -> d
+                               _       -> d - 1
+                   nmhigh <- nullMoveFailsHigh nst b d' lastnull
                    abrt <- gets abort
                    if abrt
                       then return b	-- when aborted: it doesn't matter
@@ -728,7 +731,7 @@ pvZeroW !nst !b !d !lastnull redu = do
                             let nst' = if hdeep > 0 && (tp /= 0 || nullSeq (pvcont nst))
                                           then nst { pvcont = Seq [e'] }
                                           else nst
-                            edges <- genAndSort nst' bGrain b d
+                            edges <- genAndSort nst' bGrain b d'
                             if noMove edges
                                then do
                                  chk <- lift tacticalPos
@@ -739,17 +742,17 @@ pvZeroW !nst !b !d !lastnull redu = do
                                else do
                                  !nodes0 <- gets (sNodes . stats)
                                  -- futility pruning:
-                                 prune <- isPruneFutil d bGrain
+                                 prune <- isPruneFutil d' bGrain
                                  -- Loop thru the moves
                                  kill1 <- case nmhigh of
-                                              NullMoveThreat s -> newTKiller d s
+                                              NullMoveThreat s -> newTKiller d' s
                                               _                -> return NoKiller
                                  let !nsti = resetNSt bGrain kill1 nst'
-                                 nstf <- pvZLoop b d prune redu nsti edges
+                                 nstf <- pvZLoop b d' prune redu nsti edges
                                  let s = cursc nstf
                                  -- Here we expect bGrain <= s < b -- this must be checked
                                  pindent $ "<: " ++ show s
-                                 let !de = max d $ pathDepth s
+                                 let !de = max d' $ pathDepth s
                                      es = unalt edges
                                  when (de >= minToStore && s < b && not (null es)) $ do	-- we failed low
                                      !nodes1 <- gets (sNodes . stats)	-- what if es is null?
@@ -766,32 +769,49 @@ pvZeroW !nst !b !d !lastnull redu = do
                                         return $! trimaxPath bGrain b s'
     where bGrain = b -: scoreGrain
 
-isRazor :: Int -> Int -> Search (Maybe Int)
-isRazor !b !d
-    | d >  5    = return Nothing
-    | d == 1    = razor1 b
-    | d <= 3    = razor35 razMargin3 b
-    | otherwise = razor35 razMargin5 b
+data Razor = NoRazor | RCut !Int | RReduce !Int
 
-razor1 :: Int -> Search (Maybe Int)
+isRazor :: Int -> Int -> Search Razor
+isRazor !b !d
+    | d >  5    = return NoRazor
+    | otherwise = do
+    chk <- lift tacticalPos
+    if chk then return NoRazor else case d of
+        1 -> razor1 b
+        2 -> razor3 b
+        3 -> razor3 b
+        _ -> razor5 b
+
+razor1 :: Int -> Search Razor
 razor1 !b = do
     v <- lift staticVal >>= \v -> return $! v + razMargin1
     if v >= b
-       then return Nothing
+       then return NoRazor
        else do
            n <- pvQSearch (b - scoreGrain) b 0
-           return $! Just $ max n v
+           return $! RCut $ max n v
 
-razor35 :: Int -> Int -> Search (Maybe Int)
-razor35 !rm !b = do
-    v <- lift staticVal >>= \v -> return $! v + rm
+razor3 :: Int -> Search Razor
+razor3 !b = do
+    v <- lift staticVal >>= \v -> return $! v + razMargin3
     if v >= b
-       then return Nothing
+       then return NoRazor
        else do
            n <- pvQSearch (b - scoreGrain) b 0
            if (n < b)
-              then return $! Just $ max n v
-              else return Nothing
+              then return $! RCut $ max n v
+              else return NoRazor
+
+razor5 :: Int -> Search Razor
+razor5 !b = do
+    v <- lift staticVal >>= \v -> return $! v + razMargin5
+    if v >= b
+       then return NoRazor
+       else do
+           n <- pvQSearch (b - scoreGrain) b 0
+           if (n < b)
+              then return $! RReduce 1
+              else return NoRazor
 
 data NullMoveResult = NoNullMove | NullMoveHigh | NullMoveLow | NullMoveThreat Path
 
