@@ -11,6 +11,8 @@ module Search.Albeta (
 
 import Control.Monad
 import Control.Monad.State hiding (gets, modify)
+import Data.Array.Base (unsafeAt)
+import Data.Array.Unboxed
 import Data.Bits
 import Data.List (delete, sortBy)
 import Data.Ord (comparing)
@@ -101,8 +103,7 @@ qsMaxChess = 2		-- max number of chess for a quiet search path
 nulActivate, nulDebug :: Bool
 nulActivate = True		-- activate null move reduction
 nulDebug    = False
-nulRedux, nulMoves :: Int
-nulRedux    = 2 -- depth reduction for null move
+nulMoves :: Int
 nulMoves    = 2	-- how many null moves in sequence are allowed (one or two)
 nulMargin, nulSubmrg, nulTrig :: Int
 nulMargin   = 1		-- margin to search the null move (over beta) (in scoreGrain units!)
@@ -776,7 +777,9 @@ nullMoveFailsHigh nst b d lastnull
                       viztreeABD (pathScore negnmb) (pathScore negnma) d1
                       xchangeFutil
                       let nst' = deepNSt $ nst { pvcont = emptySeq }
-                      val <- fmap pnextlev $ pvZeroW nst' negnma d1 lastnull1 True
+                      val <- if v > pathScore b + bigDiff
+                                then fmap pnextlev $ pvZeroW nst' negnma d2 lastnull1 True
+                                else fmap pnextlev $ pvZeroW nst' negnma d1 lastnull1 True
                       lift undoMove	-- undo null move
                       xchangeFutil
                       viztreeUp0 nn (pathScore val)
@@ -791,12 +794,19 @@ nullMoveFailsHigh nst b d lastnull
                               if nullSeq (pathMoves val)
                                  then return $ NullMoveLow
                                  else return $ NullMoveThreat val
-    where d1  = d - (1 + nulRedux)
+    where d1  = nmDArr1 `unsafeAt` d	-- here we have always d >= 1
+          d2  = nmDArr2 `unsafeAt` d	-- this is for bigger differences
           nmb = if nulSubAct then b -: (nulSubmrg * scoreGrain) else b
           nma = nmb -: (nulMargin * scoreGrain)
           negnmb = negatePath nmb
           negnma = negatePath nma
           lastnull1 = lastnull - 1
+          bigDiff = 500	-- if we are very far ahead
+
+-- This is now more than reduction 3 for depth over 9
+nmDArr1, nmDArr2 :: UArray Int Int
+nmDArr1 = listArray (0, 20) [ 0, 0, 0, 0, 0, 1, 2, 3, 4, 4, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7 ]
+nmDArr2 = listArray (0, 20) [ 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 4, 5, 5, 5, 6, 6, 6, 6, 7, 7 ]
 
 pvSLoop :: Path -> Int -> Bool -> NodeState -> Alt Move -> Search NodeState
 pvSLoop b d p = go
