@@ -25,6 +25,7 @@ Executable Barbarossa
                -- -msse4.2
                -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques
                -ddump-opt-cmm -ddump-asm
+  CPP-Options: -DSMSTRICT
   if flag(profile)
     GHC-Options: -auto-all -with-rtsopts="-p"
   else
