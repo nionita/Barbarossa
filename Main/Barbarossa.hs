@@ -10,7 +10,7 @@ import Control.Concurrent
 import Control.Exception
 import Data.Array.Unboxed
 import Data.Foldable (foldrM)
-import Data.List (intersperse, delete)
+import Data.List (intersperse)
 import Data.Maybe
 import Data.Typeable
 import System.Console.GetOpt
@@ -38,7 +38,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.3.0"
-progVerSuff = "lkmr2"
+progVerSuff = "lkmr3"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -566,11 +566,9 @@ correctTime draft ms sc path = do
             let pmi = PrevMvInfo { pmiBestSc = sc, pmiChanged = k, pmiBMSoFar = bsf }
                 (k, bsf, cha) =
                     case path of
-                        bm:_ -> case obsf of
-                                    om:_ -> if bm == om	-- same best move?
-                                               then (ok, obsf, False)
-                                               else (ok + 1, bm : delete bm obsf, True)
-                                    []   -> (ok + 1, [bm], True)
+                        bm:_ -> if bm `elem` obsf	-- best move already seen?
+                                   then (ok,     obsf,      False)
+                                   else (ok + 1, bm : obsf, True)
                         []   -> (ok, obsf, False)	-- this cant happen!
                 func = \c -> c { prvMvInfo = Just pmi }
                 ms'  = timeFactor tp cha draft ms osc sc k bsf
