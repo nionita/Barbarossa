@@ -326,7 +326,7 @@ statePrepare = do
         elite  = take equota good
         pars   = filter (not . flip elem weak . fst) (evPParams est)
         dist   = newDist (evDistrib est) $ mapMaybe (getVect pars) elite
-        miss   = evPopCount est - length weak
+        miss   = evPopCount est - length good
     lift $ do
         writeTourTop (event ltour ++ "-top.txt") selecs
         writeTourRes (event ltour ++ "-res.txt") (games ltour) (players ltour)

@@ -43,11 +43,11 @@ instance CollectParams EvalParams where
                     epMaterQueen = 13,
                     epMaterScale = 1,
                     epMaterBonusScale = 5,
-                    epPawnBonusScale  = 4,
+                    epPawnBonusScale  = 2,
                     epPassKingProx    = 10,
                     epPassBlockO = 11,
                     epPassBlockA = 17,
-                    epPassMin    = 30,
+                    epPassMin    = 50,
                     epPassMyCtrl = 6,
                     epPassYoCtrl = 7
                 }
@@ -442,33 +442,24 @@ data KingPlace = KingPlace
 
 instance EvalItem KingPlace where
     evalItem _ ep p _  = kingPlace ep p
-    evalItemNDL _ = [
-                      ("kingPlaceCent", ((6,  0), (0, 20))),
-                      ("kingPlacePwns", ((0, 30), (0, 40)))
-                    ]
-
+    evalItemNDL _ = [ ("kingPlaceCent", ((6,  0), (0, 20))) ]
 
 -- Depending on which pieces are on the board we have some preferences
 -- where the king should be placed. For example, in the opening and middle game it should
 -- be in some corner, in endgame it should be near some (passed) pawn(s)
 kingPlace :: EvalParams -> MyPos -> IWeights
-kingPlace ep p = [ kcd, kpd ]
+kingPlace ep p = [ kcd ]
     where !kcd = (mpl - ypl) `unsafeShiftR` epMaterBonusScale ep
-          !kpd = (mpi - ypi) `unsafeShiftR` epPawnBonusScale  ep
           !mks = kingSquare (kings p) $ me p
           !yks = kingSquare (kings p) $ yo p
           !mkm = materFun yminor yrooks yqueens
           !ykm = materFun mminor mrooks mqueens
-          (!mpl, !ypl, !mpi, !ypi)
+          (!mpl, !ypl)
               | moving p == White = ( kingMaterBonus White mpawns mkm mks
                                     , kingMaterBonus Black ypawns ykm yks
-                                    , kingPawnsBonus mks (passed p) mpassed ypassed
-                                    , kingPawnsBonus yks (passed p) mpassed ypassed
                                     )
               | otherwise         = ( kingMaterBonus Black mpawns mkm mks
                                     , kingMaterBonus White ypawns ykm yks
-                                    , kingPawnsBonus mks (passed p) ypassed mpassed
-                                    , kingPawnsBonus yks (passed p) ypassed mpassed
                                     )
           !mro     = rooks p .&. me p
           !mrooks  = popCount mro
@@ -480,26 +471,8 @@ kingPlace ep p = [ kcd, kpd ]
           !yminor  = popCount $ (bishops p .|. knights p) .&. yo p
           !mpawns  = pawns p .&. me p
           !ypawns  = pawns p .&. yo p
-          !mpassed = passed p .&. me p
-          !ypassed = passed p .&. yo p
           materFun m r q = (m * epMaterMinor ep + r * epMaterRook ep + q * epMaterQueen ep)
                                `unsafeShiftR` epMaterScale ep
-
-promoW, promoB :: Square -> Square
-promoW s = 56 + (s .&. 7)
-promoB s =       s .&. 7
-
-promoFieldDistIncr :: Int -> Int
-promoFieldDistIncr = \d -> d + 1
-
--- We give bonus also for pawn promotion squares, if the pawn is near enough to promote
--- Give as parameter bitboards for all pawns, white pawns and black pawns for performance
-kingPawnsBonus :: Square -> BBoard -> BBoard -> BBoard -> Int
-kingPawnsBonus !ksq !alp !wpass !bpass = bonus
-    where !bpsqs = sum $ map (proxyBonus . squareDistance ksq) $ bbToSquares alp
-          !bqsqs = sum $ map (proxyBonus . promoFieldDistIncr . squareDistance ksq)
-                       $ map promoW (bbToSquares wpass) ++ map promoB (bbToSquares bpass)
-          !bonus = bpsqs + bqsqs
 
 -- This is a bonus for the king beeing near one corner
 -- It's bigger when the enemy has more material (only pieces)
@@ -749,27 +722,27 @@ frontAttacksBlack !b = fa
 -- by 3712 games at 15+0.25 sec against pass3v, Clop forecast: 82 +- 40 ELO
 -- enpHanging and enpEnPrise again optimised (only mean) with Clop by running 16300
 -- games at 15+0.25 sec against pass3w, resulting in a Clop forecast of 63 +- 19 ELO
+-- June 2015: en prise a bit lowered + formula coefficients changed, not defended is new
 data EnPrise = EnPrise
 
 instance EvalItem EnPrise where
     evalItem _ _ p _ = enPrise p
     evalItemNDL _  = [
-                       ("enpHanging",  ((-23, -33), (-800, 0))),
-                       ("enpEnPrise",  ((-25, -21), (-800, 0))),
-                       ("enpAttacked", (( -9, -13), (-800, 0)))
+                       ("enpHanging",  ((-23, -33), (-800, 0))),	-- hanging is worse
+                       ("enpEnPrise",  ((-18, -21), (-800, 0))),	-- than en prise
+                       ("enpAttacked", (( -9, -13), (-800, 0))),
+                       ("enpNDefend",  (( -2,  -3), (-800, 0)))		-- not defended
                      ]
 
--- Here we should only take at least the opponent attacks! When we evaluate,
--- we are in one on this situations:
+-- Here we take only the opponent attacks
+-- When we evaluate, we are in one on this situations:
 -- 1. we have no further capture and evaluate in a leaf
 -- 2. we are evaluating for delta cut
--- In 1 we should take the opponent attacks and analyse them:
--- - if he has more than 2 attacks, than our sencond best attacked piece will be lost
--- (but not always, for example when we can check or can defent one with the other)
--- - if he has only one attack, we are somehow restricted to defend or move that piece
--- In 2 we have a more complicated analysis, which maybe is not worth to do
+-- In any case, our attacked pieces are a risk which has to be counted of
+-- Isn't this flawed?? At least in the second case it should be also considered what
+-- I can capture (but don't). On the other side if I cut then I am good enough anyway...
 enPrise :: MyPos -> IWeights
-enPrise p = [ha, ep, at]
+enPrise p = [ha, ep, at, nd]
     where !meP = me p .&. pawns   p	-- my pieces
           !meN = me p .&. knights p
           !meB = me p .&. bishops p
@@ -780,23 +753,31 @@ enPrise p = [ha, ep, at]
           !atB = meB  .&. yoAttacs p
           !atR = meR  .&. yoAttacs p
           !atQ = meQ  .&. yoAttacs p
-          !haP = atP `less` myAttacs p	-- attacked and not defended
-          !haN = atN `less` myAttacs p
-          !haB = atB `less` myAttacs p
-          !haR = atR `less` myAttacs p
-          !haQ = atQ `less` myAttacs p
-          !epN = (atP `less` haP) .&. yoPAttacs p	-- defended, but attacked by less
-          !epB = (atB `less` haN) .&. yoPAttacs p	-- valuable opponent pieces
+          !at = popCount atP + 3 * (popCount atN + popCount atB)
+              + 5 * popCount atR + 10 * popCount atQ
+          !nds = complement $ myAttacs p
+          !ndP = meP .&. nds	-- my not defended pieces
+          !ndN = meN .&. nds
+          !ndB = meB .&. nds
+          !ndR = meR .&. nds
+          !ndQ = meQ .&. nds
+          !nd = popCount ndP + 3 * (popCount ndN + popCount ndB)
+              + 5 * popCount ndR + 10 * popCount ndQ
+          !haP = ndP .&. yoAttacs p	-- hanging (attacked and not defended)
+          !haN = ndN .&. yoAttacs p
+          !haB = ndB .&. yoAttacs p
+          !haR = ndR .&. yoAttacs p
+          !haQ = ndQ .&. yoAttacs p
+          !ha = popCount haP + 3 * (popCount haN + popCount haB)
+              + 5 * popCount haR + 10 * popCount haQ
+          !epN = (atP `less` haP) .&. yoPAttacs p	-- en prise (defended, but attacked by less
+          !epB = (atB `less` haN) .&. yoPAttacs p	-- valuable opponent pieces)
           !epR = (atR `less` haR) .&. yoA1
           !epQ = (atQ `less` haQ) .&. yoA2
           !yoA1 = yoPAttacs p .|. yoNAttacs p .|. yoBAttacs p
           !yoA2 = yoA1 .|. yoRAttacs p
-          !ha = popCount haP + 3 * (popCount haN + popCount haB)
-              + 5 * popCount haR + 9 * popCount haQ
-          !ep =                 3 * (popCount epN + popCount epB)
-              + 5 * popCount epR + 9 * popCount epQ
-          !at = popCount atP + 3 * (popCount atN + popCount atB)
-              + 5 * popCount atR + 9 * popCount atQ
+          !ep = 2 * (popCount epN + popCount epB)	-- consider the mean
+              + 3 * popCount epR + 7 * popCount epQ	-- value of attacker
 
 ------ Last Line ------
 data LastLine = LastLine
@@ -887,16 +868,10 @@ instance EvalItem PaBlo where
 pawnBl :: MyPos -> IWeights
 pawnBl p
     | moving p == White = let (wp, wo, wa) = pawnBloWhite mer mef yof
-                          --  (_ , ao, aa) = pawnBloWhite mes mef yof
                               (bp, bo, ba) = pawnBloBlack yor yof mef
-                          --  (_ , no, na) = pawnBloBlack yos yof mef
-                          -- in  [wp-bp, wo-bo, wa-ba, ao-no, aa-na]
                           in  [wp-bp, wo-bo, wa-ba ]
     | otherwise         = let (wp, wo, wa) = pawnBloWhite yor yof mef
-                          --  (_ , ao, aa) = pawnBloWhite yos yof mef
                               (bp, bo, ba) = pawnBloBlack mer mef yof
-                          --  (_ , no, na) = pawnBloBlack mes mef yof
-                          -- in  [bp-wp, bo-wo, ba-wa, no-ao, na-aa]
                           in  [bp-wp, bo-wo, ba-wa ]
     where !mep = pawns p .&. me p	-- my pawns
           !mes = mep .&. passed p	-- my passed pawns
@@ -948,20 +923,21 @@ passPawns gph ep p = [dpp]
 perPassedPawn :: Int -> EvalParams -> MyPos -> Color -> Square -> Int
 perPassedPawn gph ep p c sq
     | attacked && not defended
-        && c /= moving p = epPassMin ep	-- but if we have more than one like that?
-    | otherwise          = perPassedPawnOk gph ep p c sq sqbb moi toi moia toia
+        && c /= moving p = ppv `unsafeShiftR` 1
+    | otherwise          = ppv
     where !sqbb = 1 `unsafeShiftL` sq
           (!moi, !toi, !moia, !toia)
                | moving p == c = (me p, yo p, myAttacs p, yoAttacs p)
                | otherwise     = (yo p, me p, yoAttacs p, myAttacs p)
           !defended = moia .&. sqbb /= 0
           !attacked = toia .&. sqbb /= 0
+          !ppv = perPassedPawnOk gph ep p c sq sqbb moi toi moia toia
 
-perPassedPawnOk :: Int -> EvalParams -> MyPos -> Color -> Square -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
+perPassedPawnOk :: Int -> EvalParams -> MyPos -> Color -> Square -> BBoard
+                -> BBoard -> BBoard -> BBoard -> BBoard -> Int
 perPassedPawnOk gph ep p c sq sqbb moi toi moia toia = val
-    where
-          (!way, !behind) | c == White = (shadowUp sqbb, shadowDown sqbb)
-                          | otherwise  = (shadowDown sqbb, shadowUp sqbb)
+    where (!way, !behind, !qsq) | c == White = (shadowUp sqbb, shadowDown sqbb, promoW sq)
+                                | otherwise  = (shadowDown sqbb, shadowUp sqbb, promoB sq)
           !mblo = popCount $ moi .&. way
           !yblo = popCount $ toi .&. way
           !rookBehind = behind .&. (rooks p .|. queens p)
@@ -984,13 +960,38 @@ perPassedPawnOk gph ep p c sq sqbb moi toi moia toia = val
           !pmax = (a0 * x + b0) * x + c0
           !myking = kingSquare (kings p) moi
           !yoking = kingSquare (kings p) toi
-          !mdis = squareDistance sq myking
-          !ydis = squareDistance sq yoking
-          !kingprx = ((mdis - ydis) * epPassKingProx ep * (256-gph)) `unsafeShiftR` 8
-          !val' = (pmax * (128 - kingprx) * (128 - epPassBlockO ep * mblo)
-                * (128 - epPassBlockA ep * yblo)) `unsafeShiftR` 21
-          !val  = (val' * (128 + epPassMyCtrl ep * myctrl) * (128 - epPassYoCtrl ep * yoctrl))
+          !mpdis = squareDistance  sq myking
+          !ypdis = squareDistance  sq yoking
+          !mqdis = squareDistance qsq myking
+          !yqdis = squareDistance qsq yoking
+          -- King proxy is currently somehow duplicated, has to be unified, and this is first step
+          -- (was previously part of king placement)
+          -- In kingPlacePawns we multiplied by 0..30, here only by 0..9
+          -- So epPawnBonusScale had to be lowered by 1 (could be by 2 also)
+          -- The implementations are still not equivalent, as this function is called
+          -- only for "ok" pawns, i.e. not attacked or defended, so we increase the epPassMin too
+          -- !kprx    = (proxyBonus mpdis + kingPromoBonus myking qsq
+          --                - proxyBonus ypdis - kingPromoBonus yoking qsq)
+          --                `unsafeShiftR` epPawnBonusScale ep
+          !kingprx = ((mpdis + mqdis - ypdis - yqdis) * epPassKingProx ep * (256-gph))
+                         `unsafeShiftR` 8
+          !val1 = pmax * (256 - kingprx) * (128 - epPassBlockO ep * mblo) `unsafeShiftR` 15
+          !val2 = val1 * (128 - epPassBlockA ep * yblo) `unsafeShiftR` 7
+          !val  = val2 * (128 + epPassMyCtrl ep * myctrl) * (128 - epPassYoCtrl ep * yoctrl)
                     `unsafeShiftR` 14
+          -- !val  = val3 + kprx
+
+promoW, promoB :: Square -> Square
+promoW s = 56 + (s .&. 7)
+promoB s =       s .&. 7
+
+promoFieldDistIncr :: Int -> Int
+promoFieldDistIncr = \d -> d + 1
+
+-- We give bonus also for pawn promotion squares, if the pawn is near enough to promote
+kingPromoBonus :: Square -> Square -> Int
+kingPromoBonus !ksq !qsq = bonus
+    where !bonus = proxyBonus . promoFieldDistIncr . squareDistance ksq $ qsq
 
 -- Pawn end games are treated specially
 -- We consider escaped passed pawns in 2 situations:
