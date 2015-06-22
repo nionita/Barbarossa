@@ -755,21 +755,19 @@ instance EvalItem EnPrise where
     evalItem _ _ p _ = enPrise p
     evalItemNDL _  = [
                        ("enpHanging",  ((-23, -33), (-800, 0))),
-                       ("enpEnPrise",  ((-25, -21), (-800, 0))),
-                       ("enpAttacked", (( -9, -13), (-800, 0)))
+                       ("enpEnPrise",  ((-18, -21), (-800, 0))),
+                       ("enpAttacked", (( -9, -13), (-800, 0))),
+                       ("enpNDefend",  (( -2,  -3), (-800, 0)))
                      ]
-
--- Here we should only take at least the opponent attacks! When we evaluate,
--- we are in one on this situations:
+-- Here we take only the opponent attacks
+-- When we evaluate, we are in one on this situations:
 -- 1. we have no further capture and evaluate in a leaf
 -- 2. we are evaluating for delta cut
--- In 1 we should take the opponent attacks and analyse them:
--- - if he has more than 2 attacks, than our sencond best attacked piece will be lost
--- (but not always, for example when we can check or can defent one with the other)
--- - if he has only one attack, we are somehow restricted to defend or move that piece
--- In 2 we have a more complicated analysis, which maybe is not worth to do
+-- In any case, our attacked pieces are a risk which has to be counted of
+-- Isn't this flawed?? At least in the second case it should be also considered what
+-- I can capture (but don't). On the other side if I cut then I am good enough anyway...
 enPrise :: MyPos -> IWeights
-enPrise p = [ha, ep, at]
+enPrise p = [ha, ep, at, nd]
     where !meP = me p .&. pawns   p	-- my pieces
           !meN = me p .&. knights p
           !meB = me p .&. bishops p
@@ -780,23 +778,31 @@ enPrise p = [ha, ep, at]
           !atB = meB  .&. yoAttacs p
           !atR = meR  .&. yoAttacs p
           !atQ = meQ  .&. yoAttacs p
-          !haP = atP `less` myAttacs p	-- attacked and not defended
-          !haN = atN `less` myAttacs p
-          !haB = atB `less` myAttacs p
-          !haR = atR `less` myAttacs p
-          !haQ = atQ `less` myAttacs p
-          !epN = (atP `less` haP) .&. yoPAttacs p	-- defended, but attacked by less
-          !epB = (atB `less` haN) .&. yoPAttacs p	-- valuable opponent pieces
+          !at = popCount atP + 3 * (popCount atN + popCount atB)
+              + 5 * popCount atR + 10 * popCount atQ
+          !nds = complement $ myAttacs p
+          !ndP = meP .&. nds	-- my not defended pieces
+          !ndN = meN .&. nds
+          !ndB = meB .&. nds
+          !ndR = meR .&. nds
+          !ndQ = meQ .&. nds
+          !nd = popCount ndP + 3 * (popCount ndN + popCount ndB)
+              + 5 * popCount ndR + 10 * popCount ndQ
+          !haP = ndP .&. yoAttacs p	-- hanging (attacked and not defended)
+          !haN = ndN .&. yoAttacs p
+          !haB = ndB .&. yoAttacs p
+          !haR = ndR .&. yoAttacs p
+          !haQ = ndQ .&. yoAttacs p
+          !ha = popCount haP + 3 * (popCount haN + popCount haB)
+              + 5 * popCount haR + 10 * popCount haQ
+          !epN = (atP `less` haP) .&. yoPAttacs p	-- en prise (defended, but attacked by less
+          !epB = (atB `less` haN) .&. yoPAttacs p	-- valuable opponent pieces)
           !epR = (atR `less` haR) .&. yoA1
           !epQ = (atQ `less` haQ) .&. yoA2
           !yoA1 = yoPAttacs p .|. yoNAttacs p .|. yoBAttacs p
           !yoA2 = yoA1 .|. yoRAttacs p
-          !ha = popCount haP + 3 * (popCount haN + popCount haB)
-              + 5 * popCount haR + 9 * popCount haQ
-          !ep =                 3 * (popCount epN + popCount epB)
-              + 5 * popCount epR + 9 * popCount epQ
-          !at = popCount atP + 3 * (popCount atN + popCount atB)
-              + 5 * popCount atR + 9 * popCount atQ
+          !ep = 2 * (popCount epN + popCount epB)	-- consider the mean
+              + 3 * popCount epR + 7 * popCount epQ	-- value of attacker
 
 ------ Last Line ------
 data LastLine = LastLine
