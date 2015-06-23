@@ -74,8 +74,8 @@ posToState p c h e = MyState {
                        stats = stats0,
                        evalst = e
                    }
-    where (stsc, feats) = evalState (posEval p) e
-          p'' = p { staticScore = stsc, staticFeats = feats }
+    where stsc = evalState (posEval p) e
+          p'' = p { staticScore = stsc }
           stats0 = Stats { nodes = 0, maxmvs = 0 }
 
 posNewSearch :: MyState -> MyState
@@ -229,8 +229,8 @@ doMove m qs = do
                then return Illegal
                else do
                    -- bigCheckPos "doMove" pc (Just m) p'
-                   let (sts, feats) = evalState (posEval p') (evalst s)
-                       p = p' { staticScore = sts, staticFeats = feats }
+                   let sts = evalState (posEval p') (evalst s)
+                       p = p' { staticScore = sts }
                    put s { stack = p : stack s }
                    remis <- if qs then return False else checkRemisRules p'
                    if remis
@@ -245,8 +245,8 @@ doNullMove = do
     s <- get
     let !p0 = if null (stack s) then error "doNullMove" else head $ stack s
         !p' = reverseMoving p0
-        (!sts, feats) = evalState (posEval p') (evalst s)
-        !p = p' { staticScore = sts, staticFeats = feats }
+        !sts = evalState (posEval p') (evalst s)
+        !p = p' { staticScore = sts }
     -- bigCheckPos "doNullMove" p0 Nothing p'
     put s { stack = p : stack s }
 
@@ -347,13 +347,13 @@ finNode str force = do
     when (printEvalInt /= 0 && (force || nodes (stats s) .&. printEvalInt == 0)) $ do
         let (p:_) = stack s	-- we never saw an empty stack error until now
             fen = posToFen p
-            mv = case tail $ words fen of
-                     mv':_ -> mv'
-                     _     -> error "Wrong fen in finNode"
+            -- mv = case tail $ words fen of
+            --          mv':_ -> mv'
+            --          _     -> error "Wrong fen in finNode"
         logMes $ str ++ " Fen: " ++ fen
-        logMes $ "Eval info " ++ mv ++ ":"
-                      ++ concatMap (\(n, v) -> " " ++ n ++ "=" ++ show v)
-                                   (("score", staticScore p) : weightPairs (staticFeats p))
+        -- logMes $ "Eval info " ++ mv ++ ":"
+        --               ++ concatMap (\(n, v) -> " " ++ n ++ "=" ++ show v)
+        --                            (("score", staticScore p) : weightPairs (staticFeats p))
 
 materVal :: Game Int
 materVal = do

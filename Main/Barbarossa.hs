@@ -30,7 +30,7 @@ import Moves.Moves (movesInit)
 import Moves.Board (posFromFen, initPos)
 import Moves.History
 import Search.CStateMonad (execCState)
-import Eval.Eval (weightNames)
+-- import Eval.Eval (weightNames)
 import Eval.FileParams (makeEvalState)
 
 -- Name, authos, version and suffix:
@@ -38,7 +38,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.3.0"
-progVerSuff = "stst"
+progVerSuff = "mev"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -621,8 +621,8 @@ beforeReadLoop = do
     let evst = evalst $ crtStatus chg
     ctxLog LogInfo "Eval parameters and weights:"
     ctxLog LogInfo $ show (esEParams evst)
-    forM_ (zip3 weightNames (esDWeightsM evst) (esDWeightsE evst))
-       $ \(n, vm, ve) -> ctxLog LogInfo $! n ++ "\t" ++ show vm ++ "\t" ++ show ve
+    -- forM_ (zip3 weightNames (esDWeightsM evst) (esDWeightsE evst))
+    --    $ \(n, vm, ve) -> ctxLog LogInfo $! n ++ "\t" ++ show vm ++ "\t" ++ show ve
     bm <- liftIO $ hGetBuffering stdin
     ctxLog DebugUci $ "Stdin: " ++ show bm
 

@@ -5,10 +5,7 @@
 
 module Eval.Eval (
     initEvalState,
-    posEval,
-    maxStatsDepth, maxStatsIntvs,
-    inLimits,
-    weightNames, weightLims, parDim, weightPairs
+    posEval
 ) where
 
 import Prelude hiding ((++), head, foldl, map, concat, filter, takeWhile, iterate, sum, minimum,
@@ -28,77 +25,8 @@ import Moves.Moves
 import Moves.BitBoard
 import Moves.Muster
 
--- These are characteristics weights
-type IWeights = [Int]
-type DWeights = [Double]
-type Limits = [(Double, Double)]
-
-instance CollectParams EvalParams where
-    type CollectFor EvalParams = EvalParams
-    npColInit = EvalParams {
-                    epMovingMid  = 160,		-- after Clop optimisation
-                    epMovingEnd  = 130,		-- with 3700 games at 15+0.25 s
-                    epMaterMinor = 1,
-                    epMaterRook  = 4,
-                    epMaterQueen = 13,
-                    epMaterScale = 1,
-                    epMaterBonusScale = 5,
-                    epPawnBonusScale  = 4,
-                    epPassKingProx    = 10,
-                    epPassBlockO = 11,
-                    epPassBlockA = 17,
-                    epPassMin    = 30,
-                    epPassMyCtrl = 6,
-                    epPassYoCtrl = 7
-                }
-    npColParm = collectEvalParams
-    npSetParm = id
-
-collectEvalParams :: (String, Double) -> EvalParams -> EvalParams
-collectEvalParams (s, v) ep = lookApply s v ep [
-        ("epMovingMid",       setEpMovingMid),
-        ("epMovingEnd",       setEpMovingEnd),
-        ("epMaterMinor",      setEpMaterMinor),
-        ("epMaterRook",       setEpMaterRook),
-        ("epMaterQueen",      setEpMaterQueen),
-        ("epMaterScale",      setEpMaterScale),
-        ("epMaterBonusScale", setEpMaterBonusScale),
-        ("epPawnBonusScale",  setEpPawnBonusScale),
-        ("epPassKingProx",    setEpPassKingProx),
-        ("epPassBlockO",      setEpPassBlockO),
-        ("epPassBlockA",      setEpPassBlockA),
-        ("epPassMin",         setEpPassMin),
-        ("epPassMyCtrl",      setEpPassMyCtrl),
-        ("epPassYoCtrl",      setEpPassYoCtrl)
-    ]
-    where setEpMovingMid       v' ep' = ep' { epMovingMid       = round v' }
-          setEpMovingEnd       v' ep' = ep' { epMovingEnd       = round v' }
-          setEpMaterMinor      v' ep' = ep' { epMaterMinor      = round v' }
-          setEpMaterRook       v' ep' = ep' { epMaterRook       = round v' }
-          setEpMaterQueen      v' ep' = ep' { epMaterQueen      = round v' }
-          setEpMaterScale      v' ep' = ep' { epMaterScale      = round v' }
-          setEpMaterBonusScale v' ep' = ep' { epMaterBonusScale = round v' }
-          setEpPawnBonusScale  v' ep' = ep' { epPawnBonusScale  = round v' }
-          setEpPassKingProx    v' ep' = ep' { epPassKingProx    = round v' }
-          setEpPassBlockO      v' ep' = ep' { epPassBlockO      = round v' }
-          setEpPassBlockA      v' ep' = ep' { epPassBlockA      = round v' }
-          setEpPassMin         v' ep' = ep' { epPassMin         = round v' }
-          setEpPassMyCtrl      v' ep' = ep' { epPassMyCtrl      = round v' }
-          setEpPassYoCtrl      v' ep' = ep' { epPassYoCtrl      = round v' }
-
 class EvalItem a where
-    evalItem    :: Int -> EvalParams -> MyPos -> a -> IWeights
-    evalItemNDL :: a -> [(String, ((Double, Double), (Double, Double)))] -- Name, Defaults, Limits
-
--- some handy functions for eval item types:
-weightName :: (a, b) -> a
-weightName    = fst
-
-weightDefault :: (a, (b, c)) -> b
-weightDefault = fst . snd
-
-weightLimits :: (a, (b, c)) -> c
-weightLimits  = snd . snd
+    evalItem :: Int -> EvalParams -> EvalWeights -> MyPos -> a -> MidEnd -> MidEnd
 
 data AnyEvalItem = forall a . EvalItem a => EvIt a
 
@@ -125,96 +53,33 @@ evalItems = [ EvIt Material,	-- material balance (i.e. white - black material
               EvIt PassPawns	-- pass pawns
             ]
 
-parDim :: Int
-parDim = sum $ map evalLen evalItems
-    where evalLen (EvIt a) = length $ evalItemNDL a
-
-weightLims :: [(Double, Double)]
-weightLims = concatMap evalLims evalItems
-    where evalLims (EvIt a) = map weightLimits $ evalItemNDL a
-
-zeroFeats :: [Int]
-zeroFeats = replicate parDim 0	-- theese are ints
-
-evalItemPar :: EvalItem a => a -> (DWeights, DWeights) -> (String, Double)
-                               -> Maybe (DWeights, DWeights)
-evalItemPar a (dms, des) (s, v) = lookup sf (zip lu posi) >>= return . f
-    where lu = map weightName $ evalItemNDL a
-          posi = [0..] :: [Int]
-          (sf, f) | mid `isPrefixOf` s = (restmid, \i -> (replace dms i v, des))
-                  | end `isPrefixOf` s = (restend, \i -> (dms, replace des i v))
-                  | otherwise          = (s, \i -> (replace dms i v, replace des i v))
-          replace []       _ _ = []
-          replace (_ : ds) 0 v' = v' : ds
-          replace (d : ds) i v' = d : replace ds (i-1) v'
-          mid = "mid."
-          end = "end."
-          restmid = drop (length mid) s
-          restend = drop (length end) s
-
-oneWeight :: [(AnyEvalItem, (DWeights, DWeights))] -> (String, Double)
-          -> [(AnyEvalItem, (DWeights, DWeights))]
-oneWeight [] _ = []
-oneWeight (evp@(EvIt ei, dp) : evps) sds
-    | Just ndp <- evalItemPar ei dp sds = (EvIt ei, ndp) : evps
-    | otherwise = evp : oneWeight evps sds
-
--- Map a list of parameter assignments (name, value)
--- to two vectors of parameters (mid, end), taking defaults for missing parameters
-allWeights :: [(String, Double)] -> (DWeights, DWeights)
-allWeights sds = (concat ms, concat es)
-    where defevps = map defp evalItems
-          defp ei@(EvIt a) = (ei, unzip . map weightDefault $ evalItemNDL a)
-          (ms, es) = unzip $ map snd $ foldl oneWeight defevps sds
-
-weightNames :: [String]
-weightNames = concatMap pnames evalItems
-    where pnames (EvIt a) = map weightName $ evalItemNDL a
-
-weightPairs :: [Int] -> [(String, Int)]
-weightPairs = zip weightNames
-
 ------------------------------------------------------------------
 -- Parameters of this module ------------
-granCoarse, granCoarse2, granCoarseM, maxStatsDepth, maxStatsIntvs, shift2Cp :: Int
+granCoarse, granCoarse2, granCoarseM, shift2Cp :: Int
 granCoarse    = 4	-- coarse granularity
 granCoarse2   = granCoarse `div` 2
 granCoarseM   = complement (granCoarse - 1)
 shift2Cp      = 3	-- we have 2^shift2Cp units per centipawn
-maxStatsDepth = 12	-- for error statistics of the eval function - maximum depth
-maxStatsIntvs = 20	-- number of difference interval
 -----------------------------------------------
 
 initEvalState :: [(String, Double)] -> EvalState
 initEvalState sds = EvalState {
-        esDWeightsM = weightsM,
-        esDWeightsE = weightsE,
-        esIWeightsM = map round weightsM,
-        esIWeightsE = map round weightsE,
-        esEParams  = npSetParm (colParams sds :: CollectFor EvalParams)
+        esEParams  = npSetParm (colParams sds :: CollectFor EvalParams),
+        esEWeights = npSetParm (colParams sds :: CollectFor EvalWeights)
     }
-    where (weightsM, weightsE) = inLimits weightLims $ allWeights sds
-
-inLimits :: Limits -> (DWeights, DWeights) -> (DWeights, DWeights)
-inLimits ls (psm, pse) = (map inlim $ zip ls psm, map inlim $ zip ls pse)
-    where inlim ((mi, ma), p) = max mi $ min ma p
-
-(<!>) :: Num a => [a] -> [a] -> a
-a <!> b = sum $ zipWith (*) a b
-{-# SPECIALIZE (<!>) :: [Int] -> [Int] -> Int #-}
 
 matesc :: Int
 matesc = 20000 - 255	-- warning, this is also defined in Base.hs!!
 
-posEval :: MyPos -> State EvalState (Int, [Int])
+posEval :: MyPos -> State EvalState Int
 posEval !p = do
     sti <- get
-    let (sce, feat) = evalDispatch p sti
+    let sce = evalDispatch p sti
         !scl = min matesc $ max (-matesc) sce
         !scc = if granCoarse > 0 then (scl + granCoarse2) .&. granCoarseM else scl
-    return (scc, feat)
+    return scc
 
-evalDispatch :: MyPos -> EvalState -> (Int, [Int])
+evalDispatch :: MyPos -> EvalState -> Int
 evalDispatch p sti
     | pawns p == 0 = evalNoPawns p sti
     | pawns p .&. me p == 0 ||
@@ -223,17 +88,16 @@ evalDispatch p sti
       Just r <- pawnEndGame p = r
     | otherwise    = normalEval p sti
 
-itemEval :: Int -> EvalParams -> MyPos -> AnyEvalItem -> [Int]
-itemEval gph ep p (EvIt a) = evalItem gph ep p a
+itemEval :: Int -> EvalParams -> EvalWeights -> MyPos -> AnyEvalItem -> MidEnd -> MidEnd
+itemEval gph ep ew p (EvIt a) = evalItem gph ep ew p a
 
-normalEval :: MyPos -> EvalState -> (Int, [Int])
-normalEval p !sti = (sc, feat)
-    where feat = concatMap (itemEval gph ep p) evalItems
-          ep   = esEParams sti
-          scm  = feat <!> esIWeightsM sti
-          sce  = feat <!> esIWeightsE sti
+normalEval :: MyPos -> EvalState -> Int
+normalEval p !sti = sc
+    where feat = foldr (itemEval gph ep ew p) (MidEnd 0 0) evalItems
+          ep   = esEParams  sti
+          ew   = esEWeights sti
           gph  = gamePhase p
-          !sc = ((scm + epMovingMid ep) * gph + (sce + epMovingEnd ep) * (256 - gph))
+          !sc = ((mid feat + epMovingMid ep) * gph + (end feat + epMovingEnd ep) * (256 - gph))
                    `unsafeShiftR` (shift2Cp + 8)
 
 gamePhase :: MyPos -> Int
@@ -244,12 +108,12 @@ gamePhase p = g
           ns = popCount $ knights p
           !g = qs * 39 + rs * 20 + (bs + ns) * 12	-- opening: 254, end: 0
 
-evalSideNoPawns :: MyPos -> EvalState -> (Int, [Int])
+evalSideNoPawns :: MyPos -> EvalState -> Int
 evalSideNoPawns p sti
-    | npwin && insufficient = (0, zeroFeats)
-    | npwin && lessRook p   = (nsc `div` 4, feats)
-    | otherwise             = (nsc, feats)
-    where (nsc, feats) = normalEval p sti
+    | npwin && insufficient = 0
+    | npwin && lessRook p   = nsc `div` 4
+    | otherwise             = nsc
+    where nsc = normalEval p sti
           npside = if pawns p .&. me p == 0 then me p else yo p
           npwin = npside == me p && nsc > 0 || npside == yo p && nsc < 0
           insufficient = majorcnt == 0 && (minorcnt == 1 || minorcnt == 2 && bishopcnt == 0)
@@ -258,15 +122,15 @@ evalSideNoPawns p sti
           majorcnt  = popCount $ (queens p .|. rooks p) .&. npside
 
 -- These evaluation function distiguishes between some known finals with no pawns
-evalNoPawns :: MyPos -> EvalState -> (Int, [Int])
-evalNoPawns p sti = (sc, zeroFeats)
+evalNoPawns :: MyPos -> EvalState -> Int
+evalNoPawns p sti = sc
     where !sc | onlykings   = 0
               | kmk || knnk = 0		-- one minor or two knights
               | kbbk        = mateKBBK p kaloneyo	-- 2 bishops
               | kbnk        = mateKBNK p kaloneyo	-- bishop + knight
               | kMxk        = mateKMajxK p kaloneyo	-- simple mate with at least one major
-              | lessRook p  = fst (normalEval p sti) `div` 2
-              | otherwise   = fst $ normalEval p sti
+              | lessRook p  = (normalEval p sti) `div` 2
+              | otherwise   = normalEval p sti
           kaloneme = me p `less` kings p == 0
           kaloneyo = yo p `less` kings p == 0
           onlykings = kaloneme && kaloneyo
@@ -353,15 +217,14 @@ bnMateDistance wbish sq = min (squareDistance sq ocor1) (squareDistance sq ocor2
 data KingSafe = KingSafe
 
 instance EvalItem KingSafe where
-    evalItem _ _ p _ = kingSafe p
-    evalItemNDL _  = [("kingSafe", ((1, 0), (0, 20)))]
+    evalItem _ _ ew p _ mide = kingSafe p ew mide
 
 -- Rewrite of king safety taking into account number and quality
 -- of pieces attacking king neighbour squares
 -- This function is almost optimised, it could perhaps be faster
 -- if we eliminate the lists
-kingSafe :: MyPos -> [Int]
-kingSafe !p = [ksafe]
+kingSafe :: MyPos -> EvalWeights -> MidEnd -> MidEnd
+kingSafe !p !ew !mide = madm mide (ewKingSafe ew) ksafe
     where !ksafe = mattacs - yattacs
           !freem = popCount $ myKAttacs p `less` (yoAttacs p .&. me p)
           !freey = popCount $ yoKAttacs p `less` (myAttacs p .&. yo p)
@@ -402,11 +265,10 @@ kingSquare kingsb colorp = head $ bbToSquares $ kingsb .&. colorp
 data Material = Material
 
 instance EvalItem Material where
-    evalItem _ _ p _ = materDiff p
-    evalItemNDL _  = [("materialDiff", ((8, 8), (8, 8)))]
+    evalItem _ _ ew p _ mide = materDiff p ew mide
 
-materDiff :: MyPos -> IWeights
-materDiff p = [md]
+materDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
+materDiff p ew mide = mad mide (ewMaterialDiff ew) md
     where !md | moving p == White =   mater p
               | otherwise         = - mater p
 
@@ -414,12 +276,11 @@ materDiff p = [md]
 data KingOpen = KingOpen
 
 instance EvalItem KingOpen where
-    evalItem _ _ p _ = kingOpen p
-    evalItemNDL _  = [ ("kingOpen", ((12, 0), (0, 20))) ] 
+    evalItem _ _ ew p _ mide = kingOpen p ew mide
 
 -- Openness can be tought only with pawns (like we take) or all pieces
-kingOpen :: MyPos -> IWeights
-kingOpen p = [ ko ]
+kingOpen :: MyPos -> EvalWeights -> MidEnd -> MidEnd
+kingOpen p ew mide = mad mide (ewKingOpen ew) ko
     where !ko = adv - own
           moprooks   = popCount $ rooks p .&. yo p
           mopqueens  = popCount $ queens p .&. yo p
@@ -441,18 +302,13 @@ kingOpen p = [ ko ]
 data KingPlace = KingPlace
 
 instance EvalItem KingPlace where
-    evalItem _ ep p _  = kingPlace ep p
-    evalItemNDL _ = [
-                      ("kingPlaceCent", ((6,  0), (0, 20))),
-                      ("kingPlacePwns", ((0, 30), (0, 40)))
-                    ]
-
+    evalItem _ ep ew p _ mide = kingPlace ep p ew mide
 
 -- Depending on which pieces are on the board we have some preferences
 -- where the king should be placed. For example, in the opening and middle game it should
 -- be in some corner, in endgame it should be near some (passed) pawn(s)
-kingPlace :: EvalParams -> MyPos -> IWeights
-kingPlace ep p = [ kcd, kpd ]
+kingPlace :: EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
+kingPlace ep p ew mide = made (madm mide (ewKingPlaceCent ew) kcd) (ewKingPlacePwns ew) kpd
     where !kcd = (mpl - ypl) `unsafeShiftR` epMaterBonusScale ep
           !kpd = (mpi - ypi) `unsafeShiftR` epPawnBonusScale  ep
           !mks = kingSquare (kings p) $ me p
@@ -562,13 +418,10 @@ proxyLine line sq = proxyBonusArr `unsafeAt` (unsafeShiftR sq 3 - line)
 data RookPlc = RookPlc
 
 instance EvalItem RookPlc where
-    evalItem _ _ p _ = evalRookPlc p
-    evalItemNDL _  = [ ("rookHOpen", ((171, 202), (0, 500))),
-                       ("rookOpen",  ((219, 221), (0, 800))),
-                       ("rookConn",  (( 96,  78), (0, 300))) ]
+    evalItem _ _ ew p _ mide = evalRookPlc p ew mide
 
-evalRookPlc :: MyPos -> [Int]
-evalRookPlc p = [ ho, op, rc ]
+evalRookPlc :: MyPos -> EvalWeights -> MidEnd -> MidEnd
+evalRookPlc p ew mide = mad (mad (mad mide (ewRookHOpen ew) ho) (ewRookOpen ew) op) (ewRookConn ew) rc
     where !mRs = rooks p .&. me p
           !mPs = pawns p .&. me p
           (mho, mop) = foldr (perRook (pawns p) mPs) (0, 0) $ bbToSquares mRs
@@ -598,15 +451,11 @@ perRook allp myp rsq (ho, op)
 data Mobility = Mobility	-- "safe" moves
 
 instance EvalItem Mobility where
-    evalItem _ _ p _ = mobDiff p
-    evalItemNDL _  = [ ("mobilityKnight", ((60, 59), (40, 120))),
-                       ("mobilityBishop", ((59, 60), (40, 120))),
-                       ("mobilityRook",   ((28, 26), ( 0, 100))),
-                       ("mobilityQueen",  (( 4,  6), (-5,  50))) ]
+    evalItem _ _ ew p _ mide = mobDiff p ew mide
 
 -- Here we do not calculate pawn mobility (which, calculated as attacs, is useless)
-mobDiff :: MyPos -> IWeights
-mobDiff p = [n, b, r, q]
+mobDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
+mobDiff p ew mide = mad (mad (mad (mad mide (ewMobilityKnight ew) n) (ewMobilityBishop ew) b) (ewMobilityRook ew) r) (ewMobilityQueen ew) q
     where !myN = popCount $ myNAttacs p `less` (me p .|. yoPAttacs p)
           !myB = popCount $ myBAttacs p `less` (me p .|. yoPAttacs p)
           !myR = popCount $ myRAttacs p `less` (me p .|. yoA1)
@@ -628,19 +477,11 @@ mobDiff p = [n, b, r, q]
 data Center = Center
 
 instance EvalItem Center where
-    evalItem _ _ p _ = centerDiff p
-    evalItemNDL _  = [
-                      ("centerPAtts", ((68, 65), (0, 200))),
-                      ("centerNAtts", ((52, 48), (0, 200))),
-                      ("centerBAtts", ((60, 41), (0, 200))),
-                      ("centerRAtts", ((11, 36), (0, 200))),
-                      ("centerQAtts", (( 4, 62), (0, 200))),
-                      ("centerKAtts", (( 0, 56), (0, 200)))
-                     ]
+    evalItem _ _ ew p _ mide = centerDiff p ew mide
 
 -- This function is already optimised
-centerDiff :: MyPos -> IWeights
-centerDiff p = [pd, nd, bd, rd, qd, kd]
+centerDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
+centerDiff p ew mide = mad (mad (mad (mad (mad (mad mide (ewCenterPAtts ew) pd) (ewCenterNAtts ew) nd) (ewCenterBAtts ew) bd) (ewCenterRAtts ew) rd) (ewCenterQAtts ew) qd) (ewCenterKAtts ew) kd
     where !mpa = popCount $ myPAttacs p .&. center
           !ypa = popCount $ yoPAttacs p .&. center
           !pd  = mpa - ypa
@@ -665,14 +506,10 @@ centerDiff p = [pd, nd, bd, rd, qd, kd]
 data Izolan = Izolan
 
 instance EvalItem Izolan where
-    evalItem _ _ p _ = isolDiff p
-    evalItemNDL _  = [
-                      ("isolPawns",  ((-38, -119), (-300, 0))),
-                      ("isolPassed", ((-60, -153), (-500, 0)))
-                     ]
+    evalItem _ _ ew p _ mide = isolDiff p ew mide
 
-isolDiff :: MyPos -> IWeights
-isolDiff p = [ nd, pd ]
+isolDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
+isolDiff p ew mide = mad (mad mide (ewIsolPawns ew) nd) (ewIsolPassed ew) pd
     where (!myr, !myp) = isol (pawns p .&. me p) (passed p)
           (!yor, !yop) = isol (pawns p .&. yo p) (passed p)
           !nd = myr - yor
@@ -693,14 +530,10 @@ isol ps pp = (ris, pis)
 data Backward = Backward
 
 instance EvalItem Backward where
-    evalItem _ _ p _ = backDiff p
-    evalItemNDL _  = [
-                      ("backPawns", ((-102, -182), (-300, 0))),	-- malus for backward pawns
-                      ("backPOpen", (( -35,    0), (-300, 0)))	-- even more on open files
-                     ]
+    evalItem _ _ ew p _ mide = backDiff p ew mide
 
-backDiff :: MyPos -> IWeights
-backDiff p
+backDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
+backDiff p ew mide
     | moving p == White
     = let wp = pawns p .&. me p
           bp = pawns p .&. yo p
@@ -708,7 +541,7 @@ backDiff p
           (bpb, bpob) = backPawns Black bp wp (myPAttacs p)
           !bpd  = popCount bpw  - popCount bpb
           !bpod = popCount bpow - popCount bpob
-      in [ bpd, bpod ]
+      in mad (mad mide (ewBackPawns ew) bpd) (ewBackPOpen ew) bpod
     | otherwise
     = let bp = pawns p .&. me p
           wp = pawns p .&. yo p
@@ -716,7 +549,7 @@ backDiff p
           (bpb, bpob) = backPawns Black bp wp (yoPAttacs p)
           !bpd  = popCount bpb  - popCount bpw
           !bpod = popCount bpob - popCount bpow
-      in [ bpd, bpod ]
+      in mad (mad mide (ewBackPawns ew) bpd) (ewBackPOpen ew) bpod
 
 backPawns :: Color -> BBoard -> BBoard -> BBoard -> (BBoard, BBoard)
 backPawns White !mp !op !opa = (bp, bpo)
@@ -752,12 +585,7 @@ frontAttacksBlack !b = fa
 data EnPrise = EnPrise
 
 instance EvalItem EnPrise where
-    evalItem _ _ p _ = enPrise p
-    evalItemNDL _  = [
-                       ("enpHanging",  ((-23, -33), (-800, 0))),
-                       ("enpEnPrise",  ((-25, -21), (-800, 0))),
-                       ("enpAttacked", (( -9, -13), (-800, 0)))
-                     ]
+    evalItem _ _ ew p _ mide = enPrise p ew mide
 
 -- Here we should only take at least the opponent attacks! When we evaluate,
 -- we are in one on this situations:
@@ -768,8 +596,8 @@ instance EvalItem EnPrise where
 -- (but not always, for example when we can check or can defent one with the other)
 -- - if he has only one attack, we are somehow restricted to defend or move that piece
 -- In 2 we have a more complicated analysis, which maybe is not worth to do
-enPrise :: MyPos -> IWeights
-enPrise p = [ha, ep, at]
+enPrise :: MyPos -> EvalWeights -> MidEnd -> MidEnd
+enPrise p ew mide = mad (mad (mad mide (ewEnpHanging ew) ha) (ewEnpEnPrise ew) ep) (ewEnpAttacked ew) at
     where !meP = me p .&. pawns   p	-- my pieces
           !meN = me p .&. knights p
           !meB = me p .&. bishops p
@@ -802,13 +630,12 @@ enPrise p = [ha, ep, at]
 data LastLine = LastLine
 
 instance EvalItem LastLine where
-    evalItem _ _ p _ = lastline p
-    evalItemNDL _  = [("lastLinePenalty", ((115, 0), (-100, 300)))]
+    evalItem _ _ ew p _ mide = lastline p ew mide
 
 -- Only for minor figures (queen is free to stay where it wants)
 -- Negative at the end: so that it falls stronger
-lastline :: MyPos -> IWeights
-lastline p = [cdiff]
+lastline :: MyPos -> EvalWeights -> MidEnd -> MidEnd
+lastline p ew mide = madm mide (ewLastLinePenalty ew) cdiff
     where !whl = popCount $ me p .&. cb
           !bll = popCount $ yo p .&. cb
           !cb = (knights p .|. bishops p) .&. lali
@@ -819,13 +646,11 @@ lastline p = [cdiff]
 data Redundance = Redundance
 
 instance EvalItem Redundance where
-    evalItem _ _ p _ = evalRedundance p
-    evalItemNDL _  = [("bishopPair",       ((363,  388), ( 100, 500))),
-                      ("redundanceRook",   ((  0, -105), (-150,   0))) ]
+    evalItem _ _ ew p _ mide = evalRedundance p ew mide
 
 -- This function is optimised
-evalRedundance :: MyPos -> [Int]
-evalRedundance p = [bp, rr]
+evalRedundance :: MyPos -> EvalWeights -> MidEnd -> MidEnd
+evalRedundance p ew mide = mad (mad mide (ewBishopPair ew) bp) (ewRedundanceRook ew) rr
     where !wbl = bishops p .&. me p .&. lightSquares
           !wbd = bishops p .&. me p .&. darkSquares
           !bbl = bishops p .&. yo p .&. lightSquares
@@ -863,12 +688,11 @@ evalNRCorrection p = [md]
 data RookPawn = RookPawn
 
 instance EvalItem RookPawn where
-    evalItem _ _ p _ = evalRookPawn p
-    evalItemNDL _  = [("rookPawn", ((-51, -42), (-120, 0))) ]
+    evalItem _ _ ew p _ mide = evalRookPawn p ew mide
 
 -- This function is already optimised
-evalRookPawn :: MyPos -> [Int]
-evalRookPawn p = [rps]
+evalRookPawn :: MyPos -> EvalWeights -> MidEnd -> MidEnd
+evalRookPawn p ew mide = mad mide (ewRookPawn ew) rps
     where !wrp = popCount $ pawns p .&. me p .&. rookFiles
           !brp = popCount $ pawns p .&. yo p .&. rookFiles
           !rps = wrp - brp
@@ -877,27 +701,16 @@ evalRookPawn p = [rps]
 data PaBlo = PaBlo
 
 instance EvalItem PaBlo where
-    evalItem _ _ p _ = pawnBl p
-    evalItemNDL _  = [
-                     ("pawnBlockP", ((-116, -105), (-300, 0))),	-- blocked by own pawn
-                     ("pawnBlockO", (( -23,  -27), (-300, 0))),	-- blocked by own piece
-                     ("pawnBlockA", (( -14,  -73), (-300, 0)))	-- blocked by adverse piece
-                     ]
+    evalItem _ _ ew p _ mide = pawnBl p ew mide
 
-pawnBl :: MyPos -> IWeights
-pawnBl p
+pawnBl :: MyPos -> EvalWeights -> MidEnd -> MidEnd
+pawnBl p ew mide
     | moving p == White = let (wp, wo, wa) = pawnBloWhite mer mef yof
-                          --  (_ , ao, aa) = pawnBloWhite mes mef yof
                               (bp, bo, ba) = pawnBloBlack yor yof mef
-                          --  (_ , no, na) = pawnBloBlack yos yof mef
-                          -- in  [wp-bp, wo-bo, wa-ba, ao-no, aa-na]
-                          in  [wp-bp, wo-bo, wa-ba ]
+                          in mad (mad (mad mide (ewPawnBlockP ew) (wp-bp)) (ewPawnBlockO ew) (wo-bo)) (ewPawnBlockA ew) (wa-ba)
     | otherwise         = let (wp, wo, wa) = pawnBloWhite yor yof mef
-                          --  (_ , ao, aa) = pawnBloWhite yos yof mef
                               (bp, bo, ba) = pawnBloBlack mer mef yof
-                          --  (_ , no, na) = pawnBloBlack mes mef yof
-                          -- in  [bp-wp, bo-wo, ba-wa, no-ao, na-aa]
-                          in  [bp-wp, bo-wo, ba-wa ]
+                          in mad (mad (mad mide (ewPawnBlockP ew) (bp-wp)) (ewPawnBlockO ew) (bo-wo)) (ewPawnBlockA ew) (ba-wa)
     where !mep = pawns p .&. me p	-- my pawns
           !mes = mep .&. passed p	-- my passed pawns
           !mer = mep `less` mes		-- my rest pawns
@@ -926,12 +739,11 @@ data PassPawns = PassPawns
 -- 4686 games at 15+0.25 games pass3o against itself (mean)
 -- Clop forecast: 60+-25 elo
 instance EvalItem PassPawns where
-    evalItem gph ep p _ = passPawns gph ep p
-    evalItemNDL _   = [("passPawnLev", ((0, 9), (0, 20)))]
+    evalItem gph ep ew p _ mide = passPawns gph ep p ew mide
  
 -- Every passed pawn will be evaluated separately
-passPawns :: Int -> EvalParams -> MyPos -> IWeights
-passPawns gph ep p = [dpp]
+passPawns :: Int -> EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
+passPawns gph ep p ew mide = mad mide (ewPassPawnLev ew) dpp
     where !mppbb = passed p .&. me p
           !yppbb = passed p .&. yo p
           !myc = moving p
@@ -959,8 +771,7 @@ perPassedPawn gph ep p c sq
 
 perPassedPawnOk :: Int -> EvalParams -> MyPos -> Color -> Square -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
 perPassedPawnOk gph ep p c sq sqbb moi toi moia toia = val
-    where
-          (!way, !behind) | c == White = (shadowUp sqbb, shadowDown sqbb)
+    where (!way, !behind) | c == White = (shadowUp sqbb, shadowDown sqbb)
                           | otherwise  = (shadowDown sqbb, shadowUp sqbb)
           !mblo = popCount $ moi .&. way
           !yblo = popCount $ toi .&. way
@@ -1003,12 +814,12 @@ perPassedPawnOk gph ep p c sq sqbb moi toi moia toia = val
 -- 2. What about the rest of pawns? Here we make a trick: we shift the passed
 -- pawns virtually one row back, which gives less points for the possibly remaining
 -- passed pawns - now with queens)
-pawnEndGame :: MyPos -> Maybe (Int, [Int])
+pawnEndGame :: MyPos -> Maybe Int
 pawnEndGame p
     -- | null mescds && null yescds             = Nothing
-    | not (null mescds) && not (null yescds) = Just (dpr, [dpr])
-    | not (null mescds)                      = Just (myrace, [myrace])
-    |                      not (null yescds) = Just (yorace, [yorace])
+    | not (null mescds) && not (null yescds) = Just dpr
+    | not (null mescds)                      = Just myrace
+    |                      not (null yescds) = Just yorace
     | otherwise                              = Nothing
     -- | -- here we will consider what is with 2 passed pawns which are far enough from each other
     -- and even with connected (or defended) passed pawns
