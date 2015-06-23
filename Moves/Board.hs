@@ -732,8 +732,35 @@ xrayAttacs pos sq = sa1 /= sa0
     where sa1 = slideAttacs sq (bishops pos) (rooks pos) (queens pos) (occup pos)
           sa0 = slideAttacs sq (bishops pos) (rooks pos) (queens pos) 0
 
-unimax :: Int -> [Int] -> Int
-unimax = foldl' (\a g -> min g (-a))
+data MSpin = One   !Int
+           | Two   !Int !Int
+           | Three !Int !Int !Int
+           | Four  !Int !Int !Int !Int
+           | Five  !Int !Int !Int !Int !Int
+           | Six   !Int !Int !Int !Int !Int !Int
+           | Seven !Int !Int !Int !Int !Int !Int !Int
+           | More  !Int !Int !Int !Int !Int !Int !Int MSpin
+
+(<:>) :: Int -> MSpin -> MSpin
+a <:> One b = Two a b
+a <:> Two b c = Three a b c
+a <:> Three b c d = Four a b c d
+a <:> Four  b c d e = Five a b c d e
+a <:> Five  b c d e f = Six a b c d e f
+a <:> Six   b c d e f g = Seven a b c d e f g
+a <:> Seven b c d e f g h = More a b c d e f g (One h)
+a <:> More  b c d e f g h m = More a b c d e f g $ h <:> m
+
+unimax :: Int -> MSpin -> Int
+-- unimax = foldl' (\a g -> min g (-a))
+unimax a (One   b) = min b $ -a
+unimax a (Two   b c) = min c $ max (-b) a
+unimax a (Three b c d) = min d $ max (-c) $ min b (-a)
+unimax a (Four  b c d e) = min e $ max (-d) $ min c $ max (-b) a
+unimax a (Five  b c d e f) = min f $ max (-e) $ min d $ max (-c) $ min b (-a)
+unimax a (Six   b c d e f g) = min g $ max (-f) $ min e $ max (-d) $ min c $ max (-b) a
+unimax a (Seven b c d e f g h) = min h $ max (-g) $ min f $ max (-e) $ min d $ max (-c) $ min b (-a)
+unimax a (More  b c d e f g h m) = unimax (min h $ max (-g) $ min f $ max (-e) $ min d $ max (-c) $ min b (-a)) m
 
 value :: Piece -> Int
 value = matPiece White
@@ -752,15 +779,15 @@ data SEEPars = SEEPars {
 -- and the value of the first captured piece
 seeMoveValue :: MyPos -> Attacks -> Square -> Square -> Int -> Int
 seeMoveValue pos !attacks sqfirstmv sqto gain0 = v
-    where v = go sp0 [gain0]
-          go :: SEEPars -> [Int] -> Int
+    where !v = go sp0 (One gain0)
+          go :: SEEPars -> MSpin -> Int
           go seepars acc =
              let !gain'   = seeVal  seepars -     seeGain seepars
                  !moved'  = seeMovd seepars .|.   seeFrom seepars
                  !attacs1 = seeAtts seepars `xor` seeFrom seepars
                  (!from', !val') = chooseAttacker pos (attacs1 .&. seeAgrs seepars)
                  attacs2  = newAttacs sqto moved' (seeAttsRec seepars)
-                 acc' = gain' : acc
+                 !acc' = gain' <:> acc
                  seepars1 = SEEPars { seeGain = gain', seeVal = val', seeAtts = attacs1,
                                       seeFrom = from', seeMovd = moved', seeDefn = seeAgrs seepars,
                                       seeAgrs = seeDefn seepars,
