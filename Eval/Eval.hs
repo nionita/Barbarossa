@@ -33,11 +33,14 @@ type IWeights = [Int]
 type DWeights = [Double]
 type Limits = [(Double, Double)]
 
+-- This eval has all end related parameters from the version bald-1-18
+-- to serve as a marker for the rest of the candidates
+
 instance CollectParams EvalParams where
     type CollectFor EvalParams = EvalParams
     npColInit = EvalParams {
-                    epMovingMid  = 159,		-- after Clop optimisation
-                    epMovingEnd  = 130,		-- with 3700 games at 15+0.25 s
+                    epMovingMid  = 159,
+                    epMovingEnd  = 97,
                     epMaterMinor = 1,
                     epMaterRook  = 3,
                     epMaterQueen = 11,
@@ -444,7 +447,7 @@ instance EvalItem KingPlace where
     evalItem _ ep p _  = kingPlace ep p
     evalItemNDL _ = [
                       ("kingPlaceCent", ((5,  0), (0, 20))),
-                      ("kingPlacePwns", ((0, 30), (0, 40)))
+                      ("kingPlacePwns", ((0, 31), (0, 40)))
                     ]
 
 
@@ -563,9 +566,9 @@ data RookPlc = RookPlc
 
 instance EvalItem RookPlc where
     evalItem _ _ p _ = evalRookPlc p
-    evalItemNDL _  = [ ("rookHOpen", ((171, 196), (0, 500))),
-                       ("rookOpen",  ((221, 221), (0, 800))),
-                       ("rookConn",  (( 98,  75), (0, 300))) ]
+    evalItemNDL _  = [ ("rookHOpen", ((171, 195), (0, 500))),
+                       ("rookOpen",  ((221, 203), (0, 800))),
+                       ("rookConn",  (( 98, 119), (0, 300))) ]
 
 evalRookPlc :: MyPos -> [Int]
 evalRookPlc p = [ ho, op, rc ]
@@ -599,10 +602,10 @@ data Mobility = Mobility	-- "safe" moves
 
 instance EvalItem Mobility where
     evalItem _ _ p _ = mobDiff p
-    evalItemNDL _  = [ ("mobilityKnight", ((50, 56), (40, 120))),
-                       ("mobilityBishop", ((50, 55), (40, 120))),
-                       ("mobilityRook",   ((24, 25), ( 0, 100))),
-                       ("mobilityQueen",  (( 4,  7), (-5,  50))) ]
+    evalItemNDL _  = [ ("mobilityKnight", ((50, 60), (40, 120))),
+                       ("mobilityBishop", ((50, 59), (40, 120))),
+                       ("mobilityRook",   ((24, 24), ( 0, 100))),
+                       ("mobilityQueen",  (( 4, 13), (-5,  50))) ]
 
 -- Here we do not calculate pawn mobility (which, calculated as attacs, is useless)
 mobDiff :: MyPos -> IWeights
@@ -630,11 +633,11 @@ data Center = Center
 instance EvalItem Center where
     evalItem _ _ p _ = centerDiff p
     evalItemNDL _  = [
-                      ("centerPAtts", ((70, 60), (0, 200))),
-                      ("centerNAtts", ((57, 45), (0, 200))),
-                      ("centerBAtts", ((57, 45), (0, 200))),
-                      ("centerRAtts", ((17, 30), (0, 200))),
-                      ("centerQAtts", (( 4, 60), (0, 200))),
+                      ("centerPAtts", ((70, 26), (0, 200))),
+                      ("centerNAtts", ((57, 41), (0, 200))),
+                      ("centerBAtts", ((57, 47), (0, 200))),
+                      ("centerRAtts", ((17, 35), (0, 200))),
+                      ("centerQAtts", (( 4, 36), (0, 200))),
                       ("centerKAtts", (( 0, 70), (0, 200)))
                      ]
 
@@ -667,8 +670,8 @@ data Izolan = Izolan
 instance EvalItem Izolan where
     evalItem _ _ p _ = isolDiff p
     evalItemNDL _  = [
-                      ("isolPawns",  ((-42, -120), (-300, 0))),
-                      ("isolPassed", ((-57, -150), (-500, 0)))
+                      ("isolPawns",  ((-42, -110), (-300, 0))),
+                      ("isolPassed", ((-57, -244), (-500, 0)))
                      ]
 
 isolDiff :: MyPos -> IWeights
@@ -695,7 +698,7 @@ data Backward = Backward
 instance EvalItem Backward where
     evalItem _ _ p _ = backDiff p
     evalItemNDL _  = [
-                      ("backPawns", ((-97, -180), (-300, 0))),	-- malus for backward pawns
+                      ("backPawns", ((-97, -151), (-300, 0))),	-- malus for backward pawns
                       ("backPOpen", ((-36,    0), (-300, 0)))	-- even more on open files
                      ]
 
@@ -754,9 +757,9 @@ data EnPrise = EnPrise
 instance EvalItem EnPrise where
     evalItem _ _ p _ = enPrise p
     evalItemNDL _  = [
-                       ("enpHanging",  ((-23, -30), (-800, 0))),
-                       ("enpEnPrise",  ((-23, -19), (-800, 0))),
-                       ("enpAttacked", (( -8, -12), (-800, 0)))
+                       ("enpHanging",  ((-23, -28), (-800, 0))),
+                       ("enpEnPrise",  ((-23, -29), (-800, 0))),
+                       ("enpAttacked", (( -8,  -8), (-800, 0)))
                      ]
 
 -- Here we should only take at least the opponent attacks! When we evaluate,
@@ -820,8 +823,8 @@ data Redundance = Redundance
 
 instance EvalItem Redundance where
     evalItem _ _ p _ = evalRedundance p
-    evalItemNDL _  = [("bishopPair",       ((360,  380), ( 100, 500))),
-                      ("redundanceRook",   ((  0, -104), (-150,   0))) ]
+    evalItemNDL _  = [("bishopPair",       ((360,  323), ( 100, 500))),
+                      ("redundanceRook",   ((  0,  -78), (-150,   0))) ]
 
 -- This function is optimised
 evalRedundance :: MyPos -> [Int]
@@ -864,7 +867,7 @@ data RookPawn = RookPawn
 
 instance EvalItem RookPawn where
     evalItem _ _ p _ = evalRookPawn p
-    evalItemNDL _  = [("rookPawn", ((-48, -48), (-120, 0))) ]
+    evalItemNDL _  = [("rookPawn", ((-48, -40), (-120, 0))) ]
 
 -- This function is already optimised
 evalRookPawn :: MyPos -> [Int]
@@ -879,9 +882,9 @@ data PaBlo = PaBlo
 instance EvalItem PaBlo where
     evalItem _ _ p _ = pawnBl p
     evalItemNDL _  = [
-                     ("pawnBlockP", ((-116, -109), (-300, 0))),	-- blocked by own pawn
-                     ("pawnBlockO", (( -24,  -26), (-300, 0))),	-- blocked by own piece
-                     ("pawnBlockA", (( -13,  -75), (-300, 0)))	-- blocked by adverse piece
+                     ("pawnBlockP", ((-116, -97), (-300, 0))),	-- blocked by own pawn
+                     ("pawnBlockO", (( -24, -34), (-300, 0))),	-- blocked by own piece
+                     ("pawnBlockA", (( -13, -68), (-300, 0)))	-- blocked by adverse piece
                      ]
 
 pawnBl :: MyPos -> IWeights
@@ -927,7 +930,7 @@ data PassPawns = PassPawns
 -- Clop forecast: 60+-25 elo
 instance EvalItem PassPawns where
     evalItem gph ep p _ = passPawns gph ep p
-    evalItemNDL _   = [("passPawnLev", ((1, 9), (0, 20)))]
+    evalItemNDL _   = [("passPawnLev", ((1, 10), (0, 20)))]
  
 -- Every passed pawn will be evaluated separately
 passPawns :: Int -> EvalParams -> MyPos -> IWeights
