@@ -736,16 +736,22 @@ data MSpin = One   !Int
            | Two   !Int !Int
            | Three !Int !Int !Int
            | Four  !Int !Int !Int !Int
+           | Five  !Int !Int !Int !Int !Int
+           | Six   !Int !Int !Int !Int !Int !Int
+           | Seven !Int !Int !Int !Int !Int !Int !Int
 
 (<:>) :: Int -> [MSpin] -> [MSpin]
-a <:> []              = [ One a ]
-a <:> l@(Four {} : _) = One a : l
-a <:> (m : ms)        = (a <|> m) : ms
+a <:> []               = [ One a ]
+a <:> l@(Seven {} : _) = One a : l
+a <:> (m : ms)         = (a <|> m) : ms
 
 (<|>) :: Int -> MSpin -> MSpin
-a <|> One   b     = Two   a b
-a <|> Two   b c   = Three a b c
-a <|> Three b c d = Four  a b c d
+a <|> One   b           = Two   a b
+a <|> Two   b c         = Three a b c
+a <|> Three b c d       = Four  a b c d
+a <|> Four  b c d e     = Five  a b c d e
+a <|> Five  b c d e f   = Six   a b c d e f
+a <|> Six   b c d e f g = Seven a b c d e f g
 _ <|> _ = error "MSpin too big"	-- should not occur
 
 unimax :: Int -> [MSpin] -> Int
@@ -753,10 +759,13 @@ unimax :: Int -> [MSpin] -> Int
 unimax = foldl' mUnimax
 
 mUnimax :: Int -> MSpin -> Int
-mUnimax a (One   b)       = min b (-a)
-mUnimax a (Two   b c)     = min c $ max (-b) a
-mUnimax a (Three b c d)   = min d $ max (-c) $ min b (-a)
-mUnimax a (Four  b c d e) = min e $ max (-d) $ min c $ max (-b) a
+mUnimax a (One   b)             = min b (-a)
+mUnimax a (Two   b c)           = min c $ max (-b) a
+mUnimax a (Three b c d)         = min d $ max (-c) $ min b (-a)
+mUnimax a (Four  b c d e)       = min e $ max (-d) $ min c $ max (-b) a
+mUnimax a (Five  b c d e f)     = min f $ max (-e) $ min d $ max (-c) $ min b (-a)
+mUnimax a (Six   b c d e f g)   = min g $ max (-f) $ min e $ max (-d) $ min c $ max (-b) a
+mUnimax a (Seven b c d e f g h) = min h $ max (-g) $ min f $ max (-e) $ min d $ max (-c) $ min b (-a)
 
 value :: Piece -> Int
 value = matPiece White
@@ -778,30 +787,32 @@ seeMoveValue pos !attacks sqfirstmv sqto gain0 = v
     where !v = go sp0 [One gain0]
           go :: SEEPars -> [MSpin] -> Int
           go seepars acc =
-             let !gain'   = seeVal  seepars -     seeGain seepars
-                 !moved'  = seeMovd seepars .|.   seeFrom seepars
-                 !attacs1 = seeAtts seepars `xor` seeFrom seepars
+             let !attacs1 = seeAtts seepars `xor` seeFrom seepars
                  (!from', !val') = chooseAttacker pos (attacs1 .&. seeAgrs seepars)
-                 attacs2  = newAttacs sqto moved' (seeAttsRec seepars)
-                 acc' = gain' <:> acc
-                 seepars1 = SEEPars { seeGain = gain', seeVal = val', seeAtts = attacs1,
-                                      seeFrom = from', seeMovd = moved', seeDefn = seeAgrs seepars,
-                                      seeAgrs = seeDefn seepars,
-                                      seeAttsRec = seeAttsRec seepars }
-                 seepars2 = SEEPars { seeGain = gain', seeVal = val', seeAtts = atAtt attacs2,
-                                      seeFrom = from', seeMovd = moved', seeDefn = seeAgrs seepars,
-                                      seeAgrs = seeDefn seepars,
-                                      seeAttsRec = attacs2 }
              in if from' == 0
                    then unimax (minBound+2) acc
                    -- With the new attacks: is it perhaps better to recalculate always?
-                   else if usePosXRay
-                           then if posXRay && seeFrom seepars .&. mayXRay /= 0
-                                   then go seepars2 acc'
-                                   else go seepars1 acc'
-                           else if seeFrom seepars .&. mayXRay /= 0
-                                   then go seepars2 acc'
-                                   else go seepars1 acc'
+                   else let !gain'   = seeVal  seepars -     seeGain seepars
+                            !moved'  = seeMovd seepars .|.   seeFrom seepars
+                            attacs2  = newAttacs sqto moved' (seeAttsRec seepars)
+                            acc' = gain' <:> acc
+                            seepars1 = SEEPars { seeGain = gain', seeVal = val', seeAtts = attacs1,
+                                                 seeFrom = from', seeMovd = moved',
+                                                 seeDefn = seeAgrs seepars,
+                                                 seeAgrs = seeDefn seepars,
+                                                 seeAttsRec = seeAttsRec seepars }
+                            seepars2 = SEEPars { seeGain = gain', seeVal = val', seeAtts = atAtt attacs2,
+                                                 seeFrom = from', seeMovd = moved',
+                                                 seeDefn = seeAgrs seepars,
+                                                 seeAgrs = seeDefn seepars,
+                                                 seeAttsRec = attacs2 }
+                        in if usePosXRay
+                              then if posXRay && seeFrom seepars .&. mayXRay /= 0
+                                      then go seepars2 acc'
+                                      else go seepars1 acc'
+                              else if seeFrom seepars .&. mayXRay /= 0
+                                      then go seepars2 acc'
+                                      else go seepars1 acc'
           !mayXRay = pawns pos .|. bishops pos .|. rooks pos .|. queens pos  -- could be calc.
           posXRay = xrayAttacs pos sqto  -- only once, as it is per pos (but it's cheap anyway)
           !moved0 = uBit sqfirstmv
