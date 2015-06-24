@@ -13,8 +13,11 @@ module Moves.Board (
 
 import Prelude hiding ((++), foldl, filter, map, concatMap, concat, head, tail, repeat, zip,
                        zipWith, null, words, foldr, elem, lookup, any, takeWhile, iterate)
+import Control.Monad.ST
 import Data.Bits
 import Data.List.Stream
+import           Data.Vector.Unboxed.Mutable (STVector)
+import qualified Data.Vector.Unboxed.Mutable as MV
 import Data.Word
 
 import Struct.Struct
@@ -732,31 +735,13 @@ xrayAttacs pos sq = sa1 /= sa0
     where sa1 = slideAttacs sq (bishops pos) (rooks pos) (queens pos) (occup pos)
           sa0 = slideAttacs sq (bishops pos) (rooks pos) (queens pos) 0
 
-data MSpin = One   !Int
-           | Two   !Int !Int
-           | Three !Int !Int !Int
-           | Four  !Int !Int !Int !Int
-
-(<:>) :: Int -> [MSpin] -> [MSpin]
-a <:> []              = [ One a ]
-a <:> l@(Four {} : _) = One a : l
-a <:> (m : ms)        = (a <|> m) : ms
-
-(<|>) :: Int -> MSpin -> MSpin
-a <|> One   b     = Two   a b
-a <|> Two   b c   = Three a b c
-a <|> Three b c d = Four  a b c d
-_ <|> _ = error "MSpin too big"	-- should not occur
-
-unimax :: Int -> [MSpin] -> Int
+unimax :: STVector s Int -> Int -> ST s Int
 -- unimax = foldl' (\a g -> min g (-a))
-unimax = foldl' mUnimax
-
-mUnimax :: Int -> MSpin -> Int
-mUnimax a (One   b)       = min b (-a)
-mUnimax a (Two   b c)     = min c $ max (-b) a
-mUnimax a (Three b c d)   = min d $ max (-c) $ min b (-a)
-mUnimax a (Four  b c d e) = min e $ max (-d) $ min c $ max (-b) a
+unimax vec = go (minBound+2)
+    where go !a !i | i < 0     = return a
+                   | otherwise = do
+                       g <- MV.unsafeRead vec i
+                       go (min g (-a)) (i-1)
 
 value :: Piece -> Int
 value = matPiece White
@@ -775,15 +760,17 @@ data SEEPars = SEEPars {
 -- and the value of the first captured piece
 seeMoveValue :: MyPos -> Attacks -> Square -> Square -> Int -> Int
 seeMoveValue pos !attacks sqfirstmv sqto gain0 = v
-    where !v = go sp0 [One gain0]
-          go :: SEEPars -> [MSpin] -> Int
-          go seepars acc =
+    where !v = runST $ do
+                   vec <- MV.new 20		-- new vector for the unimax
+                   MV.unsafeWrite vec 0 gain0	-- max 30 pieces could be captured,
+                   go sp0 vec 0			-- but at least 11 panws remain always
+          go :: SEEPars -> STVector s Int -> Int -> ST s Int
+          go seepars vec i = do
              let !gain'   = seeVal  seepars -     seeGain seepars
                  !moved'  = seeMovd seepars .|.   seeFrom seepars
                  !attacs1 = seeAtts seepars `xor` seeFrom seepars
                  (!from', !val') = chooseAttacker pos (attacs1 .&. seeAgrs seepars)
                  attacs2  = newAttacs sqto moved' (seeAttsRec seepars)
-                 acc' = gain' <:> acc
                  seepars1 = SEEPars { seeGain = gain', seeVal = val', seeAtts = attacs1,
                                       seeFrom = from', seeMovd = moved', seeDefn = seeAgrs seepars,
                                       seeAgrs = seeDefn seepars,
@@ -792,16 +779,18 @@ seeMoveValue pos !attacks sqfirstmv sqto gain0 = v
                                       seeFrom = from', seeMovd = moved', seeDefn = seeAgrs seepars,
                                       seeAgrs = seeDefn seepars,
                                       seeAttsRec = attacs2 }
-             in if from' == 0
-                   then unimax (minBound+2) acc
-                   -- With the new attacks: is it perhaps better to recalculate always?
-                   else if usePosXRay
-                           then if posXRay && seeFrom seepars .&. mayXRay /= 0
-                                   then go seepars2 acc'
-                                   else go seepars1 acc'
-                           else if seeFrom seepars .&. mayXRay /= 0
-                                   then go seepars2 acc'
-                                   else go seepars1 acc'
+                 i1 = i + 1
+             MV.unsafeWrite vec i1 gain'
+             if from' == 0
+                then unimax vec i1
+                -- With the new attacks: is it perhaps better to recalculate always?
+                else if usePosXRay
+                        then if posXRay && seeFrom seepars .&. mayXRay /= 0
+                                then go seepars2 vec i1
+                                else go seepars1 vec i1
+                        else if seeFrom seepars .&. mayXRay /= 0
+                                then go seepars2 vec i1
+                                else go seepars1 vec i1
           !mayXRay = pawns pos .|. bishops pos .|. rooks pos .|. queens pos  -- could be calc.
           posXRay = xrayAttacs pos sqto  -- only once, as it is per pos (but it's cheap anyway)
           !moved0 = uBit sqfirstmv
