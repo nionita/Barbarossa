@@ -732,8 +732,31 @@ xrayAttacs pos sq = sa1 /= sa0
     where sa1 = slideAttacs sq (bishops pos) (rooks pos) (queens pos) (occup pos)
           sa0 = slideAttacs sq (bishops pos) (rooks pos) (queens pos) 0
 
-unimax :: Int -> [Int] -> Int
-unimax = foldl' (\a g -> min g (-a))
+data MSpin = One   !Int
+           | Two   !Int !Int
+           | Three !Int !Int !Int
+           | Four  !Int !Int !Int !Int
+
+(<:>) :: Int -> [MSpin] -> [MSpin]
+a <:> []              = [ One a ]
+a <:> l@(Four {} : _) = One a : l
+a <:> (m : ms)        = (a <|> m) : ms
+
+(<|>) :: Int -> MSpin -> MSpin
+a <|> One   b     = Two   a b
+a <|> Two   b c   = Three a b c
+a <|> Three b c d = Four  a b c d
+_ <|> _ = error "MSpin too big"	-- should not occur
+
+unimax :: Int -> [MSpin] -> Int
+-- unimax = foldl' (\a g -> min g (-a))
+unimax = foldl' mUnimax
+
+mUnimax :: Int -> MSpin -> Int
+mUnimax a (One   b)       = min b (-a)
+mUnimax a (Two   b c)     = min c $ max (-b) a
+mUnimax a (Three b c d)   = min d $ max (-c) $ min b (-a)
+mUnimax a (Four  b c d e) = min e $ max (-d) $ min c $ max (-b) a
 
 value :: Piece -> Int
 value = matPiece White
@@ -752,15 +775,15 @@ data SEEPars = SEEPars {
 -- and the value of the first captured piece
 seeMoveValue :: MyPos -> Attacks -> Square -> Square -> Int -> Int
 seeMoveValue pos !attacks sqfirstmv sqto gain0 = v
-    where v = go sp0 [gain0]
-          go :: SEEPars -> [Int] -> Int
+    where !v = go sp0 [One gain0]
+          go :: SEEPars -> [MSpin] -> Int
           go seepars acc =
              let !gain'   = seeVal  seepars -     seeGain seepars
                  !moved'  = seeMovd seepars .|.   seeFrom seepars
                  !attacs1 = seeAtts seepars `xor` seeFrom seepars
                  (!from', !val') = chooseAttacker pos (attacs1 .&. seeAgrs seepars)
                  attacs2  = newAttacs sqto moved' (seeAttsRec seepars)
-                 acc' = gain' : acc
+                 acc' = gain' <:> acc
                  seepars1 = SEEPars { seeGain = gain', seeVal = val', seeAtts = attacs1,
                                       seeFrom = from', seeMovd = moved', seeDefn = seeAgrs seepars,
                                       seeAgrs = seeDefn seepars,
