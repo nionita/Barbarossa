@@ -735,6 +735,7 @@ xrayAttacs pos sq = sa1 /= sa0
     where sa1 = slideAttacs sq (bishops pos) (rooks pos) (queens pos) (occup pos)
           sa0 = slideAttacs sq (bishops pos) (rooks pos) (queens pos) 0
 
+{-# INLINE unimax #-}
 unimax :: STVector s Int -> Int -> ST s Int
 -- unimax = foldl' (\a g -> min g (-a))
 unimax vec = go (minBound+2)
@@ -760,37 +761,40 @@ data SEEPars = SEEPars {
 -- and the value of the first captured piece
 seeMoveValue :: MyPos -> Attacks -> Square -> Square -> Int -> Int
 seeMoveValue pos !attacks sqfirstmv sqto gain0 = v
-    where !v = runST $ do
-                   vec <- MV.new 20		-- new vector for the unimax
+    where v = runST $ do
+                   vec <- MV.new 16		-- new vector for the unimax
                    MV.unsafeWrite vec 0 gain0	-- max 30 pieces could be captured,
                    go sp0 vec 0			-- but at least 11 panws remain always
           go :: SEEPars -> STVector s Int -> Int -> ST s Int
           go seepars vec i = do
-             let !gain'   = seeVal  seepars -     seeGain seepars
-                 !moved'  = seeMovd seepars .|.   seeFrom seepars
-                 !attacs1 = seeAtts seepars `xor` seeFrom seepars
+             let !attacs1 = seeAtts seepars `xor` seeFrom seepars
                  (!from', !val') = chooseAttacker pos (attacs1 .&. seeAgrs seepars)
-                 attacs2  = newAttacs sqto moved' (seeAttsRec seepars)
-                 seepars1 = SEEPars { seeGain = gain', seeVal = val', seeAtts = attacs1,
-                                      seeFrom = from', seeMovd = moved', seeDefn = seeAgrs seepars,
-                                      seeAgrs = seeDefn seepars,
-                                      seeAttsRec = seeAttsRec seepars }
-                 seepars2 = SEEPars { seeGain = gain', seeVal = val', seeAtts = atAtt attacs2,
-                                      seeFrom = from', seeMovd = moved', seeDefn = seeAgrs seepars,
-                                      seeAgrs = seeDefn seepars,
-                                      seeAttsRec = attacs2 }
-                 i1 = i + 1
-             MV.unsafeWrite vec i1 gain'
              if from' == 0
-                then unimax vec i1
-                -- With the new attacks: is it perhaps better to recalculate always?
-                else if usePosXRay
-                        then if posXRay && seeFrom seepars .&. mayXRay /= 0
-                                then go seepars2 vec i1
-                                else go seepars1 vec i1
-                        else if seeFrom seepars .&. mayXRay /= 0
-                                then go seepars2 vec i1
-                                else go seepars1 vec i1
+                then unimax vec i
+                else do
+                    let i1 = i + 1
+                        gain'    = seeVal  seepars -     seeGain seepars
+                        moved'   = seeMovd seepars .|.   seeFrom seepars
+                        attacs2  = newAttacs sqto moved' (seeAttsRec seepars)
+                        seepars1 = SEEPars { seeGain = gain', seeVal = val', seeAtts = attacs1,
+                                             seeFrom = from', seeMovd = moved',
+                                             seeDefn = seeAgrs seepars,
+                                             seeAgrs = seeDefn seepars,
+                                             seeAttsRec = seeAttsRec seepars }
+                        seepars2 = SEEPars { seeGain = gain', seeVal = val', seeAtts = atAtt attacs2,
+                                             seeFrom = from', seeMovd = moved',
+                                             seeDefn = seeAgrs seepars,
+                                             seeAgrs = seeDefn seepars,
+                                             seeAttsRec = attacs2 }
+                    MV.unsafeWrite vec i1 gain'
+                    -- With the new attacks: is it perhaps better to recalculate always?
+                    if usePosXRay
+                       then if posXRay && seeFrom seepars .&. mayXRay /= 0
+                               then go seepars2 vec i1
+                               else go seepars1 vec i1
+                       else if seeFrom seepars .&. mayXRay /= 0
+                               then go seepars2 vec i1
+                               else go seepars1 vec i1
           !mayXRay = pawns pos .|. bishops pos .|. rooks pos .|. queens pos  -- could be calc.
           posXRay = xrayAttacs pos sqto  -- only once, as it is per pos (but it's cheap anyway)
           !moved0 = uBit sqfirstmv
