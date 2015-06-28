@@ -217,7 +217,7 @@ bnMateDistance wbish sq = min (squareDistance sq ocor1) (squareDistance sq ocor2
 data KingSafe = KingSafe
 
 instance EvalItem KingSafe where
-    evalItem _ _ ew p _ mide = kingSafe p ew mide
+    evalItem _ ep ew p _ mide = kingSafe p ew mide
 
 -- Rewrite of king safety taking into account number and quality
 -- of pieces attacking king neighbour squares
@@ -226,8 +226,8 @@ instance EvalItem KingSafe where
 kingSafe :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 kingSafe !p !ew !mide = madm mide (ewKingSafe ew) ksafe
     where !ksafe = mattacs - yattacs
-          !freem = popCount $ myKAttacs p `less` (yoAttacs p .&. me p)
-          !freey = popCount $ yoKAttacs p `less` (myAttacs p .&. yo p)
+          !freem = popCount $ myKAttacs p `less` (yoAttacs p .|. me p)
+          !freey = popCount $ yoKAttacs p `less` (myAttacs p .|. yo p)
           flag k a = if k .&. a /= 0 then 1 else 0
           qual k a = popCount $ k .&. a
           flagYo = flag (myKAttacs p)
@@ -241,7 +241,7 @@ kingSafe !p !ew !mide = madm mide (ewKingSafe ew) ksafe
           !ixy = max 0 $ min 63 $ (fy * cy) `unsafeShiftR` 2 - freem
           !mattacs = attCoef `unsafeAt` ixm
           !yattacs = attCoef `unsafeAt` ixy
-          qualWeights = [1, 2, 2, 4, 7, 2]
+          qualWeights = [1, 2, 2, 4, 8, 2]
           !(Flc fm cm) = sumCount flagMe qualMe $ zip attsm qualWeights
           !(Flc fy cy) = sumCount flagYo qualYo $ zip attsy qualWeights
 
