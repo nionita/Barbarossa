@@ -3,7 +3,7 @@ module Struct.Struct (
          BBoard, Square, ZKey, ShArray, MaArray, DbArray, Move(..),
          Piece(..), Color(..), TabCont(..), MyPos(..),
          other, moving, epMask, fyMask, fyIncr, fyZero, mvMask, caRiMa,
-         caRKiw, caRQuw, caRMKw, caRMQw, caRKib, caRQub, caRMKb, caRMQb,
+         caRKiw, caRQuw, caRMKw, caRMQw, caRAKw, caRAQw, caRKib, caRQub, caRMKb, caRMQb, caRAKb, caRAQb,
          tabla, emptyPos, isReversible, remis50Moves, set50Moves, reset50Moves, addHalfMove,
          fromSquare, toSquare, isSlide, isDiag, isKkrq,
          moveIsNormal, moveIsCastle, moveIsPromo, moveIsEnPas, moveColor, movePiece,
@@ -130,8 +130,8 @@ instance Show Move where
 -- some constant bitboards for additional conditions like
 -- en-passant, castle rights and 50 moves rule
 epMask, fyMask, fyIncr, fyZero, fyMaxi, mvMask, caRiMa :: BBoard
-caRKiw, caRQuw, caRMKw, caRMQw :: BBoard
-caRKib, caRQub, caRMKb, caRMQb :: BBoard
+caRKiw, caRQuw, caRMKw, caRMQw, caRAKw, caRAQw :: BBoard
+caRKib, caRQub, caRMKb, caRMQb, caRAKb, caRAQb :: BBoard
 epMask = 0x0000FF0000FF0000	-- en passant mask
 fyMask = 0x000000000000FF00	-- mask for 50 moves rules
 fyIncr = 0x0000000000000100	-- 50 moves rule increment
@@ -143,10 +143,14 @@ caRKiw = 0x0000000000000090	-- white: king & rook position for kingside castle
 caRQuw = 0x0000000000000011	-- white: king & rook pisition for queenside castle
 caRMKw = 0x0000000000000060	-- white: empty fields for kingside castle
 caRMQw = 0x000000000000000E	-- white: empty fields for queenside castle
+caRAKw = 0x0000000000000060	-- white: not attacked fields for kingside castle
+caRAQw = 0x000000000000000C	-- white: not attacked fields for queenside castle
 caRKib = 0x9000000000000000	-- black: king & rook position for kingside castle
 caRQub = 0x1100000000000000	-- black: king & rook position for queenside castle
 caRMKb = 0x6000000000000000	-- black: empty fields for kingside castle
 caRMQb = 0x0E00000000000000	-- black: empty fields for queenside castle
+caRAKb = 0x6000000000000000	-- black: not attacked fields for kingside castle
+caRAQb = 0x0C00000000000000	-- black: not attacked fields for queenside castle
 
 emptyPos :: MyPos
 emptyPos = MyPos {

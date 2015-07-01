@@ -797,10 +797,10 @@ perPassedPawnOk gph ep p c sq sqbb moi toi moia toia = val
           !yoking = kingSquare (kings p) toi
           !mdis = squareDistance sq myking
           !ydis = squareDistance sq yoking
-          !kingprx = ((mdis - ydis) * epPassKingProx ep * (256-gph)) `unsafeShiftR` 8
-          !val' = (pmax * (128 - kingprx) * (128 - epPassBlockO ep * mblo)
-                * (128 - epPassBlockA ep * yblo)) `unsafeShiftR` 21
-          !val  = (val' * (128 + epPassMyCtrl ep * myctrl) * (128 - epPassYoCtrl ep * yoctrl))
+          !kingprx = ((mdis - ydis) * epPassKingProx ep * (256 - gph)) `unsafeShiftR` 8
+          !val1 = (pmax * (128 - kingprx) * (128 - epPassBlockO ep * mblo)) `unsafeShiftR` 14
+          !val2 = (val1 * (128 - epPassBlockA ep * yblo)) `unsafeShiftR` 7
+          !val  = (val2 * (128 + epPassMyCtrl ep * myctrl) * (128 - epPassYoCtrl ep * yoctrl))
                     `unsafeShiftR` 14
 
 -- Pawn end games are treated specially

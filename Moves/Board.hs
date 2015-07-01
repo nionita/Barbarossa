@@ -100,14 +100,16 @@ genMoveNCapt !p = map (moveAddColor c)
           traR = if c == White then 0x00FF000000000000 else 0xFF00
           !c = moving p
 
--- Generate only promotions (now only to queen) - captures and non captures
+-- Generate only promotions (now only to queen) non captures
+-- The promotion captures are generated together with the other captures
 genMoveTransf :: MyPos -> [Move]
-genMoveTransf !p = map (uncurry (makePromo Queen)) $ pGenC ++ pGenNC
-    where pGenC = concatMap (srcDests (pcapt . pAttacs c))
-                     $ bbToSquares $ pawns p .&. myfpc
+-- genMoveTransf !p = map (uncurry (makePromo Queen)) $ pGenC ++ pGenNC
+genMoveTransf !p = map (uncurry (makePromo Queen)) pGenNC
+    where -- pGenC = concatMap (srcDests (pcapt . pAttacs c))
+          --            $ bbToSquares $ pawns p .&. myfpc
           pGenNC = pAll1Moves c (pawns p .&. myfpc) (occup p)
           !myfpc = me p .&. traR
-          pcapt = (.&. yo p)
+          -- pcapt = (.&. yo p)
           !traR = if c == White then 0x00FF000000000000 else 0xFF00
           !c = moving p
 
@@ -305,11 +307,12 @@ genMoveCast :: MyPos -> [Move]
 genMoveCast p
     | inCheck p = []
     | otherwise = kingside ++ queenside
-    where (cmidk, cmidq) = if c == White then (caRMKw, caRMQw)
-                                         else (caRMKb, caRMQb)
-          kingside  = if castKingRookOk  p c && (occup p .&. cmidk == 0) && (yoAttacs p .&. cmidk == 0)
+    where (cmidk, cmidq, cattk, cattq)
+              | c == White = (caRMKw, caRMQw, caRAKw, caRAQw)
+              | otherwise  = (caRMKb, caRMQb, caRAKb, caRAQb)
+          kingside  = if castKingRookOk  p c && (occup p .&. cmidk == 0) && (yoAttacs p .&. cattk == 0)
                         then [caks] else []
-          queenside = if castQueenRookOk p c && (occup p .&. cmidq == 0) && (yoAttacs p .&. cmidq == 0)
+          queenside = if castQueenRookOk p c && (occup p .&. cmidq == 0) && (yoAttacs p .&. cattq == 0)
                         then [caqs] else []
           caks = makeCastleFor c True
           caqs = makeCastleFor c False
