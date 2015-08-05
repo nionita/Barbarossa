@@ -297,11 +297,9 @@ makeEnPas f t
 --   pro = 1 - knight, 2 - bishop, 3 - rook, 4 - queen (3 bits)
 --   frf = from files (3 bits)
 --   tosq = to square (6 bits)
--- {-#INLINE moveIsPromo #-}
+{-#INLINE moveIsPromo #-}
 moveIsPromo :: Move -> Bool
-moveIsPromo (Move w)
-    = w .&. 0x7000 == 0x7000 && (s == tcQueen || s == tcRook || s == tcBishop || s == tcKnight)
-    where s = w .&. 0x0E00
+moveIsPromo (Move w) = w .&. 0x7000 == 0x7000
 
 {-# INLINE movePromoPiece #-}
 movePromoPiece :: Move -> Piece
@@ -327,23 +325,22 @@ tcRook   = (fromIntegral $ fromEnum Rook  ) `shiftL` 9
 tcBishop = (fromIntegral $ fromEnum Bishop) `shiftL` 9
 tcKnight = (fromIntegral $ fromEnum Knight) `shiftL` 9
 
--- Castles are coded:
--- c111 <frsq> <tosq>
+-- Castles are coded just like normal voves, but they are easy to recognise:
+-- c101 <frsq> <tosq> (piece moving is King)
 -- where:
 --   c = 0 for white, 1 for black (1 bit)
 --   frsq - from square, 4 for white, 60 for black (6 bits)
 --   tosq - to square, 6 or 2 for white, 62 or 58 for black (6 bits)
 {-# INLINE moveIsCastle #-}
 moveIsCastle :: Move -> Bool
-moveIsCastle (Move w) = s == 0x7E00 || s == 0x7000
-    where s = w .&. 0x7E00
+moveIsCastle (Move w) = w == 0x5106 || w == 0x5102 || w == 0xDF3E || w == 0xDF3A
 
 {-# INLINE makeCastleFor #-}
 makeCastleFor :: Color -> Bool -> Move
-makeCastleFor White True  = Move 0x7106	-- white, kingside
-makeCastleFor White False = Move 0x7102	-- white, queenside
-makeCastleFor Black True  = Move 0xFF3E	-- black, kingside
-makeCastleFor Black False = Move 0xFF3A	-- black, queenside
+makeCastleFor White True  = Move 0x5106	-- white, kingside
+makeCastleFor White False = Move 0x5102	-- white, queenside
+makeCastleFor Black True  = Move 0xDF3E	-- black, kingside
+makeCastleFor Black False = Move 0xDF3A	-- black, queenside
 
 -- General functions for move encoding / decoding
 encodeFromTo :: Square -> Square -> Word16
@@ -353,11 +350,10 @@ encodeFromTo f t = fromIntegral t .|. (fromIntegral f `unsafeShiftL` 6)
 movePiece :: Move -> Piece
 movePiece m@(Move w)
     | moveIsNormal m
-        = if r >= 0 && r <= 5 then toEnum r else error ("Wrong moving piece in move: " ++ showHex w "")
-    | moveIsEnPas  m ||
-      moveIsPromo  m = Pawn
-    | moveIsCastle m = King
-    | otherwise      = error $ "Wrong move type: " ++ showHex w ""
+        = if r >= 0 && r <= 5
+             then toEnum r
+             else error ("Wrong moving piece in move: " ++ showHex w "")
+    | otherwise      = Pawn
     where r = fromIntegral $ (w `unsafeShiftR` 12) .&. 0x7
 
 {--

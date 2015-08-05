@@ -505,6 +505,41 @@ epSetZob = zobEP . (.&. 0x7)
 
 -- Copy one square to another and clear the source square
 doFromToMove :: Move -> MyPos -> MyPos
+doFromToMove m !p | moveIsCastle m
+    = updatePos p {
+          black = tblack, slide = tslide, kkrq  = tkkrq,  diag  = tdiag,
+          epcas = tepcas, zobkey = tzobkey, mater = tmater
+      }
+    where src = fromSquare m
+          dst = toSquare m
+          (csr, cds) = case src of
+              4  -> case dst of
+                  6 -> (7, 5)
+                  2 -> (0, 3)
+                  _ -> error $ "Wrong destination for castle move " ++ show m
+              60 -> case dst of
+                  62 -> (63, 61)
+                  58 -> (56, 59)
+                  _ -> error $ "Wrong destination for castle move " ++ show m
+              _  -> error $ "Wrong source for castle move " ++ show m
+          tblack = mvBit csr cds $ mvBit src dst $ black p
+          tslide = mvBit csr cds $ mvBit src dst $ slide p
+          tkkrq  = mvBit csr cds $ mvBit src dst $ kkrq p
+          tdiag  = mvBit csr cds $ mvBit src dst $ diag p
+          !srcbb = uBit src	-- source clears cast rights
+          (clearcast, zobcast) = clearCast (epcas p) srcbb
+          tepcas = reset50Moves $ moveAndClearEp $ epcas p `less` clearcast
+          Busy col King = tabla p src	-- identify the moving piece (king)
+          Busy co1 Rook = tabla p csr	-- identify the moving rook
+          !epcl = epClrZob $ epcas p
+          !zob = zobkey p `xor` epcl `xor` zobcast
+          CA tzobkey tmater = chainAccum (CA zob (mater p)) [
+                                accumClearSq src p,
+                                accumSetPiece dst col King p,
+                                accumClearSq csr p,
+                                accumSetPiece cds co1 Rook p,
+                                accumMoving p
+                            ]
 doFromToMove m !p | moveIsNormal m
     = updatePos p {
           black = tblack, slide = tslide, kkrq  = tkkrq,  diag  = tdiag,
@@ -566,41 +601,6 @@ doFromToMove m !p | moveIsEnPas m
                                 accumClearSq src p,
                                 accumClearSq del p,
                                 accumSetPiece dst col fig p,
-                                accumMoving p
-                            ]
-doFromToMove m !p | moveIsCastle m
-    = updatePos p {
-          black = tblack, slide = tslide, kkrq  = tkkrq,  diag  = tdiag,
-          epcas = tepcas, zobkey = tzobkey, mater = tmater
-      }
-    where src = fromSquare m
-          dst = toSquare m
-          (csr, cds) = case src of
-              4  -> case dst of
-                  6 -> (7, 5)
-                  2 -> (0, 3)
-                  _ -> error $ "Wrong destination for castle move " ++ show m
-              60 -> case dst of
-                  62 -> (63, 61)
-                  58 -> (56, 59)
-                  _ -> error $ "Wrong destination for castle move " ++ show m
-              _  -> error $ "Wrong source for castle move " ++ show m
-          tblack = mvBit csr cds $ mvBit src dst $ black p
-          tslide = mvBit csr cds $ mvBit src dst $ slide p
-          tkkrq  = mvBit csr cds $ mvBit src dst $ kkrq p
-          tdiag  = mvBit csr cds $ mvBit src dst $ diag p
-          !srcbb = uBit src	-- source clears cast rights
-          (clearcast, zobcast) = clearCast (epcas p) srcbb
-          tepcas = reset50Moves $ moveAndClearEp $ epcas p `less` clearcast
-          Busy col King = tabla p src	-- identify the moving piece (king)
-          Busy co1 Rook = tabla p csr	-- identify the moving rook
-          !epcl = epClrZob $ epcas p
-          !zob = zobkey p `xor` epcl `xor` zobcast
-          CA tzobkey tmater = chainAccum (CA zob (mater p)) [
-                                accumClearSq src p,
-                                accumSetPiece dst col King p,
-                                accumClearSq csr p,
-                                accumSetPiece cds co1 Rook p,
                                 accumMoving p
                             ]
 doFromToMove m !p | moveIsPromo m
