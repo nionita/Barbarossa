@@ -217,7 +217,7 @@ bnMateDistance wbish sq = min (squareDistance sq ocor1) (squareDistance sq ocor2
 data KingSafe = KingSafe
 
 instance EvalItem KingSafe where
-    evalItem _ ep ew p _ mide = kingSafe p ew mide
+    evalItem _ _ ew p _ mide = kingSafe p ew mide
 
 -- Rewrite of king safety taking into account number and quality
 -- of pieces attacking king neighbour squares
@@ -225,7 +225,7 @@ instance EvalItem KingSafe where
 -- if we eliminate the lists
 kingSafe :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 kingSafe !p !ew !mide = madm mide (ewKingSafe ew) ksafe
-    where !ksafe = mattacs - yattacs
+    where !ksafe = (9 * mattacs - 7 * yattacs) `unsafeShiftR` 3
           !freem = popCount $ myKAttacs p `less` (yoAttacs p .|. me p)
           !freey = popCount $ yoKAttacs p `less` (myAttacs p .|. yo p)
           flag k a = if k .&. a /= 0 then 1 else 0
@@ -797,10 +797,10 @@ perPassedPawnOk gph ep p c sq sqbb moi toi moia toia = val
           !yoking = kingSquare (kings p) toi
           !mdis = squareDistance sq myking
           !ydis = squareDistance sq yoking
-          !kingprx = ((mdis - ydis) * epPassKingProx ep * (256-gph)) `unsafeShiftR` 8
-          !val' = (pmax * (128 - kingprx) * (128 - epPassBlockO ep * mblo)
-                * (128 - epPassBlockA ep * yblo)) `unsafeShiftR` 21
-          !val  = (val' * (128 + epPassMyCtrl ep * myctrl) * (128 - epPassYoCtrl ep * yoctrl))
+          !kingprx = ((mdis - ydis) * epPassKingProx ep * (256 - gph)) `unsafeShiftR` 8
+          !val1 = (pmax * (128 - kingprx) * (128 - epPassBlockO ep * mblo)) `unsafeShiftR` 14
+          !val2 = (val1 * (128 - epPassBlockA ep * yblo)) `unsafeShiftR` 7
+          !val  = (val2 * (128 + epPassMyCtrl ep * myctrl) * (128 - epPassYoCtrl ep * yoctrl))
                     `unsafeShiftR` 14
 
 -- Pawn end games are treated specially
