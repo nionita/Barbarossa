@@ -41,7 +41,8 @@ letterToPiece = [('P', Pawn), ('R', Rook), ('N', Knight), ('B', Bishop),
                     ('Q', Queen), ('K', King)]
 
 initPos :: MyPos
-initPos = posFromFen startFen
+initPos = let p = posFromFen startFen
+          in p { realPly = Just 1 }
 
 posFromFen :: String -> MyPos
 posFromFen fen = updatePos p { epcas = x, zobkey = zk }

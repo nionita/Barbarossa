@@ -47,7 +47,7 @@ data MyPos = MyPos {
     myAttacs, yoAttacs, check :: BBoard,		-- my & yours attacs, check
     myPAttacs, myNAttacs, myBAttacs, myRAttacs, myQAttacs, myKAttacs :: BBoard,
     yoPAttacs, yoNAttacs, yoBAttacs, yoRAttacs, yoQAttacs, yoKAttacs :: BBoard,
-    staticScore :: Int
+    staticScore :: Int, realPly :: Maybe Int
     }
     deriving Eq
 
@@ -161,7 +161,7 @@ emptyPos = MyPos {
         myAttacs = 0, yoAttacs = 0, check = 0,
         myPAttacs = 0, myNAttacs = 0, myBAttacs = 0, myRAttacs = 0, myQAttacs = 0, myKAttacs = 0,
         yoPAttacs = 0, yoNAttacs = 0, yoBAttacs = 0, yoRAttacs = 0, yoQAttacs = 0, yoKAttacs = 0,
-        staticScore = 0, passed = 0
+        staticScore = 0, passed = 0, realPly = Nothing
     }
 
 -- Stuff related to 50 moves rule

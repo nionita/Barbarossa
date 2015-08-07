@@ -38,7 +38,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.3.0"
-progVerSuff = "mec"
+progVerSuff = "mect"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -517,7 +517,7 @@ searchTheTree tief mtief timx tim tpm mtg lsc lpv rmvs = do
     modifyChanging (\c -> c { crtStatus = stfin })
     currms <- lift $ currMilli (startSecond ctx)
     let (ms', mx, urg) = compTime tim tpm mtg sc
-    ms <- if urg || null path then return ms' else correctTime tief ms' sc path
+    ms <- if urg || null path then return ms' else correctTime tief (rbegTime stfin ms') sc path
     let strtms = srchStrtMs chg
         delta = strtms + ms - currms
         ms2 = ms `div` 2
@@ -597,6 +597,13 @@ timeFactor tp cha draft tim osc sc chgs mvs = round $ fromIntegral tim * min (tp
           scf  = let scdiff = osc - sc
                  in tpScScale tp * fromIntegral (scdiff * scdiff * draft)	-- score change factor
           chf  = tpChScale tp * fromIntegral (chgs * length mvs * draft)	-- change factor
+
+-- In the beginning of the game we search less time
+rbegTime :: MyState -> Int -> Int
+rbegTime s ms | Just i <- realPly p,
+                i < 10    = ms * i `div` 10
+              | otherwise = ms
+    where p : _ = stack s
 
 storeBestMove :: [Move] -> Int -> CtxIO ()
 storeBestMove mvs sc = do

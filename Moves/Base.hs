@@ -198,8 +198,12 @@ doRealMove m = do
        else if not cok
                then return Illegal
                else do
-                   put s { stack = p' : stack s }
+                   put s { stack = plusPly p' : stack s }
                    return $ Exten 0 False
+
+plusPly :: MyPos -> MyPos
+plusPly p | Just i <- realPly p = p { realPly = Just (i+1) }
+          | otherwise           = p
 
 -- Move from a node to a descendent - the search version
 doMove :: Move -> Bool -> Game DoResult
