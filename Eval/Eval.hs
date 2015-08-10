@@ -217,7 +217,7 @@ bnMateDistance wbish sq = min (squareDistance sq ocor1) (squareDistance sq ocor2
 data KingSafe = KingSafe
 
 instance EvalItem KingSafe where
-    evalItem _ ep ew p _ mide = kingSafe p ew mide
+    evalItem _ _ ew p _ mide = kingSafe p ew mide
 
 -- Rewrite of king safety taking into account number and quality
 -- of pieces attacking king neighbour squares

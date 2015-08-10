@@ -38,7 +38,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.3.0"
-progVerSuff = "mec"
+progVerSuff = "mecs"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -106,6 +106,7 @@ initContext opts = do
             working = False,
             compThread = Nothing,
             crtStatus = posToState initPos ha hi evs,
+            realPly = Nothing,
             forGui = Nothing,
             srchStrtMs = 0,
             myColor = White,
@@ -323,16 +324,21 @@ doPosition fen mvs = do
         else do
             hi <- liftIO newHist
             let es = evalst $ crtStatus chg
-            ns <- newState fen mvs (hash . crtStatus $ chg) hi es
-            modifyChanging (\c -> c { crtStatus = ns, myColor = myCol })
+            (mi, ns) <- newState fen mvs (hash . crtStatus $ chg) hi es
+            modifyChanging (\c -> c { crtStatus = ns, realPly = mi, myColor = myCol })
     where newState fpos ms c h es = foldM execMove (stateFromFen fpos c h es) ms
-          execMove p m = execCState (doRealMove m) p
+          execMove (mi, s) m = do
+              let mj = case mi of
+                           Nothing -> Nothing
+                           Just i  -> Just (i+1)
+              s' <- execCState (doRealMove m) s
+              return (mj, s')
           fenColor = movingColor fen
           myCol = if even (length mvs) then fenColor else other fenColor
 
-stateFromFen :: Pos -> Cache -> History -> EvalState -> MyState
-stateFromFen StartPos  c h es = posToState initPos c h es
-stateFromFen (Pos fen) c h es = posToState (posFromFen fen) c h es
+stateFromFen :: Pos -> Cache -> History -> EvalState -> (Maybe Int, MyState)
+stateFromFen StartPos  c h es = (Just 1,  posToState initPos c h es)
+stateFromFen (Pos fen) c h es = (Nothing, posToState (posFromFen fen) c h es)
 
 movingColor :: Pos -> Color
 movingColor fen
@@ -517,7 +523,7 @@ searchTheTree tief mtief timx tim tpm mtg lsc lpv rmvs = do
     modifyChanging (\c -> c { crtStatus = stfin })
     currms <- lift $ currMilli (startSecond ctx)
     let (ms', mx, urg) = compTime tim tpm mtg sc
-    ms <- if urg || null path then return ms' else correctTime tief ms' sc path
+    ms <- if urg || null path then return ms' else correctTime tief (reduceBegin (realPly chg) ms') sc path
     let strtms = srchStrtMs chg
         delta = strtms + ms - currms
         ms2 = ms `div` 2
@@ -597,6 +603,11 @@ timeFactor tp cha draft tim osc sc chgs mvs = round $ fromIntegral tim * min (tp
           scf  = let scdiff = osc - sc
                  in tpScScale tp * fromIntegral (scdiff * scdiff * draft)	-- score change factor
           chf  = tpChScale tp * fromIntegral (chgs * length mvs * draft)	-- change factor
+
+reduceBegin :: Maybe Int -> Int -> Int
+reduceBegin mi ms | Just i <- mi,
+                    i < 10    = (ms * i) `div` 10
+                  | otherwise = ms
 
 storeBestMove :: [Move] -> Int -> CtxIO ()
 storeBestMove mvs sc = do
