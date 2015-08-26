@@ -44,6 +44,7 @@ evalItems = [ EvIt Material,	-- material balance (i.e. white - black material
               EvIt LastLine,	-- malus for pieces on last line (except rooks and king)
               EvIt Mobility,	-- pieces mobility
               EvIt Center,	-- attacs of center squares
+              EvIt Advers,	-- attacs of adverse squares
               EvIt RookPlc,	-- rooks points for placements
               EvIt EnPrise,	-- when not quiescent - pieces en prise
               -- EvIt NRCorrection,	-- material correction for knights & rooks
@@ -501,6 +502,22 @@ centerDiff p ew mide = mad (mad (mad (mad (mad (mad mide (ewCenterPAtts ew) pd) 
           !yka = popCount $ yoKAttacs p .&. center
           !kd  = mka - yka
           center = 0x0000001818000000
+
+-------- Attacks to adverse squares ----------
+data Advers = Advers
+
+instance EvalItem Advers where
+    evalItem _ _ ew p _ mide = adversDiff p ew mide
+
+adversDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
+adversDiff p ew mide = mad mide (ewAdvAtts ew) ad
+    where !ad = md - yd
+          !md = popCount $ myAttacs p .&. yoH
+          !yd = popCount $ yoAttacs p .&. myH
+          (myH, yoH) | moving p == White = (ah14, ah58)
+                     | otherwise         = (ah58, ah14)
+          ah14 = 0xFFFFFFFF
+          ah58 = 0xFFFFFFFF00000000
 
 -------- Isolated pawns --------
 data Izolan = Izolan
