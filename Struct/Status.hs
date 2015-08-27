@@ -188,7 +188,7 @@ instance CollectParams EvalWeights where
           ewCenterRAtts     = tme 11 36,
           ewCenterQAtts     = tme  4 62,
           ewCenterKAtts     = tme  0 56,
-          ewAdvAtts         = tme  8 12,
+          ewAdvAtts         = tme  3 16,
           ewIsolPawns       = tme (-38) (-119),
           ewIsolPassed      = tme (-60) (-153),
           ewBackPawns       = tme (-102) (-182),
