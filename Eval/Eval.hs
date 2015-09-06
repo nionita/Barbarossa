@@ -229,45 +229,6 @@ kingSafe !p !ew !mide = madm mide (ewKingSafe ew) ksafe
     where !ksafe = ksSide (yo p) (yoKAttacs p) (myPAttacs p) (myNAttacs p) (myBAttacs p) (myRAttacs p) (myQAttacs p) (myKAttacs p) (myAttacs p)
                  - ksSide (me p) (myKAttacs p) (yoPAttacs p) (yoNAttacs p) (yoBAttacs p) (yoRAttacs p) (yoQAttacs p) (yoKAttacs p) (yoAttacs p)
 
-{--
-          !freem = popCount $ myKAttacs p `less` (yoAttacs p .|. me p)
-          !freey = popCount $ yoKAttacs p `less` (myAttacs p .|. yo p)
-          flag k a = if k .&. a /= 0 then 1 else 0
-          qual k a = popCount $ k .&. a
-          flagYo = flag (myKAttacs p)
-          flagMe = flag (yoKAttacs p)
-          qualYo = qual (myKAttacs p)
-          qualMe = qual (yoKAttacs p)
-          ($:) = flip ($)
-          attsm = map (p $:) [ myPAttacs, myNAttacs, myBAttacs, myRAttacs, myQAttacs, myKAttacs ]
-          !ixm = max 0 $ min 63 $ (fm * cm) `unsafeShiftR` 2 - freey
-          attsy = map (p $:) [ yoPAttacs, yoNAttacs, yoBAttacs, yoRAttacs, yoQAttacs, yoKAttacs ]
-          !ixy = max 0 $ min 63 $ (fy * cy) `unsafeShiftR` 2 - freem
-          !mattacs = attCoef `unsafeAt` ixm
-          !yattacs = attCoef `unsafeAt` ixy
-          qualWeights = [1, 2, 2, 4, 8, 2]
-          !(Flc fm cm) = sumCount flagMe qualMe $ zip attsm qualWeights
-          !(Flc fy cy) = sumCount flagYo qualYo $ zip attsy qualWeights
-
-{-# INLINE ksSide #-}
-ksSide :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
-ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
-    | myq == 0  = 0
-    | otherwise = mattacs
-    where !freey = popCount $ yok `less` (mya .|. yop)
-          flag a = if yok .&. a /= 0 then 1 else 0
-          qual a = popCount $ yok .&. a
-          attsm  = [ myp, myn, myb, myr, myq, myk ]
-          !ixm   = max 0 $ min 63 $ (fm * cm) `unsafeShiftR` 2 - freey
-          !mattacs = attCoef `unsafeAt` ixm
-          qualWeights = [1, 2, 2, 4, 8, 2]
-          !(Flc fm cm) = sumCount flag qual $ zip attsm qualWeights
-
-{-# INLINE sumCount #-}
-sumCount :: (BBoard -> Int) -> (BBoard -> Int) -> [(BBoard, Int)] -> Flc
-sumCount flag qual = foldl' (\(Flc f c) (b, i) -> Flc (f + flag b) (c + i * qual b)) (Flc 0 0)
---}
-
 -- To make the sum and count in one pass
 data Flc = Flc !Int !Int
 
@@ -298,10 +259,16 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
 -- We want to eliminate "if yok .&. a /= 0 ..."
 -- by using an array
 flaCoef :: UArray Int Int
-flaCoef = listArray (0, 7) [ 0, 1, 1, 1, 1, 1, 1, 1 ]
+flaCoef = listArray (0, 8) [ 0, 1, 1, 1, 1, 1, 1, 1, 1 ]
 
+-- We take the maximum of 240 because:
+-- Quali max: 8 * (1 + 2 + 2 + 4 + 8 + 2) < 160
+-- Flag max: 6
+-- 6 * 160 / 4 = 240
+-- Here the beginning of -8 is actually wrong, which comes to the same
+-- as increasing the importance of king safety
 attCoef :: UArray Int Int
-attCoef = listArray (-8, 120) $ [ f x | x <- [0..63] ] ++ repeat (f 63)
+attCoef = listArray (-8, 240) $ [ f x | x <- [0..63] ] ++ repeat (f 63)
     where f :: Int -> Int
           f x = let y = fromIntegral x :: Double in round $ (2.92968750 - 0.03051758*y)*y*y
 
