@@ -1135,14 +1135,8 @@ reduceLmr :: Int -> Bool -> Bool -> Int -> Int -> Int
 reduceLmr !d nearmatea !spec !exd !w
     | not lmrActive || spec || exd > 0
         || d <= 1 || w <= lmrMvs1 || nearmatea = d
-    | d <= 2 || w <= lmrMvs2 = d - 1
-    | d <= 3 || w <= lmrMvs3 = d - 2
-    | d <= 4 || w <= lmrMvs4 = d - 3
-    | otherwise              = d - 4
-    where lmrMvs1  =  4	-- unreduced quiet moves
-          lmrMvs2  =  8	-- reduced by max 1 (2xprev-1)
-          lmrMvs3  = 16	-- reduced by max 2
-          lmrMvs4  = 32	-- reduced by max 3
+    | otherwise = min 1 $ d - 1 - ((w - lmrMvs1) `unsafeShiftR` 2)
+    where lmrMvs1  =  2	-- unreduced quiet moves
 
 {--
 -- The UnsafeIx inspired from GHC.Arr (class Ix)
