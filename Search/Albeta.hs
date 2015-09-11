@@ -70,7 +70,7 @@ lmrActive, lmrDebug :: Bool
 lmrActive   = True
 lmrDebug    = False
 lmrInitLv, lmrInitLim, lmrLevMin, lmrLevMax :: Int
-lmrInitLv   = 9
+lmrInitLv   = 8
 lmrInitLim  = 16500
 lmrLevMin   = 0
 lmrLevMax   = 15
@@ -79,13 +79,13 @@ lmrLevMax   = 15
 -- Lower levels (towards 0) means less reductions, higher - more
 lmrArr :: UArray (Int, Int) Int
 lmrArr = array ((lmrLevMin, 0), (lmrLevMax, 255))
-               [ ((l, i), varImp (1+lmrLevMax-l) i) | l <- [lmrLevMin..lmrLevMax], i <- [0..255]]
+               [ ((l, i), varImp (3+lmrLevMax-l) i) | l <- [lmrLevMin..lmrLevMax], i <- [0..255]]
 
+-- Here b == 1 is not good, too sharp
 varImp :: Int -> Int -> Int
 varImp = go 0
     where go !lev !b !i | i <= b    = lev
-                        | b == 1    = lev + i - 1
-                        | otherwise = go (lev+1) (b-1) (i-b)
+                        | otherwise = go (lev+1) (b*10 `div` 7) (i-b)
 
 -- Parameters for futility pruning:
 maxFutilDepth :: Int
@@ -1176,11 +1176,11 @@ moreLMR more !d = do
     if i1 < 0
        then if lmrlv s <= lmrLevMin
                then put s { lmrhi = find (lmrhi s), lmrrs = 0 }
-               else put s { lmrlv = lmrlv s - 1 }
+               else put s { lmrlv = lmrlv s - 1, lmrrs = 0 }
        else if i1 > lmrhi s
                then if lmrlv s >= lmrLevMax
                        then put s { lmrhi = fdir (lmrhi s), lmrrs = 0 }
-                       else put s { lmrlv = lmrlv s + 1 }
+                       else put s { lmrlv = lmrlv s + 1, lmrrs = 0 }
                else put s { lmrrs = i1 }
     where fdir x = x `unsafeShiftL` 2
           find x = max 1 $ x `unsafeShiftR` 1
