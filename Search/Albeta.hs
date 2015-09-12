@@ -71,7 +71,7 @@ lmrActive   = True
 lmrDebug    = False
 lmrInitLv, lmrInitLim, lmrLevMin, lmrLevMax :: Int
 lmrInitLv   = 8
-lmrInitLim  = 16500
+lmrInitLim  = 8500
 lmrLevMin   = 0
 lmrLevMax   = 15
 
@@ -79,13 +79,15 @@ lmrLevMax   = 15
 -- Lower levels (towards 0) means less reductions, higher - more
 lmrArr :: UArray (Int, Int) Int
 lmrArr = array ((lmrLevMin, 0), (lmrLevMax, 255))
-               [ ((l, i), varImp (3+lmrLevMax-l) i) | l <- [lmrLevMin..lmrLevMax], i <- [0..255]]
+               [ ((l, i), varImp (fromIntegral (1+lmrLevMax-l)) (fromIntegral i))
+                    | l <- [lmrLevMin..lmrLevMax], i <- [0..255]]
 
 -- Here b == 1 is not good, too sharp
-varImp :: Int -> Int -> Int
-varImp = go 0
-    where go !lev !b !i | i <= b    = lev
-                        | otherwise = go (lev+1) (b*10 `div` 7) (i-b)
+varImp :: Double -> Double -> Int
+varImp lev w = round $ go 0 lev w
+    where go :: Double -> Double -> Double -> Double
+          go !lv !b !i | i <= b    = lv
+                       | otherwise = go (lv+1) (b*1.2) (i-b)
 
 -- Parameters for futility pruning:
 maxFutilDepth :: Int
