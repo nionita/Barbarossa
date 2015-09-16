@@ -213,10 +213,6 @@ data Path
          pathOrig  :: String
       } deriving Show
 
-staleMate, matedPath :: Path
-staleMate = Path { pathScore = 0, pathDepth = 0, pathMoves = Seq [], pathOrig = "stale mate" }
-matedPath = Path { pathScore = -mateScore, pathDepth = 0, pathMoves = Seq [], pathOrig = "mated" }
-
 -- Making a path from a plain score:
 pathFromScore :: String -> Int -> Path
 pathFromScore ori s = Path { pathScore = s, pathDepth = 0, pathMoves = Seq [], pathOrig = ori }
@@ -630,7 +626,9 @@ pvSearch nst !a !b !d = do
        then do
            let ttpath = Path { pathScore = hsc, pathDepth = hdeep,
                                pathMoves = Seq [e'], pathOrig = "TT" }
-           reSucc nodes' >> return ttpath
+           reSucc nodes'
+           when (tp /= 0) $ lift $ bestMoveStatistics . head . unseq . pathMoves $ ttpath
+           return ttpath
        else do
            -- Here: when ab we should do null move search
            -- Use the found TT move as best move
@@ -639,12 +637,7 @@ pvSearch nst !a !b !d = do
                          else nst
            edges <- genAndSort nst' a b d
            if noMove edges
-              then do
-                chk <- lift tacticalPos
-                let s' = if chk then matedPath else staleMate
-                viztreeScore $ "noMove: " ++ show (pathScore s')
-                pindent $ "<= " ++ show s'
-                return $! trimaxPath a b s'	-- why trimax??
+              then mateStaleMate a b
               else do
                 nodes0 <- gets (sNodes . stats)
                 -- Here: when ab we should do futility pruning
@@ -658,25 +651,26 @@ pvSearch nst !a !b !d = do
                 -- After pvSLoop ... we expect always that s >= a - this must be checked if it is so
                 -- then it makes sense below to take bestPath when failed low (s == a)
                 abrt' <- gets abort
-                if abrt' || s > a
-                   then return s
-                   else do
-                       -- here we failed low
-                       let de = max d $ pathDepth s
-                           es = unalt edges
-                       when (de >= minToStore && not (null es)) $ do	-- what if es is null?
-                           nodes1 <- gets (sNodes . stats)
-                           -- store as upper score, and as move, the first one generated
-                           lift $ do
-                               let typ = 0
-                                   !deltan = nodes1 - nodes0
-                               ttStore de typ (pathScore a) (head es) deltan	-- should be d or de?
-                       if movno nstf > 1
-                           then return $! bestPath s a "2"
+                if abrt'
+                   then return s	-- it doesn't matter
+                   else if s > a
+                           then do
+                               lift $ bestMoveStatistics . head . unseq . pathMoves $ s
+                               return s
                            else do
-                               chk <- lift tacticalPos
-                               let s' = if chk then matedPath else staleMate
-                               return $! trimaxPath a b s'	-- why trimax??
+                               -- here we failed low
+                               let de = max d $ pathDepth s
+                                   es = unalt edges
+                               when (de >= minToStore && not (null es)) $ do	-- what if es is null?
+                                   nodes1 <- gets (sNodes . stats)
+                                   -- store as upper score, and as move, the first one generated
+                                   lift $ do
+                                       let typ = 0
+                                           !deltan = nodes1 - nodes0
+                                       ttStore de typ (pathScore a) (head es) deltan	-- should be d or de?
+                               if movno nstf > 1
+                                 then return $! bestPath s a "2"
+                                 else mateStaleMate a b
 
 -- PV Zero Window
 pvZeroW :: NodeState -> Path -> Int -> Int -> Bool -> Search Path
@@ -699,9 +693,11 @@ pvZeroW !nst !b !d !lastnull redu = do
               else return (-1, 0, 0, undefined, 0)
     let bsco = pathScore b
     if hdeep >= d && (tp == 2 || tp == 1 && hsc >= bsco || tp == 0 && hsc < bsco)
-       then  do
+       then do
            let ttpath = Path { pathScore = hsc, pathDepth = hdeep, pathMoves = Seq [e'], pathOrig = "TT" }
-           reSucc nodes' >> return ttpath
+           reSucc nodes'
+           when (tp /= 0) $ lift $ bestMoveStatistics . head . unseq . pathMoves $ ttpath
+           return ttpath
        else do
            nmhigh <- nullMoveFailsHigh nst b d lastnull
            abrt <- gets abort
@@ -720,12 +716,7 @@ pvZeroW !nst !b !d !lastnull redu = do
                                   else nst
                     edges <- genAndSort nst' bGrain b d
                     if noMove edges
-                       then do
-                         chk <- lift tacticalPos
-                         let s' = if chk then matedPath else staleMate
-                         viztreeScore $ "noMove: " ++ show (pathScore s')
-                         pindent $ "<= " ++ show s'
-                         return $! trimaxPath bGrain b s'
+                       then mateStaleMate bGrain b
                        else do
                          !nodes0 <- gets (sNodes . stats)
                          -- futility pruning:
@@ -748,13 +739,29 @@ pvZeroW !nst !b !d !lastnull redu = do
                                  let typ = 0
                                      !deltan = nodes1 - nodes0
                                  ttStore de typ (pathScore b) (head es) deltan
-                         if s > bGrain || movno nstf > 1
-                            then return s
-                            else do	-- here: store exact mate or stalemate score!
-                                chk <- lift tacticalPos
-                                let s' = if chk then matedPath else staleMate
-                                return $! trimaxPath bGrain b s'
+                         if s > bGrain
+                            then do -- beta cut
+                                lift $ bestMoveStatistics . head . unseq . pathMoves $ s
+                                return s
+                            else if movno nstf > 1
+                                    then return s	-- failed low, but have a legal move
+                                    else mateStaleMate bGrain b
     where bGrain = b -: scoreGrain
+
+{-# INLINE mateStaleMate #-}
+mateStaleMate :: Path -> Path -> Search Path
+mateStaleMate a b = do
+    chk <- lift tacticalPos
+    if chk
+       then do
+           viztreeScore $ "noMove: mated"
+           pindent $ "<< mated"
+           return $! onlyScore a	-- mated is less than lower score
+       else do
+           viztreeScore $ "noMove: stale mated"
+           pindent $ "<< stale mated"
+           return $! trimaxPath a b staleMate
+    where staleMate = Path { pathScore = 0, pathDepth = 0, pathMoves = Seq [], pathOrig = "stale mate" }
 
 data NullMoveResult = NoNullMove | NullMoveHigh | NullMoveLow | NullMoveThreat Path
 

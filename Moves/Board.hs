@@ -5,7 +5,7 @@ module Moves.Board (
     goPromo, hasMoves, moveIsCapture,
     castKingRookOk, castQueenRookOk,
     genMoveCast, genMoveNCapt, genMoveTransf, genMoveFCheck, genMoveCaptWL,
-    genMoveNCaptToCheck,
+    genMoveNCaptToCheck, reCapture,
     updatePos, checkOk, moveChecks,
     legalMove, alternateMoves,
     doFromToMove, reverseMoving
@@ -877,3 +877,13 @@ addHanging pos vict to from (wsqs, lsqs)
 
 addHangingP :: Piece -> Square -> Square -> ([LMove], [LMove]) -> ([LMove], [LMove])
 addHangingP vict to from (wsqs, lsqs) = ((moveToLMove Pawn vict $ makePromo Queen from to) : wsqs, lsqs)
+
+-- Recaptures: as a first approximation for best move, the (re)capture of the last
+-- moved piece can be tried, if it is winning or equal
+reCapture :: MyPos -> Maybe Move -> [Move] -> [Move]
+reCapture _ _ ms = ms
+-- reCapture p mym ms
+--    | Just ym <- mym,
+--      bsq <- uBit (toMove ym),
+--      bsq .&. myAttacs p /= 0 = recapt p (movePiece ym) bsq ms
+--    | otherwise               = ms

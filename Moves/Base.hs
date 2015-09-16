@@ -12,7 +12,7 @@ module Moves.Base (
     staticVal, materVal, tacticalPos, isMoveLegal, isKillCand, isTKillCand, okInSequence,
     betaCut, doNullMove, ttRead, ttStore, curNodes, chooseMove, isTimeout, informCtx,
     mateScore, scoreDiff,
-    finNode,
+    finNode, bestMoveStatistics,
     showMyPos, logMes,
     nearmate	-- , special
 ) where
@@ -60,7 +60,7 @@ curNodes = gets (nodes . stats)
 
 {-# INLINE getPos #-}
 getPos :: Game MyPos
-getPos = gets (head . stack)
+getPos = gets (snd . head . stack)
 
 {-# INLINE informCtx #-}
 informCtx :: Comm -> Game ()
@@ -68,18 +68,22 @@ informCtx = lift . talkToContext
 
 posToState :: MyPos -> Cache -> History -> EvalState -> MyState
 posToState p c h e = MyState {
-                       stack = [p''],
+                       stack = [(Nothing, p'')],
                        hash = c,
                        hist = h,
+                       bmsts = bms0,
                        stats = stats0,
                        evalst = e
                    }
     where stsc = evalState (posEval p) e
           p'' = p { staticScore = stsc }
           stats0 = Stats { nodes = 0, maxmvs = 0 }
+          bms0 = BMStats { bmAll  = 0, bmOcc1 = 0, bmUnb1 = 0, bmCap2 = 0,
+                           bmPro2 = 0, bmRet2 = 0, bmAtt2 = 0, bmOcc3 = 0,
+                           bmUnb3 = 0 }
 
 posNewSearch :: MyState -> MyState
-posNewSearch p = p { hash = newGener (hash p) }
+posNewSearch s = s { hash = newGener (hash s) }
 
 -- debugGen :: Bool
 -- debugGen = False
@@ -89,7 +93,7 @@ loosingLast = True
 
 genMoves :: Game ([Move], [Move])
 genMoves = do
-    p <- getPos
+    (mym, p) <- gets $ head . stack
     let !c = moving p
         lc = genMoveFCheck p
     if isCheck p c
@@ -97,8 +101,9 @@ genMoves = do
        else do
             let l0 = genMoveCast p
                 l1 = genMoveTransf p
-                (l2w, l2l) = genMoveCaptWL p
-                l3'= genMoveNCapt p
+                (l2w', l2l) = genMoveCaptWL p
+                l2w = reCapture p mym l2w'	-- consider winning or equal recaptures first
+                l3' = genMoveNCapt p
             l3 <- sortMovesFromHist l3'
             return $! if loosingLast
                          then (l1 ++ l2w, l0 ++ l3 ++ l2l)
@@ -177,7 +182,7 @@ uBitClear bb sq = bb .&. (1 `unsafeShiftL` sq) == 0
 doRealMove :: Move -> Game DoResult
 doRealMove m = do
     s  <- get
-    let (pc:_) = stack s	-- we never saw an empty stack error until now
+    let ((_,pc):_) = stack s	-- we never saw an empty stack error until now
         !m1 = checkCastle (checkEnPas m pc) pc
         -- Moving a non-existent piece?
         il = occup pc `uBitClear` fromSquare m1
@@ -198,7 +203,7 @@ doRealMove m = do
        else if not cok
                then return Illegal
                else do
-                   put s { stack = p' : stack s }
+                   put s { stack = (Just m, p') : stack s }
                    return $ Exten 0 False
 
 -- Move from a node to a descendent - the search version
@@ -207,8 +212,7 @@ doMove m qs = do
     -- logMes $ "** doMove " ++ show m
     statNodes   -- when counting all visited nodes
     s  <- get
-    -- let pc = if null (stack s) then error "doMove" else head $ stack s
-    let (pc:_) = stack s	-- we never saw an empty stack error until now
+    let ((_,pc):_) = stack s	-- we never saw an empty stack error until now
         -- Moving a non-existent piece?
         il = occup pc `uBitClear` fromSquare m
         -- Capturing one king?
@@ -231,7 +235,7 @@ doMove m qs = do
                    -- bigCheckPos "doMove" pc (Just m) p'
                    let sts = evalState (posEval p') (evalst s)
                        p = p' { staticScore = sts }
-                   put s { stack = p : stack s }
+                   put s { stack = (Just m, p) : stack s }
                    remis <- if qs then return False else checkRemisRules p'
                    if remis
                       then return $ Final 0
@@ -243,12 +247,12 @@ doNullMove :: Game ()
 doNullMove = do
     -- logMes "** doMove null"
     s <- get
-    let !p0 = if null (stack s) then error "doNullMove" else head $ stack s
+    let !p0 = if null (stack s) then error "doNullMove" else snd . head $ stack s
         !p' = reverseMoving p0
         !sts = evalState (posEval p') (evalst s)
         !p = p' { staticScore = sts }
     -- bigCheckPos "doNullMove" p0 Nothing p'
-    put s { stack = p : stack s }
+    put s { stack = (Nothing, p) : stack s }
 
 {-- Activae when used:
 bigCheckPos :: String -> MyPos -> Maybe Move -> MyPos -> Game ()
@@ -275,7 +279,7 @@ checkRemisRules p = do
     if remis50Moves p
        then return True
        else do	-- check repetition rule
-         let revers = map zobkey $ takeWhile isReversible $ stack s
+         let revers = map zobkey $ takeWhile isReversible $ map snd $ stack s
              equal  = filter (== zobkey p) revers	-- if keys are equal, pos is equal
          case equal of
             (_:_:_)    -> return True
@@ -297,6 +301,7 @@ undoMove :: Game ()
 undoMove = do
     -- logMes "** undoMove"
     modify $ \s -> s { stack = tail $ stack s }
+
 
 -- Tactical positions will be searched complete in quiescent search
 -- Currently only when in in check
@@ -345,7 +350,7 @@ finNode :: String -> Bool -> Game ()
 finNode str force = do
     s <- get
     when (printEvalInt /= 0 && (force || nodes (stats s) .&. printEvalInt == 0)) $ do
-        let (p:_) = stack s	-- we never saw an empty stack error until now
+        let ((_,p):_) = stack s	-- we never saw an empty stack error until now
             fen = posToFen p
             -- mv = case tail $ words fen of
             --          mv':_ -> mv'
@@ -439,8 +444,8 @@ scoreDiff :: Game Int
 scoreDiff = do
     s <- get
     case stack s of
-        (p1:p2:_) -> return $! negate (staticScore p1 + staticScore p2)
-        _         -> return 0
+        ((_,p1):(_,p2):_) -> return $! negate (staticScore p1 + staticScore p2)
+        _                 -> return 0
 
 {--
 showChoose :: [] -> Game ()
@@ -480,8 +485,23 @@ isTimeout msx = do
     curr <- lift timeFromContext
     return $! msx < curr
 
-showStack :: Int -> [MyPos] -> String
-showStack n = concatMap showMyPos . take n
+-- We count now only the recaptures
+bestMoveStatistics :: Move -> Game ()
+bestMoveStatistics m = do
+    s <- get
+    case stack s of
+        (Nothing, _):_ -> return ()
+        (Just ym, _):_ -> do
+            let bms0  = bmsts s
+                bmall = bmAll bms0 + 1
+            if toSquare ym /= toSquare m
+               then put s { bmsts = bms0 { bmAll = bmall } }
+               else put s { bmsts = bms0 { bmAll = bmall, bmCap2 = bmCap2 bms0 + 1 } }
+        _ -> return ()	-- just for completeness...
+
+-- This could show also the move...
+showStack :: Int -> [(Maybe Move, MyPos)] -> String
+showStack n = concatMap showMyPos . take n . map snd
 
 talkToContext :: Comm -> CtxIO ()
 talkToContext (LogMes s)       = ctxLog LogInfo s

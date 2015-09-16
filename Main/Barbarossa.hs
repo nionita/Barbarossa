@@ -38,7 +38,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.3.0"
-progVerSuff = "ksqc"
+progVerSuff = "reca"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -539,6 +539,7 @@ searchTheTree tief mtief timx tim tpm mtg lsc lpv rmvs = do
         then do
             when depthmax $ ctxLog LogInfo "in searchTheTree: max depth reached"
             giveBestMove path
+            perMoveStats
             return sc
         else do
             chg' <- readChanging
@@ -550,6 +551,17 @@ searchTheTree tief mtief timx tim tpm mtg lsc lpv rmvs = do
                     ctxLog DebugUci "in searchTheTree: not working"
                     giveBestMove path -- was stopped
                     return sc
+
+-- Per move statistics:
+perMoveStats :: CtxIO ()
+perMoveStats = do
+    chg <- readChanging
+    let bmsf = bmsts $ crtStatus chg
+        pc :: Double
+        pc = fromIntegral (bmCap2 bmsf) * 100 / fromIntegral (bmAll bmsf)
+    ctxLog LogInfo $ "Best move statistics: total = " ++ show (bmAll bmsf)
+                     ++ ", recaptures = " ++ show (bmCap2 bmsf)
+                     ++ ", percentage = " ++ show pc
 
 -- We assume here that we always have at least the first move of the PV (our best)
 -- If not (which is a fatal error) we will get an exception (head of empty list)

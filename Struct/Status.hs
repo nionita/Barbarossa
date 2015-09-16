@@ -3,6 +3,7 @@
 
 module Struct.Status (
     Stats(..),
+    BMStats(..),
     MyState(..),
     EvalState(..),
     EvalParams(..),
@@ -22,10 +23,11 @@ data Stats = Stats {
     } deriving Show
 
 data MyState = MyState {
-        stack :: [MyPos],	-- stack of played positions
+        stack :: [(Maybe Move, MyPos)],	-- stack of played moves & resulting positions
         hash  :: Cache,		-- transposition table
         hist  :: History,	-- history table
         stats :: !Stats,	-- statistics
+        bmsts :: !BMStats,	-- best move statistics
         evalst :: EvalState	-- eval status (parameter & statistics)
     }
 
@@ -33,6 +35,18 @@ data EvalState = EvalState {
         esEParams   :: EvalParams,
         esEWeights  :: EvalWeights
     } deriving Show
+
+data BMStats = BMStats {
+        bmAll  :: !Int,	-- all calls to statistics
+        bmOcc1 :: !Int,	-- occup type 1
+        bmUnb1 :: !Int,	-- unblock type 1
+        bmCap2 :: !Int,	-- (re)capture (type 2)
+        bmPro2 :: !Int,	-- protect (type 2)
+        bmRet2 :: !Int,	-- retire (type 2)
+        bmAtt2 :: !Int,	-- attack (type 2)
+        bmOcc3 :: !Int,	-- occup type 3
+        bmUnb3 :: !Int	-- unblock type 3
+    }
 
 data MidEnd = MidEnd { mid, end :: !Int } deriving Show
 
