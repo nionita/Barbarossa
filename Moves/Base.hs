@@ -71,16 +71,16 @@ posToState p c h e = MyState {
                        stack = [(Nothing, p'')],
                        hash = c,
                        hist = h,
-                       bmsts = bms0,
+                       -- bmsts = bms0,
                        stats = stats0,
                        evalst = e
                    }
     where stsc = evalState (posEval p) e
           p'' = p { staticScore = stsc }
           stats0 = Stats { nodes = 0, maxmvs = 0 }
-          bms0 = BMStats { bmAll  = 0, bmOcc1 = 0, bmUnb1 = 0, bmCap2 = 0,
-                           bmPro2 = 0, bmRet2 = 0, bmAtt2 = 0, bmOcc3 = 0,
-                           bmUnb3 = 0 }
+          -- bms0 = BMStats { bmAll  = 0, bmOcc1 = 0, bmUnb1 = 0, bmCap2 = 0,
+          --                  bmPro2 = 0, bmRet2 = 0, bmAtt2 = 0, bmOcc3 = 0,
+          --                  bmUnb3 = 0 }
 
 posNewSearch :: MyState -> MyState
 posNewSearch s = s { hash = newGener (hash s) }
@@ -112,10 +112,11 @@ genMoves = do
 -- Generate only tactical moves, i.e. promotions, captures & check escapes
 genTactMoves :: Game [Move]
 genTactMoves = do
-    p <- getPos
+    (mym, p) <- gets $ head . stack
     let !c = moving p
         l1 = genMoveTransf p
-        (l2w, _) = genMoveCaptWL p
+        (l2w', _) = genMoveCaptWL p
+        l2w = reCapture p mym l2w'
         lc = genMoveFCheck p
         !mvs | isCheck p c = lc
              | otherwise   = l1 ++ l2w
@@ -487,6 +488,8 @@ isTimeout msx = do
 
 -- We count now only the recaptures
 bestMoveStatistics :: Move -> Game ()
+bestMoveStatistics _ = return ()
+{--
 bestMoveStatistics m = do
     s <- get
     case stack s of
@@ -498,6 +501,7 @@ bestMoveStatistics m = do
                then put s { bmsts = bms0 { bmAll = bmall } }
                else put s { bmsts = bms0 { bmAll = bmall, bmCap2 = bmCap2 bms0 + 1 } }
         _ -> return ()	-- just for completeness...
+--}
 
 -- This could show also the move...
 showStack :: Int -> [(Maybe Move, MyPos)] -> String

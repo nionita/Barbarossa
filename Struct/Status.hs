@@ -27,7 +27,7 @@ data MyState = MyState {
         hash  :: Cache,		-- transposition table
         hist  :: History,	-- history table
         stats :: !Stats,	-- statistics
-        bmsts :: !BMStats,	-- best move statistics
+        -- bmsts :: !BMStats,	-- best move statistics
         evalst :: EvalState	-- eval status (parameter & statistics)
     }
 

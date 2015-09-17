@@ -881,9 +881,23 @@ addHangingP vict to from (wsqs, lsqs) = ((moveToLMove Pawn vict $ makePromo Quee
 -- Recaptures: as a first approximation for best move, the (re)capture of the last
 -- moved piece can be tried, if it is winning or equal
 reCapture :: MyPos -> Maybe Move -> [Move] -> [Move]
-reCapture _ _ ms = ms
--- reCapture p mym ms
---    | Just ym <- mym,
---      bsq <- uBit (toMove ym),
---      bsq .&. myAttacs p /= 0 = recapt p (movePiece ym) bsq ms
---    | otherwise               = ms
+reCapture p mym ms
+    | Just ym <- mym,
+      sq  <- toSquare ym,
+      bsq <- uBit sq,
+      bsq .&. myAttacs p /= 0 = recapt (movePiece ym) sq bsq
+    | otherwise               = ms
+    where recapt vict sq bsq
+              -- | hang || apprx || adv <= gain0 = ss : delete ss ms
+              | hang || apprx                 = ss : delete ss ms
+              | otherwise                     = ms
+              where hang  = bsq .&. yoAttacs p == 0
+                    apprx = approximateEasyCapts && gain0 >= v0
+                    gain0 = value vict
+                    att   = theAttacs p sq
+                    mya   = atAtt att .&. me p
+                    (cat, v0) = chooseAttacker p mya
+                    sqfa  = firstOne cat
+                    Busy _ attc = tabla p sqfa
+                    ss    = moveAddPiece attc $ moveFromTo sqfa sq
+                    -- adv   = seeMoveValue p att sqfa sq v0

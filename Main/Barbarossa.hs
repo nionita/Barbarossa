@@ -554,6 +554,8 @@ searchTheTree tief mtief timx tim tpm mtg lsc lpv rmvs = do
 
 -- Per move statistics:
 perMoveStats :: CtxIO ()
+perMoveStats = return ()
+{--
 perMoveStats = do
     chg <- readChanging
     let bmsf = bmsts $ crtStatus chg
@@ -562,6 +564,7 @@ perMoveStats = do
     ctxLog LogInfo $ "Best move statistics: total = " ++ show (bmAll bmsf)
                      ++ ", recaptures = " ++ show (bmCap2 bmsf)
                      ++ ", percentage = " ++ show pc
+--}
 
 -- We assume here that we always have at least the first move of the PV (our best)
 -- If not (which is a fatal error) we will get an exception (head of empty list)
