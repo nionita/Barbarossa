@@ -878,6 +878,28 @@ addHanging pos vict to from (wsqs, lsqs)
 addHangingP :: Piece -> Square -> Square -> ([LMove], [LMove]) -> ([LMove], [LMove])
 addHangingP vict to from (wsqs, lsqs) = ((moveToLMove Pawn vict $ makePromo Queen from to) : wsqs, lsqs)
 
+-- For recaptures we use a simplified form for choosing the attacker, as
+-- all we need we already have calculated and need just to compare
+recaAttacker :: MyPos -> BBoard -> Piece -> (Piece, BBoard)
+recaAttacker pos vbb = go
+    where go Pawn   = accept Pawn   (myPAttacs pos) (pawns   pos)
+          go Knight = go Pawn
+                  <-> accept Knight (myNAttacs pos) (knights pos)
+                  <-> accept Bishop (myBAttacs pos) (bishops pos)
+          go Bishop = go Knight
+          go Rook   = go Knight
+                  <-> accept Rook   (myRAttacs pos) (rooks   pos)
+          go Queen  = go Rook
+                  <-> accept Queen  (myQAttacs pos) (queens  pos)
+          go _      = (King, 0)	-- piece is never used (hopefully) here
+          accept pie att pcs | att .&. vbb == 0 = (pie, 0)
+                             | otherwise        = (pie, me pos .&. pcs)
+
+{-# INLINE (<->) #-}
+(<->) :: (Piece, BBoard) -> (Piece, BBoard) -> (Piece, BBoard)
+a <-> b | snd a /= 0 = a
+        | otherwise  = b
+
 -- Recaptures: as a first approximation for best move, the (re)capture of the last
 -- moved piece can be tried, if it is winning or equal
 reCapture :: MyPos -> Maybe Move -> [Move] -> [Move]
@@ -888,16 +910,16 @@ reCapture p mym ms
       bsq .&. myAttacs p /= 0 = recapt (movePiece ym) sq bsq
     | otherwise               = ms
     where recapt vict sq bsq
-              -- | hang || apprx || adv <= gain0 = ss : delete ss ms
-              | hang || apprx                 = ss : delete ss ms
-              | otherwise                     = ms
+              | hang      = hss : delete hss ms	-- hanging piece: any capture is good
+              | att /= 0  = sle : delete sle ms	-- winning or equal capture
+              | otherwise = ms			-- no winning capture found
               where hang  = bsq .&. yoAttacs p == 0
-                    apprx = approximateEasyCapts && gain0 >= v0
-                    gain0 = value vict
-                    att   = theAttacs p sq
-                    mya   = atAtt att .&. me p
-                    (cat, v0) = chooseAttacker p mya
-                    sqfa  = firstOne cat
-                    Busy _ attc = tabla p sqfa
-                    ss    = moveAddPiece attc $ moveFromTo sqfa sq
-                    -- adv   = seeMoveValue p att sqfa sq v0
+                    (hpie, hatt) = recaAttacker p bsq Queen
+                    hasq | hatt == 0 = firstOne $ kings p .&. me p
+                         | otherwise = sourceSquare hpie hatt
+                    hss   = moveAddPiece hpie $ moveFromTo hasq sq
+                    (attc, att)  = recaAttacker p bsq vict
+                    sqfa  = sourceSquare attc att
+                    sle   = moveAddPiece attc $ moveFromTo sqfa sq
+                    sourceSquare Pawn pibb = firstOne $ pAttacs (other $ moving p) sq .&. pibb
+                    sourceSquare pie  pibb = firstOne $ fAttacs sq pie (occup p) .&. pibb
