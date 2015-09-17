@@ -901,15 +901,15 @@ a <-> b | snd a /= 0 = a
         | otherwise  = b
 
 -- Recaptures: as a first approximation for best move, the (re)capture of the last
--- moved piece can be tried, if it is winning or equal
+-- moved piece can be tried, wether it is winning or not
 reCapture :: MyPos -> Maybe Move -> [Move] -> [Move]
 reCapture p mym ms
     | Just ym <- mym,
       sq  <- toSquare ym,
       bsq <- uBit sq,
-      bsq .&. myAttacs p /= 0 = recapt (movePiece ym) sq bsq
+      bsq .&. myAttacs p /= 0 = recapt sq bsq
     | otherwise               = ms
-    where recapt vict sq bsq
+    where recapt sq bsq
               | hang      = hss : delete hss ms	-- hanging piece: any capture is good
               | att /= 0  = sle : delete sle ms	-- winning or equal capture
               | otherwise = ms			-- no winning capture found
@@ -918,7 +918,7 @@ reCapture p mym ms
                     hasq | hatt == 0 = firstOne $ kings p .&. me p
                          | otherwise = sourceSquare hpie hatt
                     hss   = moveAddPiece hpie $ moveFromTo hasq sq
-                    (attc, att)  = recaAttacker p bsq vict
+                    (attc, att)  = recaAttacker p bsq Queen	-- all captures except King
                     sqfa  = sourceSquare attc att
                     sle   = moveAddPiece attc $ moveFromTo sqfa sq
                     sourceSquare Pawn pibb = firstOne $ pAttacs (other $ moving p) sq .&. pibb
