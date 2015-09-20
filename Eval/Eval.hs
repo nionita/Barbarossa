@@ -297,7 +297,11 @@ instance EvalItem KingOpen where
 -- Openness can be tought only with pawns (like we take) or all pieces
 kingOpen :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 kingOpen p ew mide = mad mide (ewKingOpen ew) ko
-    where !ko = adv - own
+    where !ko = koSide ysq (queens p .&. me p) (rooks p .&. me p) (pawns p)
+              - koSide msq (queens p .&. yo p) (rooks p .&. yo p) (pawns p)
+          !msq = kingSquare (kings p) $ me p
+          !ysq = kingSquare (kings p) $ yo p
+{--
           moprooks   = popCount $ rooks p .&. yo p
           mopqueens  = popCount $ queens p .&. yo p
           mwb = popCount $ bAttacs paw msq `less` paw
@@ -307,12 +311,24 @@ kingOpen p ew mide = mad mide (ewKingOpen ew) ko
           ywb = popCount $ bAttacs paw ysq `less` paw
           ywr = popCount $ rAttacs paw ysq `less` (paw .|. lastrs)
           paw = pawns p
-          msq = kingSquare (kings p) $ me p
-          ysq = kingSquare (kings p) $ yo p
           comb !oR !oQ !wb !wr = let !v = oR * wr + 2 * oQ * (wb + wr) in v
           own = comb moprooks mopqueens mwb mwr
           adv = comb yoprooks yopqueens ywb ywr
+--}
+
+koSide :: Square -> BBoard -> BBoard -> BBoard -> Int
+koSide sq que roo paw
+    | que == 0  = 0
+    | otherwise = v
+    where mopqueens = popCount que
+          moprooks  = popCount roo
+          mwb = popCount $ bAttacs paw sq `less` paw
+          mwr = popCount $ rAttacs paw sq `less` (paw .|. lastrs)
+          !v = moprooks * (openArr `unsafeAt` mwr) + 2 * mopqueens * (openArr `unsafeAt` (mwb + mwr))
           lastrs = 0xFF000000000000FF	-- approx: take out last row which cant be covered by pawns
+
+openArr :: UArray Int Int
+openArr = listArray (0, 27) $ [0, 1, 2, 8, 12, 13, 14 ] ++ repeat 15
 
 ------ King placement ------
 data KingPlace = KingPlace
@@ -332,13 +348,13 @@ kingPlace ep p ew mide = made (madm mide (ewKingPlaceCent ew) kcd) (ewKingPlaceP
           !mkm = materFun yminor yrooks yqueens
           !ykm = materFun mminor mrooks mqueens
           (!mpl, !ypl, !mpi, !ypi)
-              | moving p == White = ( kingMaterBonus White mpawns mkm mks
-                                    , kingMaterBonus Black ypawns ykm yks
+              | moving p == White = ( kingMaterBonus White mpawns mkm mks yqueens
+                                    , kingMaterBonus Black ypawns ykm yks mqueens
                                     , kingPawnsBonus mks (passed p) mpassed ypassed
                                     , kingPawnsBonus yks (passed p) mpassed ypassed
                                     )
-              | otherwise         = ( kingMaterBonus Black mpawns mkm mks
-                                    , kingMaterBonus White ypawns ykm yks
+              | otherwise         = ( kingMaterBonus Black mpawns mkm mks yqueens
+                                    , kingMaterBonus White ypawns ykm yks mqueens
                                     , kingPawnsBonus mks (passed p) ypassed mpassed
                                     , kingPawnsBonus yks (passed p) ypassed mpassed
                                     )
@@ -376,8 +392,9 @@ kingPawnsBonus !ksq !alp !wpass !bpass = bonus
 -- This is a bonus for the king beeing near one corner
 -- It's bigger when the enemy has more material (only pieces)
 -- and when that corner has a pawn shelter
-kingMaterBonus :: Color -> BBoard -> Int -> Square -> Int
-kingMaterBonus c !myp !mat !ksq
+kingMaterBonus :: Color -> BBoard -> Int -> Square -> Int -> Int
+kingMaterBonus c !myp !mat !ksq !yoque
+    | yoque == 0 = 0
     | c == White = matFactor mat * prxw
     | otherwise  = matFactor mat * prxb
     where !prxw = prxWA + prxWH
@@ -387,7 +404,7 @@ kingMaterBonus c !myp !mat !ksq
           !prxBA = (unsafeShiftL (opawns shBA7) 1 + opawns shBA6) * (prxBoQ ba + prxBo bb)
           !prxBH = (unsafeShiftL (opawns shBH7) 1 + opawns shBH6) * (prxBoQ bh + prxBo bg)
           opawns = popCount . (.&. myp)
-          prxBo  = proxyBonus . squareDistance ksq
+          prxBo  = proxyCorner . squareDistance ksq
           prxBoQ = flip unsafeShiftR 2 . prxBo
           matFactor = unsafeAt matKCArr
           -- The interesting squares and bitboards about king placement
@@ -413,14 +430,19 @@ kingMaterBonus c !myp !mat !ksq
           shBH7 = row7 .&. (fileF .|. fileG .|. fileH)
 
 -- Make it longer, for artificially increased distances
-proxyBonusArr :: UArray Int Int    -- 0   1  2  3  4  5  6  7
-proxyBonusArr = listArray (0, 15) $ [55, 20, 8, 4, 3, 2, 1] ++ repeat 0
+proxyBonusPwn :: UArray Int Int    -- 0   1  2  3  4  5  6  7
+proxyBonusPwn = listArray (0, 15) $ [41, 42, 21, 10, 5, 2, 1] ++ repeat 0
+proxyBonus :: Int -> Int
+proxyBonus = unsafeAt proxyBonusPwn
+
+proxyBonusCor :: UArray Int Int    -- 0   1  2  3  4  5  6  7
+proxyBonusCor = listArray (0, 15) $ [55, 21, 11, 5, 2, 1, 1] ++ repeat 0
+proxyCorner :: Int -> Int
+proxyCorner = unsafeAt proxyBonusCor
 
 matKCArr :: UArray Int Int   -- 0              5             10
 matKCArr = listArray (0, 63) $ [0, 0, 0, 1, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12] ++ repeat 12
 
-proxyBonus :: Int -> Int
-proxyBonus = unsafeAt proxyBonusArr
 
 {--
 proxyLineArr :: UArray Int Int -- 7  6  5  4  3  2   1   0   1   2   3  4  5  6  7
@@ -870,6 +892,7 @@ advPawns p ew mide = mad (mad mide (ewAdvPawn5 ew) ap5) (ewAdvPawn6 ew) ap6
 pawnEndGame :: MyPos -> Maybe Int
 pawnEndGame p
     -- | null mescds && null yescds             = Nothing
+    | myps >= 2 && yops == 0                 = Just $ promoBonus - distMalus mnp
     | not (null mescds) && not (null yescds) = Just dpr
     | not (null mescds)                      = Just myrace
     |                      not (null yescds) = Just yorace
@@ -878,23 +901,22 @@ pawnEndGame p
     -- and even with connected (or defended) passed pawns
     where !mfpbb = passed p .&. me p
           !yfpbb = passed p .&. yo p
+          !myps  = popCount mfpbb
+          !yops  = popCount yfpbb
           !myking = kingSquare (kings p) (me p)
           !yoking = kingSquare (kings p) (yo p)
           (escMe, escYo, maDiff)
               | moving p == White = (escMeWhite yoking, escYoBlack myking,   mater p)
               | otherwise         = (escMeBlack yoking, escYoWhite myking, - mater p)
           mpsqs  = map escMe $ bbToSquares mfpbb	-- my pp squares & distances to promotion
+          mnp = fst $ minimumBy (comparing snd) $ map snd mpsqs	-- nearest passed to promotion
           !mescds = map snd $ filter fst mpsqs		-- my escaped passed pawns
           ypsqs  = map escYo $ bbToSquares yfpbb	-- your pp squares & distances to promotion
           !yescds = map snd $ filter fst ypsqs		-- your escaped passed pawns
-          -- mesc = not . null $ mescds
-          -- yesc = not . null $ yescds
           dpr | mim < miy     =  promoBonus - distMalus mim
               | mim > miy + 1 = -promoBonus + distMalus miy
               | otherwise     =  withQueens     -- Here: this is more complex, e.g. if check while promoting
                                        -- or direct after promotion + queen capture?
-          -- (mim, msq) = minimumBy (comparing snd) mescds      -- who is promoting first?
-          -- (miy, ysq) = minimumBy (comparing snd) yescds
           mim = fst $ minimumBy (comparing snd) mescds      -- who is promoting first?
           miy = fst $ minimumBy (comparing snd) yescds
           myrace =  promoBonus - distMalus mim
