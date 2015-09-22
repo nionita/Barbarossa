@@ -47,10 +47,10 @@ evalItems = [ EvIt Material,	-- material balance (i.e. white - black material
               EvIt Advers,	-- attacs of adverse squares
               EvIt RookPlc,	-- rooks points for placements
               EvIt EnPrise,	-- when not quiescent - pieces en prise
-              -- EvIt NRCorrection,	-- material correction for knights & rooks
               EvIt PaBlo,	-- pawn blocking
               EvIt Izolan,	-- isolated pawns
               EvIt Backward,	-- backward pawns
+              EvIt AdvPawns,	-- advanced pawns
               EvIt PassPawns	-- pass pawns
             ]
 
@@ -833,6 +833,27 @@ perPassedPawnOk gph ep p c sq sqbb moi toi moia toia = val
           !val2 = (val1 * (128 - epPassBlockA ep * yblo)) `unsafeShiftR` 7
           !val  = (val2 * (128 + epPassMyCtrl ep * myctrl) * (128 - epPassYoCtrl ep * yoctrl))
                     `unsafeShiftR` 14
+
+------ Advanced pawns, on 6th & 7th rows (not passed) ------
+data AdvPawns = AdvPawns
+
+instance EvalItem AdvPawns where
+    evalItem _ _ ew p _ mide = advPawns p ew mide
+ 
+advPawns :: MyPos -> EvalWeights -> MidEnd -> MidEnd
+advPawns p ew mide = mad (mad mide (ewAdvPawn5 ew) ap5) (ewAdvPawn6 ew) ap6
+    where !apbb  = pawns p `less` passed p
+          !mapbb = apbb .&. me p
+          !yapbb = apbb .&. yo p
+          (my5, my6, yo5, yo6)
+              | moving p == White = (0x000000FF00000000, 0x0000FF0000000000, 0xFF000000, 0xFF0000)
+              | otherwise         = (0xFF000000, 0xFF0000, 0x000000FF00000000, 0x0000FF0000000000)
+          !map5 = popCount $ mapbb .&. my5
+          !map6 = popCount $ mapbb .&. my6
+          !yap5 = popCount $ yapbb .&. yo5
+          !yap6 = popCount $ yapbb .&. yo6
+          !ap5  = map5 - yap5
+          !ap6  = map6 - yap6
 
 -- Pawn end games are treated specially
 -- We consider escaped passed pawns in 2 situations:
