@@ -63,7 +63,7 @@ lmrInitLv   = 7		-- initial LMR level
 lmrLevMin   = 0
 lmrLevMax   = 15
 lmrRSTick   = 4		-- every so many re-searches we build a new average
-lmrChgFrc   = 4		-- control the band in which the lmr level remains constant
+lmrChgFrc   = 3		-- controls the band in which the lmr level remains constant
 
 -- The late move reduction is variable and regulated by the number of re-searches
 -- Lower levels (towards 0) means less reductions, higher - more
@@ -192,14 +192,11 @@ data PVState
 --   i.e. the move sorting is better, and we can increse the LMR level
 -- Probably we should consider the depth somehow, as the number of nodes per re-search
 -- will get higher & higher (I guess)
-data LMR = LMR {
-               lmLev, lmNode, lmReSe :: !Int,
-               lmAv1, lmAv2, lmAv3, lmAv4, lmAv5 :: !Int
-           }
+data LMR = LMR { lmLev, lmNode, lmReSe, lmAv1, lmAv2 :: !Int }
            deriving Show
 
 lmr0 :: LMR
-lmr0 = LMR lmrInitLv 0 0 0 0 0 0 0
+lmr0 = LMR lmrInitLv 0 0 0 0
 
 -- This is a state which reflects the status of alpha beta in a node while going through the edges
 data NodeState
@@ -1188,14 +1185,14 @@ adjustLMR = do
             let cn   = sNodes (stats s)
                 !nd  = cn - lmNode av
                 !av0 = nd `div` lmrRSTick
-                !avl = (lmAv1 av + lmAv2 av + lmAv3 av + lmAv4 av + lmAv5 av) `div` 5
+                !avl = (lmAv1 av + lmAv2 av) `unsafeShiftR` 1	-- i.e. div 2
                 !chg = avl `unsafeShiftR` lmrChgFrc
                 !lev = if av0 > avl + chg
                           then max lmrLevMin (lmLev av - 1)
                           else if av0 < avl - chg
                                   then min lmrLevMax (lmLev av + 1)
                                   else lmLev av
-                !av' = LMR lev cn 0 av0 (lmAv1 av) (lmAv2 av) (lmAv3 av) (lmAv4 av)
+                !av' = LMR lev cn 0 av0 (lmAv1 av)
             when (lev /= lmLev av) $ lift $ logmes $ "LMR level on " ++ show lev
             put s { lmrav = av' }
        else put s { lmrav = av { lmReSe = rs } }
