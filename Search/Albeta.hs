@@ -40,17 +40,6 @@ viztree = False
 -- Parameter for aspiration
 useAspirWin :: Bool
 useAspirWin = False
--- aspIncr :: UArray Int Int
--- aspIncr = array (1, 3) [ (1, 128), (2, 32), (3, 8) ]
--- aspTries = 3
--- Aspiration parameter optimization - 300 games:
--- First digit: tries, second: version (see below)
--- a21 = 64, 8		-> elo  -8 +- 59
--- a22 = 64, 16		-> elo  -2 +- 58
--- a23 = 128, 16	-> elo -32 +- 60
--- a31 = 64, 16, 4	-> elo -10 +- 57
--- a32 = 128, 32, 8	-> elo +53 +- 60 --> this is it
--- a33 = 100, 20, 4	-> elo   0 +- 58
 
 -- Some fix search parameter
 scoreGrain, depthForCM, minToStore, minToRetr, maxDepthExt, negHistMNo, minPvDepth :: Int
@@ -69,11 +58,12 @@ minPvDepth  = 2		-- from this depth we use alpha beta search
 lmrActive, lmrDebug :: Bool
 lmrActive   = True
 lmrDebug    = False
-lmrInitLv, lmrInitLim, lmrLevMin, lmrLevMax :: Int
-lmrInitLv   = 8
-lmrInitLim  = 8500
+lmrInitLv, lmrLevMin, lmrLevMax, lmrRSTick, lmrChgFrc :: Int
+lmrInitLv   = 7		-- initial LMR level
 lmrLevMin   = 0
 lmrLevMax   = 15
+lmrRSTick   = 4		-- every so many re-searches we build a new average
+lmrChgFrc   = 4		-- control the band in which the lmr level remains constant
 
 -- The late move reduction is variable and regulated by the number of re-searches
 -- Lower levels (towards 0) means less reductions, higher - more
@@ -185,10 +175,31 @@ data PVState
           forme   :: !Int,	-- variable futility forgetnes - me
           futyo   :: !Int,	-- variable futility score - you
           foryo   :: !Int,	-- variable futility forgetnes - you
-          lmrhi   :: !Int,	-- upper limit of nodes to raise the lmr level
-          lmrlv   :: !Int,	-- LMR level
-          lmrrs   :: !Int	-- counter for nodes/re-searches, to adapt the LMR level
+          lmrav   :: !LMR	-- LMR related values
       } deriving Show
+
+-- For variable LMR we hold a number of averages of re-searches per node
+-- Actually it is the incerse of this, as we work with integers, and re-searches are much less than nodes
+-- The averages are done on fix number of re-searches (constant parameter)
+-- One average is currently building, which needs the node count when the sample begun and the count
+-- of re-searches so far; when we reach the fix number of re-searches, we build the average and
+-- shift all the averages to the right, begining a new one, and at the same time we decide,
+-- based on the relation betwenn the new average and the average of the older one,
+-- what we do with the LMR level:
+-- - if new average is higher than the long time average: we face more re-searches, which means
+--   the move sorting is less effective, so we will reduce the LMR level (less LMR)
+-- - otherwise (new average is lower or equal to the long time average: we face less re-searches,
+--   i.e. the move sorting is better, and we can increse the LMR level
+-- Probably we should consider the depth somehow, as the number of nodes per re-search
+-- will get higher & higher (I guess)
+data LMR = LMR {
+               lmLev, lmNode, lmReSe :: !Int,
+               lmAv1, lmAv2, lmAv3, lmAv4, lmAv5 :: !Int
+           }
+           deriving Show
+
+lmr0 :: LMR
+lmr0 = LMR lmrInitLv 0 0 0 0 0 0 0
 
 -- This is a state which reflects the status of alpha beta in a node while going through the edges
 data NodeState
@@ -309,7 +320,7 @@ tailSeq es
 pvsInit :: PVState
 pvsInit = PVState { ronly = pvro00, stats = stt0, absdp = 0, usedext = 0, abort = False,
                     futme = futIniVal, forme = futDecayW, futyo = futIniVal, foryo = futDecayW,
-                    lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
+                    lmrav = lmr0 }
 nst0 :: NodeState
 nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore "Zero" 0,
              movno = 1, spcno = 1, killer = NoKiller, albe = False, pvsl = [], pvcont = emptySeq }
@@ -356,7 +367,7 @@ alphaBeta abc =  do
                         then runCState (searchFull lpv) pvs0
                         else runCState (searchFull es1) pvs0
              Nothing ->  runCState (searchFull lpv) pvs0
-         else  runCState (searchFull lpv) pvs0
+         else runCState (searchFull lpv) pvs0
     let timint = abort (snd r)
     -- when aborted, return the last found good move
     -- we have to trust that abort is never done in draft 1!
@@ -1008,7 +1019,7 @@ pvInnerLoopExtenZ b d spec !exd nst redu = do
     -- late move reduction
     let !d1 = d + exd' - 1	-- this is the normal (unreduced) depth for next search
         !d' = if redu
-                 then reduceLmr d1 (pnearmate b) spec exd (lmrlv old) (movno nst - spcno nst)
+                 then reduceLmr d1 (pnearmate b) spec exd (lmLev $ lmrav old) (movno nst - spcno nst)
                  else d1
     pindent $ "depth " ++ show d ++ " nt " ++ show (crtnt nst)
               ++ " exd' = " ++ show exd' ++ " mvn " ++ show (movno nst) ++ " next depth " ++ show d'
@@ -1016,9 +1027,7 @@ pvInnerLoopExtenZ b d spec !exd nst redu = do
         negb  = negatePath b
     viztreeABD (pathScore negb) (pathScore onemB) d'
     if not redu || d' == d1
-       then do
-           moreLMR True 1	-- more LMR
-           fmap pnextlev (pvZeroW nst onemB d' nulMoves redu)
+       then fmap pnextlev (pvZeroW nst onemB d' nulMoves redu)
        else do
            incRedu
            nds0 <- gets $ sNodes . stats
@@ -1034,9 +1043,7 @@ pvInnerLoopExtenZ b d spec !exd nst redu = do
                    incReMi	-- LMR missed the point
                    lift $ finNode "LMRM" True
            if sr < b
-              then do
-                  moreLMR True 1	-- more LMR
-                  return sr	-- failed low (as expected)
+              then return sr	-- failed low (as expected)
               else do
                 -- was reduced and didn't fail low: re-search with full depth
                 pindent $ "Research! (" ++ show sr ++ ")"
@@ -1044,14 +1051,15 @@ pvInnerLoopExtenZ b d spec !exd nst redu = do
                 -- sts <- get
                 -- let nds1 = sNodes $ stats sts
                 incReSe nodre	-- so many nodes we wasted by reducing this time
-                moreLMR False d'	-- less LMR
+                adjustLMR	-- we have a re-search, adjust LMR
                 -- Should we expect here to fail high? I.e. change the crt/nxt node type?
                 let nst1 = if nullSeq (pathMoves sr)
                               then nst
                               else nst { pvcont = pathMoves sr }
                 viztreeABD (pathScore negb) (pathScore onemB) d1
                 sf <- fmap pnextlev (pvZeroW nst1 onemB d1 nulMoves True)
-                when (sf >= b) $ moreLMR False d1
+                -- We could call again adjustLMR here if we fail high, though
+                -- the really needed re-searches would count double - TEST!!
                 return sf
 
 checkFailOrPVLoop :: SStats -> Path -> Int -> Move -> Path
@@ -1164,28 +1172,33 @@ genAndSort nst a b d = do
 {-# INLINE reduceLmr #-}
 reduceLmr :: Int -> Bool -> Bool -> Int -> Int -> Int -> Int
 reduceLmr !d nearmatea !spec !exd lmrlev w
-    | not lmrActive || spec || exd > 0 || d <= 1 || nearmatea = d
-    | otherwise                                               = max 1 $ d - lmrArr!(lmrlev, w)
+    | not lmrActive || spec || exd > 0
+        || d <= 1 || nearmatea = d
+    | otherwise                = max 1 $ d - lmrArr!(lmrlev, w)
 
 -- Adjust the LMR related parameters in the state
 -- The correct constants have to be tuned! Some are hadcoded here
-moreLMR :: Bool -> Int -> Search ()
-moreLMR more !d = do
+adjustLMR :: Search ()
+adjustLMR = do
     s <- get
-    let !i  | more      = 1
-            | otherwise = - (1 `unsafeShiftL` d)
-        !i1 = lmrrs s + i
-    if i1 < 0
-       then if lmrlv s <= lmrLevMin
-               then put s { lmrhi = find (lmrhi s), lmrrs = 0 }
-               else put s { lmrlv = lmrlv s - 1, lmrrs = 0 }
-       else if i1 > lmrhi s
-               then if lmrlv s >= lmrLevMax
-                       then put s { lmrhi = fdir (lmrhi s), lmrrs = 0 }
-                       else put s { lmrlv = lmrlv s + 1, lmrrs = 0 }
-               else put s { lmrrs = i1 }
-    where fdir x = x `unsafeShiftL` 2
-          find x = max 1 $ x `unsafeShiftR` 1
+    let av  = lmrav s
+        !rs = lmReSe av + 1
+    if rs >= lmrRSTick
+       then do
+            let cn   = sNodes (stats s)
+                !nd  = cn - lmNode av
+                !av0 = nd `div` lmrRSTick
+                !avl = (lmAv1 av + lmAv2 av + lmAv3 av + lmAv4 av + lmAv5 av) `div` 5
+                !chg = avl `unsafeShiftR` lmrChgFrc
+                !lev = if av0 > avl + chg
+                          then max lmrLevMin (lmLev av - 1)
+                          else if av0 < avl - chg
+                                  then min lmrLevMax (lmLev av + 1)
+                                  else lmLev av
+                !av' = LMR lev cn 0 av0 (lmAv1 av) (lmAv2 av) (lmAv3 av) (lmAv4 av)
+            when (lev /= lmLev av) $ lift $ logmes $ "LMR level on " ++ show lev
+            put s { lmrav = av' }
+       else put s { lmrav = av { lmReSe = rs } }
 
 {--
 -- The UnsafeIx inspired from GHC.Arr (class Ix)
@@ -1399,8 +1412,7 @@ reportStats = do
        logmes $ "Beta cuts: " ++ show (sBeta xst) ++ ", beta factor: " ++ show r
        logmes $ "Variable futility params: me = " ++ show (futme s) ++ "/" ++ show (forme s)
                   ++ ", yo = " ++ show (futyo s) ++ "/" ++ show (foryo s)
-       logmes $ "Variable LMR: hi = " ++ show (lmrhi s)
-                  ++ ", lv = " ++ show (lmrlv s) ++ ", qu = " ++ show (lmrrs s)
+       logmes $ "Variable LMR: " ++ show (lmrav s)
        if lmrDebug
           then logmes $ "Reduced: " ++ show (sRedu xst) ++ ", Re-benefits: " ++ show (sReBe xst)
                  ++ ", ReSearchs: " ++ show (sReSe xst) ++ ", Re-waste: " ++ show (sReNo xst)
