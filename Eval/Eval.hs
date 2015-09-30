@@ -10,7 +10,7 @@ module Eval.Eval (
 
 import Prelude hiding ((++), head, foldl, map, concat, filter, takeWhile, iterate, sum, minimum,
                        zip, zipWith, foldr, concatMap, length, replicate, lookup, repeat, null,
-                       unzip, drop, elem)
+                       unzip, drop, elem, take)
 import Data.Array.Base (unsafeAt)
 import Data.Bits
 import Data.List.Stream
@@ -252,9 +252,10 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
           !qr = qual myr 4
           !qq = qual myq 8
           !qk = qual myk 2
-          !ixm = fmul (fadd qp $ fadd qn $ fadd qb $ fadd qr $ fadd qq qk) `unsafeShiftR` 2 - freey
-          -- !mattacs = attCoef `unsafeAt` ixm
-          !mattacs = attCoef ! ixm
+          !ixm = fmul (fadd qp $ fadd qn $ fadd qb $ fadd qr $ fadd qq qk) `unsafeShiftR` 2
+               + 8 + ksShift - freey
+          !mattacs = attCoef `unsafeAt` ixm
+          ksShift = 5
 
 -- We want to eliminate "if yok .&. a /= 0 ..."
 -- by using an array
@@ -268,7 +269,7 @@ flaCoef = listArray (0, 8) [ 0, 1, 1, 1, 1, 1, 1, 1, 1 ]
 -- Here the beginning of -8 is actually wrong, which comes to the same
 -- as increasing the importance of king safety
 attCoef :: UArray Int Int
-attCoef = listArray (-8, 240) $ [ f x | x <- [0..63] ] ++ repeat (f 63)
+attCoef = listArray (0, 248) $ take 8 (repeat 0) ++ [ f x | x <- [0..63] ] ++ repeat (f 63)
     where f :: Int -> Int
           f x = let y = fromIntegral x :: Double in round $ (2.92968750 - 0.03051758*y)*y*y
 

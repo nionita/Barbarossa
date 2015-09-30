@@ -4,7 +4,7 @@
 {-# LANGUAGE CPP #-}
 module Hash.TransTab (
     Cache, newCache, retrieveEntry, readCache, writeCache, newGener,
-    checkProp
+    -- checkProp
     ) where
 
 import Control.Applicative ((<$>))
@@ -15,7 +15,7 @@ import Foreign.Marshal.Array
 import Foreign.Storable
 import Foreign.Ptr
 import Data.Text.Unsafe (inlinePerformIO)
-import Test.QuickCheck hiding ((.&.))
+-- import Test.QuickCheck hiding ((.&.))
 
 import GHC.Exts
 
@@ -281,6 +281,7 @@ dumpTT tt fname = withFile fname WriteMode $ \h -> do
 --}
 
 ----------- Test in IO -------------
+{--
 testIt :: IO Cache
 testIt = do
     tt <- newCache 32
@@ -310,14 +311,6 @@ instance Arbitrary Quint where
         no <- arbitrary `suchThat` (>= 0)
         return $ Q (de, ty, sc, Move mv, no)
 
-{--
-newtype Gener = G Int
-instance Arbitrary Gener where
-     arbitrary = do
-        g <- arbitrary `suchThat` (inRange (0, 256))
-        return $ G g
---}
-
 prop_Inverse :: Cache -> ZKey -> Int -> Quint -> Bool
 prop_Inverse tt zkey _ (Q q@(de, ty, sc, mv, no))	-- unused: gen
     = q == cacheEnToQuint (quintToCacheEn tt zkey de ty sc mv no)
@@ -333,9 +326,4 @@ checkProp = do
     putStrLn $ "Arbitrary zkey, fixed gen = " ++ show gen
     -- quickCheck $ \z -> prop_Inverse tt z gen
     verboseCheck $ \z -> prop_Inverse tt z gen
-{--
-    putStrLn $ "Arbitrary gen, fixed zkey = " ++ show gen
-    -- quickCheck $ \g -> prop_Inverse tt zkey g
-    verboseCheck $ \(G g) -> do let tt' = head $ drop g (iterate newGener tt)
-                                return $ prop_Inverse tt zkey g
 --}

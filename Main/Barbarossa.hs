@@ -3,7 +3,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Main where
+module Main (main) where
 import Control.Monad
 import Control.Monad.Reader
 import Control.Concurrent
@@ -38,7 +38,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.3.0"
-progVerSuff = "hgm"
+progVerSuff = "hgms"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -370,8 +370,8 @@ doGo cmds = do
 
 data Agreg = Agreg {
          agrCumErr :: !Integer,	-- accumulated error
-         agrFenOk  :: !Int,	-- number of fens analysed
-         agrFenNOk :: !Int	-- number of fens aborted
+         agrFenOk  :: !Int	-- number of fens analysed
+         -- agrFenNOk :: !Int	-- number of fens aborted
      } deriving Show
 
 -- The file reader reads an annotated analysis file
@@ -384,7 +384,7 @@ fileReader fi = do
         "Reference" : "depth" : sdepth : _ = words header
         dpt = read sdepth
     ctxLog LogInfo $ "Start analysing from: " ++ header
-    agr <- foldrM (perFenLine dpt) (Agreg 0 0 0) fens
+    agr <- foldrM (perFenLine dpt) (Agreg 0 0) fens
     lift $ putStrLn $ show agr
 
 perFenLine :: Int -> String -> Agreg -> CtxIO Agreg
@@ -451,8 +451,8 @@ estimateMovesToGo sc = estMvsToGo ! mvidx
     where mvidx = min 8 $ abs sc `div` 100
 
 -- Some parameters (until we have a good solution)
-clearHash :: Bool
-clearHash = False
+-- clearHash :: Bool
+-- clearHash = False
 
 newThread :: CtxIO () -> CtxIO ThreadId
 newThread a = do
@@ -500,16 +500,16 @@ ctxCatch a f = do
     liftIO $ catch (runReaderT a ctx)
             (\e -> runReaderT (f e) ctx)
 
-internalStop :: Int -> CtxIO ()
-internalStop ms = do
-    let sleep = ms * 1000
-    ctxLog DebugUci $ "Internal stop clock started for " ++ show ms ++ " ms"
-    liftIO $ threadDelay sleep
-    ctxLog DebugUci "Internal stop clock ended"
-    doStop False
+-- internalStop :: Int -> CtxIO ()
+-- internalStop ms = do
+--     let sleep = ms * 1000
+--     ctxLog DebugUci $ "Internal stop clock started for " ++ show ms ++ " ms"
+--     liftIO $ threadDelay sleep
+--     ctxLog DebugUci "Internal stop clock ended"
+--     doStop False
 
-betterSc :: Int
-betterSc = 25
+-- betterSc :: Int
+-- betterSc = 25
 
 -- Search with the given depth
 searchTheTree :: Int -> Int -> Int -> Int -> Int -> Int -> Maybe Int -> [Move] -> [Move] -> CtxIO Int
@@ -699,12 +699,12 @@ formInfo itg = "info"
                      x -> " nps " ++ show (infoNodes itg `div` x * 1000)
           isc = infoScore itg
 
-formInfoB :: InfoToGui -> String
-formInfoB itg = "info"
-    -- ++ " score cp " ++ show isc
-    ++ formScore isc
-    ++ " pv" ++ concatMap (\m -> ' ' : toString m) (infoPv itg)
-    where isc = infoScore itg
+-- formInfoB :: InfoToGui -> String
+-- formInfoB itg = "info"
+--     -- ++ " score cp " ++ show isc
+--     ++ formScore isc
+--     ++ " pv" ++ concatMap (\m -> ' ' : toString m) (infoPv itg)
+--     where isc = infoScore itg
 
 formScore :: Int -> String
 formScore i
@@ -713,22 +713,22 @@ formScore i
     | otherwise               = " score cp " ++ show i
 
 -- sel.depth nicht implementiert
-formInfo2 :: InfoToGui -> String
-formInfo2 itg = "info"
-    ++ " depth " ++ show (infoDepth itg)
-    ++ " time " ++ show (infoTime itg)
-    ++ " nodes " ++ show (infoNodes itg)
-    ++ nps'
-    -- ++ " pv" ++ concatMap (\m -> ' ' : toString m) (infoPv itg)
-    where nps' = case infoTime itg of
-                     0 -> ""
-                     x -> " nps " ++ show (infoNodes itg * 1000 `div` x)
+-- formInfo2 :: InfoToGui -> String
+-- formInfo2 itg = "info"
+--     ++ " depth " ++ show (infoDepth itg)
+--     ++ " time " ++ show (infoTime itg)
+--     ++ " nodes " ++ show (infoNodes itg)
+--     ++ nps'
+--     -- ++ " pv" ++ concatMap (\m -> ' ' : toString m) (infoPv itg)
+--     where nps' = case infoTime itg of
+--                      0 -> ""
+--                      x -> " nps " ++ show (infoNodes itg * 1000 `div` x)
 
-formInfoNps :: InfoToGui -> Maybe String
-formInfoNps itg
-    = case infoTime itg of
-          0 -> Nothing
-          x -> Just $ "info nps " ++ show (infoNodes itg `div` x * 1000)
+-- formInfoNps :: InfoToGui -> Maybe String
+-- formInfoNps itg
+--     = case infoTime itg of
+--           0 -> Nothing
+--           x -> Just $ "info nps " ++ show (infoNodes itg `div` x * 1000)
 
 formInfoDepth :: InfoToGui -> String
 formInfoDepth itg
@@ -740,18 +740,18 @@ formInfoCM itg
     = "info currmove " ++ toString (infoMove itg)
         ++ " currmovenumber " ++ show (infoCurMove itg)
 
-depth :: Int -> Int -> String
-depth d _ = "info depth " ++ show d
+-- depth :: Int -> Int -> String
+-- depth d _ = "info depth " ++ show d
 
-inodes :: Int -> String
-inodes n = "info nodes " ++ show n
+-- inodes :: Int -> String
+-- inodes n = "info nodes " ++ show n
 
-pv :: Int -> [Move] -> String
-pv t mvs = "info time " ++ show t ++ " pv"
-    ++ concatMap (\m -> ' ' : toString m) mvs
+-- pv :: Int -> [Move] -> String
+-- pv t mvs = "info time " ++ show t ++ " pv"
+--     ++ concatMap (\m -> ' ' : toString m) mvs
 
-nps :: Int -> String
-nps n = "info nps " ++ show n
+-- nps :: Int -> String
+-- nps n = "info nps " ++ show n
 
 infos :: String -> String
 infos s = "info string " ++ s
