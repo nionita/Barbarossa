@@ -1164,8 +1164,10 @@ genAndSort nst a b d = do
 {-# INLINE reduceLmr #-}
 reduceLmr :: Int -> Bool -> Bool -> Int -> Int -> Int -> Int
 reduceLmr !d nearmatea !spec !exd lmrlev w
-    | not lmrActive || spec || exd > 0 || d <= 1 || nearmatea = d
-    | otherwise                                               = max 1 $ d - lmrArr!(lmrlev, w)
+    | not lmrActive || spec || exd > 0
+       || d <= 1 || nearmatea = d
+    | otherwise               = max dmin $ d - lmrArr!(lmrlev, w)
+    where dmin = d `unsafeShiftR` 1	-- minimum depth
 
 -- Adjust the LMR related parameters in the state
 -- The correct constants have to be tuned! Some are hadcoded here
