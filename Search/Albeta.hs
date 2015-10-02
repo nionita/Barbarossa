@@ -69,9 +69,8 @@ minPvDepth  = 2		-- from this depth we use alpha beta search
 lmrActive, lmrDebug :: Bool
 lmrActive   = True
 lmrDebug    = False
-lmrInitLv, lmrInitLim, lmrLevMin, lmrLevMax :: Int
-lmrInitLv   = 8
-lmrInitLim  = 8500
+lmrInitLv, lmrLevMin, lmrLevMax :: Int
+lmrInitLv   = 0
 lmrLevMin   = 0
 lmrLevMax   = 15
 
@@ -185,9 +184,7 @@ data PVState
           forme   :: !Int,	-- variable futility forgetnes - me
           futyo   :: !Int,	-- variable futility score - you
           foryo   :: !Int,	-- variable futility forgetnes - you
-          lmrhi   :: !Int,	-- upper limit of nodes to raise the lmr level
-          lmrlv   :: !Int,	-- LMR level
-          lmrrs   :: !Int	-- counter for nodes/re-searches, to adapt the LMR level
+          lmrlv   :: !Int	-- LMR level
       } deriving Show
 
 -- This is a state which reflects the status of alpha beta in a node while going through the edges
@@ -309,7 +306,7 @@ tailSeq es
 pvsInit :: PVState
 pvsInit = PVState { ronly = pvro00, stats = stt0, absdp = 0, usedext = 0, abort = False,
                     futme = futIniVal, forme = futDecayW, futyo = futIniVal, foryo = futDecayW,
-                    lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
+                    lmrlv = lmrInitLv }
 nst0 :: NodeState
 nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore "Zero" 0,
              movno = 1, spcno = 1, killer = NoKiller, albe = False, pvsl = [], pvcont = emptySeq }
@@ -337,7 +334,10 @@ alphaBeta abc =  do
         searchFull    lp  = pvRootSearch alpha0 beta0 d lp  rmvs False
         pvro = PVReadOnly { draft = d, albest = best abc,
                             timeli = stoptime abc /= 0, abmili = stoptime abc }
-        pvs0 = pvsInit { ronly = pvro }	-- :: PVState
+        -- Less LMR for small drafts, as the history tables are sparse
+        -- We can do this logarithmic too
+        -- pvs0 = pvsInit { ronly = pvro, lmrlv = lmrInitLv + (round (log $ fromIntegral d) }	-- table!
+        pvs0 = pvsInit { ronly = pvro, lmrlv = lmrInitLv + d - 1 }
     r <- if useAspirWin
          then case lastscore abc of
              Just sp -> do
@@ -574,6 +574,7 @@ checkFailOrPVRoot xstats b d e s nst =  do
                                 let typ = 1	-- beta cut (score is lower limit) with move e
                                 ttStore de typ (pathScore b) e nodes'
                             betaCut True (absdp sst) e
+                        incBeta mn
                         let xpvslg = insertToPvs d pvg (pvsl nst)	-- the good
                             !csc = if s > b then combinePath s b else bestPath s b "1"
                         pindent $ "beta cut: " ++ show csc
@@ -588,6 +589,7 @@ checkFailOrPVRoot xstats b d e s nst =  do
                                 let typ = 2	-- best move so far (score is exact)
                                 ttStore de typ sc e nodes'
                             betaCut True (absdp sst) e	-- not really cut, but good move
+                        incBeta mn
                         let xpvslg = insertToPvs d pvg (pvsl nst)	-- the good
                             nst1 = nst { cursc = s, nxtnt = nextNodeType (nxtnt nst),
                                          movno = mn + 1, pvsl = xpvslg, pvcont = emptySeq }
@@ -1016,9 +1018,7 @@ pvInnerLoopExtenZ b d spec !exd nst redu = do
         negb  = negatePath b
     viztreeABD (pathScore negb) (pathScore onemB) d'
     if not redu || d' == d1
-       then do
-           moreLMR True 1	-- more LMR
-           fmap pnextlev (pvZeroW nst onemB d' nulMoves redu)
+       then fmap pnextlev (pvZeroW nst onemB d' nulMoves redu)
        else do
            incRedu
            nds0 <- gets $ sNodes . stats
@@ -1034,9 +1034,7 @@ pvInnerLoopExtenZ b d spec !exd nst redu = do
                    incReMi	-- LMR missed the point
                    lift $ finNode "LMRM" True
            if sr < b
-              then do
-                  moreLMR True 1	-- more LMR
-                  return sr	-- failed low (as expected)
+              then return sr	-- failed low (as expected)
               else do
                 -- was reduced and didn't fail low: re-search with full depth
                 pindent $ "Research! (" ++ show sr ++ ")"
@@ -1044,15 +1042,12 @@ pvInnerLoopExtenZ b d spec !exd nst redu = do
                 -- sts <- get
                 -- let nds1 = sNodes $ stats sts
                 incReSe nodre	-- so many nodes we wasted by reducing this time
-                moreLMR False d'	-- less LMR
                 -- Should we expect here to fail high? I.e. change the crt/nxt node type?
                 let nst1 = if nullSeq (pathMoves sr)
                               then nst
                               else nst { pvcont = pathMoves sr }
                 viztreeABD (pathScore negb) (pathScore onemB) d1
-                sf <- fmap pnextlev (pvZeroW nst1 onemB d1 nulMoves True)
-                when (sf >= b) $ moreLMR False d1
-                return sf
+                fmap pnextlev (pvZeroW nst1 onemB d1 nulMoves True)
 
 checkFailOrPVLoop :: SStats -> Path -> Int -> Move -> Path
                   -> NodeState -> Search (Bool, NodeState)
@@ -1070,6 +1065,7 @@ checkFailOrPVLoop xstats b d e s nst = do
              nodes1 = sNodes $ stats sst
              nodes' = nodes1 - nodes0
              !de = max d $ pathDepth s
+         incBeta mn
          if s >= b
             then do
               lift $ do
@@ -1077,7 +1073,6 @@ checkFailOrPVLoop xstats b d e s nst = do
                       let typ = 1	-- best move is e and is beta cut (score is lower limit)
                       ttStore de typ (pathScore b) e nodes'
                   betaCut True (absdp sst) e -- anounce a beta move (for example, update history)
-              incBeta mn
               -- when debug $ logmes $ "<-- pvInner: beta cut: " ++ show s ++ ", return " ++ show b
               let !csc = if s > b then combinePath s b else bestPath s b "3"
               pindent $ "beta cut: " ++ show csc
@@ -1164,30 +1159,8 @@ genAndSort nst a b d = do
 {-# INLINE reduceLmr #-}
 reduceLmr :: Int -> Bool -> Bool -> Int -> Int -> Int -> Int
 reduceLmr !d nearmatea !spec !exd lmrlev w
-    | not lmrActive || spec || exd > 0
-       || d <= 1 || nearmatea = d
-    | otherwise               = max dmin $ d - lmrArr!(lmrlev, w)
-    where dmin = d `unsafeShiftR` 1	-- minimum depth
-
--- Adjust the LMR related parameters in the state
--- The correct constants have to be tuned! Some are hadcoded here
-moreLMR :: Bool -> Int -> Search ()
-moreLMR more !d = do
-    s <- get
-    let !i  | more      = 1
-            | otherwise = - (1 `unsafeShiftL` d)
-        !i1 = lmrrs s + i
-    if i1 < 0
-       then if lmrlv s <= lmrLevMin
-               then put s { lmrhi = find (lmrhi s), lmrrs = 0 }
-               else put s { lmrlv = lmrlv s - 1, lmrrs = 0 }
-       else if i1 > lmrhi s
-               then if lmrlv s >= lmrLevMax
-                       then put s { lmrhi = fdir (lmrhi s), lmrrs = 0 }
-                       else put s { lmrlv = lmrlv s + 1, lmrrs = 0 }
-               else put s { lmrrs = i1 }
-    where fdir x = x `unsafeShiftL` 2
-          find x = max 1 $ x `unsafeShiftR` 1
+    | not lmrActive || spec || exd > 0 || d <= 1 || nearmatea = d
+    | otherwise                                               = max 1 $ d - lmrArr!(lmrlev, w)
 
 {--
 -- The UnsafeIx inspired from GHC.Arr (class Ix)
@@ -1401,8 +1374,6 @@ reportStats = do
        logmes $ "Beta cuts: " ++ show (sBeta xst) ++ ", beta factor: " ++ show r
        logmes $ "Variable futility params: me = " ++ show (futme s) ++ "/" ++ show (forme s)
                   ++ ", yo = " ++ show (futyo s) ++ "/" ++ show (foryo s)
-       logmes $ "Variable LMR: hi = " ++ show (lmrhi s)
-                  ++ ", lv = " ++ show (lmrlv s) ++ ", qu = " ++ show (lmrrs s)
        if lmrDebug
           then logmes $ "Reduced: " ++ show (sRedu xst) ++ ", Re-benefits: " ++ show (sReBe xst)
                  ++ ", ReSearchs: " ++ show (sReSe xst) ++ ", Re-waste: " ++ show (sReNo xst)
