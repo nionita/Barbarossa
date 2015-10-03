@@ -14,6 +14,12 @@ Flag Profile
   Description:	Enables profile support
   Default:	False
 
+Executable Evalo
+  Main-is:	Main/SSO.hs
+  Build-depends: base >= 4.5, async, array, mtl, transformers, directory, filepath, process,
+                 old-time, old-locale, containers, random, vector, text, stream-fusion, parsec
+  GHC-Options: -O2 -Wall -threaded
+
 Executable Barbarossa
   Main-is:	Main/Barbarossa.hs
   Build-depends: base >= 4.5, array, old-time, containers, mtl, parsec, vector,
