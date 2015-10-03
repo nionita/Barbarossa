@@ -70,7 +70,7 @@ lmrActive, lmrDebug :: Bool
 lmrActive   = True
 lmrDebug    = False
 lmrInitLv, lmrLevMin, lmrLevMax :: Int
-lmrInitLv   = 0
+lmrInitLv   = 4
 lmrLevMin   = 0
 lmrLevMax   = 15
 
@@ -87,6 +87,14 @@ varImp lev w = round $ go 0 lev w
     where go :: Double -> Double -> Double -> Double
           go !lv !b !i | i <= b    = lv
                        | otherwise = go (lv+1) (b*1.2) (i-b)
+
+-- This array translates the draft to a LMR level
+lmrLev :: UArray Int Int
+lmrLev = listArray (0, 20) $ lmrLevMin : [ loglev i | i <- [1..20] ]	-- to max draft
+    where loglev :: Int -> Int
+          loglev i = max lmrLevMin $ min lmrLevMax $ lmrInitLv + (round $ ilog i)
+          ilog :: Int -> Double
+          ilog = log . fromIntegral
 
 -- Parameters for futility pruning:
 maxFutilDepth :: Int
@@ -336,8 +344,7 @@ alphaBeta abc =  do
                             timeli = stoptime abc /= 0, abmili = stoptime abc }
         -- Less LMR for small drafts, as the history tables are sparse
         -- We can do this logarithmic too
-        -- pvs0 = pvsInit { ronly = pvro, lmrlv = lmrInitLv + (round (log $ fromIntegral d) }	-- table!
-        pvs0 = pvsInit { ronly = pvro, lmrlv = lmrInitLv + d - 1 }
+        pvs0 = pvsInit { ronly = pvro, lmrlv = lmrLev!d }
     r <- if useAspirWin
          then case lastscore abc of
              Just sp -> do
