@@ -54,9 +54,9 @@ main = do
     chn <- newChan
     br  <- async $ batchReader sz 3 h chn
     -- aes <- sequence $ take threads $ repeat $ oneProc engine eopts params chn mvs ms
-    aes <- async $ oneProc testEngine [] [] chn 12 1000
+    aes <- sequence $ map async $ take 3 $ repeat $ oneProc testEngine ["-l", "5"] [] chn 12 1000
     -- Now everything is started & calculating; wait for the results & return the sum of costs
-    cs <- wait aes
+    cs <- mapM wait aes
     print cs
 
 -- Open the fen file and return handle & size
@@ -165,7 +165,7 @@ oneProc engine eopts params chn mvs ms = do
     hSetBuffering hin  LineBuffering
     hSetBuffering hout LineBuffering
     hPutStrLn hin "uci"
-    _ <- accumLines hout ("uciok " `isPrefixOf`) (\_ _ -> ()) ()
+    _ <- accumLines hout ("uciok" `isPrefixOf`) (\_ _ -> ()) ()
     -- Should send options like hash size here...
     r <- catch (runPos hin hout chn mvs ms 0) $ \e -> do
         let es = ioeGetErrorString e
@@ -181,7 +181,7 @@ oneProc engine eopts params chn mvs ms = do
     where f (pn, pv) = pn ++ "=" ++ pv
 
 uciDebug :: Bool
-uciDebug = True
+uciDebug = False
 
 -- Analyse positions through a UCI chess engine connection, returning the error
 runPos :: Handle -> Handle -> Chan (Maybe MyState) -> Int -> Int -> Double -> IO Double
@@ -195,7 +195,7 @@ runPos hi ho chn mvs ms acc = do
             let !acc' = acc + calcError sf
             runPos hi ho chn mvs ms acc'
         Nothing -> do
-            when batDebug $ putStrLn $ "Bat: got nothing fromchan, exit"
+            when batDebug $ putStrLn $ "Bat: got nothing from chan, exit"
             writeChan chn Nothing	-- so the other threads don't block
             return acc
     where go = do
