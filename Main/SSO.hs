@@ -10,7 +10,6 @@ import Control.Concurrent
 import Control.Exception
 import Control.Monad.State
 import Data.List
-import Data.Maybe
 import System.FilePath
 import System.IO
 import System.IO.Error
@@ -24,6 +23,7 @@ import Moves.Notation
 import Uci.UCI
 
 data Score = Cp Int | Mt Int
+    deriving Show
 
 data MyState = MyState {
          stRemMvs :: Int,	-- remaining real moves to analyse
@@ -45,19 +45,23 @@ showMyPos :: MyPos -> String
 showMyPos p = showTab (black p) (slide p) (kkrq p) (diag p) ++ "================ " ++ mc ++ "\n"
     where mc = if moving p == White then "w" else "b"
 
-testEngine :: String
+testEngine, theFenFile :: String
 testEngine = "dist" </> "build" </> "Barbarossa" </> "Barbarossa"
+theFenFile = "test.fen"
+
+noThreads, batchSize :: Int
+noThreads = 4
+batchSize = 64
 
 main :: IO ()
 main = do
-    (h, sz) <- openFenFile "test.fen"
+    (h, sz) <- openFenFile theFenFile
     chn <- newChan
-    br  <- async $ batchReader sz 3 h chn
-    -- aes <- sequence $ take threads $ repeat $ oneProc engine eopts params chn mvs ms
-    aes <- sequence $ map async $ take 3 $ repeat $ oneProc testEngine ["-l", "5"] [] chn 12 1000
+    _   <- async $ batchReader sz batchSize h chn noThreads
+    aes <- sequence $ map async $ take noThreads $ repeat $ oneProc testEngine ["-l", "5"] [] chn 8 7
     -- Now everything is started & calculating; wait for the results & return the sum of costs
     cs <- mapM wait aes
-    print cs
+    putStrLn $ "Total error: " ++ show (sum cs)
 
 -- Open the fen file and return handle & size
 openFenFile :: FilePath -> IO (Handle, Integer)
@@ -73,7 +77,7 @@ bigPointCost :: Handle -> Integer -> Int -> Int -> Int -> Int -> String -> [Stri
              -> [(String, String)] -> IO Double
 bigPointCost h fsize bsize threads mvs ms engine eopts params = do
     chn <- newChan
-    _   <- async $ batchReader fsize bsize h chn
+    _   <- async $ batchReader fsize bsize h chn threads
     aes <- sequence $ map async $ take threads $ repeat $ oneProc engine eopts params chn mvs ms
     -- Now everything is started & calculating; wait for the results & return the sum of costs
     cs <- mapM wait aes
@@ -85,10 +89,10 @@ bigPointCost h fsize bsize threads mvs ms engine eopts params = do
 -- but what we get here is a distribution with higher probability
 -- for fens followint longer lines
 -- 2. First line must be some dummy, because it will be always discarded when read
-batchReader :: Integer -> Int -> Handle -> Chan (Maybe MyState) -> IO ()
-batchReader fsize bsize h chn = do
+batchReader :: Integer -> Int -> Handle -> Chan (Maybe MyState) -> Int -> IO ()
+batchReader fsize bsize h chn thr = do
     sequence_ $ take bsize $ repeat $ readOneFen fsize h chn
-    writeChan chn Nothing	-- signal the end of the batch
+    sequence_ $ take thr $ repeat $ writeChan chn Nothing	-- signal the end of the batch
 
 batDebug :: Bool
 batDebug = True
@@ -125,16 +129,21 @@ randomFen fsize h = do
                          Just ss -> return ss
                          Nothing -> go
 
+minMvs :: Int
+minMvs = 3	-- we skip position which do not have at least so many moves
+
 randomMove :: Int -> String -> IO (Maybe MyState)
-randomMove trs fen = do
+randomMove trys fen = do
     let opo = posFromFen fen
         mvs = genMoves opo
         mvl = length mvs
     when batDebug $ putStrLn $ "Bat: pos has " ++ show mvl ++ " moves"
-    go trs opo mvs mvl
+    go trys opo mvs mvl
     where go 0   _   _   _   = return Nothing
+          go _   _   _   mvl
+             | mvl <= minMvs = return Nothing
           go trs opo mvs mvl = do
-              rm <- randomRIO (1, mvl)
+              rm <- randomRIO (0, mvl-1)
               when batDebug $ putStrLn $ "Bat: random for move is " ++ show rm
               let mv = mvs !! rm
                   po = doFromToMove mv opo
@@ -173,15 +182,16 @@ oneProc engine eopts params chn mvs ms = do
         terminateProcess ph
         throwIO e
     hPutStrLn hin "quit"
-    putStrLn $ engine ++ ": done, with " ++ show r
+    when funDebug $ putStrLn $ engine ++ ": done, with result " ++ show r
     hClose hin
     hClose hout
     _ <- waitForProcess ph
     return r
     where f (pn, pv) = pn ++ "=" ++ pv
 
-uciDebug :: Bool
+uciDebug, funDebug :: Bool
 uciDebug = False
+funDebug = False
 
 -- Analyse positions through a UCI chess engine connection, returning the error
 runPos :: Handle -> Handle -> Chan (Maybe MyState) -> Int -> Int -> Double -> IO Double
@@ -190,13 +200,18 @@ runPos hi ho chn mvs ms acc = do
     mst <- readChan chn
     case mst of
         Just st -> do
-            when uciDebug $ putStrLn $ "Got to analyse fen: " ++ stIniFen st
+            when (batDebug || funDebug) $ putStrLn $ "Fen to analyse: " ++ stIniFen st
             sf <- execStateT go st { stRemMvs = mvs }
-            let !acc' = acc + calcError sf
+            let !acc' = acc + ferr
+                !ferr = calcError sf
+            when funDebug $ do
+                putStrLn $ "Fen done: " ++ stIniFen st
+                putStrLn $ "Fen collects:"
+                forM_ (reverse $ stScDMvs sf) $ \s -> putStrLn (show s)
+                putStrLn $ "Fen error: " ++ show ferr
             runPos hi ho chn mvs ms acc'
         Nothing -> do
             when batDebug $ putStrLn $ "Bat: got nothing from chan, exit"
-            writeChan chn Nothing	-- so the other threads don't block
             return acc
     where go = do
              s <- get
@@ -206,13 +221,17 @@ runPos hi ho chn mvs ms acc = do
              Just a@(sc, _, bm) <- lift $ do
                  hPutStrLn hi $ ucipos ++ ucimvs
                  when uciDebug $ putStrLn $ "Sent: " ++ ucipos ++ ucimvs
-                 let ucitime | moving (stCrtPos s) == White = "wtime "
-                             | otherwise                    = "btime "
-                 hPutStrLn hi $ "go movestogo 1 " ++ ucitime ++ show ms
-                 when uciDebug $ putStrLn $ "Sent: go movestogo 1 " ++ ucitime ++ show ms
+                 -- let ucitime | moving (stCrtPos s) == White = "wtime "
+                 --             | otherwise                    = "btime "
+                 -- hPutStrLn hi $ "go movestogo 1 " ++ ucitime ++ show ms
+                 -- when uciDebug $ putStrLn $ "Sent: go movestogo 1 " ++ ucitime ++ show ms
+                 hPutStrLn hi $ "go depth " ++ show ms
+                 when uciDebug $ putStrLn $ "Sent: go depth " ++ show ms
                  -- We don't check the time - but what if process is stuck?
                  accumLines ho ("bestmove " `isPrefixOf`) getSearchResults Nothing
-             let p' = doFromToMove bm (stCrtPos s)
+             let p   = stCrtPos s
+                 bm' = checkCastle (checkEnPas bm p) p
+                 p'  = doFromToMove bm' p
              if not $ checkOk p'
                 then lift $ error $ "Wrong move from engine, illegal position: " ++ show p'
                 else do
@@ -263,7 +282,7 @@ calcError st
           mulwadd a w n = a + w * fromIntegral n
 
 mateScoreMax :: Int
-mateScoreMax = 800
+mateScoreMax = 1000
 
 -- This is the error per ply
 errorPerPly :: Int -> Score -> Int
