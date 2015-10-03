@@ -49,19 +49,21 @@ testEngine, theFenFile :: String
 testEngine = "dist" </> "build" </> "Barbarossa" </> "Barbarossa"
 theFenFile = "test.fen"
 
-noThreads, batchSize :: Int
-noThreads = 4
-batchSize = 64
+noThreads, batchSize, noSamps :: Int
+noThreads =  5
+batchSize = 128
+noSamps   = 16
 
 main :: IO ()
 main = do
     (h, sz) <- openFenFile theFenFile
     chn <- newChan
-    _   <- async $ batchReader sz batchSize h chn noThreads
-    aes <- sequence $ map async $ take noThreads $ repeat $ oneProc testEngine ["-l", "5"] [] chn 8 7
-    -- Now everything is started & calculating; wait for the results & return the sum of costs
-    cs <- mapM wait aes
-    putStrLn $ "Total error: " ++ show (sum cs)
+    sequence_ $ take noSamps $ repeat $ do
+        _   <- async $ batchReader sz batchSize h chn noThreads
+        aes <- sequence $ map async $ take noThreads $ repeat $ oneProc testEngine ["-l", "5"] [] chn 8 7
+        -- Now everything is started & calculating; wait for the results & return the sum of costs
+        cs <- mapM wait aes
+        putStrLn $ show $ sum cs
 
 -- Open the fen file and return handle & size
 openFenFile :: FilePath -> IO (Handle, Integer)
@@ -75,10 +77,10 @@ openFenFile fp = do
 -- It will start more threads for this, including a batch reader
 bigPointCost :: Handle -> Integer -> Int -> Int -> Int -> Int -> String -> [String]
              -> [(String, String)] -> IO Double
-bigPointCost h fsize bsize threads mvs ms engine eopts params = do
+bigPointCost h fsize bsize threads mvs depth engine eopts params = do
     chn <- newChan
     _   <- async $ batchReader fsize bsize h chn threads
-    aes <- sequence $ map async $ take threads $ repeat $ oneProc engine eopts params chn mvs ms
+    aes <- sequence $ map async $ take threads $ repeat $ oneProc engine eopts params chn mvs depth
     -- Now everything is started & calculating; wait for the results & return the sum of costs
     cs <- mapM wait aes
     return $! sum cs
@@ -95,7 +97,7 @@ batchReader fsize bsize h chn thr = do
     sequence_ $ take thr $ repeat $ writeChan chn Nothing	-- signal the end of the batch
 
 batDebug :: Bool
-batDebug = True
+batDebug = False
 
 readOneFen :: Integer -> Handle -> Chan (Maybe MyState) -> IO ()
 readOneFen fsize h chn = do
@@ -166,7 +168,7 @@ randomMove trys fen = do
 -- states take from the batch channel as long as there are some more
 -- Calculate the error as sum of errors of all analysed states
 oneProc :: String -> [String] -> [(String, String)] -> Chan (Maybe MyState) -> Int -> Int -> IO Double
-oneProc engine eopts params chn mvs ms = do
+oneProc engine eopts params chn mvs depth = do
     let crp | null params = proc engine eopts
             | otherwise   = proc engine (eopts ++ "-p" : intersperse "," (map f params))
     (Just hin, Just hout, _, ph)
@@ -176,7 +178,7 @@ oneProc engine eopts params chn mvs ms = do
     hPutStrLn hin "uci"
     _ <- accumLines hout ("uciok" `isPrefixOf`) (\_ _ -> ()) ()
     -- Should send options like hash size here...
-    r <- catch (runPos hin hout chn mvs ms 0) $ \e -> do
+    r <- catch (runPos hin hout chn mvs depth 0) $ \e -> do
         let es = ioeGetErrorString e
         putStrLn $ "Error reading from engine: " ++ es
         terminateProcess ph
@@ -195,7 +197,7 @@ funDebug = False
 
 -- Analyse positions through a UCI chess engine connection, returning the error
 runPos :: Handle -> Handle -> Chan (Maybe MyState) -> Int -> Int -> Double -> IO Double
-runPos hi ho chn mvs ms acc = do
+runPos hi ho chn mvs depth acc = do
     when batDebug $ putStrLn $ "Bat: waiting for new fen from channel..."
     mst <- readChan chn
     case mst of
@@ -209,7 +211,7 @@ runPos hi ho chn mvs ms acc = do
                 putStrLn $ "Fen collects:"
                 forM_ (reverse $ stScDMvs sf) $ \s -> putStrLn (show s)
                 putStrLn $ "Fen error: " ++ show ferr
-            runPos hi ho chn mvs ms acc'
+            runPos hi ho chn mvs depth acc'
         Nothing -> do
             when batDebug $ putStrLn $ "Bat: got nothing from chan, exit"
             return acc
@@ -225,8 +227,8 @@ runPos hi ho chn mvs ms acc = do
                  --             | otherwise                    = "btime "
                  -- hPutStrLn hi $ "go movestogo 1 " ++ ucitime ++ show ms
                  -- when uciDebug $ putStrLn $ "Sent: go movestogo 1 " ++ ucitime ++ show ms
-                 hPutStrLn hi $ "go depth " ++ show ms
-                 when uciDebug $ putStrLn $ "Sent: go depth " ++ show ms
+                 hPutStrLn hi $ "go depth " ++ show depth
+                 when uciDebug $ putStrLn $ "Sent: go depth " ++ show depth
                  -- We don't check the time - but what if process is stuck?
                  accumLines ho ("bestmove " `isPrefixOf`) getSearchResults Nothing
              let p   = stCrtPos s
