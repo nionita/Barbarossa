@@ -1,5 +1,6 @@
 {-# LANGUAGE BangPatterns
-             #-}
+           , PatternGuards
+  #-}
 
 module Main (
     main
@@ -342,19 +343,22 @@ accumLines h p f = go []
 
 getSearchResults :: String -> Maybe (Score, Move) -> Maybe (Score, Move)
 getSearchResults l old
-    | "info score " `isPrefixOf` l = Just $ getSB l
+    | "info score " `isPrefixOf` l = getSB l
     | otherwise                    = old
 
 -- Get score, nodes & best move from a info score line, a primitive approach
-getSB :: String -> (Score, Move)
-getSB l = (sc, mv)
+getSB :: String -> Maybe (Score, Move)
+getSB l
+    | ("score":st:sv:rest1) <- dropWhile (/= "score") ws,
+      ("depth":_:rest2)     <- dropWhile (/= "depth") rest1,
+      ("pv":bm:_)           <- dropWhile (/= "pv")    rest2
+        = let sc | st == "cp" = Cp (read sv)
+                 | otherwise  = Mt (read sv)
+          in case parseMoveStr bm of
+              Right mv -> Just (sc, mv)
+              _        -> Nothing
+    | otherwise = Nothing
     where ws = words l
-          ("score":st:sv:rest1) = dropWhile (/= "score") ws
-          ("depth":_:rest2)     = dropWhile (/= "depth") rest1
-          ("pv":bm:_)           = dropWhile (/= "pv")    rest2
-          sc | st == "cp" = Cp (read sv)
-             | otherwise  = Mt (read sv)
-          Right mv = parseMoveStr bm
 
 -- This is a decay in weights of successive score differences
 -- Further differences count less and less
