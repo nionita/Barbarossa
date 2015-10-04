@@ -325,12 +325,20 @@ reportEngineProblem st ls = withFile engErrFile AppendMode $ \h -> do
 accumLines :: Handle -> (String -> Bool) -> (String -> a -> a) -> a -> IO (a, [String])
 accumLines h p f = go []
     where go ls a = do
-             l <- hGetLine h
-             when uciDebug $ putStrLn $ "Got: " ++ l
-             let !a' = f l a
-                 ls' = l : ls
-             if p l then return (a, ls')
-                    else go ls' a'
+             eel <- try $ hGetLine h
+             case eel of
+                 Left e -> do
+                     let es = ioeGetErrorString e
+                     when uciDebug $ putStrLn $ "Got: " ++ es
+                     let ls' = es : ls
+                     return (a, ls')
+                 Right l -> do
+                     when uciDebug $ putStrLn $ "Got: " ++ l
+                     let ls' = l : ls
+                     if p l then return (a, ls')
+                            else do
+                                let !a' = f l a
+                                go ls' a'
 
 getSearchResults :: String -> Maybe (Score, Move) -> Maybe (Score, Move)
 getSearchResults l old
