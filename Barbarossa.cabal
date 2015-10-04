@@ -15,7 +15,7 @@ Flag Profile
   Default:	False
 
 Executable Evalo
-  Main-is:	Main/SSO.hs
+  Main-is:	Main/Evalo.hs
   Build-depends: base >= 4.5, async, array, mtl, transformers, directory, filepath, process,
                  old-time, old-locale, containers, random, vector, text, stream-fusion, parsec
   GHC-Options: -O2 -Wall -threaded

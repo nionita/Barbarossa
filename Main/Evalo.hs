@@ -10,6 +10,8 @@ import Control.Concurrent
 import Control.Exception
 import Control.Monad.State
 import Data.List
+import System.Console.GetOpt
+import System.Environment (getArgs)
 import System.FilePath
 import System.IO
 import System.IO.Error
@@ -22,6 +24,68 @@ import Moves.ShowMe
 import Moves.Notation
 import Uci.UCI
 
+data Options = Options {
+         optConFile :: Maybe String,	-- configuration file
+         optSavFile :: Maybe String,	-- save status file
+         optNoThrds :: Int,		-- number of threads to run
+         optNoSamps :: Maybe Int,	-- number of samples to generate
+         optBatch   :: Int		-- batch size, until we can read config
+     }
+
+defaultOptions :: Options
+defaultOptions = Options {
+        optConFile = Nothing, optSavFile = Nothing, optNoThrds = 1, optNoSamps = Nothing, optBatch = 32
+    }
+
+setConFile :: String -> Options -> Options
+setConFile s opt = opt { optConFile = Just s }
+
+setSavFile :: String -> Options -> Options
+setSavFile s opt = opt { optSavFile = Just s }
+
+setNoThrds :: String -> Options -> Options
+setNoThrds s opt = opt { optNoThrds = read s }
+
+setNoSamps :: String -> Options -> Options
+setNoSamps s opt = opt { optNoSamps = Just $ read s }
+
+setBatch :: String -> Options -> Options
+setBatch s opt = opt { optBatch = read s }
+
+options :: [OptDescr (Options -> Options)]
+options = [
+        Option "c" ["config"]   (ReqArg setConFile "STRING") "Config file",
+        Option "s" ["savefile"] (ReqArg setSavFile "STRING") "Save status file",
+        Option "t" ["threads"]  (ReqArg setNoThrds "STRING") "Number of threads",
+        Option "g" ["generate"] (ReqArg setNoSamps "STRING") "Number of samples to generate",
+        Option "b" ["batch"]    (ReqArg setBatch   "STRING") "Batch size for generation"
+    ]
+
+theOptions :: IO (Options, [String])
+theOptions = do
+    args <- getArgs
+    case getOpt Permute options args of
+        (o, n, []) -> return (foldr ($) defaultOptions o, n)
+        (_, _, es) -> ioError (userError (concat es ++ usageInfo header options))
+    where header = "Usage: Evalo [-c config] [-s savefile]"
+
+data Config = Config {
+         conEngCom  :: String,	-- engine commands (including arguments)
+         conFenFile :: String,	-- full path name of the FEN file
+         conBatch   :: Int,	-- batch size (samples per measure point)
+         conDepth   :: Int,	-- fix depth to analyse
+         conLength  :: Int	-- length of mini game per fen
+     }
+
+defaultConfig :: Config
+defaultConfig = Config {
+         conEngCom  = "dist" </> "build" </> "Barbarossa" </> "Barbarossa",
+         conFenFile = "test.fen",
+         conBatch   = 256,
+         conDepth   = 7,
+         conLength  = 8
+    }
+
 data Score = Cp Int | Mt Int
     deriving Show
 
@@ -30,7 +94,7 @@ data MyState = MyState {
          stIniCol :: Color,	-- initial analysis moving color
          stIniFen :: String,	-- initial analysis fen
          stCrtPos :: MyPos,	-- current position
-         stScDMvs :: [(Score, Int, Move)]	-- scores, depths, played moves (reversed)
+         stScDMvs :: [(Score, Move)]	-- scores and played moves (reversed)
      }
 
 -- We generate the move, but need no sorting
@@ -45,25 +109,23 @@ showMyPos :: MyPos -> String
 showMyPos p = showTab (black p) (slide p) (kkrq p) (diag p) ++ "================ " ++ mc ++ "\n"
     where mc = if moving p == White then "w" else "b"
 
-testEngine, theFenFile :: String
-testEngine = "dist" </> "build" </> "Barbarossa" </> "Barbarossa"
-theFenFile = "test.fen"
-
-noThreads, batchSize, noSamps :: Int
-noThreads =  5
-batchSize = 128
-noSamps   = 16
-
 main :: IO ()
 main = do
-    (h, sz) <- openFenFile theFenFile
-    chn <- newChan
-    sequence_ $ take noSamps $ repeat $ do
-        _   <- async $ batchReader sz batchSize h chn noThreads
-        aes <- sequence $ map async $ take noThreads $ repeat $ oneProc testEngine ["-l", "5"] [] chn 8 7
-        -- Now everything is started & calculating; wait for the results & return the sum of costs
-        cs <- mapM wait aes
-        putStrLn $ show $ sum cs
+    (opts, _) <- theOptions
+    case optNoSamps opts of
+        Nothing    -> return ()
+        Just samps -> do
+            let config = defaultConfig
+            (h, sz) <- openFenFile (conFenFile config)
+            chn <- newChan
+            sequence_ $ take samps $ repeat $ do
+                _   <- async $ batchReader sz (optBatch opts) h chn (optNoThrds opts)
+                aes <- sequence $ map async $ take (optNoThrds opts) $ repeat
+                                $ oneProc (conEngCom config) ["-l", "5"] [] chn
+                                    (conLength config) (conDepth config)
+                -- Now everything is started & calculating; wait for the results & return the sum of costs
+                cs <- mapM wait aes
+                putStrLn $ show $ sum cs
 
 -- Open the fen file and return handle & size
 openFenFile :: FilePath -> IO (Handle, Integer)
@@ -220,7 +282,7 @@ runPos hi ho chn mvs depth acc = do
              let ucipos = "position fen " ++ stIniFen s
                  ucimvs | null (stScDMvs s) = ""
                         | otherwise         = " moves" ++ concatMap f (reverse $ stScDMvs s)
-             Just a@(sc, _, bm) <- lift $ do
+             (ma, ls) <- lift $ do
                  hPutStrLn hi $ ucipos ++ ucimvs
                  when uciDebug $ putStrLn $ "Sent: " ++ ucipos ++ ucimvs
                  -- let ucitime | moving (stCrtPos s) == White = "wtime "
@@ -231,40 +293,56 @@ runPos hi ho chn mvs depth acc = do
                  when uciDebug $ putStrLn $ "Sent: go depth " ++ show depth
                  -- We don't check the time - but what if process is stuck?
                  accumLines ho ("bestmove " `isPrefixOf`) getSearchResults Nothing
-             let p   = stCrtPos s
-                 bm' = checkCastle (checkEnPas bm p) p
-                 p'  = doFromToMove bm' p
-             if not $ checkOk p'
-                then lift $ error $ "Wrong move from engine, illegal position: " ++ show p'
-                else do
-                    let rmvs = stRemMvs s - 1
-                    put s { stRemMvs = rmvs, stCrtPos = p', stScDMvs = a : stScDMvs s }
-                    case sc of
-                        Cp _ -> if rmvs > 0 then go else return ()
-                        Mt _ -> return ()	-- we stop after a mate
-          f (_, _, mv) = " " ++ show mv
+             case ma of
+                 Nothing -> lift $ reportEngineProblem s ls
+                 Just a@(sc, bm) -> do
+                     let p   = stCrtPos s
+                         bm' = checkCastle (checkEnPas bm p) p
+                         p'  = doFromToMove bm' p
+                     if not $ checkOk p'
+                        then lift $ error $ "Wrong move from engine, illegal position: " ++ show p'
+                        else do
+                            let rmvs = stRemMvs s - 1
+                            put s { stRemMvs = rmvs, stCrtPos = p', stScDMvs = a : stScDMvs s }
+                            case sc of
+                                Cp _ -> if rmvs > 0 then go else return ()
+                                Mt _ -> return ()	-- we stop after a mate
+          f (_, mv) = " " ++ show mv
 
-accumLines :: Handle -> (String -> Bool) -> (String -> a -> a) -> a -> IO a
-accumLines h p f = go
-    where go a = do
+engErrFile :: FilePath
+engErrFile = "engErrors.txt"
+
+reportEngineProblem :: MyState -> [String] -> IO ()
+reportEngineProblem st ls = withFile engErrFile AppendMode $ \h -> do
+    hPutStrLn h "*** Problem in mini play ***"
+    hPutStrLn h $ "Initial fen: " ++ stIniFen st
+    hPutStrLn h "Moves & scores:"
+    mapM_ (hPutStrLn h . show) $ reverse $ stScDMvs st
+    hPutStrLn h $ "Current fen: " ++ posToFen (stCrtPos st)
+    hPutStrLn h "Lines from engine:"
+    mapM_ (hPutStrLn h) $ reverse ls
+
+accumLines :: Handle -> (String -> Bool) -> (String -> a -> a) -> a -> IO (a, [String])
+accumLines h p f = go []
+    where go ls a = do
              l <- hGetLine h
              when uciDebug $ putStrLn $ "Got: " ++ l
              let !a' = f l a
-             if p l then return a
-                    else go a'
+                 ls' = l : ls
+             if p l then return (a, ls')
+                    else go ls' a'
 
-getSearchResults :: String -> Maybe (Score, Int, Move) -> Maybe (Score, Int, Move)
+getSearchResults :: String -> Maybe (Score, Move) -> Maybe (Score, Move)
 getSearchResults l old
-    | "info score " `isPrefixOf` l = Just $ getSDB l
-    -- | "bestmove "   `isPrefixOf` l = old
+    | "info score " `isPrefixOf` l = Just $ getSB l
     | otherwise                    = old
 
 -- Get score, nodes & best move from a info score line, a primitive approach
-getSDB :: String -> (Score, Int, Move)
-getSDB l = (sc, read n, mv)
+getSB :: String -> (Score, Move)
+getSB l = (sc, mv)
     where ws = words l
           ("score":st:sv:rest1) = dropWhile (/= "score") ws
-          ("depth":n:rest2)     = dropWhile (/= "depth") rest1
+          ("depth":_:rest2)     = dropWhile (/= "depth") rest1
           ("pv":bm:_)           = dropWhile (/= "pv")    rest2
           sc | st == "cp" = Cp (read sv)
              | otherwise  = Mt (read sv)
@@ -278,7 +356,7 @@ lamDecay = 0.7
 calcError :: MyState -> Double
 calcError st
     | null (stScDMvs st) = error "Status with no moves!"
-    | otherwise          = diffs 0 1 $ reverse $ map (\(s, _, _) -> s) (stScDMvs st)
+    | otherwise          = diffs 0 1 $ reverse $ map fst (stScDMvs st)
     where diffs acc w (Cp x : s : ss) = diffs (mulwadd acc w $ errorPerPly x s) (w * lamDecay) (s : ss)
           diffs acc _ _               = acc
           mulwadd a w n = a + w * fromIntegral n
