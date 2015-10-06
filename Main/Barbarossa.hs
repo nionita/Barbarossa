@@ -38,7 +38,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.3.0"
-progVerSuff = "hgms"
+progVerSuff = ""
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -51,7 +51,7 @@ defaultOptions :: Options
 defaultOptions = Options {
         optConfFile = Nothing,
         optParams   = [],
-        optLogging  = DebugUci,
+        optLogging  = LogNever,
         optAFenFile = Nothing
     }
 
