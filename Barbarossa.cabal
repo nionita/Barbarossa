@@ -17,11 +17,12 @@ Flag Profile
 Executable Barbarossa
   Main-is:	Main/Barbarossa.hs
   Build-depends: base >= 4.5, array, old-time, containers, mtl, parsec, vector,
-                 random, stream-fusion, directory, transformers, QuickCheck, text
+                 random, directory, transformers, QuickCheck, text
   GHC-Options: -O2 -Wall
                -funbox-strict-fields -threaded -rtsopts
                -fspec-constr-count=24
                -funfolding-use-threshold=32
+               -fno-warn-tabs
                -- -msse4.2
                -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques
                -ddump-opt-cmm -ddump-asm
@@ -37,6 +38,7 @@ Executable Evolve
   Build-depends: base >= 4.5, async, transformers, directory, filepath, process,
                  old-time, old-locale, containers, random
   GHC-Options: -O2 -Wall -threaded
+               -fno-warn-tabs
 
 --Executable MMTO
 --  Main-is:	Main/MMTO.hs

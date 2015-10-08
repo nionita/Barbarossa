@@ -8,14 +8,13 @@ module Moves.Moves (
     ) where
 
 import Data.Array.Base
--- import Data.Array.Unboxed
 import Data.Bits
 
 import Struct.Struct
 import Moves.GenMagics
 import Moves.Magics
 import Moves.BitBoard
-import Moves.Muster
+import Moves.Pattern
 
 -- Used to compute all the needed tables by initialiasation:
 movesInit :: Int
