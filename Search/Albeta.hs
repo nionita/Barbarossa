@@ -769,7 +769,7 @@ pvZeroW !nst !b !d !lastnull redu = do
                              lift $ do
                                  let typ = 0
                                      !deltan = nodes1 - nodes0
-                                 ttStore de typ (pathScore b) (head es) deltan
+                                 ttStore de typ (pathScore bGrain) (head es) deltan
                          if s > bGrain || movno nstf > 1
                             then return s
                             else do	-- here: store exact mate or stalemate score!
