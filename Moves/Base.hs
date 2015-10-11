@@ -228,7 +228,7 @@ doMove m qs = do
        else if not cok
                then return Illegal
                else do
-                   -- bigCheckPos "doMove" pc (Just m) p'
+                   when debugDoMove $ zobCheckPos "doMove" pc (Just m) p'
                    let sts = evalState (posEval p') (evalst s)
                        p = p' { staticScore = sts }
                    put s { stack = p : stack s }
@@ -247,27 +247,27 @@ doNullMove = do
         !p' = reverseMoving p0
         !sts = evalState (posEval p') (evalst s)
         !p = p' { staticScore = sts }
-    -- bigCheckPos "doNullMove" p0 Nothing p'
+    when debugDoMove $ zobCheckPos "doNullMove" p0 Nothing p'
     put s { stack = p : stack s }
 
-{-- Activae when used:
-bigCheckPos :: String -> MyPos -> Maybe Move -> MyPos -> Game ()
-bigCheckPos loc pin mmv pou = do
+debugDoMove :: Bool
+debugDoMove = False
+
+zobCheckPos :: String -> MyPos -> Maybe Move -> MyPos -> Game ()
+zobCheckPos loc pin mmv pou = do
     let fpou = posToFen pou
         p    = posFromFen fpou
     -- when (pou { staticScore = 0, staticFeats = [] } /= p { staticScore = 0, staticFeats = [] }) $ do
     when (zobkey pou /= zobkey p) $ do
-        let fpin = posToFen pin
         logMes $ "Wrong pos in " ++ loc
-        logMes $ "Input:  " ++ fpin
+        logMes $ "Input:  " ++ posToFen pin
         case mmv of
             Just mv -> logMes $ "Move:   " ++ toNiceNotation pin mv
             Nothing -> logMes $ "Move:   null move"
         logMes $ "Output: " ++ fpou
-        logMes $ "Outget: " ++ fpou
+        logMes $ "Outget: " ++ posToFen p
         logMes $ "MyPos pou: " ++ show pou
         logMes $ "MyPos p:   " ++ show p
---}
 
 checkRemisRules :: MyPos -> Game Bool
 checkRemisRules p = do
@@ -367,8 +367,8 @@ materVal = do
 -- quiet p = at .&. ta == 0
 --     where (!at, !ta) = if moving p == White then (whAttacs p, black p) else (blAttacs p, white p)
 
--- Fixme!! We have big problems with hash store/retrieval: many wrong scores (and perhaps hash moves)
--- come from there!!
+checkTTLegality :: Bool
+checkTTLegality = False
 
 {-# INLINE ttRead #-}
 ttRead :: Game (Int, Int, Int, Move, Int)
@@ -382,7 +382,14 @@ ttRead = if not useHash then return empRez else do
     case mhr of
         Nothing -> return empRez
         Just t@(_, _, _, m, _) ->
-            if legalMove p m then return t else return empRez	-- we should count...
+            if not checkTTLegality || legalMove p m
+               then return t
+               else do
+                   logMes "Not legal move from TT:"
+                   logMes $ "Fen:     " ++ posToFen p
+                   logMes $ "MyPos p: " ++ show p
+                   logMes $ "Move:    " ++ show m ++ " (" ++ toNiceNotation p m ++ ")"
+                   return empRez	-- we should count...
     where empRez = (-1, 0, 0, Move 0, 0)
 
 {-# INLINE ttStore #-}

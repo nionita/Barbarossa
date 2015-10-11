@@ -10,7 +10,9 @@ import Control.Concurrent.Async
 import Control.Concurrent
 import Control.Exception
 import Control.Monad.State
+import Data.Char (isSpace)
 import Data.List
+import Data.Maybe (catMaybes)
 import System.Console.GetOpt
 import System.Environment (getArgs)
 import System.FilePath
@@ -70,22 +72,20 @@ theOptions = do
         (_, _, es) -> ioError (userError (concat es ++ usageInfo header options))
     where header = "Usage: Evalo [-c config] [-s savefile]"
 
-data Config = Config {
-         conEngCom  :: String,	-- engine commands (including arguments)
-         conFenFile :: String,	-- full path name of the FEN file
-         conBatch   :: Int,	-- batch size (samples per measure point)
-         conDepth   :: Int,	-- fix depth to analyse
-         conLength  :: Int	-- length of mini game per fen
-     }
+type Config = [(String, String)]
 
-defaultConfig :: Config
-defaultConfig = Config {
-         conEngCom  = "dist" </> "build" </> "Barbarossa" </> "Barbarossa",
-         conFenFile = "test.fen",
-         conBatch   = 256,
-         conDepth   = 7,
-         conLength  = 8
-    }
+-- Default config parameters:
+defConEngCom, defConFenFile :: FilePath
+defConEngCom  = "dist" </> "build" </> "Barbarossa" </> "Barbarossa"
+defConFenFile = "test.fen"
+
+defConBatch, defConDepth, defConLength :: Int
+defConBatch   = 256
+defConDepth   = 7
+defConLength  = 8
+
+defConfig :: Config
+defConfig = []
 
 data Score = Cp Int | Mt Int
     deriving Show
@@ -116,14 +116,17 @@ main = do
     case optNoSamps opts of
         Nothing    -> return ()
         Just samps -> do
-            let config = defaultConfig
-            (h, sz) <- openFenFile (conFenFile config)
+            config <- case optConFile opts of
+                          Just cf -> readConfigFile cf
+                          Nothing -> return defConfig
+            (h, sz) <- openFenFile (getConfigVal config "fenFile" $ Just defConFenFile)
             chn <- newChan
             sequence_ $ take samps $ repeat $ do
                 _   <- async $ batchReader sz (optBatch opts) h chn (optNoThrds opts)
                 aes <- sequence $ map async $ take (optNoThrds opts) $ repeat
-                                $ oneProc (conEngCom config) ["-l", "5"] [] chn
-                                    (conLength config) (conDepth config)
+                                $ oneProc (getConfigVal config "engCom" $ Just defConEngCom) ["-l", "5"] [] chn
+                                    (getConfigVal config "playLength" $ Just defConLength)
+                                    (getConfigVal config "playDepth" $ Just defConDepth)
                 -- Now everything is started & calculating; wait for the results & return the sum of costs
                 cs <- mapM wait aes
                 putStrLn $ show $ sum cs
@@ -382,3 +385,47 @@ errorPerPly x0 (Cp x1) = abs (x0 + x1)
 errorPerPly x0 (Mt n )
     | n < 0     = max 0 $ mateScoreMax - x0
     | otherwise = max 0 $ mateScoreMax + x0
+
+-- This part with the config is used in Evolve too, better do a separate module!!
+-- Convert the content of a file with assignments par=val (one per line)
+-- and possibly some comments (Haskell style) into pairs (name, value)
+-- Name & Value are both strings
+fileToLookup :: String -> [(String, String)]
+fileToLookup = catMaybes . map readSParam . nocomments . lines
+    where nocomments = filter (not . iscomment)
+          iscomment [] = True
+          iscomment ('-':'-':_) = True
+          iscomment (c:cs) | isSpace c = iscomment cs
+          iscomment _ = False
+
+readConfigFile :: FilePath -> IO Config
+readConfigFile cf = readFile cf >>= return . fileToLookup
+
+-- Param names should not contain spaces (will be deleted)
+-- Values can't begin with spaces (any space prefix will be deleted)
+readSParam :: String -> Maybe (String, String)
+readSParam s = let (ns, vs) = span (/= '=') s
+               in case vs of
+                      ('=' : rs) -> Just (strip ns, dropWhile isSpace rs)
+                      _          -> Nothing	-- did not contain '='
+    where strip = filter (not . isSpace)
+
+getConfigStr :: Config -> String -> Maybe String -> String
+getConfigStr cf key mdef = s
+    where s = case lookup ckey cf of
+                  Nothing -> case mdef of
+                                 Nothing -> error $ ckey ++ " not found in config"
+                                 Just s' -> s'
+                  Just s' -> s'
+          ckey = "config." ++ key
+
+getConfigVal :: Read a => Config -> String -> Maybe a -> a
+getConfigVal cf key mdef
+    = case lookup ckey cf of
+          Nothing -> case mdef of
+                         Nothing -> error $ ckey ++ " not found in config"
+                         Just v  -> v
+          Just s  -> case reads s of
+                         (v, ""):[] -> v
+                         _          -> error $ "Can't read " ++ ckey ++ " " ++ s ++ ", wrong type"
+    where ckey = "config." ++ key

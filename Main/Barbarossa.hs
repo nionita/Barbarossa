@@ -444,7 +444,7 @@ compTime tim tpm fixmtg lastsc
           ttroub = short || over
 
 estMvsToGo :: Array Int Int
-estMvsToGo = listArray (0, 8) [30, 28, 24, 18, 12, 10, 8, 6, 3]
+estMvsToGo = listArray (0, 8) [60, 40, 27, 18, 12, 10, 8, 6, 3]
 
 estimateMovesToGo :: Int -> Int
 estimateMovesToGo sc = estMvsToGo ! mvidx
