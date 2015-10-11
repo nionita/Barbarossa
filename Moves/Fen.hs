@@ -11,6 +11,7 @@ import Data.Maybe (fromJust)
 import Struct.Struct
 import Moves.Moves
 import Moves.BitBoard
+import Moves.Pattern
 import Eval.BasicEval
 import Hash.Zobrist
 
@@ -152,25 +153,19 @@ updatePosCheck p = p {
           !yocheck = yo p .&. kings p .&. myAttacs p
           !tcheck = mecheck .|. yocheck
 
--- Small optimisation: .&. instead `less` below
--- This one should be done in Muster.hs and used elsewhere too
-notFileA, notFileH :: BBoard
-notFileA = 0xFEFEFEFEFEFEFEFE
-notFileH = 0x7F7F7F7F7F7F7F7F
-
 -- Passed pawns: only with bitboard operations
 whitePassed :: BBoard -> BBoard -> BBoard
 whitePassed !wp !bp = wpa
-    where !bpL = (bp .&. notFileA) `unsafeShiftR` 1	-- left
-          !bpR = (bp .&. notFileH) `unsafeShiftL` 1	-- and right
+    where !bpL = bbLeft bp
+          !bpR = bbRight bp
           !wb0 = bpR .|. bpL .|. bp .|. wp
           !sha = shadowDown wb0	-- erase
           !wpa = wp `less` sha
 
 blackPassed :: BBoard -> BBoard -> BBoard
 blackPassed !wp !bp = bpa
-    where !wpL = (wp .&. notFileA) `unsafeShiftR` 1	-- left
-          !wpR = (wp .&. notFileH) `unsafeShiftL` 1	-- and right
+    where !wpL = bbLeft wp
+          !wpR = bbRight wp
           !wb0 = wpR .|. wpL .|. wp .|. bp
           !sha = shadowUp wb0	-- erase
           !bpa = bp `less` sha

@@ -15,7 +15,7 @@ module Search.CStateMonad (
     runCState, execCState
     ) where
 
-import Control.Applicative
+-- import Control.Applicative
 import Control.Monad
 import Control.Monad.State hiding (gets, modify)
 

@@ -11,10 +11,11 @@ module Moves.Board (
     doFromToMove, reverseMoving
     ) where
 
-import Prelude hiding ((++), foldl, filter, map, concatMap, concat, head, tail, repeat, zip,
-                       zipWith, null, words, foldr, elem, lookup, any, takeWhile, iterate)
+-- import Prelude hiding ((++), foldl, filter, map, concatMap, concat, head, tail, repeat, zip,
+--                        zipWith, null, words, foldr, elem, lookup, any, takeWhile, iterate)
 import Data.Bits
-import Data.List.Stream
+-- import Data.List.Stream
+import Data.List (sort, foldl')
 import Data.Word
 
 import Struct.Struct

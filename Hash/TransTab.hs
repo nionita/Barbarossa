@@ -7,7 +7,7 @@ module Hash.TransTab (
     -- checkProp
     ) where
 
-import Control.Applicative ((<$>))
+-- import Control.Applicative ((<$>))
 import Data.Bits
 import Data.Int
 import Data.Word

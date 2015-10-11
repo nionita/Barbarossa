@@ -670,7 +670,6 @@ pvSearch nst !a !b !d = do
                 return $! trimaxPath a b s'	-- why trimax??
               else do
                 nodes0 <- gets (sNodes . stats)
-                -- Here: when ab we should do futility pruning
                 -- futility pruning:
                 prune <- isPruneFutil d a
                 -- Loop thru the moves
@@ -770,7 +769,7 @@ pvZeroW !nst !b !d !lastnull redu = do
                              lift $ do
                                  let typ = 0
                                      !deltan = nodes1 - nodes0
-                                 ttStore de typ (pathScore b) (head es) deltan
+                                 ttStore de typ (pathScore bGrain) (head es) deltan
                          if s > bGrain || movno nstf > 1
                             then return s
                             else do	-- here: store exact mate or stalemate score!
@@ -863,7 +862,7 @@ pvInnerLoop b d prune nst e = do
        then return (True, nst)
        else do
          -- What about TT & killer moves???
-         willPrune <- if not prune then return False else lift $ canPruneMove e
+         willPrune <- if not prune || movno nst == 1 then return False else lift $ canPruneMove e
          if willPrune
             then do
                 let !nst1 = nst { movno = movno nst + 1, pvcont = emptySeq }
@@ -1221,8 +1220,8 @@ isPruneFutil d a
     -- why not for d == 0? It will spare the QS
     | d > maxFutilDepth || nearmate (pathScore a) = return False
     | otherwise = do
-        tact <- lift tacticalPos
-        if tact then return False else do
+        -- tact <- lift tacticalPos
+        -- if tact then return False else do
             v <- lift staticVal	-- E1
             m <- varFutVal	-- variable futility value
             let margin = futilMargins d m

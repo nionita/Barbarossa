@@ -13,7 +13,7 @@ import Data.Word
 
 import Struct.Struct
 import Moves.Magics
-import Moves.Muster
+import Moves.Pattern
 
 -- Bring one configuration of the given length into a bitboard
 -- according to a given pattern

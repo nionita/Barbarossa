@@ -8,12 +8,9 @@ module Eval.Eval (
     posEval
 ) where
 
-import Prelude hiding ((++), head, foldl, map, concat, filter, takeWhile, iterate, sum, minimum,
-                       zip, zipWith, foldr, concatMap, length, replicate, lookup, repeat, null,
-                       unzip, drop, elem, take)
 import Data.Array.Base (unsafeAt)
 import Data.Bits
-import Data.List.Stream
+import Data.List (minimumBy)
 import Control.Monad.State.Lazy
 import Data.Array.Unboxed
 import Data.Ord (comparing)
@@ -23,7 +20,7 @@ import Struct.Status
 import Struct.Config
 import Moves.Moves
 import Moves.BitBoard
-import Moves.Muster
+import Moves.Pattern
 
 class EvalItem a where
     evalItem :: Int -> EvalParams -> EvalWeights -> MyPos -> a -> MidEnd -> MidEnd
@@ -573,7 +570,7 @@ isol :: BBoard -> BBoard -> (Int, Int)
 isol ps pp = (ris, pis)
     where !myp = ps .&. pp
           !myr = ps `less` myp
-          !myf = ((ps .&. notFileA) `unsafeShiftR` 1) .|. ((ps .&. notFileH) `unsafeShiftL` 1)
+          !myf = bbLeft ps .|. bbRight ps
           !myu = myf `unsafeShiftL` 8
           !myd = myf `unsafeShiftR` 8
           !myc = myf .|. myu .|. myd
@@ -619,14 +616,14 @@ backPawns Black !mp !op !opa = (bp, bpo)
 
 frontAttacksWhite :: BBoard -> BBoard
 frontAttacksWhite !b = fa
-    where fal = (b .&. notFileA) `unsafeShiftR` 1
-          far = (b .&. notFileH) `unsafeShiftL` 1
+    where fal = bbLeft b
+          far = bbRight b
           !fa = shadowUp (fal .|. far)	-- shadowUp is exclusive the original!
 
 frontAttacksBlack :: BBoard -> BBoard
 frontAttacksBlack !b = fa
-    where fal = (b .&. notFileA) `unsafeShiftR` 1
-          far = (b .&. notFileH) `unsafeShiftL` 1
+    where fal = bbLeft b
+          far = bbRight b
           !fa = shadowDown (fal .|. far)	-- shadowUp is exclusive the original!
 
 ------ En prise ------

@@ -1,13 +1,11 @@
-module Moves.Muster (
+module Moves.Pattern (
         genArray,
         row1,  row2,  row3,  row4,  row5,  row6,  row7,  row8,
         fileA, fileB, fileC, fileD, fileE, fileF, fileG, fileH,
-        notFileA, notFileH,
-        rowBB, colBB,
-        rookFiles, lightSquares, darkSquares
+        bbLeft, bbRight,
+        rowBB, colBB, rookFiles, lightSquares, darkSquares
     ) where
 
--- import Data.Word
 import Data.Bits
 import Data.Array.Unboxed
 
@@ -53,11 +51,13 @@ rowBB, colBB :: Int -> BBoard
 rowBB = (!) rowArray
 colBB = (!) fileArray
 
-left, right, up, down :: BBoard -> BBoard
-left  = flip shiftR 1 . (.&.) (complement fileA)
-right = flip shiftL 1 . (.&.) (complement fileH)
-down  = flip shiftR 8
-up    = flip shiftL 8
+{-# INLINE bbLeft #-}
+{-# INLINE bbRight #-}
+bbLeft, bbRight, up, down :: BBoard -> BBoard
+bbLeft  = flip unsafeShiftR 1 . (.&. notFileA)
+bbRight = flip unsafeShiftL 1 . (.&. notFileH)
+down    = flip shiftR 8
+up      = flip shiftL 8
 
 type Elem = (Int, BBoard)
 
@@ -69,9 +69,9 @@ genDir :: (Elem -> Elem) -> (Elem -> Bool) -> Elem -> [Elem]
 genDir g f e = drop 1 $ takeWhile f $ iterate g e
 
 genLeft, genRight, genUp, genDown, genFile, genRow :: Elem -> [Elem]
-genLeft ib@(i0, _) = genDir (\(i, b) -> (i-1, left b)) (\(i, _) -> i `div` 8 == i0 `div` 8) ib
+genLeft ib@(i0, _) = genDir (\(i, b) -> (i-1, bbLeft b)) (\(i, _) -> i `div` 8 == i0 `div` 8) ib
 
-genRight ib@(i0, _) = genDir (\(i, b) -> (i+1, right b)) (\(i, _) -> i `div` 8 == i0 `div` 8) ib
+genRight ib@(i0, _) = genDir (\(i, b) -> (i+1, bbRight b)) (\(i, _) -> i `div` 8 == i0 `div` 8) ib
 
 genDown = genDir (\(i, b) -> (i-8, down b)) (\(i, _) -> i >= 0)
 
