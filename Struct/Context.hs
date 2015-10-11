@@ -101,6 +101,7 @@ data Changing = Chg {
         working    :: Bool,             -- are we in tree search?
         compThread :: Maybe ThreadId,   -- the search thread id
         crtStatus  :: MyState,          -- current state
+        crtPhase   :: Int,		-- current game phase
         realPly    :: Maybe Int,	-- real ply so far (if defined)
         forGui     :: Maybe InfoToGui,  -- info for gui
         srchStrtMs :: Int,              -- search start time (milliseconds)

@@ -30,7 +30,7 @@ import Moves.Moves (movesInit)
 import Moves.Board (posFromFen, initPos)
 import Moves.History
 import Search.CStateMonad (execCState)
--- import Eval.Eval (weightNames)
+import Eval.Eval (gamePhase)
 import Eval.FileParams (makeEvalState)
 
 -- Name, authos, version and suffix:
@@ -38,7 +38,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.4.0"
-progVerSuff = "nsfc"
+progVerSuff = "nsft"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -106,6 +106,7 @@ initContext opts = do
             working = False,
             compThread = Nothing,
             crtStatus = posToState initPos ha hi evs,
+            crtPhase  = gamePhase initPos,
             realPly = Nothing,
             forGui = Nothing,
             srchStrtMs = 0,
@@ -325,7 +326,8 @@ doPosition fen mvs = do
             hi <- liftIO newHist
             let es = evalst $ crtStatus chg
             (mi, ns) <- newState fen mvs (hash . crtStatus $ chg) hi es
-            modifyChanging (\c -> c { crtStatus = ns, realPly = mi, myColor = myCol })
+            let nf = gamePhase $ crtPos ns
+            modifyChanging (\c -> c { crtStatus = ns, crtPhase = nf, realPly = mi, myColor = myCol })
     where newState fpos ms c h es = foldM execMove (stateFromFen fpos c h es) ms
           execMove (mi, s) m = do
               let mj = case mi of
@@ -425,11 +427,11 @@ timeReserved   = 70	-- milliseconds reserved for move communication
 -- This function calculates the normal time for the next search loop,
 -- the maximum of that (whch cannot be exceeded)
 -- and if we are in time troubles or not
-compTime :: Int -> Int -> Int -> Int -> (Int, Int, Bool)
-compTime tim tpm fixmtg lastsc
+compTime :: Int -> Int -> Int -> Int -> Int -> (Int, Int, Bool)
+compTime tim tpm fixmtg lastsc gphase
     | tim == 0 && tpm == 0 = (  0,   0,  False)
     | otherwise            = (ctm, tmx, ttroub)
-    where mtg = if fixmtg > 0 then fixmtg else estimateMovesToGo lastsc
+    where mtg = if fixmtg > 0 then fixmtg else estimateMovesToGo lastsc gphase
           ctn = tpm + tim `div` mtg
           (ctm, short) = if tim > 0 && tim < 2000 || tim == 0 && tpm < 700
                             then (300, True)
@@ -444,11 +446,18 @@ compTime tim tpm fixmtg lastsc
           ttroub = short || over
 
 estMvsToGo :: Array Int Int
-estMvsToGo = listArray (0, 8) [30, 28, 24, 18, 12, 10, 8, 6, 3]
+estMvsToGo = listArray (0, 8) [60, 40, 27, 18, 12, 10, 8, 6, 3]
 
-estimateMovesToGo :: Int -> Int
-estimateMovesToGo sc = estMvsToGo ! mvidx
+estimateMovesToGo :: Int -> Int -> Int
+estimateMovesToGo sc ph
+    | asc <= 100 = pmvs
+    | asc >  300 = smvs
+    | otherwise  = ((100 - w) * pmvs + w * smvs) `div` 100
     where mvidx = min 8 $ abs sc `div` 100
+          asc   = abs sc
+          pmvs  = max 6 $ ph `div` 3
+          smvs  = estMvsToGo ! mvidx
+          w     = asc `div` 2 - 50
 
 -- Some parameters (until we have a good solution)
 -- clearHash :: Bool
@@ -522,7 +531,7 @@ searchTheTree tief mtief timx tim tpm mtg lsc lpv rmvs = do
     storeBestMove path sc	-- write back in status
     modifyChanging (\c -> c { crtStatus = stfin })
     currms <- lift $ currMilli (startSecond ctx)
-    let (ms', mx, urg) = compTime tim tpm mtg sc
+    let (ms', mx, urg) = compTime tim tpm mtg sc (crtPhase chg)
     ms <- if urg || null path then return ms' else correctTime tief (reduceBegin (realPly chg) ms') sc path
     let strtms = srchStrtMs chg
         delta = strtms + ms - currms
@@ -604,10 +613,15 @@ timeFactor tp cha draft tim osc sc chgs mvs = round $ fromIntegral tim * min (tp
                  in tpScScale tp * fromIntegral (scdiff * scdiff * draft)	-- score change factor
           chf  = tpChScale tp * fromIntegral (chgs * length mvs * draft)	-- change factor
 
+redBeginMax :: Int
+redBeginMax = 9
+redBegin :: Array Int Int
+redBegin = listArray (0, redBeginMax) [42, 42, 42, 42, 62, 62, 78, 78, 90, 90]
+
 reduceBegin :: Maybe Int -> Int -> Int
 reduceBegin mi ms | Just i <- mi,
-                    i < 10    = (ms * i) `div` 10
-                  | otherwise = ms
+                    i <= redBeginMax = (ms * redBegin!i) `div` 100
+                  | otherwise        = ms
 
 storeBestMove :: [Move] -> Int -> CtxIO ()
 storeBestMove mvs sc = do
