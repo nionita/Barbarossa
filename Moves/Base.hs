@@ -6,7 +6,7 @@
              #-}
 
 module Moves.Base (
-    posToState, getPos, posNewSearch,
+    posToState, getPos, thePos, posNewSearch,
     doRealMove, doMove, undoMove, genMoves, genTactMoves, canPruneMove,
     useHash,
     staticVal, materVal, tacticalPos, isMoveLegal, isKillCand, isTKillCand, okInSequence,
@@ -60,7 +60,10 @@ curNodes = gets (nodes . stats)
 
 {-# INLINE getPos #-}
 getPos :: Game MyPos
-getPos = gets (head . stack)
+getPos = gets thePos
+
+thePos :: MyState -> MyPos
+thePos = head . stack
 
 {-# INLINE informCtx #-}
 informCtx :: Comm -> Game ()

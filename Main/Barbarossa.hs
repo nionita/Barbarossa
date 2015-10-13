@@ -425,11 +425,11 @@ timeReserved   = 70	-- milliseconds reserved for move communication
 -- This function calculates the normal time for the next search loop,
 -- the maximum of that (whch cannot be exceeded)
 -- and if we are in time troubles or not
-compTime :: Int -> Int -> Int -> Int -> (Int, Int, Bool)
-compTime tim tpm fixmtg lastsc
+compTime :: Int -> Int -> Int -> Int -> Maybe Int -> (Int, Int, Bool)
+compTime tim tpm fixmtg lastsc mply
     | tim == 0 && tpm == 0 = (  0,   0,  False)
     | otherwise            = (ctm, tmx, ttroub)
-    where mtg = if fixmtg > 0 then fixmtg else estimateMovesToGo lastsc
+    where mtg = if fixmtg > 0 then fixmtg else estimateMovesToGo lastsc (maybe 10 id mply)
           ctn = tpm + tim `div` mtg
           (ctm, short) = if tim > 0 && tim < 2000 || tim == 0 && tpm < 700
                             then (300, True)
@@ -443,12 +443,13 @@ compTime tim tpm fixmtg lastsc
           (tmx, over) = if maxx < tmxt then (maxx, True) else (tmxt, False)
           ttroub = short || over
 
-estMvsToGo :: Array Int Int
-estMvsToGo = listArray (0, 8) [60, 40, 27, 18, 12, 10, 8, 6, 3]
+-- estMvsToGo :: Array Int Int
+-- estMvsToGo = listArray (0, 8) [60, 40, 27, 18, 12, 10, 8, 6, 3]
 
-estimateMovesToGo :: Int -> Int
-estimateMovesToGo sc = estMvsToGo ! mvidx
-    where mvidx = min 8 $ abs sc `div` 100
+estimateMovesToGo :: Int -> Int -> Int
+estimateMovesToGo sc ply = round $ 49.773 - 3.869 * disc - 0.238 * dply
+    where disc = 1 / (1 + abs (fromIntegral sc))
+          dply = fromIntegral ply :: Double
 
 -- Some parameters (until we have a good solution)
 -- clearHash :: Bool
@@ -522,7 +523,7 @@ searchTheTree tief mtief timx tim tpm mtg lsc lpv rmvs = do
     storeBestMove path sc	-- write back in status
     modifyChanging (\c -> c { crtStatus = stfin })
     currms <- lift $ currMilli (startSecond ctx)
-    let (ms', mx, urg) = compTime tim tpm mtg sc
+    let (ms', mx, urg) = compTime tim tpm mtg sc (realPly chg)
     ms <- if urg || null path then return ms' else correctTime tief (reduceBegin (realPly chg) ms') sc path
     let strtms = srchStrtMs chg
         delta = strtms + ms - currms

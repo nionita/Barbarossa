@@ -5,7 +5,8 @@
 
 module Eval.Eval (
     initEvalState,
-    posEval
+    posEval,
+    gamePhase
 ) where
 
 import Data.Array.Base (unsafeAt)
