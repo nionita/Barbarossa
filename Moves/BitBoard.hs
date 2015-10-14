@@ -2,7 +2,8 @@
 module Moves.BitBoard (
     lsb, bbToSquares, less, firstOne,
     bbToSquaresBB,
-    shadowDown, shadowUp, uTestBit, uBit
+    shadowDown, shadowUp, uTestBit, uBit,
+    flood, floodA, floodAN
     -- exactOne,
     -- bbFoldr
 ) where
@@ -105,3 +106,34 @@ bbFoldr f = go
           go !r b = let lsbb = lsb b
                     in go (f lsbb r) (b .&. complement lsbb)
 --}
+
+{-# INLINE flood #-}
+flood :: (Square -> BBoard) -> BBoard -> BBoard
+flood f = go 0
+    where go !r !n
+              | n == 0    = r
+              | otherwise = let !r1 = foldr (.|.) r $ map f $ bbToSquares n
+                                !n1 = r1 `less` r
+                            in go r1 n1
+
+{-# INLINE floodA #-}
+floodA :: (Square -> BBoard) -> (BBoard -> Int -> a -> (a, Int)) -> a -> BBoard -> Int
+floodA f g = go 0 0 0
+    where go !r !acc !i a !n
+              | n == 0    = acc
+              | otherwise = let !r1 = foldr (.|.) r $ map f $ bbToSquares n
+                                !n1 = r1 `less` r
+                                (a1, g1) = g n1 i a
+                                !acc1    = acc + g1
+                            in go r1 acc1 (i+1) a1 n1
+
+{-# INLINE floodAN #-}
+floodAN :: Int -> (Square -> BBoard) -> (BBoard -> Int -> a -> (a, Int)) -> a -> BBoard -> Int
+floodAN k f g = go 0 0 0
+    where go !r !acc !i a !n
+              | n == 0 || i >= k = acc
+              | otherwise        = let !r1 = foldr (.|.) r $ map f $ bbToSquares n
+                                       !n1 = r1 `less` r
+                                       (a1, g1) = g n1 i a
+                                       !acc1    = acc + g1
+                                   in go r1 acc1 (i+1) a1 n1

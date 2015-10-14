@@ -22,6 +22,8 @@ import Struct.Config
 import Moves.Moves
 import Moves.BitBoard
 import Moves.Pattern
+-- import Moves.Fen
+-- import Moves.Board
 
 class EvalItem a where
     evalItem :: Int -> EvalParams -> EvalWeights -> MyPos -> a -> MidEnd -> MidEnd
@@ -224,8 +226,14 @@ instance EvalItem KingSafe where
 -- if we eliminate the lists
 kingSafe :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 kingSafe !p !ew !mide = madm mide (ewKingSafe ew) ksafe
-    where !ksafe = ksSide (yo p) (yoKAttacs p) (myPAttacs p) (myNAttacs p) (myBAttacs p) (myRAttacs p) (myQAttacs p) (myKAttacs p) (myAttacs p)
-                 - ksSide (me p) (myKAttacs p) (yoPAttacs p) (yoNAttacs p) (yoBAttacs p) (yoRAttacs p) (yoQAttacs p) (yoKAttacs p) (yoAttacs p)
+    where !ksafe = mksc - yksc
+          !mks = ksSide (yo p) (yoKAttacs p) (myPAttacs p) (myNAttacs p) (myBAttacs p) (myRAttacs p) (myQAttacs p) (myKAttacs p) (myAttacs p)
+          !mksc | mks >= ksMinFlood = floodSide p True  mks
+                | otherwise         = mks
+          !yks = ksSide (me p) (myKAttacs p) (yoPAttacs p) (yoNAttacs p) (yoBAttacs p) (yoRAttacs p) (yoQAttacs p) (yoKAttacs p) (yoAttacs p)
+          !yksc | yks >= ksMinFlood = floodSide p False yks
+                | otherwise         = yks
+          ksMinFlood = 120	-- make parameter & tune!
 
 -- To make the sum and count in one pass
 data Flc = Flc !Int !Int
@@ -271,9 +279,54 @@ attCoef = listArray (0, 248) $ take 8 (repeat 0) ++ [ f x | x <- [0..63] ] ++ re
     where f :: Int -> Int
           f x = let y = fromIntegral x :: Double in round $ (2.92968750 - 0.03051758*y)*y*y
 
+{-# INLINE kingSquare #-}
 kingSquare :: BBoard -> BBoard -> Square
 kingSquare kingsb colorp = head $ bbToSquares $ kingsb .&. colorp
-{-# INLINE kingSquare #-}
+
+-- When the king safety score for one side has riched some level,
+-- make an even deeper effort to find out which pieces can come soon
+-- to increase the pressure
+floodSide :: MyPos -> Bool -> Int -> Int
+floodSide p forme sks = ks
+    where !cn = commingPcs p forme (\_ -> nAttacs) knights
+          !cb = commingPcs p forme bAttacs         bishops
+          !cr = commingPcs p forme rAttacs         rooks
+          !cq = commingPcs p forme qAttacs         queens
+          !fs = fsn * cn + fsb * cb + fsr * cr + fsq * cq
+          !ks = (sks * (floodF + (fs `unsafeShiftR` floodS))) `unsafeShiftR` floodS
+          fsn =  3	-- make parameters & tune!
+          fsb =  3
+          fsr =  5
+          fsq = 10
+          -- current values are so that, if a queen and a knight can come (each in 1 ply)
+          -- this will increase the evaluation by (fsn+fsb)/2 % (now: 13 %)
+          -- maybe it should be a bit higher...
+
+-- Parameters of the flood kind safety improvement
+floodF, floodS, futureDecay :: Int
+floodF      = 128
+floodS      = 7
+futureDecay = 1
+
+-- Given a position, for whom to calculate (attacker is me?),
+-- specific an attacker (piece) function and a defender zone function:
+-- calculate the impact of comming pieces taking into consideration
+-- how many moves they need to come into play
+commingPcs :: MyPos -> Bool -> (BBoard -> Square -> BBoard) -> (MyPos -> BBoard) -> Int
+commingPcs p forme attf pcsf
+    -- = floodAN 2 (attf (occup p)) (countComming (pcsf p .&. attacker)) floodF defender
+    = floodAN 2 ((`less` unsafe) . attf (occup p)) (countComming (pcsf p .&. attacker)) floodF defender
+    where (attacker, defender, unsafe) | forme     = (me p, yoKAttacs p, yoAttacs p)
+                                       | otherwise = (yo p, myKAttacs p, myAttacs p)
+
+-- Count comming given pieces & weight based on the number of moves
+-- they need to attack the opponent king area
+countComming :: BBoard -> BBoard -> Int -> Int -> (Int, Int)
+countComming cp r i w
+    | i == 0    = (w, 0)	-- don't count the direct attackers
+    | otherwise = (w `unsafeShiftR` futureDecay, cw)
+    where c   = popCount $ cp .&. r
+          !cw = c * w
 
 ------ Material ------
 data Material = Material
