@@ -288,17 +288,17 @@ kingSquare kingsb colorp = head $ bbToSquares $ kingsb .&. colorp
 -- to increase the pressure
 floodSide :: MyPos -> Bool -> Int -> Int
 floodSide p forme sks = ks
-    where !cn = commingPcs p forme (\_ -> nAttacs) knights
-          !cb = commingPcs p forme bAttacs         bishops
-          !cr = commingPcs p forme rAttacs         rooks
-          !cq = commingPcs p forme qAttacs         queens
+    where !cn = comingPcs p forme (\_ -> nAttacs) knights
+          !cb = comingPcs p forme bAttacs         bishops
+          !cr = comingPcs p forme rAttacs         rooks
+          !cq = comingPcs p forme qAttacs         queens
           !fs = fsn * cn + fsb * cb + fsr * cr + fsq * cq
-          fsn =  3	-- make parameters & tune!
-          fsb =  3
-          fsr =  5
-          fsq = 10
+          fsn = 15	-- make parameters & tune!
+          fsb = 15
+          fsr = 25
+          fsq = 50
           -- comScale is for scaling so that rounding does not hurt
-          -- floodF/S is to scale the effect of comming pieces as a whole
+          -- floodF/S is to scale the effect of coming pieces as a whole
           -- fsX coefficients are used to scale the effect of different piece types
           -- Current values are so that, if a queen and a knight can come (each in 1 ply)
           -- this will increase the evaluation by (fsn+fsb) % (not really %, but 1/128)
@@ -312,17 +312,17 @@ comScale = 7
 
 -- Given a position, for whom to calculate (attacker is me?),
 -- specific attacker (piece) function and the corresponding piece selection function:
--- calculate the impact of comming pieces of that type
+-- calculate the impact of coming pieces of that type
 -- taking into consideration how many moves they need to come into play
 -- We limit the search to 2 steps
-commingPcs :: MyPos -> Bool -> (BBoard -> Square -> BBoard) -> (MyPos -> BBoard) -> Int
-commingPcs p forme attf pcsf
+comingPcs :: MyPos -> Bool -> (BBoard -> Square -> BBoard) -> (MyPos -> BBoard) -> Int
+comingPcs p forme attf pcsf
     = floodSearch 2 ((`less` unsafe) . attf (occup p)) countComming pcs defender
     where (attacker, defender, unsafe) | forme     = (me p, yoKAttacs p, yoAttacs p)
                                        | otherwise = (yo p, myKAttacs p, myAttacs p)
           pcs = pcsf p .&. attacker
 
--- Count comming given pieces & weight based on the number of moves
+-- Count coming given pieces & weight based on the number of moves
 -- they need to attack the opponent king area
 countComming :: BBoard -> Int -> Int -> Int
 countComming cp i w
@@ -335,8 +335,7 @@ floodSearch :: Int -> (Square -> BBoard) -> (BBoard -> Int -> Int -> Int) -> BBo
 floodSearch k f g = go 0 0 weight2 0
     where go !acc !i !w !rc !rm !n
               | n == 0 || rm == 0 || i >= k = acc	-- stop when no new, no remaining pieces or max steps
-              | otherwise = let !g1  | i == 0    = 0	-- we skip the direct attackers (step 0)
-                                     | otherwise = g (n .&. rm) i w
+              | otherwise = let !g1  = g (n .&. rm) i w
                                 !ac1 = acc + g1
                                 !rc1 = foldr (.|.) rc $ map f $ bbToSquares n
                                 !nrc = complement rc
