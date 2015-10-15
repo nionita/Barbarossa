@@ -293,40 +293,60 @@ floodSide p forme sks = ks
           !cr = commingPcs p forme rAttacs         rooks
           !cq = commingPcs p forme qAttacs         queens
           !fs = fsn * cn + fsb * cb + fsr * cr + fsq * cq
-          !ks = (sks * (floodF + (fs `unsafeShiftR` floodS))) `unsafeShiftR` floodS
           fsn =  3	-- make parameters & tune!
           fsb =  3
           fsr =  5
           fsq = 10
-          -- current values are so that, if a queen and a knight can come (each in 1 ply)
-          -- this will increase the evaluation by (fsn+fsb)/2 % (now: 13 %)
+          -- comScale is for scaling so that rounding does not hurt
+          -- floodF/S is to scale the effect of comming pieces as a whole
+          -- fsX coefficients are used to scale the effect of different piece types
+          -- Current values are so that, if a queen and a knight can come (each in 1 ply)
+          -- this will increase the evaluation by (fsn+fsb) % (not really %, but 1/128)
           -- maybe it should be a bit higher...
+          !ks = (sks * (floodF + (fs `unsafeShiftR` comScale))) `unsafeShiftR` floodS
+          floodF = 1 `unsafeShiftL` floodS
+          floodS = 7
 
--- Parameters of the flood kind safety improvement
-floodF, floodS, futureDecay :: Int
-floodF      = 128
-floodS      = 7
-futureDecay = 1
+comScale :: Int
+comScale = 7
 
 -- Given a position, for whom to calculate (attacker is me?),
--- specific an attacker (piece) function and a defender zone function:
--- calculate the impact of comming pieces taking into consideration
--- how many moves they need to come into play
+-- specific attacker (piece) function and the corresponding piece selection function:
+-- calculate the impact of comming pieces of that type
+-- taking into consideration how many moves they need to come into play
+-- We limit the search to 2 steps
 commingPcs :: MyPos -> Bool -> (BBoard -> Square -> BBoard) -> (MyPos -> BBoard) -> Int
 commingPcs p forme attf pcsf
-    -- = floodAN 2 (attf (occup p)) (countComming (pcsf p .&. attacker)) floodF defender
-    = floodAN 2 ((`less` unsafe) . attf (occup p)) (countComming (pcsf p .&. attacker)) floodF defender
+    = floodSearch 2 ((`less` unsafe) . attf (occup p)) countComming pcs defender
     where (attacker, defender, unsafe) | forme     = (me p, yoKAttacs p, yoAttacs p)
                                        | otherwise = (yo p, myKAttacs p, myAttacs p)
+          pcs = pcsf p .&. attacker
 
 -- Count comming given pieces & weight based on the number of moves
 -- they need to attack the opponent king area
-countComming :: BBoard -> BBoard -> Int -> Int -> (Int, Int)
-countComming cp r i w
-    | i == 0    = (w, 0)	-- don't count the direct attackers
-    | otherwise = (w `unsafeShiftR` futureDecay, cw)
-    where c   = popCount $ cp .&. r
-          !cw = c * w
+countComming :: BBoard -> Int -> Int -> Int
+countComming cp i w
+    | i == 0    = 0	-- don't count the direct attackers
+    | otherwise = cw
+    where !cw = w * popCount cp
+
+{-# INLINE floodSearch #-}
+floodSearch :: Int -> (Square -> BBoard) -> (BBoard -> Int -> Int -> Int) -> BBoard -> BBoard -> Int
+floodSearch k f g = go 0 0 weight2 0
+    where go !acc !i !w !rc !rm !n
+              | n == 0 || rm == 0 || i >= k = acc	-- stop when no new, no remaining pieces or max steps
+              | otherwise = let !g1  | i == 0    = 0	-- we skip the direct attackers (step 0)
+                                     | otherwise = g (n .&. rm) i w
+                                !ac1 = acc + g1
+                                !rc1 = foldr (.|.) rc $ map f $ bbToSquares n
+                                !nrc = complement rc
+                                !n1  = rc1 .&. nrc
+                                !rm1 = rm  .&. nrc
+                                !w1  = w `unsafeShiftR` stepDecay
+                            in go ac1 (i+1) w1 rc1 rm1 n1
+          -- step 0 is ignored, so it counts beginning with 128 (step 1), then 64 (step 2) a.s.o.
+          weight2 = 1 `unsafeShiftL` (comScale + 1)
+          stepDecay = 1
 
 ------ Material ------
 data Material = Material

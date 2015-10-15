@@ -8,7 +8,7 @@ import Control.Monad
 import Control.Monad.Reader
 import Control.Concurrent
 import Control.Exception
-import Data.Array.Unboxed
+-- import Data.Array.Unboxed
 import Data.Foldable (foldrM)
 import Data.List (intersperse, delete)
 import Data.Maybe
@@ -38,7 +38,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.4.0"
-progVerSuff = "ksf"
+progVerSuff = "ksf1"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -447,7 +447,7 @@ compTime tim tpm fixmtg lastsc mply
 -- estMvsToGo = listArray (0, 8) [60, 40, 27, 18, 12, 10, 8, 6, 3]
 
 estimateMovesToGo :: Int -> Int -> Int
-estimateMovesToGo sc ply = round $ 49.773 - 3.869 * disc - 0.238 * dply
+estimateMovesToGo sc ply = max 1 $ round $ 49.773 - 3.869 * disc - 0.238 * dply
     where disc = 1 / (1 + abs (fromIntegral sc))
           dply = fromIntegral ply :: Double
 
