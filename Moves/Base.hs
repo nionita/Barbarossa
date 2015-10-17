@@ -181,7 +181,7 @@ doRealMove :: Move -> Game DoResult
 doRealMove m = do
     s  <- get
     let (pc:_) = stack s	-- we never saw an empty stack error until now
-        !m1 = checkCastle (checkEnPas m pc) pc
+        !m1 = checkCastle pc $ checkEnPas pc m
         -- Moving a non-existent piece?
         il = occup pc `uBitClear` fromSquare m1
         -- Capturing one king?

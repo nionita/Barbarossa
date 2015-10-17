@@ -391,8 +391,8 @@ moveAddPiece piece (Move w)
     -- | moveIsNormal m = Move $ (fromIntegral (fromEnum piece) `unsafeShiftL` 12) .|. w
     -- | otherwise      = m
 
-checkCastle :: Move -> MyPos -> Move
-checkCastle m p
+checkCastle :: MyPos -> Move -> Move
+checkCastle p m
     | moveIsNormal m && isKingMoving m p
         = case ds of
             2  -> makeCastleFor c True
@@ -404,8 +404,8 @@ checkCastle m p
           ds = d - s
           c = moving p
 
-checkEnPas :: Move -> MyPos -> Move
-checkEnPas m p
+checkEnPas :: MyPos -> Move -> Move
+checkEnPas p m
     | moveIsNormal m && isPawnMoving m p
          = if (epcas p .&. epMask) `testBit` t then makeEnPas f t else m
     | otherwise        = m

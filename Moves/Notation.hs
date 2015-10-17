@@ -364,7 +364,7 @@ pawnXA1 p f0 f r []
                                     | cp == King -> Left $ "Semantic: pawn captures king"
                                     | otherwise  -> Right m
                          Empty -> if (fcol == White && r == 5) || (fcol == Black && r == 2)
-                                     then let m' = checkEnPas m p
+                                     then let m' = checkEnPas p m
                                           in if moveIsEnPas m'
                                                 then Right m'
                                                 else Left $ "Semantic: pawn capture on empty square"

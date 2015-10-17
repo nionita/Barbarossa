@@ -8,7 +8,7 @@ import Control.Monad
 import Control.Monad.Reader
 import Control.Concurrent
 import Control.Exception
-import Data.Array.Unboxed
+-- import Data.Array.Unboxed
 import Data.Foldable (foldrM)
 import Data.List (intersperse, delete)
 import Data.Maybe

@@ -15,7 +15,7 @@ import Data.List
 import Data.Maybe (catMaybes)
 import System.Console.GetOpt
 import System.Environment (getArgs)
-import System.FilePath
+-- import System.FilePath
 import System.IO
 import System.IO.Error
 import System.Process
@@ -23,7 +23,7 @@ import System.Random
 
 import Struct.Struct
 import Moves.Board
-import Moves.ShowMe
+-- import Moves.ShowMe
 import Moves.Notation
 import Uci.UCI
 
@@ -75,10 +75,6 @@ theOptions = do
 type Config = [(String, String)]
 
 -- Default config parameters:
-defConEngCom, defConFenFile :: FilePath
-defConEngCom  = "dist" </> "build" </> "Barbarossa" </> "Barbarossa"
-defConFenFile = "test.fen"
-
 defConBatch, defConDepth, defConLength :: Int
 defConBatch   = 256
 defConDepth   = 7
@@ -106,9 +102,9 @@ genMoves p
     where c = moving p
           (wcs, lcs) = genMoveCaptWL p
 
-showMyPos :: MyPos -> String
-showMyPos p = showTab (black p) (slide p) (kkrq p) (diag p) ++ "================ " ++ mc ++ "\n"
-    where mc = if moving p == White then "w" else "b"
+-- showMyPos :: MyPos -> String
+-- showMyPos p = showTab (black p) (slide p) (kkrq p) (diag p) ++ "================ " ++ mc ++ "\n"
+--     where mc = if moving p == White then "w" else "b"
 
 main :: IO ()
 main = do
@@ -119,17 +115,18 @@ main = do
             config <- case optConFile opts of
                           Just cf -> readConfigFile cf
                           Nothing -> return defConfig
-            (h, sz) <- openFenFile (getConfigVal config "fenFile" $ Just defConFenFile)
+            (h, sz) <- openFenFile (getConfigStr config "fenFile" Nothing)
             chn <- newChan
             sequence_ $ take samps $ repeat $ do
                 _   <- async $ batchReader sz (optBatch opts) h chn (optNoThrds opts)
                 aes <- sequence $ map async $ take (optNoThrds opts) $ repeat
-                                $ oneProc (getConfigVal config "engCom" $ Just defConEngCom) ["-l", "5"] [] chn
+                                $ oneProc (getConfigStr config "engCom" Nothing) ["-l", "5"] [] chn
                                     (getConfigVal config "playLength" $ Just defConLength)
                                     (getConfigVal config "playDepth" $ Just defConDepth)
                 -- Now everything is started & calculating; wait for the results & return the sum of costs
                 cs <- mapM wait aes
-                putStrLn $ show $ sum cs
+                let (n, s) = foldr (\(a,b) (c,d) -> (a+c, b+d)) (0, 0) cs
+                putStrLn $ show n ++ "\t" ++ show (s / fromIntegral n)
 
 -- Open the fen file and return handle & size
 openFenFile :: FilePath -> IO (Handle, Integer)
@@ -141,6 +138,7 @@ openFenFile fp = do
 
 -- This will calculate the error or cost for a point in the parameter space
 -- It will start more threads for this, including a batch reader
+{--
 bigPointCost :: Handle -> Integer -> Int -> Int -> Int -> Int -> String -> [String]
              -> [(String, String)] -> IO Double
 bigPointCost h fsize bsize threads mvs depth engine eopts params = do
@@ -150,6 +148,7 @@ bigPointCost h fsize bsize threads mvs depth engine eopts params = do
     -- Now everything is started & calculating; wait for the results & return the sum of costs
     cs <- mapM wait aes
     return $! sum cs
+--}
 
 -- The batch reader reads randomly a number of fens from a fen file,
 -- makes them to stati and write them to the channel
@@ -233,7 +232,7 @@ randomMove trys fen = do
 -- Start an engine with given parameters and drive it to analyse
 -- states take from the batch channel as long as there are some more
 -- Calculate the error as sum of errors of all analysed states
-oneProc :: String -> [String] -> [(String, String)] -> Chan (Maybe MyState) -> Int -> Int -> IO Double
+oneProc :: String -> [String] -> [(String, String)] -> Chan (Maybe MyState) -> Int -> Int -> IO (Int, Double)
 oneProc engine eopts params chn mvs depth = do
     let crp | null params = proc engine eopts
             | otherwise   = proc engine (eopts ++ "-p" : intersperse "," (map f params))
@@ -244,7 +243,7 @@ oneProc engine eopts params chn mvs depth = do
     hPutStrLn hin "uci"
     _ <- accumLines hout ("uciok" `isPrefixOf`) (\_ _ -> ()) ()
     -- Should send options like hash size here...
-    r <- catch (runPos hin hout chn mvs depth 0) $ \e -> do
+    r <- catch (runPos hin hout chn mvs depth 0 0) $ \e -> do
         let es = ioeGetErrorString e
         putStrLn $ "Error reading from engine: " ++ es
         terminateProcess ph
@@ -262,30 +261,34 @@ uciDebug = False
 funDebug = False
 
 -- Analyse positions through a UCI chess engine connection, returning the error
-runPos :: Handle -> Handle -> Chan (Maybe MyState) -> Int -> Int -> Double -> IO Double
-runPos hi ho chn mvs depth acc = do
+runPos :: Handle -> Handle -> Chan (Maybe MyState) -> Int -> Int -> Int -> Double -> IO (Int, Double)
+runPos hi ho chn mvs depth npos erac = do
     when batDebug $ putStrLn $ "Bat: waiting for new fen from channel..."
     mst <- readChan chn
     case mst of
         Just st -> do
             when (batDebug || funDebug) $ putStrLn $ "Fen to analyse: " ++ stIniFen st
             sf <- execStateT go st { stRemMvs = mvs }
-            let !acc' = acc + ferr
-                !ferr = calcError sf
+            let !ferr  = calcError sf
             when funDebug $ do
                 putStrLn $ "Fen done: " ++ stIniFen st
                 putStrLn $ "Fen collects:"
                 forM_ (reverse $ stScDMvs sf) $ \s -> putStrLn (show s)
                 putStrLn $ "Fen error: " ++ show ferr
-            runPos hi ho chn mvs depth acc'
+            -- Remaining moves 0 means we could analyse without errors
+            if stRemMvs sf /= 0
+               then runPos hi ho chn mvs depth npos erac	-- ignore the failes pos
+               else do
+                   let !erac' = erac + ferr
+                   runPos hi ho chn mvs depth (npos+1) erac'
         Nothing -> do
             when batDebug $ putStrLn $ "Bat: got nothing from chan, exit"
-            return acc
+            return (npos, erac)
     where go = do
              s <- get
              let ucipos = "position fen " ++ stIniFen s
                  ucimvs | null (stScDMvs s) = ""
-                        | otherwise         = " moves" ++ concatMap f (reverse $ stScDMvs s)
+                        | otherwise         = " moves" ++ concatMap showPl (reverse $ stScDMvs s)
              (ma, ls) <- lift $ do
                  hPutStrLn hi $ ucipos ++ ucimvs
                  when uciDebug $ putStrLn $ "Sent: " ++ ucipos ++ ucimvs
@@ -298,27 +301,40 @@ runPos hi ho chn mvs depth acc = do
                  -- We don't check the time - but what if process is stuck?
                  accumLines ho ("bestmove " `isPrefixOf`) getSearchResults Nothing
              case ma of
-                 Nothing -> lift $ reportEngineProblem s ls
-                 Just a@(sc, bm) -> do
-                     let p   = stCrtPos s
-                         bm' = checkCastle (checkEnPas bm p) p
-                         p'  = doFromToMove bm' p
-                     if not $ checkOk p'
-                        then lift $ error $ "Wrong move from engine, illegal position: " ++ show p'
-                        else do
-                            let rmvs = stRemMvs s - 1
-                            put s { stRemMvs = rmvs, stCrtPos = p', stScDMvs = a : stScDMvs s }
-                            case sc of
-                                Cp _ -> if rmvs > 0 then go else return ()
-                                Mt _ -> return ()	-- we stop after a mate
-          f (_, mv) = " " ++ show mv
+                 Nothing -> lift $ reportEngineProblem s ls "Engine sent no info pv"
+                 Just (sc, bm') -> do
+                     let p'  = stCrtPos s
+                         src = fromSquare bm'
+                     case tabla p' src of
+                         Empty      -> lift $ reportEngineProblem s ls "Engine moves inexistent piece"
+                         Busy c fig -> do
+                             let bm | moveIsNormal bm' = moveAddColor c $ moveAddPiece fig bm'
+                                    | otherwise        = bm'
+                                 m = checkCastle p' $ checkEnPas p' bm
+                             if not $ legalMove p' m
+                                then lift $ reportEngineProblem s ls "Engine sent illegal best move"
+                                else do
+                                    let p  = doFromToMove m p'
+                                        a  = (sc, m)
+                                        as = stScDMvs s
+                                    if not $ checkOk p
+                                       then lift $ error $ "Wrong move from engine, illegal position: " ++ show p
+                                       else case sc of
+                                               -- we stop after a mate was found
+                                               Mt _ -> put s { stRemMvs = 0, stCrtPos = p, stScDMvs = a : as }
+                                               Cp _ -> do
+                                                   let rmvs = stRemMvs s - 1
+                                                   put s { stRemMvs = rmvs, stCrtPos = p, stScDMvs = a : as }
+                                                   if rmvs > 0 then go else return ()
+          showPl (_, mv) = " " ++ show mv
 
 engErrFile :: FilePath
 engErrFile = "engErrors.txt"
 
-reportEngineProblem :: MyState -> [String] -> IO ()
-reportEngineProblem st ls = withFile engErrFile AppendMode $ \h -> do
+reportEngineProblem :: MyState -> [String] -> String -> IO ()
+reportEngineProblem st ls pre = withFile engErrFile AppendMode $ \h -> do
     hPutStrLn h "*** Problem in mini play ***"
+    hPutStrLn h pre
     hPutStrLn h $ "Initial fen: " ++ stIniFen st
     hPutStrLn h "Moves & scores:"
     mapM_ (hPutStrLn h . show) $ reverse $ stScDMvs st
