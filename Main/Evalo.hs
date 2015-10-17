@@ -297,24 +297,27 @@ runPos hi ho chn mvs depth npos erac = do
     when batDebug $ putStrLn $ "Bat: waiting for new fen from channel..."
     mst <- readChan chn
     case mst of
+        Nothing -> do
+            when batDebug $ putStrLn $ "Bat: got nothing from chan, exit"
+            return (npos, erac)
         Just st -> do
             when (batDebug || funDebug) $ putStrLn $ "Fen to analyse: " ++ stIniFen st
+            threadDelay 30000
             sf <- execStateT go st { stRemMvs = mvs }
-            let !ferr  = calcError sf
+            let merr = calcError sf
             when funDebug $ do
                 putStrLn $ "Fen done: " ++ stIniFen st
                 putStrLn $ "Fen collects:"
                 forM_ (reverse $ stScDMvs sf) $ \s -> putStrLn (show s)
-                putStrLn $ "Fen error: " ++ show ferr
+                putStrLn $ "Fen error: " ++ show merr
             -- Remaining moves 0 means we could analyse without errors
             if stRemMvs sf /= 0
-               then runPos hi ho chn mvs depth npos erac	-- ignore the failes pos
-               else do
-                   let !erac' = erac + ferr
-                   runPos hi ho chn mvs depth (npos+1) erac'
-        Nothing -> do
-            when batDebug $ putStrLn $ "Bat: got nothing from chan, exit"
-            return (npos, erac)
+               then runPos hi ho chn mvs depth npos erac	-- ignore the failed pos
+               else case merr of
+                       Nothing   -> runPos hi ho chn mvs depth npos erac	-- ignore
+                       Just ferr -> do
+                           let !erac' = erac + ferr
+                           runPos hi ho chn mvs depth (npos+1) erac'
     where go = do
              s <- get
              let ucipos = "position fen " ++ stIniFen s
@@ -415,10 +418,10 @@ getSB l
 lamDecay :: Double
 lamDecay = 0.7
 
-calcError :: MyState -> Double
+calcError :: MyState -> Maybe Double
 calcError st
-    | null (stScDMvs st) = error "Status with no moves!"
-    | otherwise          = diffs 0 1 $ reverse $ map fst (stScDMvs st)
+    | null (stScDMvs st) = Nothing
+    | otherwise          = Just $ diffs 0 1 $ reverse $ map fst (stScDMvs st)
     where diffs acc w (Cp x : s : ss) = diffs (mulwadd acc w $ errorPerPly x s) (w * lamDecay) (s : ss)
           diffs acc _ _               = acc
           mulwadd a w n = a + w * fromIntegral n
