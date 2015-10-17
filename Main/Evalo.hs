@@ -27,6 +27,8 @@ import Moves.Board
 import Moves.Notation
 import Uci.UCI
 
+import SSSPSA
+
 data Options = Options {
          optConFile :: Maybe String,	-- configuration file
          optSavFile :: Maybe String,	-- save status file
@@ -110,23 +112,66 @@ main :: IO ()
 main = do
     (opts, _) <- theOptions
     case optNoSamps opts of
-        Nothing    -> return ()
-        Just samps -> do
-            config <- case optConFile opts of
-                          Just cf -> readConfigFile cf
-                          Nothing -> return defConfig
-            (h, sz) <- openFenFile (getConfigStr config "fenFile" Nothing)
-            chn <- newChan
-            sequence_ $ take samps $ repeat $ do
-                _   <- async $ batchReader sz (optBatch opts) h chn (optNoThrds opts)
-                aes <- sequence $ map async $ take (optNoThrds opts) $ repeat
-                                $ oneProc (getConfigStr config "engCom" Nothing) ["-l", "5"] [] chn
-                                    (getConfigVal config "playLength" $ Just defConLength)
-                                    (getConfigVal config "playDepth" $ Just defConDepth)
-                -- Now everything is started & calculating; wait for the results & return the sum of costs
-                cs <- mapM wait aes
-                let (n, s) = foldr (\(a,b) (c,d) -> (a+c, b+d)) (0, 0) cs
-                putStrLn $ show n ++ "\t" ++ show (s / fromIntegral n)
+        Just samps -> generateSamples opts samps
+        Nothing    -> optimiseParams  opts
+
+optimiseParams :: Options -> IO ()
+optimiseParams opts = do
+    config <- case optConFile opts of
+                  Just cf -> readConfigFile cf
+                  Nothing -> return defConfig
+    let ovs = getOptimVars config
+        pNames = map fst ovs
+        ranges = map snd ovs
+        maxost = getConfigVal config "maxSteps" $ Just 50
+        batch   = getConfigVal config "sampBatch" $ Just defConBatch
+        threads = optNoThrds opts
+        engine  = getConfigStr config "engCom" Nothing
+        eopts   = ["-l", "5"]
+        playlen = getConfigVal config "playLength" $ Just defConLength
+        playdep = getConfigVal config "playDepth" $ Just defConDepth
+        spsaParams = defSpsaParams { verb = True, nmax = maxost }
+    (h, sz) <- openFenFile (getConfigStr config "fenFile" Nothing)
+    opars <- ssSPSA (bigPointCost h sz batch threads playlen playdep engine eopts pNames)
+                    spsaParams ranges
+    putStrLn "Optimal params so far:"
+    forM_ (zip pNames opars) $ \(n, v) -> putStrLn $ n ++ " = " ++ show v
+
+-- This will calculate the error or cost for a point in the parameter space
+-- It will start more threads for this, including a batch reader
+bigPointCost :: Handle -> Integer -> Int -> Int -> Int -> Int -> String -> [String]
+             -> [String] -> [Double] -> IO Double
+bigPointCost h sz bsize threads mvs depth engine eopts pnames params = do
+    putStrLn "Cont called with params:"
+    let eparams = zip pnames $ map show params
+    forM_ eparams $ \(n, v) -> putStrLn $ n ++ " = " ++ v
+    chn <- newChan
+    _   <- async $ batchReader sz bsize h chn threads
+    aes <- sequence $ map async $ take threads $ repeat
+               $ oneProc engine eopts eparams chn mvs depth
+    -- Now everything is started & calculating; wait for the results & return the sum of costs
+    cs <- mapM wait aes
+    let (n, s) = foldr (\(a,b) (c,d) -> (a+c, b+d)) (0, 0) cs
+        !val   = negate $ s / fromIntegral n	-- we want minimum, so negate
+    return val
+
+generateSamples :: Options -> Int -> IO ()
+generateSamples opts samps = do
+    config <- case optConFile opts of
+                  Just cf -> readConfigFile cf
+                  Nothing -> return defConfig
+    (h, sz) <- openFenFile (getConfigStr config "fenFile" Nothing)
+    chn <- newChan
+    sequence_ $ take samps $ repeat $ do
+        _   <- async $ batchReader sz (optBatch opts) h chn (optNoThrds opts)
+        aes <- sequence $ map async $ take (optNoThrds opts) $ repeat
+                   $ oneProc (getConfigStr config "engCom" Nothing) ["-l", "5"] [] chn
+                             (getConfigVal config "playLength" $ Just defConLength)
+                             (getConfigVal config "playDepth" $ Just defConDepth)
+        -- Now everything is started & calculating; wait for the results & sum
+        cs <- mapM wait aes
+        let (n, s) = foldr (\(a,b) (c,d) -> (a+c, b+d)) (0, 0) cs
+        putStrLn $ show n ++ "\t" ++ show (s / fromIntegral n)
 
 -- Open the fen file and return handle & size
 openFenFile :: FilePath -> IO (Handle, Integer)
@@ -135,20 +180,6 @@ openFenFile fp = do
     hSetBuffering h (BlockBuffering Nothing)
     s <- hFileSize h
     return (h, s)
-
--- This will calculate the error or cost for a point in the parameter space
--- It will start more threads for this, including a batch reader
-{--
-bigPointCost :: Handle -> Integer -> Int -> Int -> Int -> Int -> String -> [String]
-             -> [(String, String)] -> IO Double
-bigPointCost h fsize bsize threads mvs depth engine eopts params = do
-    chn <- newChan
-    _   <- async $ batchReader fsize bsize h chn threads
-    aes <- sequence $ map async $ take threads $ repeat $ oneProc engine eopts params chn mvs depth
-    -- Now everything is started & calculating; wait for the results & return the sum of costs
-    cs <- mapM wait aes
-    return $! sum cs
---}
 
 -- The batch reader reads randomly a number of fens from a fen file,
 -- makes them to stati and write them to the channel
@@ -445,3 +476,12 @@ getConfigVal cf key mdef
                          (v, ""):[] -> v
                          _          -> error $ "Can't read " ++ ckey ++ " " ++ s ++ ", wrong type"
     where ckey = "config." ++ key
+
+getOptimVars :: Config -> [(String, ((Double, Double), Double))]
+getOptimVars cf = map mkParam $ filter (isPrefixOf "optim." . fst) cf
+    where remPrfx = tail . dropWhile (/= '.')
+          triple s = let (s1, r1) = break (== ',') s
+                         (s2, r2) = break (== ',') (tail r1)
+                         s3       = tail r2
+                     in ((read s1, read s2), read s3)
+          mkParam (s, v) = (remPrfx s, triple v)

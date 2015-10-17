@@ -17,7 +17,8 @@ Flag Profile
 Executable Evalo
   Main-is:	Main/Evalo.hs
   Build-depends: base >= 4.5, async, array, mtl, transformers, directory, filepath, process,
-                 old-time, old-locale, containers, random, vector, text, parsec
+                 old-time, old-locale, containers, random, vector, text, parsec,
+                 Sopt
   GHC-Options: -O2 -Wall -threaded
                -fno-warn-tabs
 

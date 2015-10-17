@@ -1,5 +1,7 @@
 flags: {}
 packages:
 - '.'
-extra-deps: []
+- ../Sopt
+extra-deps:
+- Sopt-0.1.0.0
 resolver: lts-3.5
