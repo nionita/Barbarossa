@@ -20,6 +20,7 @@ import System.IO
 import System.IO.Error
 import System.Process
 import System.Random
+import System.Timeout
 
 import Struct.Struct
 import Moves.Board
@@ -302,7 +303,7 @@ runPos hi ho chn mvs depth npos erac = do
             return (npos, erac)
         Just st -> do
             when (batDebug || funDebug) $ putStrLn $ "Fen to analyse: " ++ stIniFen st
-            threadDelay 30000
+            -- threadDelay 30000
             sf <- execStateT go st { stRemMvs = mvs }
             let merr = calcError sf
             when funDebug $ do
@@ -318,7 +319,8 @@ runPos hi ho chn mvs depth npos erac = do
                        Just ferr -> do
                            let !erac' = erac + ferr
                            runPos hi ho chn mvs depth (npos+1) erac'
-    where go = do
+    where showPl (_, mv) = " " ++ show mv
+          go = do
              s <- get
              let ucipos = "position fen " ++ stIniFen s
                  ucimvs | null (stScDMvs s) = ""
@@ -360,7 +362,6 @@ runPos hi ho chn mvs depth npos erac = do
                                                    let rmvs = stRemMvs s - 1
                                                    put s { stRemMvs = rmvs, stCrtPos = p, stScDMvs = a : as }
                                                    if rmvs > 0 then go else return ()
-          showPl (_, mv) = " " ++ show mv
 
 engErrFile :: FilePath
 engErrFile = "engErrors.txt"
@@ -376,23 +377,30 @@ reportEngineProblem st ls pre = withFile engErrFile AppendMode $ \h -> do
     hPutStrLn h "Lines from engine:"
     mapM_ (hPutStrLn h) $ reverse ls
 
+liTout :: Int
+liTout = 5000000	-- this in in microseconds; i.e. we wait 5 s
+
 accumLines :: Handle -> (String -> Bool) -> (String -> a -> a) -> a -> IO (a, [String])
 accumLines h p f = go []
     where go ls a = do
-             eel <- try $ hGetLine h
+             eel <- try $ timeout liTout $ hGetLine h
              case eel of
-                 Left e -> do
+                 Left e  -> do
                      let es = ioeGetErrorString e
                      when uciDebug $ putStrLn $ "Got: " ++ es
                      let ls' = es : ls
                      return (a, ls')
-                 Right l -> do
-                     when uciDebug $ putStrLn $ "Got: " ++ l
-                     let ls' = l : ls
-                     if p l then return (a, ls')
-                            else do
-                                let !a' = f l a
-                                go ls' a'
+                 Right ml -> case ml of
+                                 Nothing -> do
+                                     when uciDebug $ putStrLn $ "Timeout in hGetLine"
+                                     return (a, ls)
+                                 Just l  -> do
+                                     when uciDebug $ putStrLn $ "Got: " ++ l
+                                     let ls' = l : ls
+                                     if p l then return (a, ls')
+                                            else do
+                                                let !a' = f l a
+                                                go ls' a'
 
 getSearchResults :: String -> Maybe (Score, Move) -> Maybe (Score, Move)
 getSearchResults l old
