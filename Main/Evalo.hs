@@ -335,7 +335,8 @@ runPos hi ho chn mvs depth npos erac = do
                  hPutStrLn hi $ "go depth " ++ show depth
                  when uciDebug $ putStrLn $ "Sent: go depth " ++ show depth
                  -- We don't check the time - but what if process is stuck?
-                 accumLines ho ("bestmove " `isPrefixOf`) getSearchResults Nothing
+                 -- accumLines ho ("bestmove " `isPrefixOf`) getSearchResults Nothing
+                 accumLines ho engCommEnd getSearchResults Nothing
              case ma of
                  Nothing -> lift $ reportEngineProblem s ls "Engine sent no info pv"
                  Just (sc, bm') -> do
@@ -401,6 +402,12 @@ accumLines h p f = go []
                                             else do
                                                 let !a' = f l a
                                                 go ls' a'
+
+engCommEnd :: String -> Bool
+engCommEnd s
+    | "bestmove "            `isPrefixOf` s = True
+    | "info string empty pv" `isPrefixOf` s = True
+    | otherwise                             = False
 
 getSearchResults :: String -> Maybe (Score, Move) -> Maybe (Score, Move)
 getSearchResults l old
