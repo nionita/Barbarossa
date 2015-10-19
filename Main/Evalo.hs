@@ -14,8 +14,8 @@ import Data.Char (isSpace)
 import Data.List
 import Data.Maybe (catMaybes)
 import System.Console.GetOpt
+import System.Directory (doesFileExist)
 import System.Environment (getArgs)
--- import System.FilePath
 import System.IO
 import System.IO.Error
 import System.Process
@@ -32,22 +32,21 @@ import SSSPSA
 
 data Options = Options {
          optConFile :: Maybe String,	-- configuration file
-         optSavFile :: Maybe String,	-- save status file
+         optRestart :: Bool,		-- save status file
          optNoThrds :: Int,		-- number of threads to run
-         optNoSamps :: Maybe Int,	-- number of samples to generate
-         optBatch   :: Int		-- batch size, until we can read config
+         optNoSamps :: Maybe Int	-- number of samples to generate
      }
 
 defaultOptions :: Options
 defaultOptions = Options {
-        optConFile = Nothing, optSavFile = Nothing, optNoThrds = 1, optNoSamps = Nothing, optBatch = 32
+        optConFile = Nothing, optRestart = False, optNoThrds = 1, optNoSamps = Nothing
     }
 
 setConFile :: String -> Options -> Options
 setConFile s opt = opt { optConFile = Just s }
 
-setSavFile :: String -> Options -> Options
-setSavFile s opt = opt { optSavFile = Just s }
+setRestart :: Options -> Options
+setRestart opt = opt { optRestart = True }
 
 setNoThrds :: String -> Options -> Options
 setNoThrds s opt = opt { optNoThrds = read s }
@@ -55,16 +54,12 @@ setNoThrds s opt = opt { optNoThrds = read s }
 setNoSamps :: String -> Options -> Options
 setNoSamps s opt = opt { optNoSamps = Just $ read s }
 
-setBatch :: String -> Options -> Options
-setBatch s opt = opt { optBatch = read s }
-
 options :: [OptDescr (Options -> Options)]
 options = [
         Option "c" ["config"]   (ReqArg setConFile "STRING") "Config file",
-        Option "s" ["savefile"] (ReqArg setSavFile "STRING") "Save status file",
-        Option "t" ["threads"]  (ReqArg setNoThrds "STRING") "Number of threads",
+        Option "r" ["restart"]  (NoArg  setRestart         ) "Restart from a saved checkpoint file",
         Option "g" ["generate"] (ReqArg setNoSamps "STRING") "Number of samples to generate",
-        Option "b" ["batch"]    (ReqArg setBatch   "STRING") "Batch size for generation"
+        Option "t" ["threads"]  (ReqArg setNoThrds "STRING") "Number of threads"
     ]
 
 theOptions :: IO (Options, [String])
@@ -121,10 +116,11 @@ optimiseParams opts = do
     config <- case optConFile opts of
                   Just cf -> readConfigFile cf
                   Nothing -> return defConfig
-    let ovs = getOptimVars config
-        pNames = map fst ovs
-        ranges = map snd ovs
-        maxost = getConfigVal config "maxSteps" $ Just 50
+    let save    = getConfigStr config "checkpoint" $ Just ""
+        ovs = getOptimVars config
+        pNames  = map fst ovs
+        ranges  = map snd ovs
+        maxost  = getConfigVal config "maxSteps" $ Just 50
         batch   = getConfigVal config "sampBatch" $ Just defConBatch
         threads = optNoThrds opts
         engine  = getConfigStr config "engCom" Nothing
@@ -132,9 +128,21 @@ optimiseParams opts = do
         playlen = getConfigVal config "playLength" $ Just defConLength
         playdep = getConfigVal config "playDepth" $ Just defConDepth
         spsaParams = defSpsaParams { verb = True, nmax = maxost }
+    so <- case save of
+               "" -> if optRestart opts
+                             then error "Restart requested, but no checkpoint file in config!"
+                             else return $ SOStartNoCheckpoint ranges
+               _  -> do
+                  sfex <- doesFileExist save
+                  if sfex
+                     then if optRestart opts
+                             then return $ SORestart save
+                             else error $ "No restart requested, but checkpoint file " ++ save ++ " exists"
+                     else if optRestart opts
+                             then error $ "Restart requested, but checkpoint file " ++ save ++ " does not exists"
+                             else return $ SOStartWithCheckpoint save ranges
     (h, sz) <- openFenFile (getConfigStr config "fenFile" Nothing)
-    opars <- ssSPSA (bigPointCost h sz batch threads playlen playdep engine eopts pNames)
-                    spsaParams ranges
+    opars <- ssSPSA (bigPointCost h sz batch threads playlen playdep engine eopts pNames) (Just spsaParams) so
     putStrLn "Optimal params so far:"
     forM_ (zip pNames opars) $ \(n, v) -> putStrLn $ n ++ " = " ++ show v
 
@@ -164,7 +172,9 @@ generateSamples opts samps = do
     (h, sz) <- openFenFile (getConfigStr config "fenFile" Nothing)
     chn <- newChan
     sequence_ $ take samps $ repeat $ do
-        _   <- async $ batchReader sz (optBatch opts) h chn (optNoThrds opts)
+        _   <- async $ batchReader sz
+                                   (getConfigVal config "sampBatch" $ Just defConBatch)
+                                   h chn (optNoThrds opts)
         aes <- sequence $ map async $ take (optNoThrds opts) $ repeat
                    $ oneProc (getConfigStr config "engCom" Nothing) ["-l", "5"] [] chn
                              (getConfigVal config "playLength" $ Just defConLength)
@@ -282,6 +292,7 @@ oneProc engine eopts params chn mvs depth = do
         throwIO e
     hPutStrLn hin "quit"
     when funDebug $ putStrLn $ engine ++ ": done, with result " ++ show r
+    threadDelay 50000	-- wait to allow smooth quit of engine
     hClose hin
     hClose hout
     _ <- waitForProcess ph
