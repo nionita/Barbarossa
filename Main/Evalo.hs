@@ -117,7 +117,7 @@ optimiseParams opts = do
                   Just cf -> readConfigFile cf
                   Nothing -> return defConfig
     let save    = getConfigStr config "checkpoint" $ Just ""
-        ovs = getOptimVars config
+        ovs     = getOptimVars config
         pNames  = map fst ovs
         ranges  = map snd ovs
         maxost  = getConfigVal config "maxSteps" $ Just 50
@@ -283,7 +283,7 @@ oneProc engine eopts params chn mvs depth = do
     hSetBuffering hin  LineBuffering
     hSetBuffering hout LineBuffering
     hPutStrLn hin "uci"
-    _ <- accumLines hout ("uciok" `isPrefixOf`) (\_ _ -> ()) ()
+    _ <- accumLines hout hin ("uciok" `isPrefixOf`) (\_ _ -> ()) ()
     -- Should send options like hash size here...
     r <- catch (runPos hin hout chn mvs depth 0 0) $ \e -> do
         let es = ioeGetErrorString e
@@ -337,6 +337,7 @@ runPos hi ho chn mvs depth npos erac = do
                  ucimvs | null (stScDMvs s) = ""
                         | otherwise         = " moves" ++ concatMap showPl (reverse $ stScDMvs s)
              (ma, ls) <- lift $ do
+                 discardLines ho
                  hPutStrLn hi $ ucipos ++ ucimvs
                  when uciDebug $ putStrLn $ "Sent: " ++ ucipos ++ ucimvs
                  -- let ucitime | moving (stCrtPos s) == White = "wtime "
@@ -345,9 +346,7 @@ runPos hi ho chn mvs depth npos erac = do
                  -- when uciDebug $ putStrLn $ "Sent: go movestogo 1 " ++ ucitime ++ show ms
                  hPutStrLn hi $ "go depth " ++ show depth
                  when uciDebug $ putStrLn $ "Sent: go depth " ++ show depth
-                 -- We don't check the time - but what if process is stuck?
-                 -- accumLines ho ("bestmove " `isPrefixOf`) getSearchResults Nothing
-                 accumLines ho engCommEnd getSearchResults Nothing
+                 accumLines ho hi engCommEnd getSearchResults Nothing
              case ma of
                  Nothing -> lift $ reportEngineProblem s ls "Engine sent no info pv"
                  Just (sc, bm') -> do
@@ -390,12 +389,12 @@ reportEngineProblem st ls pre = withFile engErrFile AppendMode $ \h -> do
     mapM_ (hPutStrLn h) $ reverse ls
 
 liTout :: Int
-liTout = 5000000	-- this in in microseconds; i.e. we wait 5 s
+liTout = 25000000 -- this is in microseconds; i.e. we wait max 25 s (for depth 7 ok, more not!)
 
-accumLines :: Handle -> (String -> Bool) -> (String -> a -> a) -> a -> IO (a, [String])
-accumLines h p f = go []
+accumLines :: Handle -> Handle -> (String -> Bool) -> (String -> a -> a) -> a -> IO (a, [String])
+accumLines hi ho p f = go []
     where go ls a = do
-             eel <- try $ timeout liTout $ hGetLine h
+             eel <- try $ timeout liTout $ hGetLine hi
              case eel of
                  Left e  -> do
                      let es = ioeGetErrorString e
@@ -405,6 +404,8 @@ accumLines h p f = go []
                  Right ml -> case ml of
                                  Nothing -> do
                                      when uciDebug $ putStrLn $ "Timeout in hGetLine"
+                                     hPutStrLn ho "stop"
+                                     discardLines hi
                                      return (a, ls)
                                  Just l  -> do
                                      when uciDebug $ putStrLn $ "Got: " ++ l
@@ -438,6 +439,19 @@ getSB l
               _        -> Nothing
     | otherwise = Nothing
     where ws = words l
+
+discardLines :: Handle -> IO ()
+discardLines h = do
+    threadDelay discTo
+    go
+    where discTo = 50000	-- 50 ms
+          go = do
+              has <- hReady h
+              if has
+                 then do
+                     _ <- hGetLine h
+                     go
+                 else return ()
 
 -- This is a decay in weights of successive score differences
 -- Further differences count less and less
