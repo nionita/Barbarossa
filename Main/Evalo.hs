@@ -10,6 +10,7 @@ import Control.Concurrent.Async
 import Control.Concurrent
 import Control.Exception
 import Control.Monad.State
+import Data.Bits
 import Data.Char (isSpace)
 import Data.List
 import Data.Maybe (catMaybes)
@@ -23,6 +24,7 @@ import System.Random
 import System.Timeout
 
 import Struct.Struct
+import Moves.BitBoard (uBit)
 import Moves.Board
 -- import Moves.ShowMe
 import Moves.Notation
@@ -89,7 +91,8 @@ data MyState = MyState {
          stIniCol :: Color,	-- initial analysis moving color
          stIniFen :: String,	-- initial analysis fen
          stCrtPos :: MyPos,	-- current position
-         stScDMvs :: [(Score, Move)]	-- scores and played moves (reversed)
+         stScDMvs :: [(Score, Move)],	-- scores and played moves (reversed)
+         stZobKys :: [ZKey]	-- zobrist keys seen so far to detect repetition
      }
 
 -- We generate the move, but need no sorting
@@ -268,7 +271,8 @@ randomMove trys fen = do
                                        stIniCol = moving po,
                                        stIniFen = posToFen po,
                                        stCrtPos = po,
-                                       stScDMvs = []
+                                       stScDMvs = [],
+                                       stZobKys = []
                                    }
 
 -- Start an engine with given parameters and drive it to analyse
@@ -331,7 +335,7 @@ runPos hi ho chn mvs depth npos erac = do
                            let !erac' = erac + ferr
                            runPos hi ho chn mvs depth (npos+1) erac'
     where showPl (_, mv) = " " ++ show mv
-          go = do
+          go = stopWhenFinalPos $ do
              s <- get
              let ucipos = "position fen " ++ stIniFen s
                  ucimvs | null (stScDMvs s) = ""
@@ -364,15 +368,48 @@ runPos hi ho chn mvs depth npos erac = do
                                     let p  = doFromToMove m p'
                                         a  = (sc, m)
                                         as = stScDMvs s
+                                        zs = zobkey p : stZobKys s
                                     if not $ checkOk p
                                        then lift $ error $ "Wrong move from engine, illegal position: " ++ show p
                                        else case sc of
                                                -- we stop after a mate was found
-                                               Mt _ -> put s { stRemMvs = 0, stCrtPos = p, stScDMvs = a : as }
+                                               Mt _ -> put s { stRemMvs = 0, stCrtPos = p, stScDMvs = a : as, stZobKys = zs }
                                                Cp _ -> do
                                                    let rmvs = stRemMvs s - 1
-                                                   put s { stRemMvs = rmvs, stCrtPos = p, stScDMvs = a : as }
+                                                   put s { stRemMvs = rmvs, stCrtPos = p, stScDMvs = a : as, stZobKys = zs }
                                                    if rmvs > 0 then go else return ()
+
+stopWhenFinalPos :: StateT MyState IO () -> StateT MyState IO ()
+stopWhenFinalPos act = do
+    s <- get
+    let p = stCrtPos s
+    -- first check the 50 moves rule:
+    if remis50Moves p
+       then do
+           when funDebug $ lift $ putStrLn $ "Position " ++ posToFen p ++ " : 50 moves rule remis"
+           return ()
+       else -- check if we have repetition:
+           case filter (== zobkey (stCrtPos s)) $ stZobKys s of
+               (_:_:_:_) -> do
+                   when funDebug $ lift $ putStrLn $ "Position " ++ posToFen p ++ " : 3 times repetition"
+                   return ()
+               _         -> -- check if there is no move or all are illegal
+                   if someLegalMoves p
+                      then do
+                          when funDebug $ lift $ putStrLn $ "Position " ++ posToFen p ++ " : ok"
+                          act
+                      else do
+                          when funDebug $ lift $ putStrLn $ "Position " ++ posToFen p ++ " : no legal moves"
+                          return ()
+
+someLegalMoves :: MyPos -> Bool
+someLegalMoves p = or $ map legal mvs
+    where mvs | isCheck p (moving p) = genMoveFCheck p
+              | otherwise            = let (l2w, l2l) = genMoveCaptWL p
+                                       in genMoveCast p ++ genMoveTransf p ++ genMoveNCapt p ++ l2w ++ l2l
+          legal m = (occup p .&. bbf /= 0) && (kings p .&. bbt == 0) && (checkOk $ doFromToMove m p)
+              where bbf = uBit $ fromSquare m
+                    bbt = uBit $ toSquare m
 
 engErrFile :: FilePath
 engErrFile = "engErrors.txt"
