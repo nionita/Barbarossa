@@ -354,7 +354,7 @@ alphaBeta abc =  do
                     <- runCState (searchReduced alpha1 beta1) pvs0
                 if abort pvsf || (s1 > alpha1 && s1 < beta1 && not (nullSeq es1))
                     then return r1
-                    else  if nullSeq es1
+                    else if nullSeq es1
                         then runCState (searchFull lpv) pvs0
                         else runCState (searchFull es1) pvs0
              Nothing -> runCState (searchFull lpv) pvs0
@@ -522,7 +522,7 @@ pvInnerRootExten b d !exd nst =  do
            abrt <- gets abort
            if abrt || s1 <= a -- we failed low as expected
               then return s1
-              else  do
+              else do
                  -- Here we didn't fail low and need re-search
                  -- As we don't reduce (beeing in a PV node), re-search is full window
                  pindent $ "Research! (" ++ show s1 ++ ")"
@@ -549,7 +549,7 @@ checkFailOrPVRoot xstats b d e s nst =  do
              pvb    = Pvsl s nodes' False	-- the bad
              de = max d $ pathDepth s
          if d == 1
-            then  do
+            then do
                  let typ = 2
                  when (de >= minToStore) $ lift $ ttStore de typ (pathScore s) e nodes'
                  let xpvslg = if s > a
@@ -688,23 +688,25 @@ pvSearch nst !a !b !d = do
                 if abrt' || s > a
                    then return s
                    else do
-                       -- here we failed low
+                       -- We failed low
                        let de = max d $ pathDepth s
                            es = unalt edges
-                       when (de >= minToStore) $ do	-- what if es is null?
+                           valid = movno nstf > 1	-- we have a valid move
+                       -- do not store when es is null: it is mate or stale mate
+                       when (valid && de >= minToStore) $ do
                            nodes1 <- gets (sNodes . stats)
                            -- store as upper score, and as move, the first one generated
-                           lift $ do
-                               let typ = 0
-                                   !deltan = nodes1 - nodes0
-                                   mv | null es   = Move 0
-                                      | otherwise = head es
-                               ttStore de typ (pathScore a) mv deltan	-- should be d or de?
-                       if movno nstf > 1
+                           let typ = 0
+                               !deltan = nodes1 - nodes0
+                               mv = head es	-- it is alway not null here! See above haveNoMove
+                           lift $ ttStore de typ (pathScore a) mv deltan
+                       if valid
                            then return $! bestPath s a "2"
                            else do
                                chk <- lift tacticalPos
                                let s' = if chk then matedPath else staleMate
+                               -- store the leaf node with maximum depth
+                               when (de >= minToStore) $ lift $ ttStore 20 2 (pathScore s') noMove 0
                                return $! trimaxPath a b s'	-- why trimax??
 
 -- PV Zero Window
@@ -776,24 +778,25 @@ pvZeroW !nst !b !d !lastnull redu = do
                          if abrt' || s > bGrain
                             then return b
                             else do
-                                -- here we failed low
+                                -- We failed low
                                 let !de = max d $ pathDepth s
                                     es = unalt edges
+                                    valid = movno nstf > 1	-- have valid move
                                 -- when (de >= minToStore && s < b && not (null es)) $ do	-- we failed low
-                                when (de >= minToStore) $ do
+                                when (valid && de >= minToStore) $ do
                                     !nodes1 <- gets (sNodes . stats)
                                     -- store as upper score, and as move the first one (generated)
-                                    lift $ do
-                                        let typ = 0
-                                            !deltan = nodes1 - nodes0
-                                            mv | null es   = Move 0
-                                               | otherwise = head es
-                                        ttStore de typ (pathScore bGrain) mv deltan
-                                if movno nstf > 1
+                                    let typ = 0
+                                        !deltan = nodes1 - nodes0
+                                        mv = head es	-- here es is always not null (haveNoMove above)
+                                    lift $ ttStore de typ (pathScore bGrain) mv deltan
+                                if valid
                                    then return $ bestPath s bGrain "2a"
                                    else do	-- here: store exact mate or stalemate score!
                                        chk <- lift tacticalPos
                                        let s' = if chk then matedPath else staleMate
+                                       -- store the leaf node with maximum depth
+                                       when (de >= minToStore) $ lift $ ttStore 20 2 (pathScore s') noMove 0
                                        return $! trimaxPath bGrain b s'
     where bGrain = b -: scoreGrain
 
