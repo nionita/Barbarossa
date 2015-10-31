@@ -4,16 +4,19 @@ module Moves.Board (
     isCheck, inCheck,
     moveIsCapture,
     castKingRookOk, castQueenRookOk,
-    genMoveCast, genMoveNCapt, genMovePromo, genMoveFCheck, genMoveCaptWL,
+    genMoveCast, genMoveNCapt, genMovePromo, genMoveFCheck, genMoveCaptWL, genMoveCaptQS,
     updatePos, checkOk, moveChecks, legalMove,
     doFromToMove, reverseMoving
     ) where
 
 import Control.Monad.ST
 import Data.Bits
-import Data.List (sort, foldl')
-import qualified Data.Vector.Unboxed         as V
-import qualified Data.Vector.Unboxed.Mutable as VM
+import Data.Foldable (foldrM)
+import Data.List (foldl')
+import Data.Ord (comparing)
+import qualified Data.Vector.Unboxed          as V
+import qualified Data.Vector.Unboxed.Mutable  as VM
+import qualified Data.Vector.Algorithms.Intro as VM
 import Data.Word
 
 import Struct.Struct
@@ -759,15 +762,43 @@ seeMoveValue pos !attacks sqfirstmv sqto gain0 = v
 
 -- This function can produce illegal captures with the king!
 genMoveCaptWL :: MyPos -> (V.Vector Move, V.Vector Move)
-genMoveCaptWL !pos = (V.fromList $ map f $ sort ws, V.fromList $ map f $ sort ls)
+genMoveCaptWL !pos = runST $ do
+    vw <- VM.unsafeNew 24
+    i  <- V.foldM (epCopy vw) 0 $ genEPCapts pos
+    vl <- VM.unsafeNew 24
+    IPair wi li <- foldrM (perCaptFieldWL pos False (me pos) (yoAttacs pos) vw vl) (IPair i 0)
+                       $ bbToSquares capts
+    VM.sortByBounds cid vw 0 wi
+    VM.sortByBounds cid vl 0 li
+    vwm <- V.map f . V.take wi <$> V.unsafeFreeze vw
+    vlm <- V.map f . V.take li <$> V.unsafeFreeze vl
+    return (vwm, vlm)
     where !capts = myAttacs pos .&. yo pos
-          epcs  = genEPCapts pos
           c     = moving pos
-          (ws, ls) = foldr (perCaptFieldWL pos (me pos) (yoAttacs pos)) (lepcs,[]) $ bbToSquares capts
-          lepcs = V.toList $ V.map (moveToLMove Pawn Pawn) epcs
-          f = moveAddColor c . lmoveToMove
+          f     = moveAddColor c . lmoveToMove
+          cid   = comparing id
+          epCopy v !i !a = VM.write v i (moveToLMove Pawn Pawn a) >> return (i+1)
+
+-- This function can produce illegal captures with the king!
+genMoveCaptQS :: MyPos -> V.Vector Move
+genMoveCaptQS !pos = runST $ do
+    vw <- VM.unsafeNew 24
+    i  <- V.foldM (epCopy vw) 0 $ genEPCapts pos
+    -- For losing captures we pass the same vector, knowing it will not be used
+    IPair wi _ <- foldrM (perCaptFieldWL pos True (me pos) (yoAttacs pos) vw vw) (IPair i 0)
+                      $ bbToSquares capts
+    VM.sortByBounds cid vw 0 wi
+    vwm <- V.map f . V.take wi <$> V.unsafeFreeze vw
+    return vwm
+    where !capts = myAttacs pos .&. yo pos
+          c     = moving pos
+          f     = moveAddColor c . lmoveToMove
+          cid   = comparing id
+          epCopy v !i !a = VM.write v i (moveToLMove Pawn Pawn a) >> return (i+1)
 
 type LMove = Word32
+
+data IPair = IPair !Int !Int
 
 -- We want to sort MVVLVA, which means first victim, then attacker
 -- Victim is "negate" so that the normal sort will pick higher victims first
@@ -796,12 +827,15 @@ genEPCapts !pos
           dst   = firstOne epBB	-- safe because epBB /= 0
           srcBB = pAttacs (other $ moving pos) dst .&. me pos .&. pawns pos
 
-perCaptFieldWL :: MyPos -> BBoard -> BBoard -> Square -> ([LMove], [LMove]) -> ([LMove], [LMove])
-perCaptFieldWL pos mypc advdefence sq mvlst
-    | hanging   = let mvlst1 = foldr (addHanging  pos pcto sq) mvlst  reAgrsqs
-                  in           foldr (addHangingP     pcto sq) mvlst1 prAgrsqs	-- for promotions
-    | otherwise = let mvlst1 = foldr (perCaptWL pos myAttRec False pcto valto sq) mvlst  reAgrsqs
-                  in           foldr (perCaptWL pos myAttRec True  pcto valto sq) mvlst1 prAgrsqs
+perCaptFieldWL :: MyPos -> Bool -> BBoard -> BBoard -> VM.MVector s LMove -> VM.MVector s LMove
+               -> Square -> IPair -> ST s IPair
+perCaptFieldWL pos qs mypc advdefence vw vl sq !pi0
+    | hanging   = do
+        pi1 <- foldrM (addHanging  pos pcto sq vw) pi0 reAgrsqs
+        foldrM        (addHangingP     pcto sq vw) pi1 prAgrsqs	-- for promotions
+    | otherwise = do
+        pi1 <- foldrM (perCaptWL pos qs myAttRec False pcto valto sq vw vl) pi0 reAgrsqs
+        foldrM        (perCaptWL pos qs myAttRec True  pcto valto sq vw vl) pi1 prAgrsqs
     where !myAttRec = theAttacs pos sq
           myattacs = mypc .&. atAtt myAttRec
           Busy _ pcto = tabla pos sq
@@ -823,12 +857,19 @@ perCaptFieldWL pos mypc advdefence sq mvlst
 approximateEasyCapts :: Bool
 approximateEasyCapts = True	-- when capturing a better piece: no SEE, it is always winning
 
-perCaptWL :: MyPos -> Attacks -> Bool -> Piece -> Int -> Square -> Square
-          -> ([LMove], [LMove]) -> ([LMove], [LMove])
-perCaptWL !pos !attacks promo vict !gain0 !sq !sqfa (wsqs, lsqs)
-    | promo = ((moveToLMove Pawn vict $ makePromo Queen sqfa sq) : wsqs, lsqs)
-    | approx || adv <= gain0 = (ss:wsqs, lsqs)
-    | otherwise = (wsqs, ss:lsqs)
+perCaptWL :: MyPos -> Bool -> Attacks -> Bool -> Piece -> Int -> Square
+          -> VM.MVector s LMove -> VM.MVector s LMove -> Square -> IPair -> ST s IPair
+perCaptWL !pos qs !attacks promo vict !gain0 !sq vw vl !sqfa pi0@(IPair wi li)
+    | promo = do
+        VM.write vw wi $ moveToLMove Pawn vict $ makePromo Queen sqfa sq
+        return $! IPair (wi+1) li
+    | approx || adv <= gain0 = do
+        VM.write vw wi ss
+        return $! IPair (wi+1) li
+    | qs        = return pi0	-- no losing captures in QS
+    | otherwise = do
+        VM.write vl li ss
+        return $! IPair wi (li+1)
     where ss = moveToLMove attc vict $ moveAddPiece attc $ moveFromTo sqfa sq
           approx = approximateEasyCapts && gain0 >= v0
           Busy _ attc = tabla pos sqfa
@@ -836,10 +877,13 @@ perCaptWL !pos !attacks promo vict !gain0 !sq !sqfa (wsqs, lsqs)
           adv = seeMoveValue pos attacks sqfa sq v0
 
 -- Captures of hanging pieces are always winning
-addHanging :: MyPos -> Piece -> Square -> Square -> ([LMove], [LMove]) -> ([LMove], [LMove])
-addHanging pos vict to from (wsqs, lsqs)
-    = ((moveToLMove apiece vict $ moveAddPiece apiece (moveFromTo from to)) : wsqs, lsqs)
+addHanging :: MyPos -> Piece -> Square -> VM.MVector s LMove -> Square -> IPair -> ST s IPair
+addHanging pos vict to vw from (IPair wi li) = do
+    VM.write vw wi $ moveToLMove apiece vict $ moveAddPiece apiece (moveFromTo from to)
+    return $! IPair (wi+1) li
     where Busy _ apiece = tabla pos from
 
-addHangingP :: Piece -> Square -> Square -> ([LMove], [LMove]) -> ([LMove], [LMove])
-addHangingP vict to from (wsqs, lsqs) = ((moveToLMove Pawn vict $ makePromo Queen from to) : wsqs, lsqs)
+addHangingP :: Piece -> Square -> VM.MVector s LMove -> Square -> IPair -> ST s IPair
+addHangingP vict to vw from (IPair wi li) = do
+    VM.write vw wi $ moveToLMove Pawn vict $ makePromo Queen from to
+    return $! IPair (wi+1) li

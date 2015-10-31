@@ -18,10 +18,10 @@ module Moves.Base (
 ) where
 
 import Data.Bits
-import Data.List
+-- import Data.List
 import Control.Monad.State
 import Control.Monad.Reader (ask)
-import Data.Ord (comparing)
+-- import Data.Ord (comparing)
 import qualified Data.Vector.Unboxed as V
 -- import Numeric
 import System.Random
@@ -111,7 +111,7 @@ genTactMoves = do
     p <- getPos
     let !c = moving p
         l1 = genMovePromo p
-        (l2w, _) = genMoveCaptWL p
+        l2w = genMoveCaptQS p
         !mvs | isCheck p c = genMoveFCheck p
              | otherwise   = l1 V.++ l2w
     -- return $ checkGenMoves p mvs
