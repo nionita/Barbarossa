@@ -9,11 +9,11 @@ module Moves.Board (
     doFromToMove, reverseMoving
     ) where
 
-import Control.Monad.ST
+-- import Control.Monad.ST
 import Data.Bits
 import Data.List (sort, foldl')
 import qualified Data.Vector.Unboxed         as V
-import qualified Data.Vector.Unboxed.Mutable as VM
+-- import qualified Data.Vector.Unboxed.Mutable as VM
 import Data.Word
 
 import Struct.Struct

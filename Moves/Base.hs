@@ -18,10 +18,10 @@ module Moves.Base (
 ) where
 
 import Data.Bits
-import Data.List
+-- import Data.List
 import Control.Monad.State
 import Control.Monad.Reader (ask)
-import Data.Ord (comparing)
+-- import Data.Ord (comparing)
 import qualified Data.Vector.Unboxed as V
 -- import Numeric
 import System.Random
