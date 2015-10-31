@@ -95,11 +95,12 @@ genMoves = do
     if isCheck p c
        then return (V.toList $ genMoveFCheck p, [])
        else do
+            his <- gets hist
+            hiv <- liftIO $ allHist his
             let l0 = genMoveCast p
                 l1 = genMovePromo p
                 (l2w, l2l) = genMoveCaptWL p
-                l3' = genMoveNCapt p
-            l3 <- V.fromList <$> sortMovesFromHist (V.toList l3')
+                l3 = histSortMvs hiv $ genMoveNCapt p
             return $! if loosingLast
                          then (V.toList $ l1 V.++ l2w, V.toList $ l0 V.++ l3 V.++ l2l)
                          else (V.toList $ l1 V.++ l2w V.++ l2l, V.toList $ l0 V.++ l3)
@@ -137,7 +138,6 @@ checkGenMove p m@(Move w)
           mc = moving p
           wrong mes = Left $ "checkGenMove: " ++ mes ++ " for move "
                             ++ showHex w (" in pos\n" ++ showMyPos p)
---}
 
 sortMovesFromHist :: [Move] -> Game [Move]
 sortMovesFromHist mvs = do
@@ -145,6 +145,7 @@ sortMovesFromHist mvs = do
     mvsc <- liftIO $ mapM (\m -> valHist (hist s) m) mvs
     let (posi, zero) = partition ((/=0) . snd) $ zip mvs mvsc
     return $! map fst $ sortBy (comparing snd) posi ++ zero
+--}
 
 -- massert :: String -> Game Bool -> Game ()
 -- massert s mb = do
