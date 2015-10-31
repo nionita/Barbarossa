@@ -1170,7 +1170,7 @@ reduceLmr !d nearmatea !spec !exd lmrlev w
     | not lmrActive || spec || exd > 0
        || d <= 1 || nearmatea = d
     | otherwise               = max dmin $ d - lmrArr!(lmrlev, w)
-    where dmin = (d+d+d) `unsafeShiftR` 2	-- minimum depth: 3/4 of original
+    where dmin = 1 + ((d+d+d) `unsafeShiftR` 2)	-- minimum depth: 3/4 of original + 1
 
 -- Adjust the LMR related parameters in the state
 -- The correct constants have to be tuned! Some are hadcoded here
