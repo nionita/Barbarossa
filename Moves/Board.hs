@@ -2,20 +2,18 @@
 module Moves.Board (
     posFromFen, initPos,
     isCheck, inCheck,
-    goPromo, hasMoves, moveIsCapture,
+    moveIsCapture,
     castKingRookOk, castQueenRookOk,
-    genMoveCast, genMoveNCapt, genMoveTransf, genMoveFCheck, genMoveCaptWL,
-    genMoveNCaptToCheck,
-    updatePos, checkOk, moveChecks,
-    legalMove, alternateMoves,
+    genMoveCast, genMoveNCapt, genMovePromo, genMoveFCheck, genMoveCaptWL,
+    updatePos, checkOk, moveChecks, legalMove,
     doFromToMove, reverseMoving
     ) where
 
--- import Prelude hiding ((++), foldl, filter, map, concatMap, concat, head, tail, repeat, zip,
---                        zipWith, null, words, foldr, elem, lookup, any, takeWhile, iterate)
+import Control.Monad.ST
 import Data.Bits
--- import Data.List.Stream
 import Data.List (sort, foldl')
+import qualified Data.Vector.Unboxed         as V
+import qualified Data.Vector.Unboxed.Mutable as VM
 import Data.Word
 
 import Struct.Struct
@@ -39,84 +37,58 @@ isCheck p Black | check p .&. black p == 0 = False
 inCheck :: MyPos -> Bool
 inCheck = (/= 0) . check
 
+-- Maybe we will need these ones to extend or save from prunning some moves
+{--
 goPromo :: MyPos -> Move -> Bool
 goPromo p m
-    | moveIsPromo m = True
+    | moveIsPromo m  = True
     | movePassed p m = True
     | otherwise      = False
 
 movePassed :: MyPos -> Move -> Bool
 movePassed p m = passed p .&. (uBit $ fromSquare m) /= 0
+--}
 
--- Here it seems we have a problem when we are not in check but could move
--- only a pinned piece: then we are stale mate but don't know (yet)
--- In the next ply, when we try to find a move, we see that all moves are illegal
--- In this case we should take care in search that the score is 0!
-hasMoves :: MyPos -> Color -> Bool
-hasMoves !p c
-    | chk       = not . null $ genMoveFCheck p
-    | otherwise = anyMove
-    where hasPc = any (/= 0) $ map (pcapt . pAttacs c)
-                     $ bbToSquares $ pawns p .&. me p
-          hasPm = not . null $ pAll1Moves c (pawns p .&. me p) (occup p)
-          hasN = any (/= 0) $ map (legmv . nAttacs) $ bbToSquares $ knights p .&. me p
-          hasB = any (/= 0) $ map (legmv . bAttacs (occup p))
-                     $ bbToSquares $ bishops p .&. me p
-          hasR = any (/= 0) $ map (legmv . rAttacs (occup p))
-                     $ bbToSquares $ rooks p .&. me p
-          hasQ = any (/= 0) $ map (legmv . qAttacs (occup p))
-                     $ bbToSquares $ queens p .&. me p
-          !hasK = 0 /= (legal . kAttacs $ firstOne $ kings p .&. me p)
-          !anyMove = hasK || hasN || hasPm || hasPc || hasQ || hasR || hasB
-          chk = inCheck p
-          !yopiep = yo p .|. (epcas p .&. epMask)
-          legmv = (`less` me p)
-          pcapt = (.&. yopiep)
-          legal = (`less` yoAttacs p)
-
-genMoveNCapt :: MyPos -> [Move]
-genMoveNCapt !p = map (moveAddColor c)
-                      $ concat [ nGenNC, bGenNC, rGenNC, qGenNC, pGenNC1, pGenNC2, kGenNC ]
-    where pGenNC1 = map (moveAddPiece Pawn . uncurry moveFromTo)
-                      $ pAll1Moves c (pawns p .&. me p `less` traR) (occup p)
-          pGenNC2 = map (moveAddPiece Pawn . uncurry moveFromTo)
-                      $ pAll2Moves c (pawns p .&. me p) (occup p)
-          nGenNC = map (moveAddPiece Knight . uncurry moveFromTo)
-                      $ concatMap (srcDests (ncapt . nAttacs))
-                      $ bbToSquares $ knights p .&. me p
-          bGenNC = map (moveAddPiece Bishop . uncurry moveFromTo)
-                      $ concatMap (srcDests (ncapt . bAttacs (occup p)))
-                      $ bbToSquares $ bishops p .&. me p
-          rGenNC = map (moveAddPiece Rook   . uncurry moveFromTo)
-                      $ concatMap (srcDests (ncapt . rAttacs (occup p)))
-                      $ bbToSquares $ rooks p .&. me p
-          qGenNC = map (moveAddPiece Queen  . uncurry moveFromTo)
-                      $ concatMap (srcDests (ncapt . qAttacs (occup p)))
-                      $ bbToSquares $ queens p .&. me p
-          kGenNC = map (moveAddPiece King   . uncurry moveFromTo)
+genMoveNCapt :: MyPos -> V.Vector Move
+genMoveNCapt !p = V.map (moveAddColor c)
+                      $ V.concat [ nGenNC, bGenNC, rGenNC, qGenNC, pGenNC1, pGenNC2, kGenNC ]
+    where pGenNC1 = V.map (moveAddPiece Pawn . uncurry moveFromTo)
+                      $ V.fromList $ pAll1Moves c (pawns p .&. me p `less` traR) (occup p)
+          pGenNC2 = V.map (moveAddPiece Pawn . uncurry moveFromTo)
+                      $ V.fromList $ pAll2Moves c (pawns p .&. me p) (occup p)
+          nGenNC = V.map (moveAddPiece Knight . uncurry moveFromTo)
+                      $ V.concatMap (srcDests (ncapt . nAttacs))
+                      $ bbToSquaresV $ knights p .&. me p
+          bGenNC = V.map (moveAddPiece Bishop . uncurry moveFromTo)
+                      $ V.concatMap (srcDests (ncapt . bAttacs (occup p)))
+                      $ bbToSquaresV $ bishops p .&. me p
+          rGenNC = V.map (moveAddPiece Rook   . uncurry moveFromTo)
+                      $ V.concatMap (srcDests (ncapt . rAttacs (occup p)))
+                      $ bbToSquaresV $ rooks p .&. me p
+          qGenNC = V.map (moveAddPiece Queen  . uncurry moveFromTo)
+                      $ V.concatMap (srcDests (ncapt . qAttacs (occup p)))
+                      $ bbToSquaresV $ queens p .&. me p
+          kGenNC = V.map (moveAddPiece King   . uncurry moveFromTo)
                       $            srcDests (ncapt . legal . kAttacs)
                       $ firstOne $ kings p .&. me p
-          ncapt = (`less` occup p)
+          !free = complement $ occup p
+          ncapt = (.&. free)
           legal = (`less` yoAttacs p)
           traR = if c == White then 0x00FF000000000000 else 0xFF00
           !c = moving p
 
 -- Generate only promotions (now only to queen) non captures
 -- The promotion captures are generated together with the other captures
-genMoveTransf :: MyPos -> [Move]
--- genMoveTransf !p = map (uncurry (makePromo Queen)) $ pGenC ++ pGenNC
-genMoveTransf !p = map (uncurry (makePromo Queen)) pGenNC
-    where -- pGenC = concatMap (srcDests (pcapt . pAttacs c))
-          --            $ bbToSquares $ pawns p .&. myfpc
-          pGenNC = pAll1Moves c (pawns p .&. myfpc) (occup p)
+genMovePromo :: MyPos -> V.Vector Move
+genMovePromo !p = V.map (uncurry (makePromo Queen)) pGenNC
+    where pGenNC = V.fromList $ pAll1Moves c (pawns p .&. myfpc) (occup p)
           !myfpc = me p .&. traR
-          -- pcapt = (.&. yo p)
           !traR = if c == White then 0x00FF000000000000 else 0xFF00
           !c = moving p
 
 {-# INLINE srcDests #-}
-srcDests :: (Square -> BBoard) -> Square -> [(Square, Square)]
-srcDests f !s = zip (repeat s) $ bbToSquares $ f s
+srcDests :: (Square -> BBoard) -> Square -> V.Vector (Square, Square)
+srcDests f !s = bbToSquaresVS s $ f s
 
 -- This one should be called only for normal moves
 {-# INLINE moveChecksDirect #-}
@@ -179,13 +151,13 @@ findChecking !pos = concat [ pChk, nChk, bChk, rChk, qbChk, qrChk ]
           !p = pawns pos   .&. yo pos
 
 -- Generate move when in check
-genMoveFCheck :: MyPos -> [Move]
+genMoveFCheck :: MyPos -> V.Vector Move
 genMoveFCheck !p
     | null chklist = error "genMoveFCheck"
-    | null $ tail chklist = r1 ++ kGen ++ r2	-- simple check
+    | null $ tail chklist = r1 V.++ kGen V.++ r2	-- simple check
     | otherwise = kGen				-- double check, only king moves help
     where !chklist = findChecking p
-          !kGen = map (moveAddColor (moving p) . moveAddPiece King . uncurry moveFromTo)
+          !kGen = V.map (moveAddColor (moving p) . moveAddPiece King . uncurry moveFromTo)
                       $ srcDests (legal . kAttacs) ksq
           !ksq = firstOne kbb
           !kbb = kings p .&. me p
@@ -197,8 +169,8 @@ genMoveFCheck !p
           chkAtt (QueenCheck f s)  = fAttacs s f ocp1
           -- This head is safe becase chklist is first checked in the pattern of the function
           (r1, r2) = case head chklist of	-- this is needed only when simple check
-                 NormalCheck Pawn sq   -> (beatAtP p (bit sq), [])  -- cannot block pawn
-                 NormalCheck Knight sq -> (beatAt  p (bit sq), [])  -- or knight check
+                 NormalCheck Pawn sq   -> (beatAtP p (bit sq), V.empty)  -- cannot block pawn
+                 NormalCheck Knight sq -> (beatAt  p (bit sq), V.empty)  -- or knight check
                  NormalCheck Bishop sq -> beatOrBlock Bishop p sq
                  NormalCheck Rook sq   -> beatOrBlock Rook p sq
                  QueenCheck pt sq      -> beatOrBlock pt p sq
@@ -206,46 +178,46 @@ genMoveFCheck !p
 
 -- Generate moves ending on a given square (used to defend a check by capture or blocking)
 -- This part is only for queens, rooks, bishops and knights (no pawns and, of course, no kings)
-defendAt :: MyPos -> BBoard -> [Move]
-defendAt p !bb = map (moveAddColor $ moving p) $ concat [ nGenC, bGenC, rGenC, qGenC ]
-    where nGenC = map (moveAddPiece Knight . uncurry moveFromTo)
-                     $ concatMap (srcDests (target . nAttacs))
-                     $ bbToSquares $ knights p .&. me p
-          bGenC = map (moveAddPiece Bishop . uncurry moveFromTo)
-                     $ concatMap (srcDests (target . bAttacs (occup p)))
-                     $ bbToSquares $ bishops p .&. me p
-          rGenC = map (moveAddPiece Rook   . uncurry moveFromTo)
-                     $ concatMap (srcDests (target . rAttacs (occup p)))
-                     $ bbToSquares $ rooks p .&. me p
-          qGenC = map (moveAddPiece Queen  . uncurry moveFromTo)
-                     $ concatMap (srcDests (target . qAttacs (occup p)))
-                     $ bbToSquares $ queens p .&. me p
+defendAt :: MyPos -> BBoard -> V.Vector Move
+defendAt p !bb = V.map (moveAddColor $ moving p) $ V.concat [ nGenC, bGenC, rGenC, qGenC ]
+    where nGenC = V.map (moveAddPiece Knight . uncurry moveFromTo)
+                     $ V.concatMap (srcDests (target . nAttacs))
+                     $ bbToSquaresV $ knights p .&. me p
+          bGenC = V.map (moveAddPiece Bishop . uncurry moveFromTo)
+                     $ V.concatMap (srcDests (target . bAttacs (occup p)))
+                     $ bbToSquaresV $ bishops p .&. me p
+          rGenC = V.map (moveAddPiece Rook   . uncurry moveFromTo)
+                     $ V.concatMap (srcDests (target . rAttacs (occup p)))
+                     $ bbToSquaresV $ rooks p .&. me p
+          qGenC = V.map (moveAddPiece Queen  . uncurry moveFromTo)
+                     $ V.concatMap (srcDests (target . qAttacs (occup p)))
+                     $ bbToSquaresV $ queens p .&. me p
           target = (.&. bb)
 
 -- Generate capture pawn moves ending on a given square (used to defend a check by capture)
-pawnBeatAt :: MyPos -> BBoard -> [Move]
-pawnBeatAt !p bb = map (uncurry (makePromo Queen))
-                       (concatMap
+pawnBeatAt :: MyPos -> BBoard -> V.Vector Move
+pawnBeatAt !p bb = V.map (uncurry (makePromo Queen))
+                       (V.concatMap
                            (srcDests (pcapt . pAttacs (moving p)))
-                           (bbToSquares promo))
-                ++ map (moveAddColor (moving p) . moveAddPiece Pawn . uncurry moveFromTo)
-                       (concatMap
+                           (bbToSquaresV promo))
+                V.++ V.map (moveAddColor (moving p) . moveAddPiece Pawn . uncurry moveFromTo)
+                       (V.concatMap
                            (srcDests (pcapt . pAttacs (moving p)))
-                           (bbToSquares rest))
+                           (bbToSquaresV rest))
     where !yopi = bb .&. yo p
           pcapt = (.&. yopi)
           (promo, rest) = promoRest p
 
 -- Generate blocking pawn moves ending on given squares (used to defend a check by blocking)
-pawnBlockAt :: MyPos -> BBoard -> [Move]
-pawnBlockAt p !bb = map (uncurry (makePromo Queen))
-                        (concatMap
+pawnBlockAt :: MyPos -> BBoard -> V.Vector Move
+pawnBlockAt p !bb = V.map (uncurry (makePromo Queen))
+                        (V.concatMap
                               (srcDests (block . \s -> pMovs s (moving p) (occup p)))
-                              (bbToSquares promo))
-                 ++ map (moveAddColor (moving p) . moveAddPiece Pawn . uncurry moveFromTo)
-                        (concatMap
+                              (bbToSquaresV promo))
+                 V.++ V.map (moveAddColor (moving p) . moveAddPiece Pawn . uncurry moveFromTo)
+                        (V.concatMap
                               (srcDests (block . \s -> pMovs s (moving p) (occup p)))
-                              (bbToSquares rest))
+                              (bbToSquaresV rest))
     where block = (.&. bb)
           (promo, rest) = promoRest p
 
@@ -260,24 +232,26 @@ promoRest p
                     in (prp, rea)
     where !mypawns = pawns p .&. me p
 
-beatAt :: MyPos -> BBoard -> [Move]
-beatAt p !bb = pawnBeatAt p bb ++ defendAt p bb
+beatAt :: MyPos -> BBoard -> V.Vector Move
+beatAt p !bb = V.concat [pawnBeatAt p bb, defendAt p bb]
 
 -- Here we generate a possible en passant capture of a pawn which maybe checks
-beatAtP :: MyPos -> BBoard -> [Move]
-beatAtP p !bb = genEPCapts p ++ pawnBeatAt p bb ++ defendAt p bb
+beatAtP :: MyPos -> BBoard -> V.Vector Move
+beatAtP p !bb = V.concat [genEPCapts p, pawnBeatAt p bb, defendAt p bb]
 
-blockAt :: MyPos -> BBoard -> [Move]
-blockAt p !bb = pawnBlockAt p bb ++ defendAt p bb
+blockAt :: MyPos -> BBoard -> V.Vector Move
+blockAt p !bb = V.concat [pawnBlockAt p bb, defendAt p bb]
 
 -- Defend a check from a sliding piece: beat it or block it
-beatOrBlock :: Piece -> MyPos -> Square -> ([Move], [Move])
+beatOrBlock :: Piece -> MyPos -> Square -> (V.Vector Move, V.Vector Move)
 beatOrBlock f !p sq = (beat, block)
     where !beat = beatAt p $ bit sq
           !aksq = firstOne $ me p .&. kings p
           !line = findLKA f aksq sq
           !block = blockAt p line
 
+-- Maybe we will need these ones in a later version
+{--
 genMoveNCaptToCheck :: MyPos -> [(Square, Square)]
 genMoveNCaptToCheck p = genMoveNCaptDirCheck p ++ genMoveNCaptIndirCheck p
 
@@ -302,19 +276,20 @@ genMoveNCaptDirCheck p = concat [ qGenC, rGenC, bGenC, nGenC ]
 -- TODO: indirect non capture checking moves
 genMoveNCaptIndirCheck :: MyPos -> [(Square, Square)]
 genMoveNCaptIndirCheck _ = []
+--}
 
 -- Generate the castle moves
-genMoveCast :: MyPos -> [Move]
+genMoveCast :: MyPos -> V.Vector Move
 genMoveCast p
-    | inCheck p = []
-    | otherwise = kingside ++ queenside
+    | inCheck p = V.empty
+    | otherwise = kingside V.++ queenside
     where (cmidk, cmidq, cattk, cattq)
               | c == White = (caRMKw, caRMQw, caRAKw, caRAQw)
               | otherwise  = (caRMKb, caRMQb, caRAKb, caRAQb)
           kingside  = if castKingRookOk  p c && (occup p .&. cmidk == 0) && (yoAttacs p .&. cattk == 0)
-                        then [caks] else []
+                        then V.singleton caks else V.empty
           queenside = if castQueenRookOk p c && (occup p .&. cmidq == 0) && (yoAttacs p .&. cattq == 0)
-                        then [caqs] else []
+                        then V.singleton caqs else V.empty
           caks = makeCastleFor c True
           caqs = makeCastleFor c False
           !c = moving p
@@ -426,16 +401,6 @@ clearingCast sdcas cas = (cascl, zobcl)
           bqrb = 0x0100000000000000	-- black queen rook
           bkrb = 0x8000000000000000	-- black king rook
 
--- Just for a dumb debug: a quick check if two consecutive moves
--- can be part of a move sequence
-alternateMoves :: MyPos -> Move -> Move -> Bool
-alternateMoves p m1 m2
-    | Busy c1 _ <- tabla p src1,
-      Busy c2 _ <- tabla p src2 = c1 /= c2
-    | otherwise = True	-- means: we cannot say...
-    where src1 = fromSquare m1
-          src2 = fromSquare m2
-
 -- This is used to filter the illegal moves coming from killers or hash table
 -- but we must treat special moves (en-passant, castle and promotion) differently,
 -- because they are more complex
@@ -456,9 +421,9 @@ legalMove p m
           !mc  = moving p
 
 specialMoveIsLegal :: MyPos -> Move -> Bool
-specialMoveIsLegal p m | moveIsCastle m = elem m $ genMoveCast p
+specialMoveIsLegal p m | moveIsCastle m = V.elem m $ genMoveCast p
 specialMoveIsLegal p m | moveIsPromo  m = canMove Pawn p (fromSquare m) (toSquare m)
-specialMoveIsLegal p m | moveIsEnPas  m = elem m $ genEPCapts p
+specialMoveIsLegal p m | moveIsEnPas  m = V.elem m $ genEPCapts p
 specialMoveIsLegal _ _ = False
 
 {-# INLINE moveIsCapture #-}
@@ -793,13 +758,13 @@ seeMoveValue pos !attacks sqfirstmv sqto gain0 = v
                           seeAttsRec = attacs0 }
 
 -- This function can produce illegal captures with the king!
-genMoveCaptWL :: MyPos -> ([Move], [Move])
-genMoveCaptWL !pos = (map f $ sort ws, map f $ sort ls)
+genMoveCaptWL :: MyPos -> (V.Vector Move, V.Vector Move)
+genMoveCaptWL !pos = (V.fromList $ map f $ sort ws, V.fromList $ map f $ sort ls)
     where !capts = myAttacs pos .&. yo pos
           epcs  = genEPCapts pos
           c     = moving pos
           (ws, ls) = foldr (perCaptFieldWL pos (me pos) (yoAttacs pos)) (lepcs,[]) $ bbToSquares capts
-          lepcs = map (moveToLMove Pawn Pawn) epcs
+          lepcs = V.toList $ V.map (moveToLMove Pawn Pawn) epcs
           f = moveAddColor c . lmoveToMove
 
 type LMove = Word32
@@ -823,12 +788,12 @@ moveToLMove attacker victim (Move w)
 lmoveToMove :: LMove -> Move
 lmoveToMove = Move . fromIntegral . (.&. 0xFFFF)
 
-genEPCapts :: MyPos -> [Move]
+genEPCapts :: MyPos -> V.Vector Move
 genEPCapts !pos
-    | epBB == 0 = []
-    | otherwise = map (\s -> makeEnPas s dst) $ bbToSquares srcBB
+    | epBB == 0 = V.empty
+    | otherwise = V.map (\s -> makeEnPas s dst) $ V.fromList $ bbToSquares srcBB
     where !epBB = epcas pos .&. epMask
-          dst = head $ bbToSquares epBB	-- safe because epBB /= 0
+          dst   = firstOne epBB	-- safe because epBB /= 0
           srcBB = pAttacs (other $ moving pos) dst .&. me pos .&. pawns pos
 
 perCaptFieldWL :: MyPos -> BBoard -> BBoard -> Square -> ([LMove], [LMove]) -> ([LMove], [LMove])

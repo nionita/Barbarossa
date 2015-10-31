@@ -1,15 +1,18 @@
 {-# LANGUAGE BangPatterns #-}
 module Moves.BitBoard (
-    lsb, bbToSquares, less, firstOne,
+    lsb, less, firstOne,
+    bbToSquares,
+    bbToSquaresV,
+    bbToSquaresVS,
     bbToSquaresBB,
     shadowDown, shadowUp, uTestBit, uBit
     -- exactOne,
     -- bbFoldr
 ) where
 
-import Data.Array.Base
+import qualified Data.Vector.Unboxed as V
 import Data.Bits
-import Data.List (unfoldr)
+import Data.List (unfoldr, sort)
 
 import Struct.Struct
 
@@ -29,15 +32,14 @@ firstOne = bitToSquare . lsb
 
 -- Here the bitboard must have exactly one bit set!
 bitToSquare :: BBoard -> Square
-bitToSquare !b = bitScanDatabase `unsafeAt` mbsm b
+bitToSquare !b = bitScanDatabase `V.unsafeIndex` mbsm b
 
 bitScanMagic :: BBoard
 bitScanMagic = 0x07EDD5E59A4E28C2
 
-bitScanDatabase :: UArray Int Int
-bitScanDatabase = array (0, 63) paar
+bitScanDatabase :: V.Vector Int
+bitScanDatabase = V.fromListN 64 $ map snd $ sort [(mbsm ibit, i) | (i, ibit) <- ones ]
     where ones = take 64 $ zip [0..] $ iterate (`unsafeShiftL` 1) 1
-          paar = [(mbsm ibit, i) | (i, ibit) <- ones]
 
 {-# INLINE mbsm #-}
 mbsm :: BBoard -> Int
@@ -49,6 +51,21 @@ bbToSquares bb = unfoldr f bb
     where f :: BBoard -> Maybe (Square, BBoard)
           f 0 = Nothing
           f b = Just $ extractSquare b
+
+{-# INLINE bbToSquaresV #-}
+bbToSquaresV :: BBoard -> V.Vector Square
+bbToSquaresV bb = V.unfoldrN 32 f bb
+    where f :: BBoard -> Maybe (Square, BBoard)
+          f 0 = Nothing
+          f b = Just $ extractSquare b
+
+{-# INLINE bbToSquaresVS #-}
+bbToSquaresVS :: Square -> BBoard -> V.Vector (Square, Square)
+bbToSquaresVS src bb = V.unfoldrN 32 f bb
+    where f :: BBoard -> Maybe ((Square, Square), BBoard)
+          f 0 = Nothing
+          f b = let (dst, b') = extractSquare b
+                in Just $ ((src, dst), b')
 
 {-# INLINE bbToSquaresBB #-}
 bbToSquaresBB :: (Square -> BBoard) -> BBoard -> BBoard

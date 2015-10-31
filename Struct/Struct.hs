@@ -1,4 +1,8 @@
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns
+  , TypeFamilies
+  , FlexibleContexts
+  , MultiParamTypeClasses
+  #-}
 module Struct.Struct (
          BBoard, Square, ZKey, ShArray, MaArray, DbArray, Move(..),
          Piece(..), Color(..), TabCont(..), MyPos(..),
@@ -17,6 +21,9 @@ import Data.Array.Base
 import Data.Char (ord, chr)
 import Data.Word
 import Data.Bits
+import Data.Vector.Unboxed(Unbox, MVector, Vector)
+import qualified Data.Vector.Generic         as G
+import qualified Data.Vector.Generic.Mutable as GM
 import Numeric
 
 -- The very basic data types used in the modules
@@ -126,6 +133,37 @@ newtype Move = Move Word16 deriving Eq
 
 instance Show Move where
     show = toString
+
+instance Unbox Move
+
+newtype instance MVector s Move = MV_Move (MVector s Word16)
+newtype instance Vector    Move = V_Move  (Vector    Word16)
+
+instance GM.MVector MVector Move where
+    {-# INLINE basicLength #-}
+    basicLength (MV_Move v) = GM.basicLength v
+    {-# INLINE basicUnsafeSlice #-}
+    basicUnsafeSlice i l (MV_Move v) = MV_Move (GM.basicUnsafeSlice i l v)
+    {-# INLINE basicOverlaps #-}
+    basicOverlaps (MV_Move v1) (MV_Move v2) = GM.basicOverlaps v1 v2
+    {-# INLINE basicUnsafeNew #-}
+    basicUnsafeNew l = MV_Move <$> GM.basicUnsafeNew l
+    {-# INLINE basicUnsafeRead #-}
+    basicUnsafeRead (MV_Move v) i = Move <$> GM.basicUnsafeRead v i
+    {-# INLINE basicUnsafeWrite #-}
+    basicUnsafeWrite (MV_Move v) i (Move w) = GM.basicUnsafeWrite v i w
+
+instance G.Vector Vector Move where
+    {-# INLINE basicUnsafeFreeze #-}
+    basicUnsafeFreeze (MV_Move v) = V_Move <$> G.basicUnsafeFreeze v
+    {-# INLINE basicUnsafeThaw #-}
+    basicUnsafeThaw (V_Move v) = MV_Move <$> G.basicUnsafeThaw v
+    {-# INLINE basicLength #-}
+    basicLength (V_Move v) = G.basicLength v
+    {-# INLINE basicUnsafeSlice #-}
+    basicUnsafeSlice i l (V_Move v) = V_Move (G.basicUnsafeSlice i l v)
+    {-# INLINE basicUnsafeIndexM #-}
+    basicUnsafeIndexM (V_Move v) i = Move <$> G.basicUnsafeIndexM v i
 
 -- some constant bitboards for additional conditions like
 -- en-passant, castle rights and 50 moves rule

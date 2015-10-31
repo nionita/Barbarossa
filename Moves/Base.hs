@@ -9,7 +9,7 @@ module Moves.Base (
     posToState, getPos, posNewSearch,
     doRealMove, doMove, undoMove, genMoves, genTactMoves, canPruneMove,
     useHash,
-    staticVal, materVal, tacticalPos, isMoveLegal, isKillCand, isTKillCand, okInSequence,
+    staticVal, materVal, tacticalPos, isMoveLegal, isKillCand, isTKillCand,
     betaCut, doNullMove, ttRead, ttStore, curNodes, chooseMove, isTimeout, informCtx,
     mateScore, scoreDiff,
     finNode,
@@ -22,6 +22,7 @@ import Data.List
 import Control.Monad.State
 import Control.Monad.Reader (ask)
 import Data.Ord (comparing)
+import qualified Data.Vector.Unboxed as V
 -- import Numeric
 import System.Random
 
@@ -91,31 +92,29 @@ genMoves :: Game ([Move], [Move])
 genMoves = do
     p <- getPos
     let !c = moving p
-        lc = genMoveFCheck p
     if isCheck p c
-       then return (lc, [])
+       then return (V.toList $ genMoveFCheck p, [])
        else do
             let l0 = genMoveCast p
-                l1 = genMoveTransf p
+                l1 = genMovePromo p
                 (l2w, l2l) = genMoveCaptWL p
-                l3'= genMoveNCapt p
-            l3 <- sortMovesFromHist l3'
+                l3' = genMoveNCapt p
+            l3 <- V.fromList <$> sortMovesFromHist (V.toList l3')
             return $! if loosingLast
-                         then (l1 ++ l2w, l0 ++ l3 ++ l2l)
-                         else (l1 ++ l2w ++ l2l, l0 ++ l3)
+                         then (V.toList $ l1 V.++ l2w, V.toList $ l0 V.++ l3 V.++ l2l)
+                         else (V.toList $ l1 V.++ l2w V.++ l2l, V.toList $ l0 V.++ l3)
 
 -- Generate only tactical moves, i.e. promotions, captures & check escapes
 genTactMoves :: Game [Move]
 genTactMoves = do
     p <- getPos
     let !c = moving p
-        l1 = genMoveTransf p
+        l1 = genMovePromo p
         (l2w, _) = genMoveCaptWL p
-        lc = genMoveFCheck p
-        !mvs | isCheck p c = lc
-             | otherwise   = l1 ++ l2w
+        !mvs | isCheck p c = genMoveFCheck p
+             | otherwise   = l1 V.++ l2w
     -- return $ checkGenMoves p mvs
-    return mvs
+    return $ V.toList mvs
 
 {--
 checkGenMoves :: MyPos -> [Move] -> [Move]
@@ -324,11 +323,6 @@ isTKillCand :: Move -> Game Bool
 isTKillCand mm = do
     t <- getPos
     return $! not $ moveIsCapture t mm
-
-okInSequence :: Move -> Move -> Game Bool
-okInSequence m1 m2 = do
-    t <- getPos
-    return $! alternateMoves t m1 m2
 
 -- Static evaluation function
 -- This does not detect a mate or stale mate, it only returns the calculated
