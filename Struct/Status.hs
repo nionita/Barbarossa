@@ -68,6 +68,13 @@ data EvalParams
           epMaterScale :: !Int,
           epMaterBonusScale :: !Int,
           epPawnBonusScale  :: !Int,
+          epKSafePawn       :: !Int,
+          epKSafeKnight     :: !Int,
+          epKSafeBishop     :: !Int,
+          epKSafeRook       :: !Int,
+          epKSafeQueen      :: !Int,
+          epKSafeKing       :: !Int,
+          epKSafeShift      :: !Int,
           epPassKingProx    :: !Int,
           epPassBlockO :: !Int,
           epPassBlockA :: !Int,
@@ -127,6 +134,13 @@ instance CollectParams EvalParams where
                     epMaterScale = 1,
                     epMaterBonusScale = 5,
                     epPawnBonusScale  = 4,
+                    epKSafePawn       = 1,
+                    epKSafeKnight     = 2,
+                    epKSafeBishop     = 2,
+                    epKSafeRook       = 4,
+                    epKSafeQueen      = 8,
+                    epKSafeKing       = 2,
+                    epKSafeShift      = 5,
                     epPassKingProx    = 10,
                     epPassBlockO = 11,
                     epPassBlockA = 17,
@@ -147,6 +161,13 @@ collectEvalParams (s, v) ep = lookApply s v ep [
         ("epMaterScale",      setEpMaterScale),
         ("epMaterBonusScale", setEpMaterBonusScale),
         ("epPawnBonusScale",  setEpPawnBonusScale),
+        ("epKSafePawn",       setEpKSafePawn),
+        ("epKSafeKnight",     setEpKSafeKnight),
+        ("epKSafeBishop",     setEpKSafeBishop),
+        ("epKSafeRook",       setEpKSafeRook),
+        ("epKSafeQueen",      setEpKSafeQueen),
+        ("epKSafeKing",       setEpKSafeKing),
+        ("epKSafeShift",      setEpKSafeShift),
         ("epPassKingProx",    setEpPassKingProx),
         ("epPassBlockO",      setEpPassBlockO),
         ("epPassBlockA",      setEpPassBlockA),
@@ -162,6 +183,13 @@ collectEvalParams (s, v) ep = lookApply s v ep [
           setEpMaterScale      v' ep' = ep' { epMaterScale      = round v' }
           setEpMaterBonusScale v' ep' = ep' { epMaterBonusScale = round v' }
           setEpPawnBonusScale  v' ep' = ep' { epPawnBonusScale  = round v' }
+          setEpKSafePawn       v' ep' = ep' { epKSafePawn       = round v' }
+          setEpKSafeKnight     v' ep' = ep' { epKSafeKnight     = round v' }
+          setEpKSafeBishop     v' ep' = ep' { epKSafeBishop     = round v' }
+          setEpKSafeRook       v' ep' = ep' { epKSafeRook       = round v' }
+          setEpKSafeQueen      v' ep' = ep' { epKSafeQueen      = round v' }
+          setEpKSafeKing       v' ep' = ep' { epKSafeKing       = round v' }
+          setEpKSafeShift      v' ep' = ep' { epKSafeShift      = round v' }
           setEpPassKingProx    v' ep' = ep' { epPassKingProx    = round v' }
           setEpPassBlockO      v' ep' = ep' { epPassBlockO      = round v' }
           setEpPassBlockA      v' ep' = ep' { epPassBlockA      = round v' }

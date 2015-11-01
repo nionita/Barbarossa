@@ -215,16 +215,18 @@ bnMateDistance wbish sq = min (squareDistance sq ocor1) (squareDistance sq ocor2
 data KingSafe = KingSafe
 
 instance EvalItem KingSafe where
-    evalItem _ _ ew p _ mide = kingSafe p ew mide
+    evalItem _ ep ew p _ mide = kingSafe p ep ew mide
 
 -- Rewrite of king safety taking into account number and quality
 -- of pieces attacking king neighbour squares
 -- This function is almost optimised, it could perhaps be faster
 -- if we eliminate the lists
-kingSafe :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-kingSafe !p !ew !mide = madm mide (ewKingSafe ew) ksafe
-    where !ksafe = ksSide (yo p) (yoKAttacs p) (myPAttacs p) (myNAttacs p) (myBAttacs p) (myRAttacs p) (myQAttacs p) (myKAttacs p) (myAttacs p)
-                 - ksSide (me p) (myKAttacs p) (yoPAttacs p) (yoNAttacs p) (yoBAttacs p) (yoRAttacs p) (yoQAttacs p) (yoKAttacs p) (yoAttacs p)
+kingSafe :: MyPos -> EvalParams -> EvalWeights -> MidEnd -> MidEnd
+kingSafe !p !ep !ew !mide = madm mide (ewKingSafe ew) ksafe
+    where !ksafe = ksSide ep (yo p) (yoKAttacs p) (myPAttacs p) (myNAttacs p) (myBAttacs p)
+                       (myRAttacs p) (myQAttacs p) (myKAttacs p) (myAttacs p)
+                 - ksSide ep (me p) (myKAttacs p) (yoPAttacs p) (yoNAttacs p) (yoBAttacs p)
+                       (yoRAttacs p) (yoQAttacs p) (yoKAttacs p) (yoAttacs p)
 
 -- To make the sum and count in one pass
 data Flc = Flc !Int !Int
@@ -235,24 +237,23 @@ fadd (Flc f1 q1) (Flc f2 q2) = Flc (f1+f2) (q1+q2)
 fmul :: Flc -> Int
 fmul (Flc f q) = f * q
 
-ksSide :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
-ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
+ksSide :: EvalParams -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard
+       -> BBoard -> BBoard -> BBoard -> Int
+ksSide !ep !yop !yok !myp !myn !myb !myr !myq !myk !mya
     | myq == 0  = 0
     | otherwise = mattacs
     where !freey = popCount $ yok `less` (mya .|. yop)
           qual a p = let c = popCount $ yok .&. a
                      in Flc (flaCoef `unsafeAt` c) (c * p)
-          -- qualWeights = [1, 2, 2, 4, 8, 2]
-          !qp = qual myp 1
-          !qn = qual myn 2
-          !qb = qual myb 2
-          !qr = qual myr 4
-          !qq = qual myq 8
-          !qk = qual myk 2
+          !qp = qual myp $ epKSafePawn   ep
+          !qn = qual myn $ epKSafeKnight ep
+          !qb = qual myb $ epKSafeBishop ep
+          !qr = qual myr $ epKSafeRook   ep
+          !qq = qual myq $ epKSafeQueen  ep
+          !qk = qual myk $ epKSafeKing   ep
           !ixm = fmul (fadd qp $ fadd qn $ fadd qb $ fadd qr $ fadd qq qk) `unsafeShiftR` 2
-               + 8 + ksShift - freey
+               + 8 + epKSafeShift ep - freey
           !mattacs = attCoef `unsafeAt` ixm
-          ksShift = 5
 
 -- We want to eliminate "if yok .&. a /= 0 ..."
 -- by using an array
@@ -263,8 +264,6 @@ flaCoef = listArray (0, 8) [ 0, 1, 1, 1, 1, 1, 1, 1, 1 ]
 -- Quali max: 8 * (1 + 2 + 2 + 4 + 8 + 2) < 160
 -- Flag max: 6
 -- 6 * 160 / 4 = 240
--- Here the beginning of -8 is actually wrong, which comes to the same
--- as increasing the importance of king safety
 attCoef :: UArray Int Int
 attCoef = listArray (0, 248) $ take 8 (repeat 0) ++ [ f x | x <- [0..63] ] ++ repeat (f 63)
     where f :: Int -> Int

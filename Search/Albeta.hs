@@ -67,7 +67,7 @@ minPvDepth  = 2		-- from this depth we use alpha beta search
 
 -- Parameters for late move reduction:
 lmrActive, lmrDebug :: Bool
-lmrActive   = True
+lmrActive   = False
 lmrDebug    = False
 lmrInitLv, lmrInitLim, lmrLevMin, lmrLevMax :: Int
 lmrInitLv   = 8
@@ -91,7 +91,7 @@ varImp lev w = round $ go 0 lev w
 
 -- Parameters for futility pruning:
 maxFutilDepth :: Int
-maxFutilDepth = 3
+maxFutilDepth = 1
 
 -- This is a linear formula for futility margin
 -- Should apply from 1 to maxFutilDepth (checked elsewehere)
