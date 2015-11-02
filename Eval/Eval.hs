@@ -244,15 +244,15 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
                      in Flc (flaCoef `unsafeAt` c) (c * p)
           -- qualWeights = [1, 2, 2, 4, 8, 2]
           !qp = qual myp 1
-          !qn = qual myn 4
+          !qn = qual myn 3
           !qb = qual myb 2
           !qr = qual myr 4
-          !qq = qual myq 19
-          !qk = qual myk 7
+          !qq = qual myq 6
+          !qk = qual myk 3
           !ixm = fmul (fadd qp $ fadd qn $ fadd qb $ fadd qr $ fadd qq qk) `unsafeShiftR` 2
                + 8 + ksShift - freey
           !mattacs = attCoef `unsafeAt` ixm
-          ksShift = 2
+          ksShift = 1
 
 -- We want to eliminate "if yok .&. a /= 0 ..."
 -- by using an array
