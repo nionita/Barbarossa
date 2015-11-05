@@ -130,7 +130,8 @@ optimiseParams opts = do
         eopts   = ["-l", "5"]
         playlen = getConfigVal config "playLength" $ Just defConLength
         playdep = getConfigVal config "playDepth" $ Just defConDepth
-        spsaParams = defSpsaParams { verb = True, nmax = maxost }
+        -- spsaParams = defSpsaParams { inte = True, verb = True, nmax = maxost }
+        spsaParams = defSpsaParams { h0 = 4 * length ovs, verb = True, nmax = maxost }
     so <- case save of
                "" -> if optRestart opts
                              then error "Restart requested, but no checkpoint file in config!"
