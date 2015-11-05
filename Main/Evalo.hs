@@ -130,8 +130,7 @@ optimiseParams opts = do
         eopts   = ["-l", "5"]
         playlen = getConfigVal config "playLength" $ Just defConLength
         playdep = getConfigVal config "playDepth" $ Just defConDepth
-        -- spsaParams = defSpsaParams { inte = True, verb = True, nmax = maxost }
-        spsaParams = defSpsaParams { h0 = 4 * length ovs, verb = True, nmax = maxost }
+        spsaParams = defSpsaParams { verb = True, nmax = maxost }
     so <- case save of
                "" -> if optRestart opts
                              then error "Restart requested, but no checkpoint file in config!"
@@ -321,7 +320,7 @@ runPos hi ho chn mvs depth npos erac = do
             when (batDebug || funDebug) $ putStrLn $ "Fen to analyse: " ++ stIniFen st
             -- threadDelay 30000
             sf <- execStateT go st { stRemMvs = mvs }
-            let merr = calcError sf
+            let merr = calcErrorN sf
             when funDebug $ do
                 putStrLn $ "Fen done: " ++ stIniFen st
                 putStrLn $ "Fen collects:"
@@ -427,7 +426,7 @@ reportEngineProblem st ls pre = withFile engErrFile AppendMode $ \h -> do
     mapM_ (hPutStrLn h) $ reverse ls
 
 liTout :: Int
-liTout = 25000000 -- this is in microseconds; i.e. we wait max 25 s (for depth 7 ok, more not!)
+liTout = 60000000 -- this is in microseconds; i.e. we wait max 60 s
 
 accumLines :: Handle -> Handle -> (String -> Bool) -> (String -> a -> a) -> a -> IO (a, [String])
 accumLines hi ho p f = go []
@@ -494,7 +493,10 @@ discardLines h = do
 -- This is a decay in weights of successive score differences
 -- Further differences count less and less
 lamDecay :: Double
-lamDecay = 0.7
+lamDecay = -0.7
+
+mateScoreMax :: Int
+mateScoreMax = 1000
 
 calcError :: MyState -> Maybe Double
 calcError st
@@ -504,15 +506,45 @@ calcError st
           diffs acc _ _               = acc
           mulwadd a w n = a + w * fromIntegral n
 
-mateScoreMax :: Int
-mateScoreMax = 1000
-
 -- This is the error per ply
 errorPerPly :: Int -> Score -> Int
 errorPerPly x0 (Cp x1) = abs (x0 + x1)
 errorPerPly x0 (Mt n )
     | n < 0     = max 0 $ mateScoreMax - x0
     | otherwise = max 0 $ mateScoreMax + x0
+
+calcErrorN :: MyState -> Maybe Double
+calcErrorN st
+    | null (stScDMvs st) = Nothing
+    | i > 0              = Just $ s / fromIntegral i
+    | otherwise          = Nothing
+    where scs = reverse $ map fst (stScDMvs st)
+          dcs = iterate (* lamDecay) 1
+          (s, i) = foldr (\(s, i) (s0, i0) -> (s+s0, i+i0)) (0, 0)
+                       $ map (errorN scs)
+                       $ zip dcs $ tail $ tails scs
+
+errorN :: [Score] -> (Double, [Score]) -> (Double, Int)
+errorN ss (w, ns)
+    | w > 0     = ( w * fromIntegral (sum (zipWith errorPerPlyNO ss ns)), l)
+    | otherwise = (-w * fromIntegral (sum (zipWith errorPerPlyNE ss ns)), l)
+    where l = length ns
+
+-- This is the error per ply: the odd part
+errorPerPlyNO :: Score -> Score -> Int
+errorPerPlyNO (Cp x0) (Cp x1) = abs (x0 + x1)
+errorPerPlyNO (Cp x0) (Mt n )
+    | n < 0     = max 0 $ mateScoreMax - x0	-- different sides, near scores
+    | otherwise = max 0 $ mateScoreMax + x0	-- different sides, far scores
+errorPerPlyNO _       _ = error "Score after mate!"	-- should not be possible
+
+-- This is the error per ply: the even part
+errorPerPlyNE :: Score -> Score -> Int
+errorPerPlyNE (Cp x0) (Cp x1) = abs (x0 - x1)
+errorPerPlyNE (Cp x0) (Mt n )
+    | n < 0     = max 0 $ mateScoreMax + x0	-- same side, far scores
+    | otherwise = max 0 $ mateScoreMax - x0	-- same side, near scores
+errorPerPlyNE _       _ = error "Score after mate!"	-- should not be possible
 
 -- This part with the config is used in Evolve too, better do a separate module!!
 -- Convert the content of a file with assignments par=val (one per line)
