@@ -182,8 +182,8 @@ instance CollectParams EvalWeights where
           ewRookConn        = tme  96  78,
           ewMobilityKnight  = tme 50 71,	-- Evalo 200 steps:
           ewMobilityBishop  = tme 57 33,	-- length 10, depth 6, batch 128
-          ewMobilityRook    = tme 28 26,
-          ewMobilityQueen   = tme  4  6,
+          ewMobilityRook    = tme  9 23,	-- after 121 steps evalo with
+          ewMobilityQueen   = tme  7  5,	-- length 9, depth 6, batch 256
           ewCenterPAtts     = tme 68 65,
           ewCenterNAtts     = tme 52 48,
           ewCenterBAtts     = tme 60 41,
