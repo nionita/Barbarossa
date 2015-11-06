@@ -493,11 +493,17 @@ discardLines h = do
 -- This is a decay in weights of successive score differences
 -- Further differences count less and less
 lamDecay :: Double
-lamDecay = -0.7
+lamDecay = 0.7
 
-mateScoreMax :: Int
-mateScoreMax = 1000
+-- Some parameters which define the error between expected
+-- and actual score in future positions given the score
+-- in current position
+mateScoreLim, equalScoreLim, winMvs :: Int
+equalScoreLim =  100	-- for this score we must win (should be 25?)
+mateScoreLim  = 1000	-- from this score we wone
+winMvs        =   20	-- defines the score increase rate
 
+-- Old error calculation
 calcError :: MyState -> Maybe Double
 calcError st
     | null (stScDMvs st) = Nothing
@@ -510,41 +516,74 @@ calcError st
 errorPerPly :: Int -> Score -> Int
 errorPerPly x0 (Cp x1) = abs (x0 + x1)
 errorPerPly x0 (Mt n )
-    | n < 0     = max 0 $ mateScoreMax - x0
-    | otherwise = max 0 $ mateScoreMax + x0
+    | n < 0     = max 0 $ mateScoreLim - x0
+    | otherwise = max 0 $ mateScoreLim + x0
 
+-- New error calculation
 calcErrorN :: MyState -> Maybe Double
 calcErrorN st
     | null (stScDMvs st) = Nothing
     | i > 0              = Just $ s / fromIntegral i
     | otherwise          = Nothing
-    where scs = reverse $ map fst (stScDMvs st)
-          dcs = iterate (* lamDecay) 1
+    where scs = reverse $ map limitScore $ map fst (stScDMvs st)
+          dcs = zip [1..] $ iterate (* lamDecay) 1
           (s, i) = foldr (\(s, i) (s0, i0) -> (s+s0, i+i0)) (0, 0)
                        $ map (errorN scs)
                        $ zip dcs $ tail $ tails scs
 
-errorN :: [Score] -> (Double, [Score]) -> (Double, Int)
-errorN ss (w, ns)
-    | w > 0     = ( w * fromIntegral (sum (zipWith errorPerPlyNO ss ns)), l)
-    | otherwise = (-w * fromIntegral (sum (zipWith errorPerPlyNE ss ns)), l)
+errorN :: [Int] -> ((Int, Double), [Int]) -> (Double, Int)
+errorN ss ((n, w), ns) = (w * fromIntegral (sum (zipWith (f n) ss ns)), l)
     where l = length ns
+          f | odd n     = errorPerPlyNO
+            | otherwise = errorPerPlyNE
+
+-- When the position is more or less equal, the current score is the target
+-- for future scores and can be used directly to compute the errors
+-- But when the position is not equal, then the better side is expected to
+-- increase the advantage by future moves, so that an increased score
+-- has to be taken into consideration - higher for further positions
+-- The model is exponential in number of moves
+-- For the losing part it is the other way round
+targetScore :: Int -> Int -> Int
+targetScore n x
+    | x >=  mateScoreLim  =  mateScoreLim	-- not much more to win here
+    | x >   equalScoreLim =  expScore (n0 + n)
+    | x >= -equalScoreLim =  x	-- should we use 0 here? Or something toward 0?
+    | x <  -equalScoreLim = -(expScore (n0 + n))
+    | x <= -mateScoreLim  = -mateScoreLim	-- not much more to lose here
+    where xp = abs x
+          n0 = revExp xp
+
+-- expScore 0      = equalScoreLim
+-- expScore winMvs = mateScoreLim
+-- Scould we go with double from here, to be more smooth?
+expScore :: Int -> Int
+expScore n = round $ ax * exp (bx * fromIntegral n)
+
+-- Inverse:
+revExp :: Int -> Int
+revExp n = round $ log (fromIntegral n / ax) / bx
+
+ax, bx :: Double
+ax = fromIntegral equalScoreLim
+bx = log (fromIntegral mateScoreLim / ax) / fromIntegral winMvs
+
+limitScore :: Score -> Int
+limitScore (Cp x)
+    | x >  mateScoreLim =  mateScoreLim
+    | x < -mateScoreLim = -mateScoreLim
+    | otherwise         = x
+limitScore (Mt n)
+    | n <= 0    = -mateScoreLim
+    | otherwise =  mateScoreLim
 
 -- This is the error per ply: the odd part
-errorPerPlyNO :: Score -> Score -> Int
-errorPerPlyNO (Cp x0) (Cp x1) = abs (x0 + x1)
-errorPerPlyNO (Cp x0) (Mt n )
-    | n < 0     = max 0 $ mateScoreMax - x0	-- different sides, near scores
-    | otherwise = max 0 $ mateScoreMax + x0	-- different sides, far scores
-errorPerPlyNO _       _ = error "Score after mate!"	-- should not be possible
+errorPerPlyNO :: Int -> Int -> Int -> Int
+errorPerPlyNO n x0 x1 = abs (targetScore n x0 + x1)
 
 -- This is the error per ply: the even part
-errorPerPlyNE :: Score -> Score -> Int
-errorPerPlyNE (Cp x0) (Cp x1) = abs (x0 - x1)
-errorPerPlyNE (Cp x0) (Mt n )
-    | n < 0     = max 0 $ mateScoreMax + x0	-- same side, far scores
-    | otherwise = max 0 $ mateScoreMax - x0	-- same side, near scores
-errorPerPlyNE _       _ = error "Score after mate!"	-- should not be possible
+errorPerPlyNE :: Int -> Int -> Int -> Int
+errorPerPlyNE n x0 x1 = abs (targetScore n x0 - x1)
 
 -- This part with the config is used in Evolve too, better do a separate module!!
 -- Convert the content of a file with assignments par=val (one per line)
