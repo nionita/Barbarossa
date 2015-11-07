@@ -253,7 +253,7 @@ addToPath e p = p { pathDepth = pathDepth p + 1, pathMoves = Seq $ e : unseq (pa
 -- Take only the score from a path (to another), rest empty
 onlyScore :: Path -> Path
 onlyScore p = Path { pathScore = pathScore p, pathDepth = 0, pathMoves = Seq [],
-                  pathOrig = "onlyScore from " ++ pathOrig p }
+                     pathOrig = "onlyScore from " ++ pathOrig p }
 
 -- Take all from the first path, except the score, which comes from the second (for fail hard)
 combinePath :: Path -> Path -> Path
@@ -268,11 +268,11 @@ negatePath p = p { pathScore = - pathScore p, pathDepth = 0, pathMoves = Seq [],
 
 -- This should be used only when scores are equal
 -- Then it takes the longer path
-bestPath :: Path -> Path -> String -> Path
-bestPath a b s
-    | a == b    = if pathDepth b > pathDepth a then b else a
-    | otherwise = error $ "bestPath on unequal scores case " ++ s
-                          ++ ": " ++ show a ++ " versus " ++ show b
+-- bestPath :: Path -> Path -> String -> Path
+-- bestPath a b s
+--     | a == b    = if pathDepth b > pathDepth a then b else a
+--     | otherwise = error $ "bestPath on unequal scores case " ++ s
+--                          ++ ": " ++ show a ++ " versus " ++ show b
 
 (-:) :: Path -> Int -> Path
 p -: s = p { pathScore = pathScore p - s, pathOrig = pathOrig p ++ " <-:> " ++ show s }
@@ -577,7 +577,7 @@ checkFailOrPVRoot xstats b d e s nst =  do
                                 ttStore de typ (pathScore b) e nodes'
                             betaCut True (absdp sst) e
                         let xpvslg = insertToPvs d pvg (pvsl nst)	-- the good
-                            !csc = if s > b then combinePath s b else bestPath s b "1"
+                            !csc = combinePath s b
                         pindent $ "beta cut: " ++ show csc
                         let nst1 = nst { cursc = csc, pvsl = xpvslg, pvcont = emptySeq }
                         return (True, nst1)
@@ -696,12 +696,13 @@ pvSearch nst !a !b !d = do
                        when (valid && de >= minToStore) $ do
                            nodes1 <- gets (sNodes . stats)
                            -- store as upper score, and as move, the first one generated
-                           let typ = 0
-                               !deltan = nodes1 - nodes0
-                               mv = head es	-- it is alway not null here! See above haveNoMove
-                           lift $ ttStore de typ (pathScore a) mv deltan
+                           lift $ do
+                               let typ = 0
+                                   !deltan = nodes1 - nodes0
+                                   mv = head es	-- it is alway not null here! See above haveNoMove
+                               ttStore de typ (pathScore a) mv deltan
                        if valid
-                           then return $! bestPath s a "2"
+                           then return $! combinePath s a
                            else do
                                chk <- lift tacticalPos
                                let s' = if chk then matedPath else staleMate
@@ -773,7 +774,6 @@ pvZeroW !nst !b !d !lastnull redu = do
                          let s = cursc nstf
                          -- Here we expect bGrain <= s < b -- this must be checked
                          pindent $ "<: " ++ show s
-                         -- incFlow
                          abrt' <- gets abort
                          if abrt' || s > bGrain
                             then return b
@@ -782,21 +782,19 @@ pvZeroW !nst !b !d !lastnull redu = do
                                 let !de = max d $ pathDepth s
                                     es = unalt edges
                                     valid = movno nstf > 1	-- have valid move
-                                -- when (de >= minToStore && s < b && not (null es)) $ do	-- we failed low
                                 when (valid && de >= minToStore) $ do
                                     !nodes1 <- gets (sNodes . stats)
                                     -- store as upper score, and as move the first one (generated)
-                                    let typ = 0
-                                        !deltan = nodes1 - nodes0
-                                        mv = head es	-- here es is always not null (haveNoMove above)
-                                    lift $ ttStore de typ (pathScore bGrain) mv deltan
+                                    lift $ do
+                                        let typ = 0
+                                            !deltan = nodes1 - nodes0
+                                            mv = head es	-- here es is always not null (haveNoMove above)
+                                        ttStore de typ (pathScore bGrain) mv deltan
                                 if valid
-                                   then return $ bestPath s bGrain "2a"
+                                   then return $! combinePath s bGrain
                                    else do	-- here: store exact mate or stalemate score!
                                        chk <- lift tacticalPos
                                        let s' = if chk then matedPath else staleMate
-                                       -- store the leaf node with maximum depth
-                                       when (de >= minToStore) $ lift $ ttStore 20 2 (pathScore s') noMove 0
                                        return $! trimaxPath bGrain b s'
     where bGrain = b -: scoreGrain
 
@@ -1187,8 +1185,10 @@ genAndSort nst a b d = do
 {-# INLINE reduceLmr #-}
 reduceLmr :: Int -> Bool -> Bool -> Int -> Int -> Int -> Int
 reduceLmr !d nearmatea !spec !exd lmrlev w
-    | not lmrActive || spec || exd > 0 || d <= 1 || nearmatea = d
-    | otherwise                                               = max 1 $ d - lmrArr!(lmrlev, w)
+    | not lmrActive || spec || exd > 0
+       || d <= 1 || nearmatea = d
+    | otherwise               = max dmin $ d - lmrArr!(lmrlev, w)
+    where dmin = (d+d+d) `unsafeShiftR` 2	-- minimum depth: 3/4 of original
 
 -- Adjust the LMR related parameters in the state
 -- The correct constants have to be tuned! Some are hadcoded here
