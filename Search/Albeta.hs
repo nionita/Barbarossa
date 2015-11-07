@@ -1099,7 +1099,7 @@ checkFailOrPVLoop xstats b d e s nst = do
                      betaCut True (absdp sst) e -- anounce a beta move (for example, update history)
                  incBeta mn
                  -- when debug $ logmes $ "<-- pvInner: beta cut: " ++ show s ++ ", return " ++ show b
-                 let !csc = if s > b then combinePath s b else bestPath s b "3"
+                 let !csc = combinePath s b
                  pindent $ "beta cut: " ++ show csc
                  let !nst1 = nst { cursc = csc, pvcont = emptySeq }
                  return (True, nst1)
@@ -1139,7 +1139,7 @@ checkFailOrPVLoopZ xstats b d e s nst = do
                     ttStore de typ (pathScore b) e nodes'
                 betaCut True (absdp sst) e -- anounce a beta move (for example, update history)
             incBeta mn
-            let !csc = if s > b then combinePath s b else bestPath s b "4"
+            let !csc = combinePath s b
             pindent $ "beta cut: " ++ show csc
             let !nst1 = nst { cursc = csc, pvcont = emptySeq }
             return (True, nst1)
