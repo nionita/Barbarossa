@@ -85,7 +85,7 @@ fenFromString fen = zipWith ($) fenfuncs fentails
           getFenMvNo = headOrDefault "-"
 
 updatePos :: MyPos -> MyPos
-updatePos = updatePosCheck . updatePosAttacs . updatePosOccup
+updatePos = updatePosLazy . updatePosOccup
 
 updatePosOccup :: MyPos -> MyPos
 updatePosOccup !p = p {
@@ -112,22 +112,28 @@ updatePosOccup !p = p {
           -- 3. Unify updatePos: one function with basic fields as parameter and eventually
           --    the old position, then everything in one go - should avoid copying
 
-updatePosAttacs :: MyPos -> MyPos
-updatePosAttacs !p
-    | moving p == White = p {
-                      myPAttacs = twhPAtt, myNAttacs = twhNAtt, myBAttacs = twhBAtt,
-                      myRAttacs = twhRAtt, myQAttacs = twhQAtt, myKAttacs = twhKAtt,
-                      yoPAttacs = tblPAtt, yoNAttacs = tblNAtt, yoBAttacs = tblBAtt,
-                      yoRAttacs = tblRAtt, yoQAttacs = tblQAtt, yoKAttacs = tblKAtt,
-                      myAttacs = twhAttacs, yoAttacs = tblAttacs
+updatePosLazy :: MyPos -> MyPos
+updatePosLazy !p
+    | moving p == White
+        = let lzb = LazyBits {
+                      _check = tcheck,
+                      _myPAttacs = twhPAtt, _myNAttacs = twhNAtt, _myBAttacs = twhBAtt,
+                      _myRAttacs = twhRAtt, _myQAttacs = twhQAtt, _myKAttacs = twhKAtt,
+                      _yoPAttacs = tblPAtt, _yoNAttacs = tblNAtt, _yoBAttacs = tblBAtt,
+                      _yoRAttacs = tblRAtt, _yoQAttacs = tblQAtt, _yoKAttacs = tblKAtt,
+                      _myAttacs  = twhAttacs, _yoAttacs = tblAttacs
                   }
-    | otherwise         = p {
-                      myPAttacs = tblPAtt, myNAttacs = tblNAtt, myBAttacs = tblBAtt,
-                      myRAttacs = tblRAtt, myQAttacs = tblQAtt, myKAttacs = tblKAtt,
-                      yoPAttacs = twhPAtt, yoNAttacs = twhNAtt, yoBAttacs = twhBAtt,
-                      yoRAttacs = twhRAtt, yoQAttacs = twhQAtt, yoKAttacs = twhKAtt,
-                      myAttacs = tblAttacs, yoAttacs = twhAttacs
+        in p { lazyBits = lzb }
+    | otherwise
+        = let lzb = LazyBits {
+                      _check = tcheck,
+                      _myPAttacs = tblPAtt, _myNAttacs = tblNAtt, _myBAttacs = tblBAtt,
+                      _myRAttacs = tblRAtt, _myQAttacs = tblQAtt, _myKAttacs = tblKAtt,
+                      _yoPAttacs = twhPAtt, _yoNAttacs = twhNAtt, _yoBAttacs = twhBAtt,
+                      _yoRAttacs = twhRAtt, _yoQAttacs = twhQAtt, _yoKAttacs = twhKAtt,
+                      _myAttacs  = tblAttacs, _yoAttacs = twhAttacs
                   }
+        in p { lazyBits = lzb }
     where !twhPAtt = bbToSquaresBB (pAttacs White) $ pawns p .&. white
           !twhNAtt = bbToSquaresBB nAttacs $ knights p .&. white
           !twhBAtt = bbToSquaresBB (bAttacs ocp) $ bishops p .&. white
@@ -142,16 +148,11 @@ updatePosAttacs !p
           !tblKAtt = kAttacs $ firstOne $ kings p .&. black p
           !twhAttacs = twhPAtt .|. twhNAtt .|. twhBAtt .|. twhRAtt .|. twhQAtt .|. twhKAtt
           !tblAttacs = tblPAtt .|. tblNAtt .|. tblBAtt .|. tblRAtt .|. tblQAtt .|. tblKAtt
+          !white = ocp `less` black p
+          !whcheck = white   .&. kings p .&. tblAttacs
+          !blcheck = black p .&. kings p .&. twhAttacs
+          !tcheck = whcheck .|. blcheck
           ocp = occup p
-          white = ocp `less` black p
-
-updatePosCheck :: MyPos -> MyPos
-updatePosCheck p = p {
-                  check = tcheck
-               }
-    where !mecheck = me p .&. kings p .&. yoAttacs p
-          !yocheck = yo p .&. kings p .&. myAttacs p
-          !tcheck = mecheck .|. yocheck
 
 -- Passed pawns: only with bitboard operations
 whitePassed :: BBoard -> BBoard -> BBoard
