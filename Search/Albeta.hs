@@ -123,7 +123,7 @@ nulActivate, nulDebug :: Bool
 nulActivate = True		-- activate null move reduction
 nulDebug    = False
 nulMoves :: Int
-nulMoves    = 2	-- how many null moves in sequence are allowed (one or two)
+nulMoves    = 1	-- how many null moves in sequence are allowed (one or two)
 nulMargin, nulSubmrg, nulTrig :: Int
 nulMargin   = 1		-- margin to search the null move (over beta) (in scoreGrain units!)
 nulSubmrg   = 2		-- improved margin (in scoreGrain units!)
@@ -782,7 +782,8 @@ data NullMoveResult = NoNullMove | NullMoveHigh | NullMoveLow | NullMoveThreat P
 
 nullMoveFailsHigh :: NodeState -> Path -> Int -> Int -> Search NullMoveResult
 nullMoveFailsHigh nst b d lastnull
-    | not nulActivate || lastnull < 1 = return NoNullMove	-- go smooth into QS
+    | not nulActivate || lastnull < 1			-- go smooth into QS
+      || crtnt nst == AllNode = return NoNullMove	-- no null move in all nodes
     | otherwise = do
          tact <- lift tacticalPos
          if tact
@@ -1046,8 +1047,8 @@ pvInnerLoopExtenZ b d spec !exd nst redu = do
                 moreLMR False d'	-- less LMR
                 -- Should we expect here to fail high? I.e. change the crt/nxt node type?
                 let nst1 = if nullSeq (pathMoves sr)
-                              then nst
-                              else nst { pvcont = pathMoves sr }
+                              then nst { crtnt = nxtnt nst, nxtnt = crtnt nst } 
+                              else nst { crtnt = nxtnt nst, nxtnt = crtnt nst, pvcont = pathMoves sr }
                 viztreeABD (pathScore negb) (pathScore onemB) d1
                 sf <- fmap pnextlev (pvZeroW nst1 onemB d1 nulMoves True)
                 when (sf >= b) $ moreLMR False d1
