@@ -1267,8 +1267,6 @@ trimax a b x
 pvQSearch :: Int -> Int -> Int -> Search Int
 pvQSearch !a !b c = do				   -- to avoid endless loops
     -- qindent $ "=> " ++ show a ++ ", " ++ show b
-    !stp <- lift staticVal				-- until we can recognize repetition
-    viztreeScore $ "Static: " ++ show stp
     !tact <- lift tacticalPos
     if tact
        then do
@@ -1277,7 +1275,7 @@ pvQSearch !a !b c = do				   -- to avoid endless loops
            if noMove edges
               then do
                   lift $ finNode "MATE" False
-                  return $! trimax a b stp
+                  return $! trimax a b (-mateScore)
               else if c >= qsMaxChess
                       then do
                           viztreeScore $ "endless check: " ++ show inEndlessCheck
@@ -1291,7 +1289,10 @@ pvQSearch !a !b c = do				   -- to avoid endless loops
                           let !esc = lenmax3 $ unalt edges
                               !nc = c + esc - 2
                           pvQLoop b nc a edges
-       else if qsBetaCut && stp >= b
+       else do
+            !stp <- lift staticVal
+            viztreeScore $ "Static: " ++ show stp
+            if qsBetaCut && stp >= b
                then do
                    lift $ finNode "BETA" False
                    return b

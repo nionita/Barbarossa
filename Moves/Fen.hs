@@ -85,13 +85,11 @@ fenFromString fen = zipWith ($) fenfuncs fentails
           getFenMvNo = headOrDefault "-"
 
 updatePos :: MyPos -> MyPos
-updatePos = updatePosLazy . updatePosOccup
-
-updatePosOccup :: MyPos -> MyPos
-updatePosOccup !p = p {
+updatePos !p = p {
                   occup = toccup, me = tme, yo = tyo, kings   = tkings,
                   pawns = tpawns, knights = tknights, queens  = tqueens,
-                  rooks = trooks, bishops = tbishops, passed = tpassed
+                  rooks = trooks, bishops = tbishops, passed = tpassed,
+                  lazyBits = lzb
                }
     where !toccup = kkrq p .|. diag p
           !tkings = kkrq p .&. diag p `less` slide p
@@ -111,11 +109,11 @@ updatePosOccup !p = p {
           -- 2. This is necessary only after a pawn move, otherwise passed remains the same
           -- 3. Unify updatePos: one function with basic fields as parameter and eventually
           --    the old position, then everything in one go - should avoid copying
+          lzb = posLazy (moving p) toccup (black p) tpawns tknights tbishops trooks tqueens tkings
 
-updatePosLazy :: MyPos -> MyPos
-updatePosLazy !p
-    | moving p == White
-        = let lzb = LazyBits {
+posLazy :: Color -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> LazyBits
+posLazy !co !ocp !tblack !tpawns !tknights !tbishops !trooks !tqueens !tkings
+    | co == White = LazyBits {
                       _check = tcheck,
                       _myPAttacs = twhPAtt, _myNAttacs = twhNAtt, _myBAttacs = twhBAtt,
                       _myRAttacs = twhRAtt, _myQAttacs = twhQAtt, _myKAttacs = twhKAtt,
@@ -123,9 +121,7 @@ updatePosLazy !p
                       _yoRAttacs = tblRAtt, _yoQAttacs = tblQAtt, _yoKAttacs = tblKAtt,
                       _myAttacs  = twhAttacs, _yoAttacs = tblAttacs
                   }
-        in p { lazyBits = lzb }
-    | otherwise
-        = let lzb = LazyBits {
+    | otherwise   = LazyBits {
                       _check = tcheck,
                       _myPAttacs = tblPAtt, _myNAttacs = tblNAtt, _myBAttacs = tblBAtt,
                       _myRAttacs = tblRAtt, _myQAttacs = tblQAtt, _myKAttacs = tblKAtt,
@@ -133,26 +129,24 @@ updatePosLazy !p
                       _yoRAttacs = twhRAtt, _yoQAttacs = twhQAtt, _yoKAttacs = twhKAtt,
                       _myAttacs  = tblAttacs, _yoAttacs = twhAttacs
                   }
-        in p { lazyBits = lzb }
-    where !twhPAtt = bbToSquaresBB (pAttacs White) $ pawns p .&. white
-          !twhNAtt = bbToSquaresBB nAttacs $ knights p .&. white
-          !twhBAtt = bbToSquaresBB (bAttacs ocp) $ bishops p .&. white
-          !twhRAtt = bbToSquaresBB (rAttacs ocp) $ rooks p .&. white
-          !twhQAtt = bbToSquaresBB (qAttacs ocp) $ queens p .&. white
-          !twhKAtt = kAttacs $ firstOne $ kings p .&. white
-          !tblPAtt = bbToSquaresBB (pAttacs Black) $ pawns p .&. black p
-          !tblNAtt = bbToSquaresBB nAttacs $ knights p .&. black p
-          !tblBAtt = bbToSquaresBB (bAttacs ocp) $ bishops p .&. black p
-          !tblRAtt = bbToSquaresBB (rAttacs ocp) $ rooks p .&. black p
-          !tblQAtt = bbToSquaresBB (qAttacs ocp) $ queens p .&. black p
-          !tblKAtt = kAttacs $ firstOne $ kings p .&. black p
+    where !twhPAtt = bbToSquaresBB (pAttacs White) $ tpawns .&. white
+          !twhNAtt = bbToSquaresBB nAttacs $ tknights .&. white
+          !twhBAtt = bbToSquaresBB (bAttacs ocp) $ tbishops .&. white
+          !twhRAtt = bbToSquaresBB (rAttacs ocp) $ trooks .&. white
+          !twhQAtt = bbToSquaresBB (qAttacs ocp) $ tqueens .&. white
+          !twhKAtt = kAttacs $ firstOne $ tkings .&. white
+          !tblPAtt = bbToSquaresBB (pAttacs Black) $ tpawns .&. tblack
+          !tblNAtt = bbToSquaresBB nAttacs $ tknights .&. tblack
+          !tblBAtt = bbToSquaresBB (bAttacs ocp) $ tbishops .&. tblack
+          !tblRAtt = bbToSquaresBB (rAttacs ocp) $ trooks .&. tblack
+          !tblQAtt = bbToSquaresBB (qAttacs ocp) $ tqueens .&. tblack
+          !tblKAtt = kAttacs $ firstOne $ tkings .&. tblack
           !twhAttacs = twhPAtt .|. twhNAtt .|. twhBAtt .|. twhRAtt .|. twhQAtt .|. twhKAtt
           !tblAttacs = tblPAtt .|. tblNAtt .|. tblBAtt .|. tblRAtt .|. tblQAtt .|. tblKAtt
-          !white = ocp `less` black p
-          !whcheck = white   .&. kings p .&. tblAttacs
-          !blcheck = black p .&. kings p .&. twhAttacs
+          !white = ocp `less` tblack
+          !whcheck = white   .&. tkings .&. tblAttacs
+          !blcheck = tblack .&. tkings .&. twhAttacs
           !tcheck = whcheck .|. blcheck
-          ocp = occup p
 
 -- Passed pawns: only with bitboard operations
 whitePassed :: BBoard -> BBoard -> BBoard
