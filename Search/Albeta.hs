@@ -1265,7 +1265,7 @@ trimax a b x
 
 -- PV Quiescent Search
 pvQSearch :: Int -> Int -> Int -> Search Int
-pvQSearch !a !b c = do				   -- to avoid endless loops
+pvQSearch !a !b !c = do				   -- to avoid endless loops
     -- qindent $ "=> " ++ show a ++ ", " ++ show b
     !tact <- lift tacticalPos
     if tact
@@ -1286,8 +1286,8 @@ pvQSearch !a !b c = do				   -- to avoid endless loops
                           -- if 1 move: search even deeper
                           -- if 2 moves: same depth
                           -- if 3 or more: no extension
-                          let !esc = lenmax3 $ unalt edges
-                              !nc = c + esc - 2
+                          let !esc = lenmax2 $ unalt edges
+                              !nc = c + esc - 1
                           pvQLoop b nc a edges
        else do
             !stp <- lift staticVal
@@ -1305,14 +1305,12 @@ pvQSearch !a !b c = do				   -- to avoid endless loops
                           if noMove edges
                              then do
                                  lift $ finNode "NOCA" False
-                                 return $! trimax a b stp
+                                 return $! trimax a b stp	-- no capture
                              else if stp > a
                                      then pvQLoop b c stp edges
                                      else pvQLoop b c a   edges
-    where lenmax3 = go 0
-              where go n _ | n == 3 = 3
-                    go n []         = n
-                    go n (_:as)     = go (n+1) as
+    where lenmax2 (_:_:_) = 2
+          lenmax2 _       = 1	-- we know here it is not empty
 
 pvQLoop :: Int -> Int -> Int -> Alt Move -> Search Int
 pvQLoop b c = go
