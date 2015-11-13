@@ -30,7 +30,8 @@ import Moves.Board
 import Moves.Notation
 import Uci.UCI
 
-import SSSPSA
+-- import SSSPSA
+import Adam
 
 data Options = Options {
          optConFile :: Maybe String,	-- configuration file
@@ -124,13 +125,20 @@ optimiseParams opts = do
         pNames  = map fst ovs
         ranges  = map snd ovs
         maxost  = getConfigVal config "maxSteps" $ Just 50
+        -- Some parameters for Adam:
+        alpha   = getConfigVal config "alpha" $ Just 0.001
+        beta1   = getConfigVal config "beta1" $ Just 0.9
+        beta2   = getConfigVal config "beta2" $ Just 0.999
+        eps     = getConfigVal config "eps"   $ Just 1E-8
         batch   = getConfigVal config "sampBatch" $ Just defConBatch
         threads = optNoThrds opts
         engine  = getConfigStr config "engCom" Nothing
         eopts   = ["-l", "5"]
         playlen = getConfigVal config "playLength" $ Just defConLength
         playdep = getConfigVal config "playDepth" $ Just defConDepth
-        spsaParams = defSpsaParams { verb = True, nmax = maxost }
+        -- spsaParams = defSpsaParams { verb = True, nmax = maxost }
+        adamParams = defAdamParams { verb = True, alfa = alpha, bet1 = beta1,
+                                     bet2 = beta2, epsi = eps, nmax = maxost }
     so <- case save of
                "" -> if optRestart opts
                              then error "Restart requested, but no checkpoint file in config!"
@@ -145,7 +153,8 @@ optimiseParams opts = do
                              then error $ "Restart requested, but checkpoint file " ++ save ++ " does not exists"
                              else return $ SOStartWithCheckpoint save ranges
     (h, sz) <- openFenFile (getConfigStr config "fenFile" Nothing)
-    opars <- ssSPSA (bigPointCost h sz batch threads playlen playdep engine eopts pNames) (Just spsaParams) so
+    -- opars <- ssSPSA (bigPointCost h sz batch threads playlen playdep engine eopts pNames) (Just spsaParams) so
+    opars <- adam (bigPointCost h sz batch threads playlen playdep engine eopts pNames) (Just adamParams) so
     putStrLn "Optimal params so far:"
     forM_ (zip pNames opars) $ \(n, v) -> putStrLn $ n ++ " = " ++ show v
 
@@ -629,6 +638,7 @@ getConfigVal cf key mdef
                          _          -> error $ "Can't read " ++ ckey ++ " " ++ s ++ ", wrong type"
     where ckey = "config." ++ key
 
+{--
 getOptimVars :: Config -> [(String, ((Double, Double), Double))]
 getOptimVars cf = map mkParam $ filter (isPrefixOf "optim." . fst) cf
     where remPrfx = tail . dropWhile (/= '.')
@@ -637,3 +647,12 @@ getOptimVars cf = map mkParam $ filter (isPrefixOf "optim." . fst) cf
                          s3       = tail r2
                      in ((read s1, read s2), read s3)
           mkParam (s, v) = (remPrfx s, triple v)
+--}
+
+getOptimVars :: Config -> [(String, (Double, Double))]
+getOptimVars cf = map mkParam $ filter (isPrefixOf "optim." . fst) cf
+    where remPrfx = tail . dropWhile (/= '.')
+          doub s  = let (s1, r1) = break (== ',') s
+                        s2       = tail r1
+                    in (read s1, read s2)
+          mkParam (s, v) = (remPrfx s, doub v)
