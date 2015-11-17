@@ -31,7 +31,9 @@ import Moves.Notation
 import Uci.UCI
 
 -- import SSSPSA
-import Adam
+-- import Adam
+-- import AdaDelta
+import Newton
 
 data Options = Options {
          optConFile :: Maybe String,	-- configuration file
@@ -129,6 +131,7 @@ optimiseParams opts = do
         alpha   = getConfigVal config "alpha" $ Just 0.001
         beta1   = getConfigVal config "beta1" $ Just 0.9
         beta2   = getConfigVal config "beta2" $ Just 0.999
+        beta    = getConfigVal config "beta"  $ Just 0.9
         eps     = getConfigVal config "eps"   $ Just 1E-8
         batch   = getConfigVal config "sampBatch" $ Just defConBatch
         threads = optNoThrds opts
@@ -137,8 +140,10 @@ optimiseParams opts = do
         playlen = getConfigVal config "playLength" $ Just defConLength
         playdep = getConfigVal config "playDepth" $ Just defConDepth
         -- spsaParams = defSpsaParams { verb = True, nmax = maxost }
-        adamParams = defAdamParams { verb = True, alfa = alpha, bet1 = beta1,
-                                     bet2 = beta2, epsi = eps, nmax = maxost }
+        -- adamParams = defAdamParams { verb = True, alfa = alpha, bet1 = beta1,
+        --                              bet2 = beta2, epsi = eps, nmax = maxost }
+        -- adaDeltaParams = defAdaDeltaParams { verb = True, epsi = eps, nmax = maxost }
+        newtonParams = defNewtonParams { verb = True, epsi = eps, nmax = maxost }
     so <- case save of
                "" -> if optRestart opts
                              then error "Restart requested, but no checkpoint file in config!"
@@ -154,7 +159,9 @@ optimiseParams opts = do
                              else return $ SOStartWithCheckpoint save ranges
     (h, sz) <- openFenFile (getConfigStr config "fenFile" Nothing)
     -- opars <- ssSPSA (bigPointCost h sz batch threads playlen playdep engine eopts pNames) (Just spsaParams) so
-    opars <- adam (bigPointCost h sz batch threads playlen playdep engine eopts pNames) (Just adamParams) so
+    -- opars <- adam (bigPointCost h sz batch threads playlen playdep engine eopts pNames) (Just adamParams) so
+    -- opars <- adaDelta (bigPointCost h sz batch threads playlen playdep engine eopts pNames) (Just adaDeltaParams) so
+    opars <- newton (bigPointCost h sz batch threads playlen playdep engine eopts pNames) (Just newtonParams) so
     putStrLn "Optimal params so far:"
     forM_ (zip pNames opars) $ \(n, v) -> putStrLn $ n ++ " = " ++ show v
 
