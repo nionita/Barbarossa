@@ -250,7 +250,7 @@ addToPath e p = p { pathDepth = pathDepth p + 1, pathMoves = Seq $ e : unseq (pa
 -- Take only the score from a path (to another), rest empty
 onlyScore :: Path -> Path
 onlyScore p = Path { pathScore = pathScore p, pathDepth = 0, pathMoves = Seq [],
-                  pathOrig = "onlyScore from " ++ pathOrig p }
+                     pathOrig = "onlyScore from " ++ pathOrig p }
 
 -- Take all from the first path, except the score, which comes from the second (for fail hard)
 combinePath :: Path -> Path -> Path
@@ -265,11 +265,11 @@ negatePath p = p { pathScore = - pathScore p, pathDepth = 0, pathMoves = Seq [],
 
 -- This should be used only when scores are equal
 -- Then it takes the longer path
-bestPath :: Path -> Path -> String -> Path
-bestPath a b s
-    | a == b    = if pathDepth b > pathDepth a then b else a
-    | otherwise = error $ "bestPath on unequal scores case " ++ s
-                          ++ ": " ++ show a ++ " versus " ++ show b
+-- bestPath :: Path -> Path -> String -> Path
+-- bestPath a b s
+--     | a == b    = if pathDepth b > pathDepth a then b else a
+--     | otherwise = error $ "bestPath on unequal scores case " ++ s
+--                          ++ ": " ++ show a ++ " versus " ++ show b
 
 (-:) :: Path -> Int -> Path
 p -: s = p { pathScore = pathScore p - s, pathOrig = pathOrig p ++ " <-:> " ++ show s }
@@ -575,7 +575,7 @@ checkFailOrPVRoot xstats b d e s nst =  do
                                 ttStore de typ (pathScore b) e nodes'
                             betaCut True (absdp sst) e
                         let xpvslg = insertToPvs d pvg (pvsl nst)	-- the good
-                            !csc = if s > b then combinePath s b else bestPath s b "1"
+                            !csc = combinePath s b
                         pindent $ "beta cut: " ++ show csc
                         let nst1 = nst { cursc = csc, pvsl = xpvslg, pvcont = emptySeq }
                         return (True, nst1)
@@ -694,7 +694,7 @@ pvSearch nst !a !b !d = do
                                    !deltan = nodes1 - nodes0
                                ttStore de typ (pathScore a) (head es) deltan	-- should be d or de?
                        if movno nstf > 1
-                           then return $! bestPath s a "2"
+                           then return $! combinePath s a
                            else do
                                chk <- lift tacticalPos
                                let s' = if chk then matedPath else staleMate
@@ -761,21 +761,25 @@ pvZeroW !nst !b !d !lastnull redu = do
                          let s = cursc nstf
                          -- Here we expect bGrain <= s < b -- this must be checked
                          pindent $ "<: " ++ show s
-                         let !de = max d $ pathDepth s
-                             es = unalt edges
-                         when (de >= minToStore && s < b && not (null es)) $ do	-- we failed low
-                             !nodes1 <- gets (sNodes . stats)	-- what if es is null?
-                             -- store as upper score, and as move the first one (generated)
-                             lift $ do
-                                 let typ = 0
-                                     !deltan = nodes1 - nodes0
-                                 ttStore de typ (pathScore bGrain) (head es) deltan
-                         if s > bGrain || movno nstf > 1
+                         abrt' <- gets abort
+                         if abrt' || s > bGrain
                             then return s
-                            else do	-- here: store exact mate or stalemate score!
-                                chk <- lift tacticalPos
-                                let s' = if chk then matedPath else staleMate
-                                return $! trimaxPath bGrain b s'
+                            else do
+                                let !de = max d $ pathDepth s
+                                    es = unalt edges
+                                when (de >= minToStore && s < b && not (null es)) $ do	-- we failed low
+                                    !nodes1 <- gets (sNodes . stats)	-- what if es is null?
+                                    -- store as upper score, and as move the first one (generated)
+                                    lift $ do
+                                        let typ = 0
+                                            !deltan = nodes1 - nodes0
+                                        ttStore de typ (pathScore bGrain) (head es) deltan
+                                if movno nstf > 1
+                                   then return $! combinePath s bGrain
+                                   else do	-- here: store exact mate or stalemate score!
+                                       chk <- lift tacticalPos
+                                       let s' = if chk then matedPath else staleMate
+                                       return $! trimaxPath bGrain b s'
     where bGrain = b -: scoreGrain
 
 data NullMoveResult = NoNullMove | NullMoveHigh | NullMoveLow | NullMoveThreat Path
@@ -1079,7 +1083,7 @@ checkFailOrPVLoop xstats b d e s nst = do
                   betaCut True (absdp sst) e -- anounce a beta move (for example, update history)
               incBeta mn
               -- when debug $ logmes $ "<-- pvInner: beta cut: " ++ show s ++ ", return " ++ show b
-              let !csc = if s > b then combinePath s b else bestPath s b "3"
+              let !csc = combinePath s b
               pindent $ "beta cut: " ++ show csc
               let !nst1 = nst { cursc = csc, pvcont = emptySeq }
               return (True, nst1)
@@ -1118,7 +1122,7 @@ checkFailOrPVLoopZ xstats b d e s nst = do
                  ttStore de typ (pathScore b) e nodes'
              betaCut True (absdp sst) e -- anounce a beta move (for example, update history)
          incBeta mn
-         let !csc = if s > b then combinePath s b else bestPath s b "4"
+         let !csc = combinePath s b
          pindent $ "beta cut: " ++ show csc
          let !nst1 = nst { cursc = csc, pvcont = emptySeq }
          return (True, nst1)
@@ -1164,8 +1168,10 @@ genAndSort nst a b d = do
 {-# INLINE reduceLmr #-}
 reduceLmr :: Int -> Bool -> Bool -> Int -> Int -> Int -> Int
 reduceLmr !d nearmatea !spec !exd lmrlev w
-    | not lmrActive || spec || exd > 0 || d <= 1 || nearmatea = d
-    | otherwise                                               = max 1 $ d - lmrArr!(lmrlev, w)
+    | not lmrActive || spec || exd > 0
+       || d <= 1 || nearmatea = d
+    | otherwise               = max dmin $ d - lmrArr!(lmrlev, w)
+    where dmin = (d+d+d) `unsafeShiftR` 2	-- minimum depth: 3/4 of original
 
 -- Adjust the LMR related parameters in the state
 -- The correct constants have to be tuned! Some are hadcoded here
