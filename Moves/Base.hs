@@ -431,7 +431,7 @@ canPruneMove m
         p <- getPos
         return $! if moveIsCapture p m
                      then False
-                     else not $ moveChecks p m
+                     else not $ moveAdvPawn p m || moveChecks p m
 
 -- Score difference obtained by last move, from POV of the moving part
 -- It considers the fact that static score is for the part which has to move

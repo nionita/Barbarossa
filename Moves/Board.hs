@@ -5,7 +5,7 @@ module Moves.Board (
     goPromo, hasMoves, moveIsCapture,
     castKingRookOk, castQueenRookOk,
     genMoveCast, genMoveNCapt, genMoveTransf, genMoveFCheck, genMoveCaptWL,
-    genMoveNCaptToCheck,
+    genMoveNCaptToCheck, moveAdvPawn,
     updatePos, checkOk, moveChecks,
     legalMove, alternateMoves,
     doFromToMove, reverseMoving
@@ -154,6 +154,16 @@ moveChecksIndirect !p !m = ba .&. bq /= 0 || ra .&. rq /= 0
           ba   = bAttacs occ ksq
           ra   = rAttacs occ ksq
 
+-- Used to decide if we futility prune a move
+-- True: do not prune
+moveAdvPawn :: MyPos -> Move -> Bool
+moveAdvPawn !p !m
+    | fb .&. passed p /= 0          = True	-- all passed pawn moves
+    | fb .&. pawns p .&. foufi /= 0 = True 	-- 4th to 5th or 5th to 6th pawn move
+    | otherwise                     = False
+    where !fb = uBit $ fromSquare m
+          foufi = 0x000000FFFF000000
+
 -- Because finding the blocking square for a queen check is so hard,
 -- we define a data type and, in case of a queen check, we give also
 -- the piece type (rook or bishop) in which direction the queen checks
@@ -281,7 +291,7 @@ beatOrBlock f !p sq = (beat, block)
 genMoveNCaptToCheck :: MyPos -> [(Square, Square)]
 genMoveNCaptToCheck p = genMoveNCaptDirCheck p ++ genMoveNCaptIndirCheck p
 
--- Todo: check with pawns (should be also without transformations)
+-- Todo: check with pawns (should be also without promotions)
 genMoveNCaptDirCheck :: MyPos -> [(Square, Square)]
 genMoveNCaptDirCheck p = concat [ qGenC, rGenC, bGenC, nGenC ]
     where nGenC = concatMap (srcDests (target nTar . nAttacs))
