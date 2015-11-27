@@ -93,16 +93,11 @@ varImp lev w = round $ go 0 lev w
 maxFutilDepth :: Int
 maxFutilDepth = 3
 
--- This is a linear formula for futility margin
--- Should apply from 1 to maxFutilDepth (checked elsewehere)
--- futilMs, futilMv :: Int
--- futilMs = 275	-- margin for depth 1
--- futilMv = 150	-- suplementary margin for every further depth
--- Ignore depth (it is 1 or 2) and use a 25% safety margin
+-- Futility margins
 futilMargins :: Int -> Int -> Int
-futilMargins 3 s = 4 * s
-futilMargins _ s = s + (s `unsafeShiftR` 2)
--- futilMargins d s = futilMs - futilMv + d*futilMv
+futilMargins 1 s = s + (s `unsafeShiftR` 3)
+futilMargins 2 s = s `unsafeShiftL` 1
+futilMargins _ s = s `unsafeShiftL` 3	-- i.e. for depth 3
 
 -- Score statistics parameters for variable futility
 futIniVal, futMinVal, futDecayB, futDecayW :: Int
