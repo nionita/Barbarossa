@@ -95,9 +95,8 @@ maxFutilDepth = 3
 
 -- Futility margins
 futilMargins :: Int -> Int -> Int
-futilMargins 1 s = s + (s `unsafeShiftR` 3)
-futilMargins 2 s = s `unsafeShiftL` 1
-futilMargins _ s = s `unsafeShiftL` 3	-- i.e. for depth 3
+futilMargins 1 s = s
+futilMargins d s = s `unsafeShiftL` (d-1)
 
 -- Score statistics parameters for variable futility
 futIniVal, futMinVal, futDecayB, futDecayW :: Int
