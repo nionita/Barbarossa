@@ -236,11 +236,11 @@ fmul :: Flc -> Int
 fmul (Flc f q) = f * q
 
 ksSide :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
-ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
+ksSide !yop !yoka !myp !myn !myb !myr !myq !myk !mya
     | myq == 0  = 0
     | otherwise = mattacs
-    where !freey = popCount $ yok `less` (mya .|. yop)
-          qual a p = let c = popCount $ yok .&. a
+    where !freey = popCount $ yoka `less` (mya .|. yop)
+          qual a p = let c = popCount $ yoka .&. a
                      in Flc (flaCoef `unsafeAt` c) (c * p)
           -- qualWeights = [1, 2, 2, 4, 8, 2]
           !qp = qual myp 1
@@ -254,7 +254,7 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
           !mattacs = attCoef `unsafeAt` ixm
           ksShift = 5
 
--- We want to eliminate "if yok .&. a /= 0 ..."
+-- We want to eliminate "if yoka .&. a /= 0 ..."
 -- by using an array
 flaCoef :: UArray Int Int
 flaCoef = listArray (0, 8) [ 0, 1, 1, 1, 1, 1, 1, 1, 1 ]

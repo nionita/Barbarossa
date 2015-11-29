@@ -2,7 +2,7 @@
 module Moves.Board (
     posFromFen, initPos,
     isCheck, inCheck,
-    goPromo, hasMoves, moveIsCapture,
+    goPromo, hasMoves,
     castKingRookOk, castQueenRookOk,
     genMoveCast, genMoveNCapt, genMoveTransf, genMoveFCheck, genMoveCaptWL,
     genMoveNCaptToCheck,
@@ -11,10 +11,7 @@ module Moves.Board (
     doFromToMove, reverseMoving
     ) where
 
--- import Prelude hiding ((++), foldl, filter, map, concatMap, concat, head, tail, repeat, zip,
---                        zipWith, null, words, foldr, elem, lookup, any, takeWhile, iterate)
 import Data.Bits
--- import Data.List.Stream
 import Data.List (sort, foldl')
 import Data.Word
 
@@ -125,15 +122,15 @@ moveChecks !p !m = moveChecksDirect p m || moveChecksIndirect p m
 
 moveChecksDirect :: MyPos -> Move -> Bool
 moveChecksDirect !p !m
-    | fig == Pawn   = pAttacs (moving p) t .&. yok /= 0
-    | fig == Knight = nAttacs t .&. yok /= 0
-    | fig == Bishop = ba .&. yok /= 0
-    | fig == Rook   = ra .&. yok /= 0
-    | fig == Queen  = ba .&. yok /= 0 || ra .&. yok /= 0
+    | fig == Pawn   = pAttacs (moving p) t .&. yob /= 0
+    | fig == Knight = nAttacs t .&. yob /= 0
+    | fig == Bishop = ba .&. yob /= 0
+    | fig == Rook   = ra .&. yob /= 0
+    | fig == Queen  = ba .&. yob /= 0 || ra .&. yob /= 0
     | otherwise     = False	-- king can't check directly
     where !fig = movePiece m
           !t   = toSquare m
-          !yok = kings p .&. yo p
+          !yob = kings p .&. yo p
           occ = occup p
           ba  = bAttacs occ t
           ra  = rAttacs occ t
@@ -141,14 +138,19 @@ moveChecksDirect !p !m
 -- This one can be further optimised by using two bitboard arrays
 -- for the attacks on empty table
 moveChecksIndirect :: MyPos -> Move -> Bool
-moveChecksIndirect !p !m = ba .&. bq /= 0 || ra .&. rq /= 0
+moveChecksIndirect !p !m
+    | fb .&. yok p == 0 = False
+    | otherwise         = moveChecksI p m fb
+    where fb = uBit $ fromSquare m
+
+moveChecksI :: MyPos -> Move -> BBoard -> Bool
+moveChecksI !p !m !fb = ba .&. bq /= 0 || ra .&. rq /= 0
     where !ksq = firstOne $ kings p .&. yo p
           !b   = bishops p .&. me p
           !r   = rooks p   .&. me p
           !q   = queens p  .&. me p
           !bq  = b .|. q
           !rq  = r .|. q
-          !fb  = uBit $ fromSquare m
           !tb  = uBit $ toSquare m
           !occ = (occup p .|. tb) `less` fb
           ba   = bAttacs occ ksq
@@ -158,7 +160,6 @@ moveChecksIndirect !p !m = ba .&. bq /= 0 || ra .&. rq /= 0
 {-# INLINE moveIntoCheck #-}
 moveIntoCheck :: MyPos -> Move -> Bool
 moveIntoCheck !p !m
-    | inCheck p           = False
     | movePiece m == King = suicide p m
     | otherwise           = movePinned p m
 
@@ -172,14 +173,19 @@ suicide !p !m
           !knb = uBit kns
 
 movePinned :: MyPos -> Move -> Bool
-movePinned !p !m = ba .&. bq /= 0 || ra .&. rq /= 0
+movePinned !p !m
+    | fb .&. mek p == 0 = False
+    | otherwise         = moveRelPinned p m fb
+    where fb = uBit $ fromSquare m
+
+moveRelPinned :: MyPos -> Move -> BBoard -> Bool
+moveRelPinned !p !m !fb = ba .&. bq /= 0 || ra .&. rq /= 0
     where !ksq = firstOne $ kings p .&. me p
           !b   = bishops p .&. yo p .&. ntb
           !r   = rooks p   .&. yo p .&. ntb
           !q   = queens p  .&. yo p .&. ntb
           !bq  = b .|. q
           !rq  = r .|. q
-          !fb  = uBit $ fromSquare m
           !tb  = uBit $ toSquare m
           !ntb = complement tb
           !occ = (occup p .|. tb) `less` fb
@@ -510,10 +516,6 @@ specialMoveIsLegal p m | moveIsCastle m = elem m $ genMoveCast p
 specialMoveIsLegal p m | moveIsPromo  m = canMove Pawn p (fromSquare m) (toSquare m)
 specialMoveIsLegal p m | moveIsEnPas  m = elem m $ genEPCapts p
 specialMoveIsLegal _ _ = False
-
-{-# INLINE moveIsCapture #-}
-moveIsCapture :: MyPos -> Move -> Bool
-moveIsCapture p m = occup p .&. (uBit (toSquare m)) /= 0
 
 canMove :: Piece -> MyPos -> Square -> Square -> Bool
 canMove Pawn p src dst
@@ -851,7 +853,7 @@ genMoveCaptWL !pos = (map f $ sort ws, map f $ sort ls)
           c     = moving pos
           (ws, ls) = foldr (perCaptFieldWL pos (me pos) (yoAttacs pos)) (lepcs,[]) $ bbToSquares capts
           lepcs = map (moveToLMove Pawn Pawn) epcs
-          f = moveAddColor c . lmoveToMove
+          f = makeCapture . moveAddColor c . lmoveToMove
 
 type LMove = Word32
 

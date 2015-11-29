@@ -333,14 +333,10 @@ isMoveLegal m = do
 isKillCand :: Move -> Move -> Game Bool
 isKillCand mm ym
     | toSquare mm == toSquare ym = return False
-    | otherwise = do
-        t <- getPos
-        return $! not $ moveIsCapture t ym
+    | otherwise = return $! not $ moveIsCapture ym
 
 isTKillCand :: Move -> Game Bool
-isTKillCand mm = do
-    t <- getPos
-    return $! not $ moveIsCapture t mm
+isTKillCand mm = return $! not $ moveIsCapture mm
 
 okInSequence :: Move -> Move -> Game Bool
 okInSequence m1 m2 = do
@@ -435,9 +431,9 @@ betaCut good absdp m
 -- Will not be pruned nor LMR reduced
 -- Now: only for captures or promotions (but check that with LMR!!!)
 moveIsCaptPromo :: MyPos -> Move -> Bool
-moveIsCaptPromo p m
+moveIsCaptPromo _ m
     | moveIsPromo m || moveIsEnPas m = True
-    | otherwise                      = moveIsCapture p m
+    | otherwise                      = moveIsCapture m
 
 -- We will call this function before we do the move
 -- This will spare a heavy operation for pruned moved
@@ -446,9 +442,7 @@ canPruneMove m
     | not (moveIsNormal m) = return False
     | otherwise = do
         p <- getPos
-        return $! if moveIsCapture p m
-                     then False
-                     else not $ moveChecks p m
+        return $! not $ moveIsCapture m || moveChecks p m
 
 -- Score difference obtained by last move, from POV of the moving part
 -- It considers the fact that static score is for the part which has to move

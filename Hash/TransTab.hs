@@ -245,17 +245,17 @@ quintToCacheEn !tt !zkey !depth !tp !score !(Move move) !nodes = pCE
              .|. (fromIntegral tp    `unsafeShiftL` 54)
              .|. (fromIntegral depth `unsafeShiftL` 48)
              .|. (fromIntegral nodes `unsafeShiftL` 16)
-             .|. (fromIntegral move)
+             .|. (fromIntegral $ move .&. 0xFFFF)	-- take last 16 bits of the move
           !pCE = PCacheEn { hi = w1, lo = w2 }
 
 cacheEnToQuint :: PCacheEn -> (Int, Int, Int, Move, Int)
-cacheEnToQuint (PCacheEn { hi = w1, lo = w2 }) = (de, ty, sc, Move mv, no)
+cacheEnToQuint (PCacheEn { hi = w1, lo = w2 }) = (de, ty, sc, mv, no)
     where u32  = fromIntegral (w1 `unsafeShiftR` 2) :: Word32
           s16  = fromIntegral (u32 .&. 0xFFFF) :: Int16
           !sc  = fromIntegral s16
           !no  = fromIntegral $ (w2 `unsafeShiftR` 16) .&. 0xFFFFFFFF
           w2lo = fromIntegral w2 :: Word32
-          !mv  = fromIntegral $ w2lo .&. 0xFFFF
+          !mv  = makeTTMove $ Move $ fromIntegral $ w2lo .&. 0xFFFF
           w2hi = fromIntegral   (w2   `unsafeShiftR` 32) :: Word32
           !de  = fromIntegral $ (w2hi `unsafeShiftR` 16) .&. 0x3F
           !ty  = fromIntegral $ (w2hi `unsafeShiftR` 22) .&. 0x3

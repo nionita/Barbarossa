@@ -86,8 +86,8 @@ fenFromString fen = zipWith ($) fenfuncs fentails
 
 updatePos :: MyPos -> MyPos
 updatePos !p = p {
-                  occup = toccup, me = tme, yo = tyo, kings   = tkings,
-                  pawns = tpawns, knights = tknights, queens  = tqueens,
+                  occup = toccup, me = tme, yo = tyo, mek = tmek, yok = tyok,
+                  kings = tkings, pawns = tpawns, knights = tknights, queens = tqueens,
                   rooks = trooks, bishops = tbishops, passed = tpassed,
                   lazyBits = lzb
                }
@@ -110,6 +110,13 @@ updatePos !p = p {
           -- 3. Unify updatePos: one function with basic fields as parameter and eventually
           --    the old position, then everything in one go - should avoid copying
           lzb = posLazy (moving p) toccup (black p) tpawns tknights tbishops trooks tqueens tkings
+          -- calculate the bitboards for pinned & indirect checks
+          !kmes = firstOne $ tme .&. tkings
+          !tmek =   bAttacs toccup kmes
+                .|. rAttacs toccup kmes
+          !kyes = firstOne $ tyo .&. tkings
+          !tyok =   bAttacs toccup kyes
+                .|. rAttacs toccup kyes
 
 posLazy :: Color -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> LazyBits
 posLazy !co !ocp !tblack !tpawns !tknights !tbishops !trooks !tqueens !tkings

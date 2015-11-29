@@ -1,4 +1,5 @@
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns, PatternGuards #-}
+
 module Struct.Struct (
          BBoard, Square, ZKey, ShArray, MaArray, DbArray, Move(..),
          Piece(..), Color(..), TabCont(..), MyPos(..), LazyBits(..),
@@ -7,6 +8,7 @@ module Struct.Struct (
          tabla, emptyPos, isReversible, remis50Moves, set50Moves, reset50Moves, addHalfMove,
          fromSquare, toSquare, isSlide, isDiag, isKkrq,
          moveIsNormal, moveIsCastle, moveIsPromo, moveIsEnPas, moveColor, movePiece,
+         moveIsTTMove, makeTTMove, moveIsCapture, makeCapture, moveIsCheck, makeCheck,
          movePromoPiece, moveEnPasDel, makeEnPas, moveAddColor, moveAddPiece,
          makeCastleFor, makePromo, moveFromTo, showWord64,
          activatePromo, fromColRow, checkCastle, checkEnPas, toString,
@@ -42,13 +44,15 @@ data TabCont = Empty
              deriving (Eq, Show)
 
 data MyPos = MyPos {
-    black, slide, kkrq, diag, epcas :: !BBoard, -- These fields completely represents of a position
+    black, slide, kkrq, diag, epcas :: !BBoard,		-- These completely represents a position
+    me, yo,	-- opponents pices: me: the moving one, yo - the other
+    mek, yok,	-- help fields for check calculations (pinned, indirect)
+    occup, passed,	-- all pieces, all passed pawns
+    kings, pawns, queens, rooks, bishops, knights :: !BBoard, -- all pieces by type
     zobkey :: !ZKey,	-- hash key
-    mater :: !Int,	-- material balance
-    me, yo, occup, kings, pawns :: !BBoard,	-- further heavy used bitboards computed for efficiency
-    queens, rooks, bishops, knights, passed :: !BBoard,
+    mater  :: !Int,	-- material balance
     staticScore :: Int,
-    lazyBits :: LazyBits
+    lazyBits :: LazyBits	-- these are not always needed
     }
 
 data LazyBits = LazyBits {
@@ -104,6 +108,8 @@ instance Show MyPos where
             (zobkey, "zobkey"),
             (me, "me"),
             (yo, "yo"),
+            (mek, "mek"),
+            (yok, "yok"),
             (occup, "occup"),
             (kings, "kings"),
             (pawns, "pawns"),
@@ -165,7 +171,10 @@ tabla p sq
           f = pieceAt p bsq
           bsq = 1 `unsafeShiftL` sq
 
-newtype Move = Move Word16 deriving Eq
+newtype Move = Move Word32
+
+instance Eq Move where
+    Move w1 == Move w2 = w1 .&. 0xFFFF == w2 .&. 0xFFFF
 
 instance Show Move where
     show = toString
@@ -199,7 +208,7 @@ emptyPos :: MyPos
 emptyPos = MyPos {
         black = 0, slide = 0, kkrq = 0, diag = 0, epcas = 0,
         zobkey = 0, mater = 0,
-        me = 0, yo = 0, occup = 0, kings = 0, pawns = 0,
+        me = 0, yo = 0, mek = 0, yok = 0, occup = 0, kings = 0, pawns = 0,
         queens = 0, rooks = 0, bishops = 0, knights = 0,
         staticScore = 0, passed = 0, lazyBits = leb
     }
@@ -251,24 +260,6 @@ isDiag Knight = False
 isDiag Rook   = False
 isDiag _      = True
 
-isKingAt :: Square -> MyPos -> Bool
-isKingAt !sq !p = kkrq p `testBit` sq
-    && diag p `testBit` sq
-    && not (slide p `testBit` sq)
-
-isKingMoving :: Move -> MyPos -> Bool
-isKingMoving m !p = isKingAt src p
-    where src = fromSquare m
-
-isPawnAt :: Square -> MyPos -> Bool
-isPawnAt !sq !p = diag p `testBit` sq
-    && not (kkrq p `testBit` sq)
-    && not (slide p `testBit` sq)
-
-isPawnMoving :: Move -> MyPos -> Bool
-isPawnMoving m !p = isPawnAt src p
-    where src = fromSquare m
-
 {-# INLINE moveFromTo #-}
 moveFromTo :: Square -> Square -> Move
 moveFromTo f t = Move $ encodeFromTo f t
@@ -294,7 +285,42 @@ showWord64 x = reverse $ take 16 (map f xs)
           hex :: UArray Int Char
           hex = listArray (0, 15) "0123456789ABCDEF"
 
--- The move is now coded in 16 bits
+-- The basic move is now coded in the lower 16 bits
+-- The coding of that bits informs about color, piece, from square & to square
+-- Special moves may differ
+-- The upper 16 bits are used to code some properties in the moves, like:
+-- move comes from TT
+-- move is capture
+-- move checks
+-- Fot these one bit per property will be used
+-- These properties will not be stored in TT, so a move coming from TT
+-- will lose all previous properties, but have the TT bit set (which is probably
+-- strong enough to cover all other interesting cases)
+
+{-# INLINE moveIsTTMove #-}
+moveIsTTMove :: Move -> Bool
+moveIsTTMove (Move w) = w .&. 0x80000000 /= 0
+
+{-# INLINE makeTTMove #-}
+makeTTMove :: Move -> Move
+makeTTMove (Move w) = Move $ w .|. 0x80000000
+
+{-# INLINE moveIsCapture #-}
+moveIsCapture :: Move -> Bool
+moveIsCapture (Move w) = w .&. 0x40000000 /= 0
+
+{-# INLINE makeCapture #-}
+makeCapture :: Move -> Move
+makeCapture (Move w) = Move $ w .|. 0x40000000
+
+{-# INLINE moveIsCheck #-}
+moveIsCheck :: Move -> Bool
+moveIsCheck (Move w) = w .&. 0x20000000 /= 0
+
+{-# INLINE makeCheck #-}
+makeCheck :: Move -> Move
+makeCheck (Move w) = Move $ w .|. 0x20000000
+
 -- Normal moves are coded:
 -- c<pie> <frsq> <tosq>
 -- where:
@@ -304,13 +330,13 @@ showWord64 x = reverse $ take 16 (map f xs)
 --   tosq - to square (6 bits)
 {-# INLINE moveIsNormal #-}
 moveIsNormal :: Move -> Bool
-moveIsNormal (Move m) = m .&. 0x6000 /= 0x6000
+moveIsNormal (Move w) = w .&. 0x6000 /= 0x6000
 
 -- For which color is the move:
 {-# INLINE moveColor #-}
 moveColor :: Move -> Color
-moveColor (Move m)
-    | m .&. 0x8000 == 0 = White
+moveColor (Move w)
+    | w .&. 0x8000 == 0 = White
     | otherwise         = Black
 
 -- En passant is coded:
@@ -368,7 +394,7 @@ makePromo p f t
           tc Knight = tcKnight
           tc _      = tcQueen	-- to eliminate warning
 
-tcQueen, tcRook, tcBishop, tcKnight :: Word16
+tcQueen, tcRook, tcBishop, tcKnight :: Word32
 tcQueen  = (fromIntegral $ fromEnum Queen ) `shiftL` 9
 tcRook   = (fromIntegral $ fromEnum Rook  ) `shiftL` 9
 tcBishop = (fromIntegral $ fromEnum Bishop) `shiftL` 9
@@ -393,7 +419,7 @@ makeCastleFor Black True  = Move 0xFF3E	-- black, kingside
 makeCastleFor Black False = Move 0xFF3A	-- black, queenside
 
 -- General functions for move encoding / decoding
-encodeFromTo :: Square -> Square -> Word16
+encodeFromTo :: Square -> Square -> Word32
 encodeFromTo f t = fromIntegral t .|. (fromIntegral f `unsafeShiftL` 6)
 
 -- {-# INLINE movePiece #-}
@@ -438,9 +464,11 @@ moveAddPiece piece (Move w)
     -- | moveIsNormal m = Move $ (fromIntegral (fromEnum piece) `unsafeShiftL` 12) .|. w
     -- | otherwise      = m
 
+-- This one is used only to check the real moves (from UCI), which come
+-- just with from & to square, and have to be translated accordingly
 checkCastle :: Move -> MyPos -> Move
 checkCastle m p
-    | moveIsNormal m && isKingMoving m p
+    | Busy c King <- tabla p s, moveIsNormal m
         = case ds of
             2  -> makeCastleFor c True
             -2 -> makeCastleFor c False
@@ -449,11 +477,12 @@ checkCastle m p
     where s = fromSquare m
           d = toSquare m
           ds = d - s
-          c = moving p
 
+-- This one is used only to check the real moves (from UCI), which come
+-- just with from & to square, and have to be translated accordingly
 checkEnPas :: Move -> MyPos -> Move
 checkEnPas m p
-    | moveIsNormal m && isPawnMoving m p
+    | Busy _ Pawn <- tabla p f, moveIsNormal m
          = if (epcas p .&. epMask) `testBit` t then makeEnPas f t else m
     | otherwise        = m
     where f = fromSquare m
