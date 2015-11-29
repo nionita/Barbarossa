@@ -201,43 +201,60 @@ doRealMove m = do
                    put s { stack = p' : stack s }
                    return $ Exten 0 False
 
+-- To make a really correct check (but expensive) if doMove is leaving
+-- a legal position
+checkExtensive :: Bool
+checkExtensive = False
+
 -- Move from a node to a descendent - the search version
 doMove :: Move -> Bool -> Game DoResult
 doMove m qs = do
-    -- logMes $ "** doMove " ++ show m
     statNodes   -- when counting all visited nodes
-    s  <- get
-    -- let pc = if null (stack s) then error "doMove" else head $ stack s
+    s <- get
     let (pc:_) = stack s	-- we never saw an empty stack error until now
         -- Moving a non-existent piece?
         il = occup pc `uBitClear` fromSquare m
         -- Capturing one king?
         kc = kings pc `uBitSet` toSquare m
-        p' = doFromToMove m pc
-        cok = checkOk p'
-    -- If the move is real and one of those conditions occur,
-    -- then we are really in trouble...
     if (il || kc)
        then do
+           let p' = doFromToMove m pc	-- just to report the error
            logMes $ "Illegal move or position: move = " ++ show m
                     ++ ", il = " ++ show il ++ ", kc = " ++ show kc ++ "\n"
            logMes $ "Illegal position (after the move):\n" ++ showMyPos p'
            logMes $ "Stack:\n" ++ showStack 3 (stack s)
            -- After an illegal result there must be no undo!
            return Illegal
-       else if not cok
+       else if moveIntoCheck pc m
                then return Illegal
                else do
-                   -- bigCheckPos "doMove" pc (Just m) p'
-                   let sts = evalState (posEval p') (evalst s)
-                       p = p' { staticScore = sts }
-                   put s { stack = p : stack s }
-                   remis <- if qs then return False else checkRemisRules p'
-                   if remis
-                      then return $ Final 0
+                   -- Yes, it is a self reference! But staticScore is lazy :-)
+                   let p   = doFromToMove m pc { staticScore = sts }
+                       sts = evalState (posEval p) (evalst s)
+                   if checkExtensive && not (checkOk p)
+                      then do
+                          -- To check illegal positions more extensively:
+                          logMes $ "What is going on? move or position: move = " ++ show m
+                                   ++ ", il = " ++ show il ++ ", kc = " ++ show kc ++ "\n"
+                          logMes $ "Illegal position (after the move):\n" ++ showMyPos p
+                          logMes $ "Stack:\n" ++ showStack 3 (stack s)
+                          logMes $ "Complete position before move:\n" ++ show pc
+                          logMes $ "inCheck: " ++ show (inCheck pc            ) ++ "\n"
+                          let c = moving pc
+                              fen = posToFen pc
+                          logMes $ "isCheck " ++ show c ++ ": " ++ show (isCheck pc c) ++ "\n"
+                          logMes $ "Position fen: " ++ fen
+                          -- After an illegal result there must be no undo!
+                          return Illegal
                       else do
-                          let dext = if inCheck p then 1 else 0
-                          return $! Exten dext $ moveIsCaptPromo pc m
+                          -- bigCheckPos "doMove" pc (Just m) p
+                          put s { stack = p : stack s }
+                          remis <- if qs then return False else checkRemisRules p
+                          if remis
+                             then return $ Final 0
+                             else do
+                                 let dext = if inCheck p then 1 else 0
+                                 return $! Exten dext $ moveIsCaptPromo pc m
 
 doNullMove :: Game ()
 doNullMove = do

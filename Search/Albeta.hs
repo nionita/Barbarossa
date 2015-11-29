@@ -194,6 +194,7 @@ data NodeState
           spcno  :: !Int,	-- last move number of a special move
           killer :: !Killer,	-- the current killer moves
           albe   :: !Bool,	-- in alpha/beta search (for small depths)
+          prune  :: !PruneInfo,	-- prune information
           pvsl   :: [Pvsl],	-- principal variation list (at root) with node statistics
           pvcont :: Seq Move	-- a pv continuation from the previous iteration, if available
       } deriving Show
@@ -306,7 +307,8 @@ pvsInit = PVState { ronly = pvro00, stats = stt0, absdp = 0, usedext = 0, abort 
                     lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
 nst0 :: NodeState
 nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore "Zero" 0,
-             movno = 1, spcno = 1, killer = NoKiller, albe = False, pvsl = [], pvcont = emptySeq }
+             movno = 1, spcno = 1, killer = NoKiller, albe = False, prune = NoPrune,
+             pvsl = [], pvcont = emptySeq }
              -- we start with spcno = 1 as we consider the first move as special
              -- to avoid in any way reducing the tt move
 
@@ -665,10 +667,10 @@ pvSearch nst !a !b !d = do
               else do
                 nodes0 <- gets (sNodes . stats)
                 -- futility pruning:
-                prune <- isPruneFutil d a
+                pr <- isPruneFutil d a
                 -- Loop thru the moves
-                let !nsti = resetNSt a NoKiller nst'
-                nstf <- pvSLoop b d prune nsti edges
+                let !nsti = resetNSt a NoKiller nst' { prune = pr }
+                nstf <- pvSLoop b d nsti edges
                 let s = cursc nstf
                 pindent $ "<= " ++ show s	-- not really...
                 -- After pvSLoop ... we expect always that s >= a - this must be checked if it is so
@@ -745,13 +747,13 @@ pvZeroW !nst !b !d !lastnull redu = do
                        else do
                          !nodes0 <- gets (sNodes . stats)
                          -- futility pruning:
-                         prune <- isPruneFutil d bGrain
+                         pr <- isPruneFutil d bGrain
                          -- Loop thru the moves
                          kill1 <- case nmhigh of
                                       NullMoveThreat s -> newTKiller d s
                                       _                -> return NoKiller
-                         let !nsti = resetNSt bGrain kill1 nst'
-                         nstf <- pvZLoop b d prune redu nsti edges
+                         let !nsti = resetNSt bGrain kill1 nst' { prune = pr }
+                         nstf <- pvZLoop b d redu nsti edges
                          let s = cursc nstf
                          -- Here we expect bGrain <= s < b -- this must be checked
                          pindent $ "<: " ++ show s
@@ -826,19 +828,19 @@ nmDArr1, nmDArr2 :: UArray Int Int
 nmDArr1 = listArray (0, 20) [ 0, 0, 0, 0, 0, 1, 2, 3, 4, 4, 5, 6, 7, 7, 8, 9, 9, 10, 11, 11, 12 ]
 nmDArr2 = listArray (0, 20) [ 0, 0, 0, 0, 0, 0, 1, 2, 3, 3, 4, 5, 6, 6, 7, 8, 8,  9, 10, 10, 11 ]
 
-pvSLoop :: Path -> Int -> Bool -> NodeState -> Alt Move -> Search NodeState
-pvSLoop b d p = go
+pvSLoop :: Path -> Int -> NodeState -> Alt Move -> Search NodeState
+pvSLoop b d = go
     where go !s (Alt []) = return s
           go !s (Alt (e:es)) = do
-              (!cut, !s') <- pvInnerLoop b d p s e
+              (!cut, !s') <- pvInnerLoop b d s e
               if cut then return s'
                      else go s' $ Alt es
 
-pvZLoop :: Path -> Int -> Bool -> Bool -> NodeState -> Alt Move -> Search NodeState
-pvZLoop b d p redu = go
+pvZLoop :: Path -> Int -> Bool -> NodeState -> Alt Move -> Search NodeState
+pvZLoop b d redu = go
     where go !s (Alt []) = return s
           go !s (Alt (e:es)) = do
-              (!cut, !s') <- pvInnerLoopZ b d p s e redu
+              (!cut, !s') <- pvInnerLoopZ b d s e redu
               if cut then return s'
                      else go s' $ Alt es
 
@@ -847,20 +849,19 @@ pvZLoop b d p redu = go
 -- Returns: flag if it was a beta cut and new status
 pvInnerLoop :: Path 	-- current beta
             -> Int	-- current search depth
-            -> Bool	-- prune?
             -> NodeState 	-- node status
             -> Move	-- move to search
             -> Search (Bool, NodeState)
-pvInnerLoop b d prune nst e = do
+pvInnerLoop b d nst e = do
     abrt <- timeToAbort
     if abrt
        then return (True, nst)
        else do
-         -- What about TT & killer moves???
-         willPrune <- if not prune || movno nst == 1 then return False else lift $ canPruneMove e
+         -- What about killer moves? TT is not pruned (movno > 1)
+         (newnst, willPrune) <- askPrune nst d e
          if willPrune
             then do
-                let !nst1 = nst { movno = movno nst + 1, pvcont = emptySeq }
+                let !nst1 = newnst { movno = movno newnst + 1, pvcont = emptySeq }
                 return (False, nst1)
             else do
                 old <- get
@@ -877,7 +878,7 @@ pvInnerLoop b d prune nst e = do
                                    sdiff <- lift scoreDiff	-- cause spc has a slighty
                                    updateFutil sdiff	-- e	-- different meaning...
                                xchangeFutil
-                               s <- pvInnerLoopExten b d exd' (deepNSt nst)
+                               s <- pvInnerLoopExten b d exd' (deepNSt newnst)
                                xchangeFutil
                                return s
                            Final sco -> do
@@ -889,27 +890,26 @@ pvInnerLoop b d prune nst e = do
                        modify $ \s' -> s' { absdp = absdp old, usedext = usedext old }
                        let s' = addToPath e s
                        pindent $ "<- " ++ show e ++ " (" ++ show s' ++ ")"
-                       checkFailOrPVLoop (stats old) b d e s' nst
-                   else return (False, nst)
+                       checkFailOrPVLoop (stats old) b d e s' newnst
+                   else return (False, newnst)
 
 -- This part for the zero window search
 pvInnerLoopZ :: Path 	-- current beta
             -> Int	-- current search depth
-            -> Bool	-- prune?
             -> NodeState 	-- node status
             -> Move	-- move to search
             -> Bool	-- reduce in LMR?
             -> Search (Bool, NodeState)
-pvInnerLoopZ b d prune nst e redu = do
+pvInnerLoopZ b d nst e redu = do
     abrt <- timeToAbort
     if abrt
        then return (True, nst)
        else do
-         -- What about TT & killer moves???
-         willPrune <- if not prune then return False else lift $ canPruneMove e
+         -- What about killer moves? Evtl TT is not pruned (movno > 1)
+         (newnst, willPrune) <- askPrune nst d e
          if willPrune
             then do
-                let !nst1 = nst { movno = movno nst + 1, pvcont = emptySeq }
+                let !nst1 = newnst { movno = movno newnst + 1, pvcont = emptySeq }
                 return (False, nst1)
             else do
                 old <- get
@@ -926,7 +926,7 @@ pvInnerLoopZ b d prune nst e redu = do
                              if spc
                                 then do
                                     xchangeFutil
-                                    s <- pvInnerLoopExtenZ b d spc exd' (deepNSt $ resetSpc nst) redu
+                                    s <- pvInnerLoopExtenZ b d spc exd' (deepNSt $ resetSpc newnst) redu
                                     xchangeFutil
                                     return s
                                 else do
@@ -934,7 +934,7 @@ pvInnerLoopZ b d prune nst e redu = do
                                         sdiff <- lift scoreDiff
                                         updateFutil sdiff	-- e
                                     xchangeFutil
-                                    s <- pvInnerLoopExtenZ b d spc exd' (deepNSt nst) redu
+                                    s <- pvInnerLoopExtenZ b d spc exd' (deepNSt newnst) redu
                                     xchangeFutil
                                     return s
                          Final sco -> do
@@ -946,8 +946,8 @@ pvInnerLoopZ b d prune nst e redu = do
                        modify $ \s' -> s' { absdp = absdp old, usedext = usedext old }
                        let s' = addToPath e s
                        pindent $ "<- " ++ show e ++ " (" ++ show s' ++ ")"
-                       checkFailOrPVLoopZ (stats old) b d e s' nst
-                   else return (False, nst)
+                       checkFailOrPVLoopZ (stats old) b d e s' newnst
+                   else return (False, newnst)
 
 resetSpc :: NodeState -> NodeState
 resetSpc nst = nst { spcno = movno nst }
@@ -1207,19 +1207,41 @@ pvLoop f s (Alt (e:es)) = do
     if cut then return s'
            else pvLoop f s' $ Alt es
 
-isPruneFutil :: Int -> Path -> Search Bool
+-- Checking for futility pruning is a bit tricky: to see if we could prune some moves,
+-- first we need the static eval, which is expensive. But for the first move we don't want
+-- to prune (it could come from TT, and in this case we could have already the score)
+-- So we defer the check, unless we know we wount prune (depth, near mate)
+data PruneInfo = NoPrune
+               | CheckPrune
+               | DoPrune
+     deriving Show
+
+isPruneFutil :: Int -> Path -> Search PruneInfo
 isPruneFutil d a
-    -- | d <= 0 || d > maxFutilDepth || nearmate (pathScore a) = return False
-    -- why not for d == 0? It will spare the QS
-    | d > maxFutilDepth || nearmate (pathScore a) = return False
-    | otherwise = do
-        -- tact <- lift tacticalPos
-        -- if tact then return False else do
-            v <- lift staticVal	-- E1
-            m <- varFutVal	-- variable futility value
-            let margin = futilMargins d m
-                a' = pathScore a
-            return $! v + margin <= a'
+    | d > maxFutilDepth || nearmate (pathScore a) = return NoPrune
+    | otherwise                                   = return CheckPrune
+
+checkPrune :: Int -> Path -> Search Bool
+checkPrune d a = do
+    -- tact <- lift tacticalPos
+    -- if tact then return NoPrune else return CheckPrune $ do
+    v <- lift staticVal
+    m <- varFutVal	-- variable futility value
+    let margin = futilMargins d m
+        a' = pathScore a
+    return $! v + margin <= a'
+
+askPrune :: NodeState -> Int -> Move -> Search (NodeState, Bool)
+askPrune nst d e
+    | movno nst <= 1 = return (nst, False) -- at least one (legal) move not pruned
+    | otherwise = case prune nst of
+                      CheckPrune -> do
+                          pr <- checkPrune d (cursc nst)
+                          return (nst { prune = if pr then DoPrune else NoPrune}, pr)
+                      DoPrune -> do
+                          bpr <- lift $ canPruneMove e
+                          return (nst, bpr)
+                      NoPrune -> return (nst, False)
 
 -- updateFutil :: Int -> Move -> Search ()
 -- updateFutil sd e = do

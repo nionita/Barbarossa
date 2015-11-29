@@ -6,7 +6,7 @@ module Moves.Board (
     castKingRookOk, castQueenRookOk,
     genMoveCast, genMoveNCapt, genMoveTransf, genMoveFCheck, genMoveCaptWL,
     genMoveNCaptToCheck,
-    updatePos, checkOk, moveChecks,
+    updatePos, checkOk, moveChecks, moveIntoCheck,
     legalMove, alternateMoves,
     doFromToMove, reverseMoving
     ) where
@@ -154,6 +154,38 @@ moveChecksIndirect !p !m = ba .&. bq /= 0 || ra .&. rq /= 0
           ba   = bAttacs occ ksq
           ra   = rAttacs occ ksq
 
+-- Will my move leave me in check?
+{-# INLINE moveIntoCheck #-}
+moveIntoCheck :: MyPos -> Move -> Bool
+moveIntoCheck !p !m
+    | inCheck p           = False
+    | movePiece m == King = suicide p m
+    | otherwise           = movePinned p m
+
+-- Still not quite correct, as king can move from check to a square where he still in check
+-- but was shaded by himself
+suicide :: MyPos -> Move -> Bool
+suicide !p !m
+    | yoAttacs p .&. knb /= 0 = True
+    | otherwise               = False
+    where !kns = toSquare m
+          !knb = uBit kns
+
+movePinned :: MyPos -> Move -> Bool
+movePinned !p !m = ba .&. bq /= 0 || ra .&. rq /= 0
+    where !ksq = firstOne $ kings p .&. me p
+          !b   = bishops p .&. yo p .&. ntb
+          !r   = rooks p   .&. yo p .&. ntb
+          !q   = queens p  .&. yo p .&. ntb
+          !bq  = b .|. q
+          !rq  = r .|. q
+          !fb  = uBit $ fromSquare m
+          !tb  = uBit $ toSquare m
+          !ntb = complement tb
+          !occ = (occup p .|. tb) `less` fb
+          ba   = bAttacs occ ksq
+          ra   = rAttacs occ ksq
+
 -- Because finding the blocking square for a queen check is so hard,
 -- we define a data type and, in case of a queen check, we give also
 -- the piece type (rook or bishop) in which direction the queen checks
@@ -180,29 +212,45 @@ findChecking !pos = concat [ pChk, nChk, bChk, rChk, qbChk, qrChk ]
 
 -- Generate move when in check
 genMoveFCheck :: MyPos -> [Move]
-genMoveFCheck !p
-    | null chklist = error "genMoveFCheck"
-    | null $ tail chklist = r1 ++ kGen ++ r2	-- simple check
-    | otherwise = kGen				-- double check, only king moves help
-    where !chklist = findChecking p
-          !kGen = map (moveAddColor (moving p) . moveAddPiece King . uncurry moveFromTo)
+genMoveFCheck !p = case findChecking p of
+    ci:[]    -> fromSimpleCheck p ci	-- simple check
+    c1:c2:[] -> fromDoubleCheck p c1 c2	-- double check
+    _        -> error "genMoveFCheck"
+
+fromSimpleCheck :: MyPos -> CheckInfo -> [Move]
+fromSimpleCheck !p !ci = r1 ++ kGen ++ r2
+    where !kGen = map (moveAddColor (moving p) . moveAddPiece King . uncurry moveFromTo)
                       $ srcDests (legal . kAttacs) ksq
           !ksq = firstOne kbb
           !kbb = kings p .&. me p
           !ocp1 = occup p `less` kbb
           legal = (`less` alle)
-          !alle = me p .|. yoAttacs p .|. excl
-          !excl = foldl' (.|.) 0 $ map chkAtt chklist
-          chkAtt (NormalCheck f s) = fAttacs s f ocp1
-          chkAtt (QueenCheck f s)  = fAttacs s f ocp1
-          -- This head is safe becase chklist is first checked in the pattern of the function
-          (r1, r2) = case head chklist of	-- this is needed only when simple check
-                 NormalCheck Pawn sq   -> (beatAtP p (bit sq), [])  -- cannot block pawn
-                 NormalCheck Knight sq -> (beatAt  p (bit sq), [])  -- or knight check
-                 NormalCheck Bishop sq -> beatOrBlock Bishop p sq
-                 NormalCheck Rook sq   -> beatOrBlock Rook p sq
-                 QueenCheck pt sq      -> beatOrBlock pt p sq
-                 _                     -> error "genMoveFCheck: what check?"
+          !alle = me p .|. yoAttacs p .|. sh
+          (sh, (r1, r2)) = case ci of
+              NormalCheck Pawn sq   -> (0, (beatAtP p (uBit sq), []))  -- cannot block pawn
+              NormalCheck Knight sq -> (0, (beatAt  p (uBit sq), []))  -- or knight check
+              NormalCheck Bishop sq -> (bAttacs ocp1 sq, beatOrBlock Bishop p sq)
+              NormalCheck Rook   sq -> (rAttacs ocp1 sq, beatOrBlock Rook   p sq)
+              QueenCheck  Bishop sq -> (bAttacs ocp1 sq, beatOrBlock Bishop p sq)
+              QueenCheck  Rook   sq -> (rAttacs ocp1 sq, beatOrBlock Rook   p sq)
+              _                     -> error "genMoveFCheck: what check?"
+
+-- When double check, only king moves help
+fromDoubleCheck :: MyPos -> CheckInfo -> CheckInfo -> [Move]
+fromDoubleCheck !p !c1 !c2 = kGen
+    where !kGen = map (moveAddColor (moving p) . moveAddPiece King . uncurry moveFromTo)
+                      $ srcDests (legal . kAttacs) ksq
+          !ksq = firstOne kbb
+          !kbb = kings p .&. me p
+          !ocp' = occup p `less` kbb
+          legal = (`less` alle)
+          !alle = me p .|. yoAttacs p .|. shadow c1 .|. shadow c2
+          shadow c = case c of
+              NormalCheck Bishop sq -> bAttacs ocp' sq
+              NormalCheck Rook   sq -> rAttacs ocp' sq
+              QueenCheck  Bishop sq -> bAttacs ocp' sq
+              QueenCheck  Rook   sq -> rAttacs ocp' sq
+              _                     -> 0
 
 -- Generate moves ending on a given square (used to defend a check by capture or blocking)
 -- This part is only for queens, rooks, bishops and knights (no pawns and, of course, no kings)
@@ -439,11 +487,13 @@ alternateMoves p m1 m2
 -- This is used to filter the illegal moves coming from killers or hash table
 -- but we must treat special moves (en-passant, castle and promotion) differently,
 -- because they are more complex
--- This legality is still incomplete, as it does not take pinned pieces into consideration
+-- When we are in check we consider such moves as illegal, and will have to take the
+-- move order from check escapes generation function
 legalMove :: MyPos -> Move -> Bool
 legalMove p m
     | moveColor m /= mc   = False
     | me p `uTestBit` dst = False
+    | inCheck p           = False
     | Busy col fig <- tabla p src,
       col == mc,
       fig == movePiece m =
@@ -793,6 +843,7 @@ seeMoveValue pos !attacks sqfirstmv sqto gain0 = v
                           seeAttsRec = attacs0 }
 
 -- This function can produce illegal captures with the king!
+-- Is the comment above still true?
 genMoveCaptWL :: MyPos -> ([Move], [Move])
 genMoveCaptWL !pos = (map f $ sort ws, map f $ sort ls)
     where !capts = myAttacs pos .&. yo pos
