@@ -34,7 +34,6 @@ type DbArray = UArray Int BBoard
 data Piece = Pawn | Knight | Bishop | Rook | Queen | King
     deriving (Eq, Ord, Enum, Ix, Show)
 
--- data Color = White | Black deriving (Eq, Show, Ord, Enum, Ix)
 data Color = White | Black deriving (Eq, Show)
 
 data TabCont = Empty
@@ -44,11 +43,11 @@ data TabCont = Empty
 data MyPos = MyPos {
     black, slide, kkrq, diag, epcas :: !BBoard, -- These fields completely represents of a position
     zobkey :: !ZKey,	-- hash key
-    mater :: !Int,	-- material balance
     me, yo, occup, kings, pawns :: !BBoard,	-- further heavy used bitboards computed for efficiency
     queens, rooks, bishops, knights, passed :: !BBoard,
-    staticScore :: Int,
-    lazyBits :: LazyBits
+    mater :: !Int,	-- material balance
+    staticScore :: Int,	-- lazy, not always needed
+    lazyBits :: LazyBits	-- lazy of course
     }
 
 data LazyBits = LazyBits {
@@ -407,11 +406,6 @@ movePiece m@(Move w)
     | otherwise      = error $ "Wrong move type: " ++ showHex w ""
     where r = fromIntegral $ (w `unsafeShiftR` 12) .&. 0x7
 
-{--
-moveHasFromSquare :: Move -> Bool
-moveHasFromSquare (Move w) = w .&. 0x7000 == 0x7000
---}
-
 -- {-# INLINE fromSquare #-}
 fromSquare :: Move -> Square
 fromSquare m@(Move w)
@@ -434,9 +428,6 @@ moveAddColor Black (Move w) = Move $ w .|. 0x8000
 moveAddPiece :: Piece -> Move -> Move
 moveAddPiece piece (Move w)
     = Move $ (fromIntegral (fromEnum piece) `unsafeShiftL` 12) .|. (w .&. 0x8FFF)
--- moveAddPiece piece m@(Move w) = Move $ (fromIntegral (fromEnum piece) `unsafeShiftL` 12) .|. w
-    -- | moveIsNormal m = Move $ (fromIntegral (fromEnum piece) `unsafeShiftL` 12) .|. w
-    -- | otherwise      = m
 
 checkCastle :: Move -> MyPos -> Move
 checkCastle m p
@@ -471,8 +462,7 @@ activatePromo b m = makePromo p f t
           chToPc _   = King	-- to eliminate warnings
 
 toString :: Move -> String
--- toString m = mvpiece : col sc : row sr : col dc : row dr : transf
-toString m = col sc : row sr : col dc : row dr : transf
+toString m = col sc : row sr : col dc : row dr : promo
     where s = fromSquare m
           d = toSquare m
           (sr, sc) = s `divMod` 8
@@ -481,13 +471,10 @@ toString m = col sc : row sr : col dc : row dr : transf
           ord1 = ord '1'
           col x = chr (orda + x)
           row x = chr (ord1 + x)
-          transf = [pcToCh (movePromoPiece m) | moveIsPromo m ]
+          promo = [pcToCh (movePromoPiece m) | moveIsPromo m ]
           pcToCh Queen  = 'q'
           pcToCh Rook   = 'r'
           pcToCh Bishop = 'b'
           pcToCh Knight = 'n'
           pcToCh Pawn   = 'p'	-- is used not only for promotion!
           pcToCh King   = 'k'
-          -- mvpc = pcToCh (movePiece m)
-          -- mvpiece | moveColor m == White = toUpper mvpc
-          --         | otherwise            = mvpc

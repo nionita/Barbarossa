@@ -14,7 +14,7 @@ module Moves.Base (
     mateScore, scoreDiff,
     finNode,
     showMyPos, logMes,
-    nearmate	-- , special
+    nearmate
 ) where
 
 import Data.Bits
@@ -81,24 +81,20 @@ posToState p c h e = MyState {
 posNewSearch :: MyState -> MyState
 posNewSearch p = p { hash = newGener (hash p) }
 
--- debugGen :: Bool
--- debugGen = False
-
+-- Loosing captures after non-captures?
 loosingLast :: Bool
 loosingLast = True
 
 genMoves :: Game ([Move], [Move])
 genMoves = do
     p <- getPos
-    let !c = moving p
-        lc = genMoveFCheck p
-    if isCheck p c
-       then return (lc, [])
+    if isCheck p $ moving p
+       then return (genMoveFCheck p, [])
        else do
             let l0 = genMoveCast p
-                l1 = genMoveTransf p
+                l1 = genMovePromo p
                 (l2w, l2l) = genMoveCaptWL p
-                l3'= genMoveNCapt p
+                l3' = genMoveNCapt p
             l3 <- sortMovesFromHist l3'
             return $! if loosingLast
                          then (l1 ++ l2w, l0 ++ l3 ++ l2l)
@@ -108,14 +104,13 @@ genMoves = do
 genTactMoves :: Game [Move]
 genTactMoves = do
     p <- getPos
-    let !c = moving p
-        l1 = genMoveTransf p
-        (l2w, _) = genMoveCaptWL p
-        lc = genMoveFCheck p
-        !mvs | isCheck p c = lc
-             | otherwise   = l1 ++ l2w
-    -- return $ checkGenMoves p mvs
-    return mvs
+    if isCheck p $ moving p
+       then return $ genMoveFCheck p
+       else do
+           let l1  = genMovePromo p
+               l2w = fst $ genMoveCaptWL p
+           -- return $ checkGenMoves p mvs
+           return $ l1 ++ l2w
 
 {--
 checkGenMoves :: MyPos -> [Move] -> [Move]
@@ -145,7 +140,8 @@ sortMovesFromHist mvs = do
     s <- get
     mvsc <- liftIO $ mapM (\m -> valHist (hist s) m) mvs
     let (posi, zero) = partition ((/=0) . snd) $ zip mvs mvsc
-    return $! map fst $ sortBy (comparing snd) posi ++ zero
+    -- return $! map fst $ sortBy (comparing snd) posi ++ zero
+    return $ map fst $ sortBy (comparing snd) posi ++ zero	-- does it differ?
 
 -- massert :: String -> Game Bool -> Game ()
 -- massert s mb = do
@@ -207,7 +203,6 @@ doMove m qs = do
     -- logMes $ "** doMove " ++ show m
     statNodes   -- when counting all visited nodes
     s  <- get
-    -- let pc = if null (stack s) then error "doMove" else head $ stack s
     let (pc:_) = stack s	-- we never saw an empty stack error until now
         -- Moving a non-existent piece?
         il = occup pc `uBitClear` fromSquare m
@@ -215,8 +210,6 @@ doMove m qs = do
         kc = kings pc `uBitSet` toSquare m
         p' = doFromToMove m pc
         cok = checkOk p'
-    -- If the move is real and one of those conditions occur,
-    -- then we are really in trouble...
     if (il || kc)
        then do
            logMes $ "Illegal move or position: move = " ++ show m
@@ -281,22 +274,9 @@ checkRemisRules p = do
             (_:_:_)    -> return True
             _          -> return False
 
--- checkRepeatPv :: MyPos -> Bool -> Game Bool
--- checkRepeatPv _ False = return False
--- checkRepeatPv p _ = do
---     s <- get
---     let search = map zobkey $ takeWhile imagRevers $ stack s
---         equal  = filter (== zobkey p) search	-- if keys are equal, pos is equal
---     case equal of
---         (_:_) -> return True
---         _     -> return False
---     where imagRevers t = isReversible t && not (realMove t)
-
 {-# INLINE undoMove #-}
 undoMove :: Game ()
-undoMove = do
-    -- logMes "** undoMove"
-    modify $ \s -> s { stack = tail $ stack s }
+undoMove = modify $ \s -> s { stack = tail $ stack s }
 
 -- Tactical positions will be searched complete in quiescent search
 -- Currently only when in in check
@@ -312,7 +292,8 @@ isMoveLegal m = do
     t <- getPos
     return $! legalMove t m
 
--- Should be: not $ moveIsSpecial ...
+-- Why not just like isTKillCand?
+-- Also: if not normal, it is useless, as now it is not recognized as legal...
 isKillCand :: Move -> Move -> Game Bool
 isKillCand mm ym
     | toSquare mm == toSquare ym = return False
@@ -320,6 +301,7 @@ isKillCand mm ym
         t <- getPos
         return $! not $ moveIsCapture t ym
 
+-- If not normal, it is useless, as now it is not recognized as legal...
 isTKillCand :: Move -> Game Bool
 isTKillCand mm = do
     t <- getPos
@@ -331,14 +313,12 @@ okInSequence m1 m2 = do
     return $! alternateMoves t m1 m2
 
 -- Static evaluation function
--- This does not detect a mate or stale mate, it only returns the calculated
+-- This does not detect mate or stale mate, it only returns the calculated
 -- static score from a position which has already to be valid
 -- Mate/stale mate has to be detected by search!
 {-# INLINE staticVal #-}
 staticVal :: Game Int
-staticVal = do
-    t <- getPos
-    return $ staticScore t
+staticVal = staticScore <$> getPos
 
 {-# INLINE finNode #-}
 finNode :: String -> Bool -> Game ()
@@ -363,13 +343,6 @@ materVal = do
                    White -> m
                    _     -> -m
 
--- quiet :: MyPos -> Bool
--- quiet p = at .&. ta == 0
---     where (!at, !ta) = if moving p == White then (whAttacs p, black p) else (blAttacs p, white p)
-
--- Fixme!! We have big problems with hash store/retrieval: many wrong scores (and perhaps hash moves)
--- come from there!!
-
 {-# INLINE ttRead #-}
 ttRead :: Game (Int, Int, Int, Move, Int)
 ttRead = if not useHash then return empRez else do
@@ -390,16 +363,8 @@ ttStore :: Int -> Int -> Int -> Move -> Int -> Game ()
 ttStore !deep !tp !sc !bestm !nds = if not useHash then return () else do
     s <- get
     p <- getPos
-    -- when (sc `mod` 4 /= 0 && tp == 2) $ liftIO $ do
-    --     putStrLn $ "info string In ttStore: tp = " ++ show tp ++ " sc = " ++ show sc
-    --         ++ " best = " ++ show best ++ " nodes = " ++ show nodes
-        -- putStrLn $ "info string score in position: " ++ show (staticScore p)
     -- We use the type: 0 - upper limit, 1 - lower limit, 2 - exact score
     liftIO $ writeCache (hash s) (zobkey p) deep tp sc bestm nds
-    -- when debug $ lift $ ctxLog "Debug" $ "*** ttStore (deep/tp/sc/mv) " ++ show deep
-    --      ++ " / " ++ show tp ++ " / " ++ show sc ++ " / " ++ show best
-    --      ++ " status: " ++ show st ++ " (" ++ show (zobkey p) ++ ")"
-    -- return ()
 
 -- History heuristic table update when beta cut
 betaCut :: Bool -> Int -> Move -> Game ()
@@ -441,15 +406,6 @@ scoreDiff = do
     case stack s of
         (p1:p2:_) -> return $! negate (staticScore p1 + staticScore p2)
         _         -> return 0
-
-{--
-showChoose :: [] -> Game ()
-showChoose pvs = do
-    mapM_ (\(i, (s, pv)) -> lift $ ctxLog "Info"
-                                 $ "choose pv " ++ show i ++ " score " ++ show s ++ ": " ++ show pv)
-                 $ zip [1..] pvs
-    return $ if null pvs then error "showChoose" else head pvs
---}
 
 -- Choose between almost equal (root) moves
 chooseMove :: Bool -> [(Int, [Move])] -> Game (Int, [Move])

@@ -30,7 +30,6 @@ import Moves.Moves (movesInit)
 import Moves.Board (posFromFen, initPos)
 import Moves.History
 import Search.CStateMonad (execCState)
--- import Eval.Eval (weightNames)
 import Eval.FileParams (makeEvalState)
 
 -- Name, authos, version and suffix:
@@ -38,7 +37,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.4.0"
-progVerSuff = "nmcf1"
+progVerSuff = "nmcc"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -255,7 +254,7 @@ interpret uci =
         UciNewGame -> goOn doUciNewGame
         Position p mvs -> goOn (doPosition p mvs)
         Go cmds    -> goOn (doGo cmds)
-        Stop       -> goOn $ doStop True
+        Stop       -> goOn doStop
         Ponderhit  -> goOn doPonderhit
         SetOption o -> goOn (doSetOption o)
         _          -> goOn ignore
@@ -450,10 +449,6 @@ estimateMovesToGo :: Int -> Int
 estimateMovesToGo sc = estMvsToGo ! mvidx
     where mvidx = min 8 $ abs sc `div` 100
 
--- Some parameters (until we have a good solution)
--- clearHash :: Bool
--- clearHash = False
-
 newThread :: CtxIO () -> CtxIO ThreadId
 newThread a = do
     ctx <- ask
@@ -499,17 +494,6 @@ ctxCatch a f = do
     ctx <- ask
     liftIO $ catch (runReaderT a ctx)
             (\e -> runReaderT (f e) ctx)
-
--- internalStop :: Int -> CtxIO ()
--- internalStop ms = do
---     let sleep = ms * 1000
---     ctxLog DebugUci $ "Internal stop clock started for " ++ show ms ++ " ms"
---     liftIO $ threadDelay sleep
---     ctxLog DebugUci "Internal stop clock ended"
---     doStop False
-
--- betterSc :: Int
--- betterSc = 25
 
 -- Search with the given depth
 searchTheTree :: Int -> Int -> Int -> Int -> Int -> Int -> Maybe Int -> [Move] -> [Move] -> CtxIO Int
@@ -640,14 +624,13 @@ beforeReadLoop = do
 beforeProgExit :: CtxIO ()
 beforeProgExit = return ()
 
-doStop :: Bool -> CtxIO ()
-doStop extern = do
+doStop :: CtxIO ()
+doStop = do
     chg <- readChanging
     modifyChanging (\c -> c { working = False, compThread = Nothing })
     case compThread chg of
         Just tid -> do
-            -- when extern $ liftIO $ threadDelay 500000  -- warte 0.5 Sec.
-            when extern $ liftIO $ threadDelay 100000  -- warte 0.1 Sec.
+            -- when extern $ liftIO $ threadDelay 100000  -- warte 0.1 Sec.
             liftIO $ killThread tid
             case forGui chg of
                 Just ifg -> giveBestMove $ infoPv ifg
