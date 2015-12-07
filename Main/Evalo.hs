@@ -32,8 +32,9 @@ import Uci.UCI
 
 -- import SSSPSA
 -- import Adam
-import AdaDelta
+-- import AdaDelta
 -- import Newton
+import Radius
 
 data Options = Options {
          optConFile :: Maybe String,	-- configuration file
@@ -142,8 +143,9 @@ optimiseParams opts = do
         -- spsaParams = defSpsaParams { verb = True, nmax = maxost }
         -- adamParams = defAdamParams { verb = True, cent = True, alfa = alpha, bet1 = beta1,
         --                              bet2 = beta2, epsi = eps, nmax = maxost, xstp = 1E-5 }
-        adaDeltaParams = defAdaDeltaParams { verb = True, alfa = alpha, beta = beta, epsi = eps, nmax = maxost }
+        -- adaDeltaParams = defAdaDeltaParams { verb = True, alfa = alpha, beta = beta, epsi = eps, nmax = maxost }
         -- newtonParams = defNewtonParams { verb = True, epsi = eps, nmax = maxost }
+        radiusParams = defRadiusParams { verb = True, epsi = eps, nmax = maxost }
     so <- case save of
                "" -> if optRestart opts
                              then error "Restart requested, but no checkpoint file in config!"
@@ -160,8 +162,9 @@ optimiseParams opts = do
     (h, sz) <- openFenFile (getConfigStr config "fenFile" Nothing)
     -- opars <- ssSPSA (bigPointCost h sz batch threads playlen playdep engine eopts pNames) (Just spsaParams) so
     -- opars <- adam (bigPointCost h sz batch threads playlen playdep engine eopts pNames) (Just adamParams) so
-    opars <- adaDelta (bigPointCost h sz batch threads playlen playdep engine eopts pNames) (Just adaDeltaParams) so
+    -- opars <- adaDelta (bigPointCost h sz batch threads playlen playdep engine eopts pNames) (Just adaDeltaParams) so
     -- opars <- newton (bigPointCost h sz batch threads playlen playdep engine eopts pNames) (Just newtonParams) so
+    opars <- radius (bigPointCost h sz batch threads playlen playdep engine eopts pNames) (Just radiusParams) so
     putStrLn "Optimal params so far:"
     forM_ (zip pNames opars) $ \(n, v) -> putStrLn $ n ++ " = " ++ show v
 
