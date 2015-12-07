@@ -127,12 +127,12 @@ instance CollectParams EvalParams where
                     epMaterScale = 1,
                     epMaterBonusScale = 5,
                     epPawnBonusScale  = 4,
-                    epPassKingProx    = 10,
-                    epPassBlockO = 11,
-                    epPassBlockA = 17,
+                    epPassKingProx    = 5,	-- evppRadius3 (len 3, depth 5, batch 256, 426 steps)
+                    epPassBlockO = 7,	-- evppRadius3 (len 3, depth 5, batch 256, 426 steps)
+                    epPassBlockA = 13,	-- evppRadius3 (len 3, depth 5, batch 256, 426 steps)
                     epPassMin    = 30,
-                    epPassMyCtrl = 6,
-                    epPassYoCtrl = 7
+                    epPassMyCtrl = 2,	-- evppRadius3 (len 3, depth 5, batch 256, 426 steps)
+                    epPassYoCtrl = 3	-- evppRadius3 (len 3, depth 5, batch 256, 426 steps)
                 }
     npColParm = collectEvalParams
     npSetParm = id
@@ -192,7 +192,7 @@ instance CollectParams EvalWeights where
           ewCenterKAtts     = tme  0 56,
           ewAdvAtts         = tme  3 16,
           ewIsolPawns       = tme (-38) (-119),
-          ewIsolPassed      = tme (-60) (-153),
+          ewIsolPassed      = tme (-64) (-155),	-- evppRadius3 (len 3, depth 5, batch 256, 426 steps)
           ewBackPawns       = tme (-102) (-182),
           ewBackPOpen       = tme (-35)    0,
           ewEnpHanging      = tme (-23) (-33),
