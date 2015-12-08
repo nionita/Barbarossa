@@ -7,8 +7,9 @@ module Struct.Status (
     EvalState(..),
     EvalParams(..),
     EvalWeights(..),
+    Accum(..),
     MidEnd(..),
-    mad, madm, made, tme
+    Feats(..),
 ) where
 
 import Struct.Struct
@@ -34,24 +35,32 @@ data EvalState = EvalState {
         esEWeights  :: EvalWeights
     } deriving Show
 
+-- A class for an accumulator of integers
+-- In normal case we accumulate the position score in a mid/end accumulator,
+-- weighted by a mid/end weight (feature specific) - see MidEnd
+-- But we can use this to collect the feature values for a position - see Feats
+class Accum a where
+    acc :: a -> MidEnd -> Int -> a
+
+-- A data type to accumulate the feature values of a position, together with
+-- the game phase
+data Feats  = Feats Int [Int]
+
+instance Accum Feats where
+    acc = accumFeats
+
+accumFeats :: Feats -> MidEnd -> Int -> Feats
+accumFeats (Feats ph fs) _ v = Feats ph (v:fs)
+
 data MidEnd = MidEnd { mid, end :: !Int } deriving Show
 
--- Helper for MidEnd operations:
-{-# INLINE madm #-}
-madm :: MidEnd -> MidEnd -> Int -> MidEnd
-madm !mide0 !mide !v = mide0 { mid = mid mide0 + mid mide * v }
+instance Accum MidEnd where
+    acc = mad
 
-{-# INLINE made #-}
-made :: MidEnd -> MidEnd -> Int -> MidEnd
-made !mide0 !mide !v = mide0 { end = end mide0 + end mide * v }
-
+-- MidEnd accumulation:
 {-# INLINE mad #-}
 mad :: MidEnd -> MidEnd -> Int -> MidEnd
 mad !mide0 !mide !v = MidEnd { mid = mid mide0 + mid mide * v, end = end mide0 + end mide * v }
-
--- {-# INLINE (<+>) #-}
--- (<+>) :: MidEnd -> MidEnd -> MidEnd
--- mide1 <+> mide2 = MidEnd { mid = mid mide1 + mid mide2, end = end mide1 + end mide2 }
 
 {-# INLINE tme #-}
 tme :: Int -> Int -> MidEnd
