@@ -206,16 +206,17 @@ data Path
          pathScore :: !Int,
          pathDepth :: !Int,
          pathMoves :: Seq Move,
-         pathOrig  :: String
+         pathOrig  :: String,
+         pathPos   :: Maybe MyPos
       } deriving Show
 
 staleMate, matedPath :: Path
-staleMate = Path { pathScore = 0, pathDepth = 0, pathMoves = Seq [], pathOrig = "stale mate" }
-matedPath = Path { pathScore = -mateScore, pathDepth = 0, pathMoves = Seq [], pathOrig = "mated" }
+staleMate = Path { pathScore = 0, pathDepth = 0, pathMoves = Seq [], pathOrig = "stale mate", pathPos = Nothing }
+matedPath = Path { pathScore = -mateScore, pathDepth = 0, pathMoves = Seq [], pathOrig = "mated", pathPos = Nothing }
 
 -- Making a path from a plain score:
 pathFromScore :: String -> Int -> Path
-pathFromScore ori s = Path { pathScore = s, pathDepth = 0, pathMoves = Seq [], pathOrig = ori }
+pathFromScore ori s = Path { pathScore = s, pathDepth = 0, pathMoves = Seq [], pathOrig = ori, pathPos = Nothing }
 
 -- Add a move to a path:
 addToPath :: Move -> Path -> Path
@@ -224,7 +225,7 @@ addToPath e p = p { pathDepth = pathDepth p + 1, pathMoves = Seq $ e : unseq (pa
 -- Take only the score from a path (to another), rest empty
 onlyScore :: Path -> Path
 onlyScore p = Path { pathScore = pathScore p, pathDepth = 0, pathMoves = Seq [],
-                     pathOrig = "onlyScore from " ++ pathOrig p }
+                     pathOrig = "onlyScore from " ++ pathOrig p, pathPos = Nothing }
 
 -- Take all from the first path, except the score, which comes from the second (for fail hard)
 combinePath :: Path -> Path -> Path
@@ -266,8 +267,8 @@ instance Ord Path where
     compare = comparing pathScore
 
 instance Bounded Path where
-    minBound = Path { pathScore = minBound, pathDepth = 0, pathMoves = Seq [], pathOrig = "" }
-    maxBound = Path { pathScore = maxBound, pathDepth = 0, pathMoves = Seq [], pathOrig = "" }
+    minBound = Path { pathScore = minBound, pathDepth = 0, pathMoves = Seq [], pathOrig = "", pathPos = Nothing }
+    maxBound = Path { pathScore = maxBound, pathDepth = 0, pathMoves = Seq [], pathOrig = "", pathPos = Nothing }
 
 noMove :: Alt Move -> Bool
 noMove (Alt es) = null es
@@ -576,25 +577,25 @@ insertToPvs d p ps@(q:qs)
           qmate   = pnearmate $ pvPath q
 
 {-# INLINE mustQSearch #-}
-mustQSearch :: Int -> Int -> Search (Int, Int)
+mustQSearch :: Int -> Int -> Search (Int, Int, Maybe MyPos)
 mustQSearch !a !b = do
     nodes0 <- gets (sNodes . stats)
-    v <- pvQSearch a b 0
+    (v, mp) <- pvQSearch a b 0
     nodes1 <- gets (sNodes . stats)
     let deltan = nodes1 - nodes0
-    return (v, deltan)
+    return (v, deltan, mp)
 
 -- PV Search
 pvSearch :: NodeState -> Path -> Path -> Int -> Search Path
 pvSearch _ !a !b !d | d <= 0 = do
     -- Now that we moved the ttRead call under pvSearch we are not prepared
     -- to handle correctly the case minToRetr = 0
-    (v, ns) <- mustQSearch (pathScore a) (pathScore b)
+    (v, ns, mp) <- mustQSearch (pathScore a) (pathScore b)
     when (minToStore == 0)
         $ lift $  ttStore 0 2 v (Move 0) ns
     let !esc = pathFromScore ("pvQSearch 1:" ++ show v) v
     pindent $ "<> " ++ show esc
-    return esc
+    return esc { pathPos = mp }
 pvSearch nst !a !b !d = do
     pindent $ "=> " ++ show a ++ ", " ++ show b
     let !inPv = crtnt nst == PVNode
@@ -618,7 +619,7 @@ pvSearch nst !a !b !d = do
        )
        then do
            let ttpath = Path { pathScore = hsc, pathDepth = hdeep,
-                               pathMoves = Seq [e'], pathOrig = "TT" }
+                               pathMoves = Seq [e'], pathOrig = "TT", pathPos = Nothing }
            reSucc nodes' >> return ttpath
        else do
            -- Here: when ab we should do null move search
@@ -670,12 +671,12 @@ pvZeroW :: NodeState -> Path -> Int -> Int -> Bool -> Search Path
 pvZeroW !_ !b !d !_ _ | d <= 0 = do
     -- Now that we moved the ttRead call under pvZeroW we are not prepared
     -- to handle correctly the case minToRetr = 0
-    (v, ns) <- mustQSearch (pathScore bGrain) (pathScore b)
+    (v, ns, mp) <- mustQSearch (pathScore bGrain) (pathScore b)
     when (minToStore == 0)
         $ lift $  ttStore 0 2 v (Move 0) ns
     let !esc = pathFromScore ("pvQSearch 21:" ++ show v) v
     pindent $ "<> " ++ show esc
-    return esc
+    return esc { pathPos = mp }
     where bGrain = b -: scoreGrain
 pvZeroW !nst !b !d !lastnull redu = do
     pindent $ ":> " ++ show b
@@ -687,7 +688,8 @@ pvZeroW !nst !b !d !lastnull redu = do
     let bsco = pathScore b
     if hdeep >= d && (tp == 2 || tp == 1 && hsc >= bsco || tp == 0 && hsc < bsco)
        then do
-           let ttpath = Path { pathScore = hsc, pathDepth = hdeep, pathMoves = Seq [e'], pathOrig = "TT" }
+           let ttpath = Path { pathScore = hsc, pathDepth = hdeep,
+                               pathMoves = Seq [e'], pathOrig = "TT", pathPos = Nothing }
            reSucc nodes' >> return ttpath
        else do
            nmhigh <- nullMoveFailsHigh nst b d lastnull
@@ -1198,8 +1200,10 @@ trimax a b x
     | x > b     = b
     | otherwise = x
 
+type ScPos = (Int, Maybe MyPos)
+
 -- PV Quiescent Search
-pvQSearch :: Int -> Int -> Int -> Search Int
+pvQSearch :: Int -> Int -> Int -> Search ScPos
 pvQSearch !a !b !c = do				   -- to avoid endless loops
     -- qindent $ "=> " ++ show a ++ ", " ++ show b
     !tact <- lift tacticalPos
@@ -1210,11 +1214,13 @@ pvQSearch !a !b !c = do				   -- to avoid endless loops
            if noMove edges
               then do
                   lift $ finNode "MATE" False
-                  return $! trimax a b (-mateScore)
+                  let !sc = trimax a b (-mateScore)
+                  return (sc, Nothing)
               else if c >= qsMaxChess
                       then do
                           lift $ finNode "ENDL" False
-                          return $! trimax a b inEndlessCheck
+                          let !sc = trimax a b inEndlessCheck
+                          return (sc, Nothing)
                       else do
                           -- for check extensions in case of very few moves (1 or 2):
                           -- if 1 move: search even deeper
@@ -1222,66 +1228,68 @@ pvQSearch !a !b !c = do				   -- to avoid endless loops
                           -- if 3 or more: no extension
                           let !esc = lenmax2 $ unalt edges
                               !nc = c + esc - 1
-                          pvQLoop b nc a edges
+                          pvQLoop b nc (a, Nothing) edges
        else do
             !stp <- lift staticVal
+            p <- lift getPos
             if qsBetaCut && stp >= b
                then do
                    lift $ finNode "BETA" False
-                   return b
+                   return (b, Just p)
                else if qsDeltaCut && stp + qsDelta < a
                       then do
                           lift $ finNode "DELT" False
-                          return a
+                          return (a, Just p)
                       else do
                           edges <- liftM Alt $ lift genTactMoves
                           if noMove edges
                              then do
                                  lift $ finNode "NOCA" False
-                                 return $! trimax a b stp	-- no capture
+                                 let !sc = trimax a b stp	-- no capture
+                                 return (sc, Just p)
                              else if stp > a
-                                     then pvQLoop b c stp edges
-                                     else pvQLoop b c a   edges
+                                     then pvQLoop b c (stp, Just p) edges
+                                     else pvQLoop b c (a, Nothing)  edges
     where lenmax2 (_:_:_) = 2
           lenmax2 _       = 1	-- we know here it is not empty
 
-pvQLoop :: Int -> Int -> Int -> Alt Move -> Search Int
+pvQLoop :: Int -> Int -> ScPos -> Alt Move -> Search ScPos
 pvQLoop b c = go
-    where go !s (Alt [])     = return s
-          go !s (Alt (e:es)) = do
-              (!cut, !s') <- pvQInnerLoop b c s e
-              if cut then return s'
-                     else go s' $ Alt es
+    where go smp (Alt [])     = return smp
+          go smp (Alt (e:es)) = do
+              (cut, smp') <- pvQInnerLoop b c smp e
+              if cut then return smp
+                     else go smp' $ Alt es
 
-pvQInnerLoop :: Int -> Int -> Int -> Move -> Search (Bool, Int)
-pvQInnerLoop !b c !a e = do
+pvQInnerLoop :: Int -> Int -> ScPos -> Move -> Search (Bool, ScPos)
+pvQInnerLoop !b c amp@(!a, _) e = do
     abrt <- timeToAbort
     if abrt
-       then return (True, b)	-- it doesn't matter which score we return
+       then return (True, (b, Nothing))	-- it doesn't matter which score we return
        else do
          -- here: delta pruning: captured piece + 200 > a? then go on, else return
          -- qindent $ "-> " ++ show e
-         r <-  lift $ doMove e True
+         r <- lift $ doMove e True
          if legalResult r
             then do
                 newNodeQS
-                !sc <- case r of
-                           Final sc -> return (-sc)
-                           _        -> do
-                             modify $ \s -> s { absdp = absdp s + 1 }
-                             !sc <- pvQSearch (-b) (-a) c
-                             modify $ \s -> s { absdp = absdp s - 1 }	-- no usedext here
-                             return (-sc)
+                (!sc, mp) <- case r of
+                               Final sc -> return (-sc, Nothing)
+                               _        -> do
+                                 modify $ \s -> s { absdp = absdp s + 1 }
+                                 (!sc', mp') <- pvQSearch (-b) (-a) c
+                                 modify $ \s -> s { absdp = absdp s - 1 }	-- no usedext here
+                                 return (-sc', mp')
                 lift undoMove
                 -- qindent $ "<- " ++ show e ++ " (" ++ show s ++ ")"
                 if sc >= b
-                   then return (True, b)
+                   then return (True, (b, Nothing))
                    else do
                        !abrt' <- gets abort
                        if sc > a
-                          then return (abrt', sc)
-                          else return (abrt', a)
-            else return (False, a)
+                          then return (abrt', (sc, mp))
+                          else return (abrt', (a, Nothing))
+            else return (False, amp)
 
 {-# INLINE bestMoveFromIID #-}
 bestMoveFromIID :: NodeState -> Path -> Path -> Int -> Search [Move]
