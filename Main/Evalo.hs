@@ -34,7 +34,8 @@ import Uci.UCI
 -- import Adam
 -- import AdaDelta
 -- import Newton
-import Radius
+-- import Radius
+import Radexp
 
 data Options = Options {
          optConFile :: Maybe String,	-- configuration file
@@ -145,7 +146,8 @@ optimiseParams opts = do
         --                              bet2 = beta2, epsi = eps, nmax = maxost, xstp = 1E-5 }
         -- adaDeltaParams = defAdaDeltaParams { verb = True, alfa = alpha, beta = beta, epsi = eps, nmax = maxost }
         -- newtonParams = defNewtonParams { verb = True, epsi = eps, nmax = maxost }
-        radiusParams = defRadiusParams { verb = True, epsi = eps, nmax = maxost }
+        -- radiusParams = defRadiusParams { verb = True, epsi = eps, nmax = maxost }
+        radexpParams = defRadexpParams { verb = True, epsi = eps, nmax = maxost }
     so <- case save of
                "" -> if optRestart opts
                              then error "Restart requested, but no checkpoint file in config!"
@@ -164,7 +166,8 @@ optimiseParams opts = do
     -- opars <- adam (bigPointCost h sz batch threads playlen playdep engine eopts pNames) (Just adamParams) so
     -- opars <- adaDelta (bigPointCost h sz batch threads playlen playdep engine eopts pNames) (Just adaDeltaParams) so
     -- opars <- newton (bigPointCost h sz batch threads playlen playdep engine eopts pNames) (Just newtonParams) so
-    opars <- radius (bigPointCost h sz batch threads playlen playdep engine eopts pNames) (Just radiusParams) so
+    -- opars <- radius (bigPointCost h sz batch threads playlen playdep engine eopts pNames) (Just radiusParams) so
+    opars <- radexp (bigPointCost h sz batch threads playlen playdep engine eopts pNames) (Just radexpParams) so
     putStrLn "Optimal params so far:"
     forM_ (zip pNames opars) $ \(n, v) -> putStrLn $ n ++ " = " ++ show v
 
