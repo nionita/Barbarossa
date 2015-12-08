@@ -104,7 +104,7 @@ data MyState = MyState {
 genMoves :: MyPos -> [Move]
 genMoves p
     | isCheck p c = genMoveFCheck p
-    | otherwise   = genMoveCast p ++ genMoveTransf p ++ wcs ++ lcs ++ genMoveNCapt p
+    | otherwise   = genMoveCast p ++ genMovePromo p ++ wcs ++ lcs ++ genMoveNCapt p
     where c = moving p
           (wcs, lcs) = genMoveCaptWL p
 
@@ -428,7 +428,7 @@ someLegalMoves :: MyPos -> Bool
 someLegalMoves p = or $ map legal mvs
     where mvs | isCheck p (moving p) = genMoveFCheck p
               | otherwise            = let (l2w, l2l) = genMoveCaptWL p
-                                       in genMoveCast p ++ genMoveTransf p ++ genMoveNCapt p ++ l2w ++ l2l
+                                       in genMoveCast p ++ genMovePromo p ++ genMoveNCapt p ++ l2w ++ l2l
           legal m = (occup p .&. bbf /= 0) && (kings p .&. bbt == 0) && (checkOk $ doFromToMove m p)
               where bbf = uBit $ fromSquare m
                     bbt = uBit $ toSquare m

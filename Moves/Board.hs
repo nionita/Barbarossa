@@ -2,19 +2,16 @@
 module Moves.Board (
     posFromFen, initPos,
     isCheck, inCheck,
-    goPromo, hasMoves, moveIsCapture,
+    goPromo, moveIsCapture,
     castKingRookOk, castQueenRookOk,
-    genMoveCast, genMoveNCapt, genMoveTransf, genMoveFCheck, genMoveCaptWL,
+    genMoveCast, genMoveNCapt, genMovePromo, genMoveFCheck, genMoveCaptWL,
     genMoveNCaptToCheck,
     updatePos, checkOk, moveChecks,
     legalMove, alternateMoves,
     doFromToMove, reverseMoving
     ) where
 
--- import Prelude hiding ((++), foldl, filter, map, concatMap, concat, head, tail, repeat, zip,
---                        zipWith, null, words, foldr, elem, lookup, any, takeWhile, iterate)
 import Data.Bits
--- import Data.List.Stream
 import Data.List (sort, foldl')
 import Data.Word
 
@@ -48,32 +45,6 @@ goPromo p m
 movePassed :: MyPos -> Move -> Bool
 movePassed p m = passed p .&. (uBit $ fromSquare m) /= 0
 
--- Here it seems we have a problem when we are not in check but could move
--- only a pinned piece: then we are stale mate but don't know (yet)
--- In the next ply, when we try to find a move, we see that all moves are illegal
--- In this case we should take care in search that the score is 0!
-hasMoves :: MyPos -> Color -> Bool
-hasMoves !p c
-    | chk       = not . null $ genMoveFCheck p
-    | otherwise = anyMove
-    where hasPc = any (/= 0) $ map (pcapt . pAttacs c)
-                     $ bbToSquares $ pawns p .&. me p
-          hasPm = not . null $ pAll1Moves c (pawns p .&. me p) (occup p)
-          hasN = any (/= 0) $ map (legmv . nAttacs) $ bbToSquares $ knights p .&. me p
-          hasB = any (/= 0) $ map (legmv . bAttacs (occup p))
-                     $ bbToSquares $ bishops p .&. me p
-          hasR = any (/= 0) $ map (legmv . rAttacs (occup p))
-                     $ bbToSquares $ rooks p .&. me p
-          hasQ = any (/= 0) $ map (legmv . qAttacs (occup p))
-                     $ bbToSquares $ queens p .&. me p
-          !hasK = 0 /= (legal . kAttacs $ firstOne $ kings p .&. me p)
-          !anyMove = hasK || hasN || hasPm || hasPc || hasQ || hasR || hasB
-          chk = inCheck p
-          !yopiep = yo p .|. (epcas p .&. epMask)
-          legmv = (`less` me p)
-          pcapt = (.&. yopiep)
-          legal = (`less` yoAttacs p)
-
 genMoveNCapt :: MyPos -> [Move]
 genMoveNCapt !p = map (moveAddColor c)
                       $ concat [ nGenNC, bGenNC, rGenNC, qGenNC, pGenNC1, pGenNC2, kGenNC ]
@@ -103,9 +74,8 @@ genMoveNCapt !p = map (moveAddColor c)
 
 -- Generate only promotions (now only to queen) non captures
 -- The promotion captures are generated together with the other captures
-genMoveTransf :: MyPos -> [Move]
--- genMoveTransf !p = map (uncurry (makePromo Queen)) $ pGenC ++ pGenNC
-genMoveTransf !p = map (uncurry (makePromo Queen)) pGenNC
+genMovePromo :: MyPos -> [Move]
+genMovePromo !p = map (uncurry (makePromo Queen)) pGenNC
     where -- pGenC = concatMap (srcDests (pcapt . pAttacs c))
           --            $ bbToSquares $ pawns p .&. myfpc
           pGenNC = pAll1Moves c (pawns p .&. myfpc) (occup p)
@@ -281,7 +251,7 @@ beatOrBlock f !p sq = (beat, block)
 genMoveNCaptToCheck :: MyPos -> [(Square, Square)]
 genMoveNCaptToCheck p = genMoveNCaptDirCheck p ++ genMoveNCaptIndirCheck p
 
--- Todo: check with pawns (should be also without transformations)
+-- Todo: check with pawns (should be also without promotions)
 genMoveNCaptDirCheck :: MyPos -> [(Square, Square)]
 genMoveNCaptDirCheck p = concat [ qGenC, rGenC, bGenC, nGenC ]
     where nGenC = concatMap (srcDests (target nTar . nAttacs))
@@ -560,7 +530,6 @@ doFromToMove m !p | moveIsEnPas m
           tdiag  = mvBit src dst (diag p) .&. nbdel
           tepcas = reset50Moves $ moveAndClearEp $ epcas p
           Busy col fig  = tabla p src	-- identify the moving piece
-          -- Busy _   Pawn = tabla p del	-- identify the captured piece (pawn)
           !epcl = epClrZob $ epcas p
           !zk = zobkey p `xor` epcl
           CA tzobkey tmater = chainAccum (CA zk (mater p)) [
@@ -614,7 +583,6 @@ doFromToMove m !p | moveIsPromo m
           sfile = fromSquare m .&. 0x7	-- see new coding!
           src = srank `unsafeShiftL` 3 .|. sfile
           dst = toSquare m
-          -- Busy col Pawn = tabla p src	-- identify the moving color (piece must be pawn)
           !pie = movePromoPiece m
           p0 = setPiece src col pie p
           tblack = mvBit src dst $ black p0

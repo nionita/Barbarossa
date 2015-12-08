@@ -1,6 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 module Moves.Moves (
-    movesInit, pAttacs,
+    movesInit, pAttacs, pawnWhiteAttacks, pawnBlackAttacks,
     fAttacs,
     pMovs,
     kAttacs, qAttacs, rAttacs, bAttacs, nAttacs,
@@ -118,13 +118,15 @@ pawnSlideB !sq oc
           sec = 6
 
 -- Pawn attacs
-whitePawnAtt, blackPawnAtt :: MaArray
-whitePawnAtt = array (0, 63) $ genArray 0x00000050000 9
-blackPawnAtt = array (0, 63) $ genArray 0x50000000000 49
+pawnWhiteAttacks, pawnBlackAttacks :: BBoard -> BBoard
+pawnWhiteAttacks !b = (bbLeft b .|. bbRight b) `unsafeShiftL` 8
+pawnBlackAttacks !b = (bbLeft b .|. bbRight b) `unsafeShiftR` 8
+{-# INLINE pawnWhiteAttacks #-}
+{-# INLINE pawnBlackAttacks #-}
 
 pAttacs :: Color -> Square -> BBoard
-pAttacs White sq = whitePawnAtt `unsafeAt` sq
-pAttacs Black sq = blackPawnAtt `unsafeAt` sq
+pAttacs White sq = pawnWhiteAttacks $ uBit sq
+pAttacs Black sq = pawnBlackAttacks $ uBit sq
 {-# INLINE pAttacs #-}
 
 pMovs :: Square -> Color -> BBoard -> BBoard
