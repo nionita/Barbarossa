@@ -366,7 +366,8 @@ promoFieldDistIncr = \d -> d + 1
 kingPawnsBonus :: Square -> BBoard -> BBoard -> BBoard -> Int
 kingPawnsBonus !ksq !alp !wpass !bpass = bonus
     where !bpsqs = sum $ map (proxyBonus . squareDistance ksq) $ bbToSquares alp
-          !bqsqs = sum $ map (proxyBonus . promoFieldDistIncr . squareDistance ksq)
+          -- !bqsqs = sum $ map (proxyBonus . promoFieldDistIncr . squareDistance ksq)
+          !bqsqs = sum $ map (proxyBonus . squareDistance ksq)
                        $ map promoW (bbToSquares wpass) ++ map promoB (bbToSquares bpass)
           !bonus = bpsqs + bqsqs
 

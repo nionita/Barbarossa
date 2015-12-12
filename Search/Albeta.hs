@@ -636,7 +636,7 @@ pvSearch nst !a !b !d = do
               else do
                 nodes0 <- gets (sNodes . stats)
                 -- futility pruning:
-                prune <- isPruneFutil d a
+                prune <- isPruneFutil d a True
                 -- Loop thru the moves
                 let !nsti = resetNSt a NoKiller nst'
                 nstf <- pvSLoop b d prune nsti edges
@@ -714,7 +714,7 @@ pvZeroW !nst !b !d !lastnull redu = do
                        else do
                          !nodes0 <- gets (sNodes . stats)
                          -- futility pruning:
-                         prune <- isPruneFutil d bGrain
+                         prune <- isPruneFutil d bGrain False
                          -- Loop thru the moves
                          kill1 <- case nmhigh of
                                       NullMoveThreat s -> newTKiller d s
@@ -1147,9 +1147,11 @@ pvLoop f s (Alt (e:es)) = do
 -- B. When we are in check, and also much below alpha, we have even less chances to come out,
 --    so it is ok to not exclude here check escapes, and maybe we should even make the margin
 --    lower (experiemnts, tune!) Maybe this is also depth dependent
-isPruneFutil :: Int -> Path -> Search Bool
-isPruneFutil d a
-    | d > maxFutilDepth || nearmate (pathScore a) = return False
+isPruneFutil :: Int -> Path -> Bool -> Search Bool
+isPruneFutil d a pv
+    | nearmate (pathScore a)  = return False
+    | pv && d > maxFutilDepth = return False
+    | d > maxFutilDepth + 1   = return False	-- for zero window searches we allow higher futility depth
     | otherwise = do
         tact <- lift tacticalPos
         v <- lift staticVal
