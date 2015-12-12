@@ -44,7 +44,7 @@ class Accum a where
 
 -- A data type to accumulate the feature values of a position, together with
 -- the game phase
-data Feats  = Feats Int [Int]
+data Feats  = Feats Int [Int] deriving Show
 
 instance Accum Feats where
     acc = accumFeats

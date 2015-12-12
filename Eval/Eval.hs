@@ -5,7 +5,7 @@
 
 module Eval.Eval (
     initEvalState,
-    posEval
+    posEval, featsEval
 ) where
 
 import Data.Array.Base (unsafeAt)
@@ -99,8 +99,8 @@ normalEval p !sti = sc
           !sc = ((mid feat + epMovingMid ep) * gph + (end feat + epMovingEnd ep) * (256 - gph))
                    `unsafeShiftR` (shift2Cp + 8)
 
-featsEval :: MyPos -> EvalState -> Feats
-featsEval p !sti = foldr (itemEval gph ep ew p) (Feats gph []) evalItems
+featsEval :: EvalState -> MyPos -> Feats
+featsEval !sti p = foldr (itemEval gph ep ew p) (Feats gph []) evalItems
     where ep   = esEParams  sti
           ew   = esEWeights sti
           gph  = gamePhase p
