@@ -323,8 +323,8 @@ instance EvalItem KingPlace where
 kingPlace :: EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
 kingPlace ep p ew mide = made (madm mide (ewKingPlaceCent ew) kcd) (ewKingPlacePwns ew) kpd
     where !kcd = (mpl - ypl) `unsafeShiftR` epMaterBonusScale ep
-          !kpd | mqueens == 0 && yqueens == 0 = kingPawnsBonus mks yks (mweak .|. yweak)
-          -- !kpd | mqueens == 0 && yqueens == 0 = kingPawnsBonus mks yks (pawns p)
+          -- !kpd | mqueens == 0 && yqueens == 0 = kingPawnsBonus mks yks (mweak .|. yweak)
+          !kpd | mqueens == 0 && yqueens == 0 = kingPawnsBonus mks yks (pawns p)
                                                     `unsafeShiftR` epPawnBonusScale  ep
                | otherwise                    = 0
           !mks = kingSquare (kings p) $ me p
@@ -348,8 +348,8 @@ kingPlace ep p ew mide = made (madm mide (ewKingPlaceCent ew) kcd) (ewKingPlaceP
           !yminor  = popCount $ (bishops p .|. knights p) .&. yo p
           !mpawns  = pawns p .&. me p
           !ypawns  = pawns p .&. yo p
-          !mweak   = (pawns p .&. me p) `less` myPAttacs p
-          !yweak   = (pawns p .&. yo p) `less` yoPAttacs p
+          -- !mweak   = (pawns p .&. me p) `less` myPAttacs p
+          -- !yweak   = (pawns p .&. yo p) `less` yoPAttacs p
           materFun m r q = (m * epMaterMinor ep + r * epMaterRook ep + q * epMaterQueen ep)
                                `unsafeShiftR` epMaterScale ep
 
@@ -361,9 +361,9 @@ promoB s =       s .&. 7
 kingPawnsBonus :: Square -> Square -> BBoard -> Int
 kingPawnsBonus !mksq !yksq !weak = mmy
     where Flc m y = foldr (weaks mksq yksq) (Flc 0 0) $ bbToSquares weak
-          !mmy = m - y
+          !mmy = y - m
           weaks s1 s2 sp (Flc w1 w2) = Flc (w1 + bonus s1 sp) (w2 + bonus s2 sp)
-          bonus s1 s2 = proxyBonus $ squareDistance s1 s2
+          bonus s1 s2 = squareDistance s1 s2
 
 -- This is a bonus for the king beeing near one corner
 -- It's bigger when the enemy has more material (only pieces)
