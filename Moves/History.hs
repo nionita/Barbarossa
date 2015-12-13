@@ -1,6 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 module Moves.History (
-        History, newHist, toHist, valHist
+        History, newHist, toHist, valHist, prepHist
     ) where
 
 import Data.Bits
@@ -54,3 +54,13 @@ subHist h !ad !p = do
     V.unsafeWrite h ad v
     where higLimit = 1000000000
           higHalf  =  500000000
+
+prepHist :: History -> IO ()
+prepHist h = go 0
+    where go :: Int -> IO ()
+          go !i | i == vsize = return ()
+                | otherwise  = do
+                    -- a <- V.unsafeRead h i
+                    -- V.unsafeWrite h i ((a+a+a) `unsafeShiftR` 2)
+                    V.unsafeWrite h i 0
+                    go (i+1)

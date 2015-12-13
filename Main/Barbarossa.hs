@@ -37,7 +37,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.4.0"
-progVerSuff = "nmcc"
+progVerSuff = "fuh"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -527,9 +527,11 @@ searchTheTree tief mtief timx tim tpm mtg lsc lpv rmvs = do
         else do
             chg' <- readChanging
             if working chg'
-                then if mx == 0	-- no time constraint
-                        then searchTheTree (tief + 1) mtief 0             tim tpm mtg (Just sc) path rmvsf
-                        else searchTheTree (tief + 1) mtief (strtms + mx) tim tpm mtg (Just sc) path rmvsf
+                then do
+                    liftIO $ prepHist $ hist $ crtStatus chg'
+                    if mx == 0	-- no time constraint
+                       then searchTheTree (tief + 1) mtief 0             tim tpm mtg (Just sc) path rmvsf
+                       else searchTheTree (tief + 1) mtief (strtms + mx) tim tpm mtg (Just sc) path rmvsf
                 else do
                     ctxLog DebugUci "in searchTheTree: not working"
                     giveBestMove path -- was stopped

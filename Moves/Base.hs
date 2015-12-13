@@ -394,9 +394,15 @@ canPruneMove m
     | not (moveIsNormal m) = return False
     | otherwise = do
         p <- getPos
-        return $! if moveIsCapture p m
-                     then False
-                     else not $ moveChecks p m
+        if moveIsCapture p m
+           then return False
+           else if moveChecks p m
+                   then return False
+                   else do
+                       s <- get
+                       mvsc <- liftIO $ valHist (hist s) m
+                       return $! mvsc >= minHistScore
+    where minHistScore = 0
 
 -- Score difference obtained by last move, from POV of the moving part
 -- It considers the fact that static score is for the part which has to move
