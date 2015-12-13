@@ -386,11 +386,16 @@ moveIsCaptPromo p m
 canPruneMove :: Move -> Game Bool
 canPruneMove m
     | not (moveIsNormal m) = return False
+    | moveAdvPawn m        = return False
     | otherwise = do
         p <- getPos
-        return $! if moveIsCapture p m
-                     then False
-                     else not $ moveChecks p m
+        if moveIsCapture p m
+           then return False
+           else if movePassed p m
+                   then return False
+                   else if moveChecks p m
+                           then return False
+                           else return True
 
 -- Score difference obtained by last move, from POV of the moving part
 -- It considers the fact that static score is for the part which has to move
