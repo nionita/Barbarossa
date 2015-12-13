@@ -49,10 +49,6 @@ made !mide0 !mide !v = mide0 { end = end mide0 + end mide * v }
 mad :: MidEnd -> MidEnd -> Int -> MidEnd
 mad !mide0 !mide !v = MidEnd { mid = mid mide0 + mid mide * v, end = end mide0 + end mide * v }
 
--- {-# INLINE (<+>) #-}
--- (<+>) :: MidEnd -> MidEnd -> MidEnd
--- mide1 <+> mide2 = MidEnd { mid = mid mide1 + mid mide2, end = end mide1 + end mide2 }
-
 {-# INLINE tme #-}
 tme :: Int -> Int -> MidEnd
 tme a b = MidEnd a b
@@ -68,7 +64,7 @@ data EvalParams
           epMaterScale :: !Int,
           epMaterBonusScale :: !Int,
           epPawnBonusScale  :: !Int,
-          epPassKingProx    :: !Int,
+          epPassBonusFact   :: !Int,	-- king proxy bonus for passed & promo squares
           epPassBlockO :: !Int,
           epPassBlockA :: !Int,
           epPassMin    :: !Int,
@@ -127,7 +123,7 @@ instance CollectParams EvalParams where
                     epMaterScale = 1,
                     epMaterBonusScale = 5,
                     epPawnBonusScale  = 4,
-                    epPassKingProx    = 10,
+                    epPassBonusFact   = 2,
                     epPassBlockO = 11,
                     epPassBlockA = 17,
                     epPassMin    = 30,
@@ -147,7 +143,7 @@ collectEvalParams (s, v) ep = lookApply s v ep [
         ("epMaterScale",      setEpMaterScale),
         ("epMaterBonusScale", setEpMaterBonusScale),
         ("epPawnBonusScale",  setEpPawnBonusScale),
-        ("epPassKingProx",    setEpPassKingProx),
+        ("epPassBonusFact",   setEpPassBonusFact),
         ("epPassBlockO",      setEpPassBlockO),
         ("epPassBlockA",      setEpPassBlockA),
         ("epPassMin",         setEpPassMin),
@@ -162,7 +158,7 @@ collectEvalParams (s, v) ep = lookApply s v ep [
           setEpMaterScale      v' ep' = ep' { epMaterScale      = round v' }
           setEpMaterBonusScale v' ep' = ep' { epMaterBonusScale = round v' }
           setEpPawnBonusScale  v' ep' = ep' { epPawnBonusScale  = round v' }
-          setEpPassKingProx    v' ep' = ep' { epPassKingProx    = round v' }
+          setEpPassBonusFact   v' ep' = ep' { epPassBonusFact   = round v' }
           setEpPassBlockO      v' ep' = ep' { epPassBlockO      = round v' }
           setEpPassBlockA      v' ep' = ep' { epPassBlockA      = round v' }
           setEpPassMin         v' ep' = ep' { epPassMin         = round v' }
@@ -176,7 +172,7 @@ instance CollectParams EvalWeights where
           ewKingSafe        = tme 1 0,
           ewKingOpen        = tme 12 0,
           ewKingPlaceCent   = tme 6 0,
-          ewKingPlacePwns   = tme 0 30,
+          ewKingPlacePwns   = tme 0 20,
           ewRookHOpen       = tme 171 202,
           ewRookOpen        = tme 219 221,
           ewRookConn        = tme  96  78,

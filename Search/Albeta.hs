@@ -72,7 +72,7 @@ varImp lev w = round $ go 0 lev w
 
 -- Parameters for futility pruning:
 maxFutilDepth :: Int
-maxFutilDepth = 2
+maxFutilDepth = 3
 
 -- Futility margins
 futilMargins :: Int -> Int -> Int
@@ -636,8 +636,7 @@ pvSearch nst !a !b !d = do
               else do
                 nodes0 <- gets (sNodes . stats)
                 -- futility pruning:
-                adp <- gets absdp
-                prune <- isPruneFutil d adp a
+                prune <- isPruneFutil d a
                 -- Loop thru the moves
                 let !nsti = resetNSt a NoKiller nst'
                 nstf <- pvSLoop b d prune nsti edges
@@ -715,8 +714,7 @@ pvZeroW !nst !b !d !lastnull redu = do
                        else do
                          !nodes0 <- gets (sNodes . stats)
                          -- futility pruning:
-                         adp <- gets absdp
-                         prune <- isPruneFutil d adp bGrain
+                         prune <- isPruneFutil d bGrain
                          -- Loop thru the moves
                          kill1 <- case nmhigh of
                                       NullMoveThreat s -> newTKiller d s
@@ -1149,11 +1147,10 @@ pvLoop f s (Alt (e:es)) = do
 -- B. When we are in check, and also much below alpha, we have even less chances to come out,
 --    so it is ok to not exclude here check escapes, and maybe we should even make the margin
 --    lower (experiemnts, tune!) Maybe this is also depth dependent
-isPruneFutil :: Int -> Int -> Path -> Search Bool
-isPruneFutil !d !adp a
-    | nearmate (pathScore a)   = return False
-    | d > maxFutilDepth &&
-      d > adp `unsafeShiftR` 1 = return False	-- max futility depth depending on draft
+isPruneFutil :: Int -> Path -> Search Bool
+isPruneFutil !d a
+    | nearmate (pathScore a) = return False
+    | d > maxFutilDepth      = return False	-- max futility depth depending on draft
     | otherwise = do
         v <- lift staticVal
         m <- varFutVal	-- variable futility value

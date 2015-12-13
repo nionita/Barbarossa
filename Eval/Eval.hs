@@ -271,7 +271,7 @@ attCoef = listArray (0, 248) $ take 8 (repeat 0) ++ [ f x | x <- [0..63] ] ++ re
           f x = let y = fromIntegral x :: Double in round $ (2.92968750 - 0.03051758*y)*y*y
 
 kingSquare :: BBoard -> BBoard -> Square
-kingSquare kingsb colorp = head $ bbToSquares $ kingsb .&. colorp
+kingSquare kingsb colorp = firstOne $ kingsb .&. colorp
 {-# INLINE kingSquare #-}
 
 ------ Material ------
@@ -323,21 +323,20 @@ instance EvalItem KingPlace where
 kingPlace :: EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
 kingPlace ep p ew mide = made (madm mide (ewKingPlaceCent ew) kcd) (ewKingPlacePwns ew) kpd
     where !kcd = (mpl - ypl) `unsafeShiftR` epMaterBonusScale ep
-          !kpd = (mpi - ypi) `unsafeShiftR` epPawnBonusScale  ep
+          !kpd | mqueens == 0 && yqueens == 0 = kingPawnsBonus mks yks (mweak .|. yweak)
+          -- !kpd | mqueens == 0 && yqueens == 0 = kingPawnsBonus mks yks (pawns p)
+                                                    `unsafeShiftR` epPawnBonusScale  ep
+               | otherwise                    = 0
           !mks = kingSquare (kings p) $ me p
           !yks = kingSquare (kings p) $ yo p
           !mkm = materFun yminor yrooks yqueens
           !ykm = materFun mminor mrooks mqueens
-          (!mpl, !ypl, !mpi, !ypi)
+          (!mpl, !ypl)
               | moving p == White = ( kingMaterBonus White mpawns mkm mks
                                     , kingMaterBonus Black ypawns ykm yks
-                                    , kingPawnsBonus mks (passed p) mpassed ypassed
-                                    , kingPawnsBonus yks (passed p) mpassed ypassed
                                     )
               | otherwise         = ( kingMaterBonus Black mpawns mkm mks
                                     , kingMaterBonus White ypawns ykm yks
-                                    , kingPawnsBonus mks (passed p) ypassed mpassed
-                                    , kingPawnsBonus yks (passed p) ypassed mpassed
                                     )
           !mro     = rooks p .&. me p
           !mrooks  = popCount mro
@@ -349,8 +348,8 @@ kingPlace ep p ew mide = made (madm mide (ewKingPlaceCent ew) kcd) (ewKingPlaceP
           !yminor  = popCount $ (bishops p .|. knights p) .&. yo p
           !mpawns  = pawns p .&. me p
           !ypawns  = pawns p .&. yo p
-          !mpassed = passed p .&. me p
-          !ypassed = passed p .&. yo p
+          !mweak   = (pawns p .&. me p) `less` myPAttacs p
+          !yweak   = (pawns p .&. yo p) `less` yoPAttacs p
           materFun m r q = (m * epMaterMinor ep + r * epMaterRook ep + q * epMaterQueen ep)
                                `unsafeShiftR` epMaterScale ep
 
@@ -358,18 +357,13 @@ promoW, promoB :: Square -> Square
 promoW s = 56 + (s .&. 7)
 promoB s =       s .&. 7
 
-promoFieldDistIncr :: Int -> Int
-promoFieldDistIncr = \d -> d + 1
-
--- We give bonus also for pawn promotion squares, if the pawn is near enough to promote
--- Give as parameter bitboards for all pawns, white pawns and black pawns for performance
-kingPawnsBonus :: Square -> BBoard -> BBoard -> BBoard -> Int
-kingPawnsBonus !ksq !alp !wpass !bpass = bonus
-    where !bpsqs = sum $ map (proxyBonus . squareDistance ksq) $ bbToSquares alp
-          -- !bqsqs = sum $ map (proxyBonus . promoFieldDistIncr . squareDistance ksq)
-          !bqsqs = sum $ map (proxyBonus . squareDistance ksq)
-                       $ map promoW (bbToSquares wpass) ++ map promoB (bbToSquares bpass)
-          !bonus = bpsqs + bqsqs
+-- We give bonus for the king beeing near weak pawns
+kingPawnsBonus :: Square -> Square -> BBoard -> Int
+kingPawnsBonus !mksq !yksq !weak = mmy
+    where Flc m y = foldr (weaks mksq yksq) (Flc 0 0) $ bbToSquares weak
+          !mmy = m - y
+          weaks s1 s2 sp (Flc w1 w2) = Flc (w1 + bonus s1 sp) (w2 + bonus s2 sp)
+          bonus s1 s2 = proxyBonus $ squareDistance s1 s2
 
 -- This is a bonus for the king beeing near one corner
 -- It's bigger when the enemy has more material (only pieces)
@@ -769,17 +763,17 @@ data PassPawns = PassPawns
 -- 4686 games at 15+0.25 games pass3o against itself (mean)
 -- Clop forecast: 60+-25 elo
 instance EvalItem PassPawns where
-    evalItem gph ep ew p _ mide = passPawns gph ep p ew mide
+    evalItem _ ep ew p _ mide = passPawns ep p ew mide
  
 -- Every passed pawn will be evaluated separately
-passPawns :: Int -> EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
-passPawns gph ep p ew mide = mad mide (ewPassPawnLev ew) dpp
+passPawns :: EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
+passPawns ep p ew mide = mad mide (ewPassPawnLev ew) dpp
     where !mppbb = passed p .&. me p
           !yppbb = passed p .&. yo p
           !myc = moving p
           !yoc = other myc
-          !mypp = sum $ map (perPassedPawn gph ep p myc) $ bbToSquares mppbb
-          !yopp = sum $ map (perPassedPawn gph ep p yoc) $ bbToSquares yppbb
+          !mypp = sum $ map (perPassedPawn ep p myc) $ bbToSquares mppbb
+          !yopp = sum $ map (perPassedPawn ep p yoc) $ bbToSquares yppbb
           !dpp  = mypp - yopp
 
 -- The value of the passed pawn depends answers to this questions:
@@ -787,11 +781,11 @@ passPawns gph ep p ew mide = mad mide (ewPassPawnLev ew) dpp
 -- - how many squares ahead are blocked by own/opponent pieces?
 -- - how many squares ahead are controlled by own/opponent pieces?
 -- - does it has a rook behind?
-perPassedPawn :: Int -> EvalParams -> MyPos -> Color -> Square -> Int
-perPassedPawn gph ep p c sq
+perPassedPawn :: EvalParams -> MyPos -> Color -> Square -> Int
+perPassedPawn ep p c sq
     | attacked && not defended
         && c /= moving p = epPassMin ep	-- but if we have more than one like that?
-    | otherwise          = perPassedPawnOk gph ep p c sq sqbb moi toi moia toia
+    | otherwise          = perPassedPawnOk ep p c sq sqbb moi toi moia toia
     where !sqbb = 1 `unsafeShiftL` sq
           (!moi, !toi, !moia, !toia)
                | moving p == c = (me p, yo p, myAttacs p, yoAttacs p)
@@ -799,10 +793,12 @@ perPassedPawn gph ep p c sq
           !defended = moia .&. sqbb /= 0
           !attacked = toia .&. sqbb /= 0
 
-perPassedPawnOk :: Int -> EvalParams -> MyPos -> Color -> Square -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
-perPassedPawnOk gph ep p c sq sqbb moi toi moia toia = val
+perPassedPawnOk :: EvalParams -> MyPos -> Color -> Square
+                -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
+perPassedPawnOk ep p c sq sqbb moi toi moia toia = val
     where (!way, !behind) | c == White = (shadowUp sqbb, shadowDown sqbb)
                           | otherwise  = (shadowDown sqbb, shadowUp sqbb)
+          !prosq = firstOne $ way .&. rank18	-- promotion square
           !mblo = popCount $ moi .&. way
           !yblo = popCount $ toi .&. way
           !rookBehind = behind .&. (rooks p .|. queens p)
@@ -823,15 +819,19 @@ perPassedPawnOk gph ep p c sq sqbb moi toi moia toia = val
           b0 = -120
           c0 = 410
           !pmax = (a0 * x + b0) * x + c0
+          !val1 = (pmax * (128 - epPassBlockO ep * mblo)) `unsafeShiftR` 7
+          !val2 = (val1 * (128 - epPassBlockA ep * yblo)) `unsafeShiftR` 7
+          !val3 = (val2 * (128 + epPassMyCtrl ep * myctrl) * (128 - epPassYoCtrl ep * yoctrl))
+                    `unsafeShiftR` 14
           !myking = kingSquare (kings p) moi
           !yoking = kingSquare (kings p) toi
-          !mdis = squareDistance sq myking
-          !ydis = squareDistance sq yoking
-          !kingprx = ((mdis - ydis) * epPassKingProx ep * (256 - gph)) `unsafeShiftR` 8
-          !val1 = (pmax * (128 - kingprx) * (128 - epPassBlockO ep * mblo)) `unsafeShiftR` 14
-          !val2 = (val1 * (128 - epPassBlockA ep * yblo)) `unsafeShiftR` 7
-          !val  = (val2 * (128 + epPassMyCtrl ep * myctrl) * (128 - epPassYoCtrl ep * yoctrl))
-                    `unsafeShiftR` 14
+          !mdis  = proxyBonus $ squareDistance sq myking
+          !ydis  = proxyBonus $ squareDistance sq yoking
+          !mkbon = proxyBonus $ squareDistance myking prosq
+          !ykbon = proxyBonus $ squareDistance yoking prosq
+          !kbon  = (mdis + mkbon - ydis - ykbon) * epPassBonusFact ep
+          !val   = val3 + kbon
+          rank18 = 0xFF000000000000FF	-- rank 1 & 8
 
 ------ Advanced pawns, on 6th & 7th rows (not passed) ------
 data AdvPawns = AdvPawns
