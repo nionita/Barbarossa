@@ -324,7 +324,6 @@ kingPlace :: EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
 kingPlace ep p ew mide = made (madm mide (ewKingPlaceCent ew) kcd) (ewKingPlacePwns ew) kpd
     where !kcd = (mpl - ypl) `unsafeShiftR` epMaterBonusScale ep
           !kpd | mqueens == 0 && yqueens == 0 = kingPawnsBonus mks yks (mweak .|. yweak)
-          -- !kpd | mqueens == 0 && yqueens == 0 = kingPawnsBonus mks yks (pawns p)
                                                     `unsafeShiftR` epPawnBonusScale  ep
                | otherwise                    = 0
           !mks = kingSquare (kings p) $ me p
@@ -785,52 +784,60 @@ perPassedPawn :: EvalParams -> MyPos -> Color -> Square -> Int
 perPassedPawn ep p c sq
     | attacked && not defended
         && c /= moving p = epPassMin ep	-- but if we have more than one like that?
-    | otherwise          = perPassedPawnOk ep p c sq sqbb moi toi moia toia
+    | otherwise          = perPassedPawnOk ep p c sq sqbb moi toi moia toia mypa
     where !sqbb = 1 `unsafeShiftL` sq
-          (!moi, !toi, !moia, !toia)
-               | moving p == c = (me p, yo p, myAttacs p, yoAttacs p)
-               | otherwise     = (yo p, me p, yoAttacs p, myAttacs p)
+          (!moi, !toi, !moia, !toia, !mypa)
+               | moving p == c = (me p, yo p, myAttacs p, yoAttacs p, myPAttacs p)
+               | otherwise     = (yo p, me p, yoAttacs p, myAttacs p, yoPAttacs p)
           !defended = moia .&. sqbb /= 0
           !attacked = toia .&. sqbb /= 0
 
+-- Additive try with bonus/malus per passed pawn & finding
+-- The values here have to be approximately in centipawns,
+-- they will be multiplied with passedPawnLev in passPawns function
+-- to be brought to the 1/800 scale
 perPassedPawnOk :: EvalParams -> MyPos -> Color -> Square
-                -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
-perPassedPawnOk ep p c sq sqbb moi toi moia toia = val
-    where (!way, !behind) | c == White = (shadowUp sqbb, shadowDown sqbb)
+                -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
+perPassedPawnOk ep p c sq sqbb moi toi moia toia mypa = val
+    where -- Bonus for advanced passed pawns (quadratic):
+          (!way, !behind) | c == White = (shadowUp sqbb, shadowDown sqbb)
                           | otherwise  = (shadowDown sqbb, shadowUp sqbb)
-          !prosq = firstOne $ way .&. rank18	-- promotion square
-          !mblo = popCount $ moi .&. way
-          !yblo = popCount $ toi .&. way
-          !rookBehind = behind .&. (rooks p .|. queens p)
-          !mebehind = rookBehind .&. moi /= 0
-                   && rookBehind .&. toi == 0
-          !yobehind = rookBehind .&. moi == 0
-                   && rookBehind .&. toi /= 0
-          !bbmyctrl | mebehind  = way
-                    | otherwise = moia .&. way
-          !bbyoctrl | yobehind  = way `less` bbmyctrl
-                    | otherwise = toia .&. (way `less` bbmyctrl)
-          !bbfree   = way `less` (bbmyctrl .|. bbyoctrl)
-          !myctrl = popCount bbmyctrl
-          !yoctrl = popCount bbyoctrl
-          !free   = popCount bbfree
-          !x = myctrl + yoctrl + free
-          a0 = 10
+          !nway = popCount way
+          a0 =   10
           b0 = -120
-          c0 = 410
-          !pmax = (a0 * x + b0) * x + c0
-          !val1 = (pmax * (128 - epPassBlockO ep * mblo)) `unsafeShiftR` 7
-          !val2 = (val1 * (128 - epPassBlockA ep * yblo)) `unsafeShiftR` 7
-          !val3 = (val2 * (128 + epPassMyCtrl ep * myctrl) * (128 - epPassYoCtrl ep * yoctrl))
-                    `unsafeShiftR` 14
+          c0 =  410
+          !pval = (a0 * nway + b0) * nway + c0
+          -- Bonus/malus for the way beeing defended/attacked:
+          !matt = epPassMyCtrl ep * popCount (moia .&. way)
+          !yatt = epPassYoCtrl ep * popCount (toia .&. way)
+          -- Malus for beeing blocked:
+          !mblo | moi .&. way /= 0 = epPassBlockO ep
+                | otherwise        = 0
+          !yblo | toi .&. way /= 0 = epPassBlockA ep
+                | otherwise        = 0
+          -- Bonus/malus for rook behind the pawn:
+          !rookBehind = behind .&. (rooks p .|. queens p)
+          !robb | rookBehind .&. moi /= 0 && rookBehind .&. toi == 0 = epPassMyRook ep
+                | rookBehind .&. moi == 0 && rookBehind .&. toi /= 0 = epPassYoRook ep
+                | otherwise                                          = 0
+          -- Malus for king being away from pawn, promo and file
           !myking = kingSquare (kings p) moi
           !yoking = kingSquare (kings p) toi
-          !mdis  = proxyBonus $ squareDistance sq myking
-          !ydis  = proxyBonus $ squareDistance sq yoking
-          !mkbon = proxyBonus $ squareDistance myking prosq
-          !ykbon = proxyBonus $ squareDistance yoking prosq
-          !kbon  = (mdis + mkbon - ydis - ykbon) * epPassBonusFact ep
-          !val   = val3 + kbon
+          !rp    = sq .&. 0x7
+          !rmk   = myking .&. 0x7
+          !ryk   = yoking .&. 0x7
+          !mpsm  = squareDistance sq myking
+          !ypsm  = squareDistance sq yoking
+          !prosq = firstOne $ way .&. rank18	-- promotion square
+          !mqsm  = squareDistance myking prosq
+          !yqsm  = squareDistance yoking prosq
+          !mfid  = rp - rmk
+          !yfid  = rp - ryk
+          !kmal  = (mpsm * mpsm + mqsm * mqsm + mfid * mfid - ypsm * ypsm - yqsm * yqsm - yfid * yfid)
+                       * epPassBonusFact ep
+          -- Bonus for own pawn support:
+          !opo   = epPassPawnSu ep * popCount (mypa .&. (sqbb .|. way))
+          !val   = max 0 $ pval + robb + opo + matt - yatt - kmal - mblo - yblo
           rank18 = 0xFF000000000000FF	-- rank 1 & 8
 
 ------ Advanced pawns, on 6th & 7th rows (not passed) ------

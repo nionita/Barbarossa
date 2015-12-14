@@ -69,7 +69,10 @@ data EvalParams
           epPassBlockA :: !Int,
           epPassMin    :: !Int,
           epPassMyCtrl :: !Int,
-          epPassYoCtrl :: !Int
+          epPassYoCtrl :: !Int,
+          epPassPawnSu :: !Int,
+          epPassMyRook :: !Int,
+          epPassYoRook :: !Int
       } deriving Show
 
 data EvalWeights
@@ -123,12 +126,15 @@ instance CollectParams EvalParams where
                     epMaterScale = 1,
                     epMaterBonusScale = 5,
                     epPawnBonusScale  = 4,
-                    epPassBonusFact   = 2,
-                    epPassBlockO = 11,
-                    epPassBlockA = 17,
+                    epPassBonusFact   = 1,	-- ~ in cp / square square
+                    epPassBlockO = 15,		-- ~ in cp
+                    epPassBlockA = 35,		-- ~ in cp
                     epPassMin    = 30,
-                    epPassMyCtrl = 6,
-                    epPassYoCtrl = 7
+                    epPassMyCtrl = 6,		-- ~ in cp per attacked square on the way
+                    epPassYoCtrl = 7,		-- ~ in cp per attacked square on the way
+                    epPassPawnSu = 70,		-- ~ in cp per supported square on the way
+                    epPassMyRook = 80,		-- ~ in cp per own rook behind
+                    epPassYoRook = -80		-- ~ in cp per opponent rook behind
                 }
     npColParm = collectEvalParams
     npSetParm = id
@@ -148,7 +154,10 @@ collectEvalParams (s, v) ep = lookApply s v ep [
         ("epPassBlockA",      setEpPassBlockA),
         ("epPassMin",         setEpPassMin),
         ("epPassMyCtrl",      setEpPassMyCtrl),
-        ("epPassYoCtrl",      setEpPassYoCtrl)
+        ("epPassYoCtrl",      setEpPassYoCtrl),
+        ("epPassPawnSu",      setEpPassPawnSu),
+        ("epPassMyRook",      setEpPassMyRook),
+        ("epPassYoRook",      setEpPassYoRook)
     ]
     where setEpMovingMid       v' ep' = ep' { epMovingMid       = round v' }
           setEpMovingEnd       v' ep' = ep' { epMovingEnd       = round v' }
@@ -164,6 +173,9 @@ collectEvalParams (s, v) ep = lookApply s v ep [
           setEpPassMin         v' ep' = ep' { epPassMin         = round v' }
           setEpPassMyCtrl      v' ep' = ep' { epPassMyCtrl      = round v' }
           setEpPassYoCtrl      v' ep' = ep' { epPassYoCtrl      = round v' }
+          setEpPassPawnSu      v' ep' = ep' { epPassPawnSu      = round v' }
+          setEpPassMyRook      v' ep' = ep' { epPassMyRook      = round v' }
+          setEpPassYoRook      v' ep' = ep' { epPassYoRook      = round v' }
 
 instance CollectParams EvalWeights where
     type CollectFor EvalWeights = EvalWeights
