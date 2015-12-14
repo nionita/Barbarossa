@@ -323,7 +323,6 @@ instance EvalItem KingPlace where
 kingPlace :: EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
 kingPlace ep p ew mide = made (madm mide (ewKingPlaceCent ew) kcd) (ewKingPlacePwns ew) kpd
     where !kcd = (mpl - ypl) `unsafeShiftR` epMaterBonusScale ep
-          -- !kpd | mqueens == 0 && yqueens == 0 = kingPawnsBonus mks yks (mweak .|. yweak)
           !kpd | mqueens == 0 && yqueens == 0 = kingPawnsBonus mks yks (pawns p)
                                                     `unsafeShiftR` epPawnBonusScale  ep
                | otherwise                    = 0
@@ -359,7 +358,7 @@ promoB s =       s .&. 7
 
 -- We give bonus for the king beeing near weak pawns
 kingPawnsBonus :: Square -> Square -> BBoard -> Int
-kingPawnsBonus !mksq !yksq !weak = mmy
+kingPawnsBonus !mksq !yksq !weak = mmy * mmy
     where Flc m y = foldr (weaks mksq yksq) (Flc 0 0) $ bbToSquares weak
           !mmy = y - m
           weaks s1 s2 sp (Flc w1 w2) = Flc (w1 + bonus s1 sp) (w2 + bonus s2 sp)
@@ -785,44 +784,50 @@ perPassedPawn :: EvalParams -> MyPos -> Color -> Square -> Int
 perPassedPawn ep p c sq
     | attacked && not defended
         && c /= moving p = epPassMin ep	-- but if we have more than one like that?
-    | otherwise          = perPassedPawnOk ep p c sq sqbb moi toi moia toia
+    | otherwise          = perPassedPawnOk ep p c sq sqbb moi toi mattacks rattacks
     where !sqbb = 1 `unsafeShiftL` sq
-          (!moi, !toi, !moia, !toia)
-               | moving p == c = (me p, yo p, myAttacs p, yoAttacs p)
-               | otherwise     = (yo p, me p, yoAttacs p, myAttacs p)
+          (!moi, !toi, !moia, !toia, !mattacks, !rattacks)
+               | moving p == c = (me p, yo p, myAttacs p, yoAttacs p,
+                                  yoBAttacs p .|. yoNAttacs p, yoRAttacs p)
+               | otherwise     = (yo p, me p, yoAttacs p, myAttacs p,
+                                  myBAttacs p .|. myNAttacs p, myRAttacs p)
           !defended = moia .&. sqbb /= 0
           !attacked = toia .&. sqbb /= 0
 
 perPassedPawnOk :: EvalParams -> MyPos -> Color -> Square
                 -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
-perPassedPawnOk ep p c sq sqbb moi toi moia toia = val
+perPassedPawnOk !ep !p c !sq !sqbb !moi !toi mattacks rattacks = val
     where (!way, !behind) | c == White = (shadowUp sqbb, shadowDown sqbb)
                           | otherwise  = (shadowDown sqbb, shadowUp sqbb)
+          a0 =  5
+          b0 =  6
+          c0 = 30
+          !nway = popCount behind
+          !ppos = (a0 * nway + b0) * nway + c0	-- position value
           !prosq = firstOne $ way .&. rank18	-- promotion square
-          !mblo = popCount $ moi .&. way
-          !yblo = popCount $ toi .&. way
           !rookBehind = behind .&. (rooks p .|. queens p)
           !mebehind = rookBehind .&. moi /= 0
                    && rookBehind .&. toi == 0
           !yobehind = rookBehind .&. moi == 0
                    && rookBehind .&. toi /= 0
-          !bbmyctrl | mebehind  = way
-                    | otherwise = moia .&. way
-          !bbyoctrl | yobehind  = way `less` bbmyctrl
-                    | otherwise = toia .&. (way `less` bbmyctrl)
-          !bbfree   = way `less` (bbmyctrl .|. bbyoctrl)
-          !myctrl = popCount bbmyctrl
-          !yoctrl = popCount bbyoctrl
-          !free   = popCount bbfree
-          !x = myctrl + yoctrl + free
-          a0 = 10
-          b0 = -120
-          c0 = 410
-          !pmax = (a0 * x + b0) * x + c0
-          !val1 = (pmax * (128 - epPassBlockO ep * mblo)) `unsafeShiftR` 7
-          !val2 = (val1 * (128 - epPassBlockA ep * yblo)) `unsafeShiftR` 7
-          !val3 = (val2 * (128 + epPassMyCtrl ep * myctrl) * (128 - epPassYoCtrl ep * yoctrl))
-                    `unsafeShiftR` 14
+          !kingblock = kings p .&. toi .&. way /= 0
+          !mblo | moi .&. way == 0 = 0
+                | otherwise        = 1
+          !yblo | toi .&. way == 0 = 0
+                | otherwise        = 1
+          !val0 | kingblock = (ppos * 96) `unsafeShiftR` 7	-- param!
+                | otherwise = ppos
+          !val1 | mebehind  = (val0 * 160) `unsafeShiftR` 7	-- param!
+                | yobehind  = (val0 *  96) `unsafeShiftR` 7	-- param!
+                | otherwise = val0
+          !val2 = (val1 * (128 - epPassBlockO ep * mblo) * (128 - epPassBlockA ep * yblo))
+                      `unsafeShiftR` 14
+          -- Limit the value, if it could be captured on the way
+          !vmax | mattacks .&. way /= 0 = 325 * 8	-- minor value
+                | rattacks .&. way /= 0 = 550 * 8	-- rook value
+                | otherwise             = 8000		-- a bit less than a queen
+          !val3 | val2 > vmax = vmax
+                | otherwise   = val2
           !myking = kingSquare (kings p) moi
           !yoking = kingSquare (kings p) toi
           !mdis  = proxyBonus $ squareDistance sq myking
