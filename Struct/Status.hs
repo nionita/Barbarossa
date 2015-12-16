@@ -127,14 +127,14 @@ instance CollectParams EvalParams where
                     epMaterBonusScale = 5,
                     epPawnBonusScale  = 2,
                     epPassBonusFact   = 1,	-- ~ in cp / square square
-                    epPassBlockO =  9,		-- ~ in cp
-                    epPassBlockA = 35,		-- ~ in cp
-                    epPassMin    = 31,
+                    epPassBlockO = 12,		-- ~ in cp
+                    epPassBlockA = 31,		-- ~ in cp
+                    epPassMin    = 27,
                     epPassMyCtrl =  6,		-- ~ in cp per attacked square on the way
                     epPassYoCtrl =  7,		-- ~ in cp per attacked square on the way
-                    epPassPawnSu = 43,		-- ~ in cp per supported square on the way
-                    epPassMyRook = 47,		-- ~ in cp per own rook behind
-                    epPassYoRook = -50		-- ~ in cp per opponent rook behind
+                    epPassPawnSu = 36,		-- ~ in cp per supported square on the way
+                    epPassMyRook = 60,		-- ~ in cp per own rook behind
+                    epPassYoRook = -46		-- ~ in cp per opponent rook behind
                 }
     npColParm = collectEvalParams
     npSetParm = id
