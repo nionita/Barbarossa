@@ -430,11 +430,7 @@ pvInnerRoot :: Path 	-- current beta
             -> NodeState 	-- node status
             -> Move	-- move to search
             -> Search (Bool, NodeState)
-pvInnerRoot b d nst e = do
-    abrt <- timeToAbort
-    if abrt
-       then return (True, nst)
-       else do
+pvInnerRoot b d nst e = timeToAbort (True, nst) $ do
          pindent $ "-> " ++ show e
          -- do the move
          exd <- lift $ doMove e False
@@ -498,11 +494,7 @@ pvInnerRootExten b d !exd nst = do
 
 checkFailOrPVRoot :: SStats -> Path -> Int -> Move -> Path
                   -> NodeState -> Search (Bool, NodeState)
-checkFailOrPVRoot xstats b d e s nst =  do
-    abrt <- timeToAbort
-    if abrt
-       then return (True, nst)
-       else do
+checkFailOrPVRoot xstats b d e s nst = timeToAbort (True, nst) $ do
          sst <- get
          let !mn     = movno nst
              !a      = cursc nst
@@ -817,11 +809,7 @@ pvInnerLoop :: Path 	-- current beta
             -> NodeState 	-- node status
             -> Move	-- move to search
             -> Search (Bool, NodeState)
-pvInnerLoop b d prune nst e = do
-    abrt <- timeToAbort
-    if abrt
-       then return (True, nst)
-       else do
+pvInnerLoop b d prune nst e = timeToAbort (True, nst) $ do
          -- What about TT & killer moves???
          willPrune <- if not prune || movno nst == 1 then return False else lift $ canPruneMove e
          if willPrune
@@ -862,11 +850,7 @@ pvInnerLoopZ :: Path 	-- current beta
             -> Move	-- move to search
             -> Bool	-- reduce in LMR?
             -> Search (Bool, NodeState)
-pvInnerLoopZ b d prune nst e redu = do
-    abrt <- timeToAbort
-    if abrt
-       then return (True, nst)
-       else do
+pvInnerLoopZ b d prune nst e redu = timeToAbort (True, nst) $ do
          -- What about TT & killer moves???
          willPrune <- if not prune then return False else lift $ canPruneMove e
          if willPrune
@@ -1256,11 +1240,7 @@ pvQLoop b c = go
                      else go s' $ Alt es
 
 pvQInnerLoop :: Int -> Int -> Int -> Move -> Search (Bool, Int)
-pvQInnerLoop !b c !a e = do
-    abrt <- timeToAbort
-    if abrt
-       then return (True, b)	-- it doesn't matter which score we return
-       else do
+pvQInnerLoop !b c !a e = timeToAbort (True, b) $ do
          -- here: delta pruning: captured piece + 200 > a? then go on, else return
          -- qindent $ "-> " ++ show e
          r <-  lift $ doMove e True
@@ -1278,11 +1258,9 @@ pvQInnerLoop !b c !a e = do
                 -- qindent $ "<- " ++ show e ++ " (" ++ show s ++ ")"
                 if sc >= b
                    then return (True, b)
-                   else do
-                       !abrt' <- gets abort
-                       if sc > a
-                          then return (abrt', sc)
-                          else return (abrt', a)
+                   else if sc > a
+                           then return (False, sc)
+                           else return (False, a)
             else return (False, a)
 
 {-# INLINE bestMoveFromIID #-}
@@ -1299,20 +1277,25 @@ bestMoveFromIID nst a b d
           nt = crtnt nst
 
 {-# INLINE timeToAbort #-}
-timeToAbort :: Search Bool
-timeToAbort = do
+timeToAbort :: a -> Search a -> Search a
+timeToAbort a act = do
     s <- get
-    let ro = ronly s
-    if draft ro > 1 && timeli ro
-       then if timeNodes .&. sNodes (stats s) /= 0
-               then return False
-               else do
-                   !abrt <- lift $ isTimeout $ abmili ro
-                   when abrt $ do
-                       lift $ informStr "Albeta: search abort!"
-                       put s { abort = True }
-                   return abrt
-       else return False
+    if abort s
+       then return a
+       else do
+           let ro = ronly s
+           if draft ro > 1 && timeli ro
+              then if timeNodes .&. sNodes (stats s) /= 0
+                      then act
+                      else do
+                          !abrt <- lift $ isTimeout $ abmili ro
+                          if abrt
+                             then do
+                                 lift $ informStr "Albeta: search abort!"
+                                 put s { abort = True }
+                                 return a
+                             else act
+              else act
     where timeNodes = 4 * 1024 - 1	-- check time every so many nodes
 
 {-# INLINE reportStats #-}

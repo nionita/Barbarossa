@@ -358,8 +358,8 @@ promoW, promoB :: Square -> Square
 promoW s = 56 + (s .&. 7)
 promoB s =       s .&. 7
 
-promoFieldDistIncr :: Int -> Int
-promoFieldDistIncr = \d -> d + 1
+-- promoFieldDistIncr :: Int -> Int
+-- promoFieldDistIncr = \d -> d + 1
 
 -- We give bonus also for pawn promotion squares, if the pawn is near enough to promote
 -- Give as parameter bitboards for all pawns, white pawns and black pawns for performance
