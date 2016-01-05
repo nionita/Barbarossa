@@ -761,12 +761,19 @@ seeMoveValue pos !attacks sqfirstmv sqto gain0 = v
                           seeAttsRec = attacs0 }
 
 -- This function can produce illegal captures with the king!
+-- We consider queen captures separate, to be searched first, coz
+-- they are always winning or at least equal
 genMoveCaptWL :: MyPos -> ([Move], [Move])
-genMoveCaptWL !pos = (map f $ sort ws, map f $ sort ls)
+genMoveCaptWL !pos = (wins, loss)
     where !capts = myAttacs pos .&. yo pos
-          epcs  = genEPCapts pos
-          c     = moving pos
-          (ws, ls) = foldr (perCaptFieldWL pos (me pos) (yoAttacs pos)) (lepcs,[]) $ bbToSquares capts
+          !qcbb  = capts .&. queens pos
+          !rcbb  = capts `less` qcbb
+          wins   = map (moveAddColor c) qcs ++ map f (sort ws)
+          loss   = map f (sort ls)
+          epcs   = genEPCapts pos
+          c      = moving pos
+          qcs    = concatMap (perCaptFieldQ pos (me pos) (yoAttacs pos)) $ bbToSquares qcbb
+          (ws, ls) = foldr (perCaptFieldWL pos (me pos) (yoAttacs pos)) (lepcs,[]) $ bbToSquares rcbb
           lepcs = map (moveToLMove Pawn Pawn) epcs
           f = moveAddColor c . lmoveToMove
 
@@ -802,7 +809,7 @@ genEPCapts !pos
 perCaptFieldWL :: MyPos -> BBoard -> BBoard -> Square -> ([LMove], [LMove]) -> ([LMove], [LMove])
 perCaptFieldWL pos mypc advdefence sq mvlst
     | hanging   = let mvlst1 = foldr (addHanging  pos pcto sq) mvlst  reAgrsqs
-                  in           foldr (addHangingP     pcto sq) mvlst1 prAgrsqs	-- for promotions
+                  in           foldr (addHangingP          sq) mvlst1 prAgrsqs	-- for promotions
     | otherwise = let mvlst1 = foldr (perCaptWL pos myAttRec False pcto valto sq) mvlst  reAgrsqs
                   in           foldr (perCaptWL pos myAttRec True  pcto valto sq) mvlst1 prAgrsqs
     where !myAttRec = theAttacs pos sq
@@ -823,13 +830,33 @@ perCaptFieldWL pos mypc advdefence sq mvlst
                     in (prp, rea)
               | otherwise = (0, myattacs)
 
+-- Specialized function for queen captures
+perCaptFieldQ :: MyPos -> BBoard -> BBoard -> Square -> [Move]
+perCaptFieldQ pos mypc advdefence sq
+    =  map (moveAddPiece Pawn   . flip moveFromTo sq) (bbToSquares myAttP)
+    ++ map (moveAddPiece Knight . flip moveFromTo sq) (bbToSquares myAttN)
+    ++ map (moveAddPiece Bishop . flip moveFromTo sq) (bbToSquares myAttB)
+    ++ map (moveAddPiece Rook   . flip moveFromTo sq) (bbToSquares myAttR)
+    ++ map (moveAddPiece Queen  . flip moveFromTo sq) (bbToSquares myAttQ)
+    ++ map (moveAddPiece King   . flip moveFromTo sq) (bbToSquares myAttK)
+    where !myAttRec = theAttacs pos sq
+          !myattacs = mypc .&. atAtt myAttRec
+          -- We capture in the order: pawns, knoghts, bishops, rooks, queens, king
+          !myAttP = myattacs .&. pawns   pos
+          myAttN  = myattacs .&. knights pos
+          myAttB  = myattacs .&. bishops pos
+          myAttR  = myattacs .&. rooks   pos
+          myAttQ  = myattacs .&. queens  pos
+          myAttK  | advdefence `testBit` sq = 0	-- don't capture in check!
+                  | otherwise               = myattacs .&. kings pos
+
 approximateEasyCapts :: Bool
 approximateEasyCapts = True	-- when capturing a better piece: no SEE, it is always winning
 
 perCaptWL :: MyPos -> Attacks -> Bool -> Piece -> Int -> Square -> Square
           -> ([LMove], [LMove]) -> ([LMove], [LMove])
 perCaptWL !pos !attacks promo vict !gain0 !sq !sqfa (wsqs, lsqs)
-    | promo = ((moveToLMove Pawn vict $ makePromo Queen sqfa sq) : wsqs, lsqs)
+    | promo = ((moveToLMove Pawn Queen $ makePromo Queen sqfa sq) : wsqs, lsqs)
     | approx || adv <= gain0 = (ss:wsqs, lsqs)
     | otherwise = (wsqs, ss:lsqs)
     where ss = moveToLMove attc vict $ moveAddPiece attc $ moveFromTo sqfa sq
@@ -844,5 +871,5 @@ addHanging pos vict to from (wsqs, lsqs)
     = ((moveToLMove apiece vict $ moveAddPiece apiece (moveFromTo from to)) : wsqs, lsqs)
     where Busy _ apiece = tabla pos from
 
-addHangingP :: Piece -> Square -> Square -> ([LMove], [LMove]) -> ([LMove], [LMove])
-addHangingP vict to from (wsqs, lsqs) = ((moveToLMove Pawn vict $ makePromo Queen from to) : wsqs, lsqs)
+addHangingP :: Square -> Square -> ([LMove], [LMove]) -> ([LMove], [LMove])
+addHangingP to from (wsqs, lsqs) = ((moveToLMove Pawn Queen $ makePromo Queen from to) : wsqs, lsqs)
