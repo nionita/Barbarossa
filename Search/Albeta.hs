@@ -594,7 +594,7 @@ pvSearch nst !a !b !d = do
     -- Here we are always in PV if enough depth:
     when (not $ inPv || ab) $ lift $ absurd $ "pvSearch: not inPv, not ab, nst = " ++ show nst
     -- Check first for a TT entry of the position to search
-    (hdeep, tp, hsc, e', nodes')
+    (hdeep, tp, hsc, e, nodes')
         <- if d >= minToRetr
               then reTrieve >> lift ttRead
               else return (-1, 0, 0, undefined, 0)
@@ -610,13 +610,17 @@ pvSearch nst !a !b !d = do
        )
        then do
            let ttpath = Path { pathScore = hsc, pathDepth = hdeep,
-                               pathMoves = Seq [e'], pathOrig = "TT" }
+                               pathMoves = Seq [e], pathOrig = "TT" }
+           -- we will treat the beta cut here too, if it happens
+           when (tp == 1 || tp == 2 && hsc > pathScore a) $ do
+               adp <- gets absdp
+               lift $ betaCut True adp e
            reSucc nodes' >> return ttpath
        else do
            -- Here: when ab we should do null move search
            -- Use the found TT move as best move
            let nst' = if hdeep > 0 && (tp /= 0 || nullSeq (pvcont nst))
-                         then nst { pvcont = Seq [e'] }
+                         then nst { pvcont = Seq [e] }
                          else nst
            edges <- genAndSort nst' a b d
            if noMove edges
@@ -642,14 +646,14 @@ pvSearch nst !a !b !d = do
                    else do
                        -- here we failed low
                        let de = max d $ pathDepth s
-                           es = unalt edges
-                       when (de >= minToStore && not (null es)) $ do	-- what if es is null?
+                       when (de >= minToStore) $ do
                            nodes1 <- gets (sNodes . stats)
                            -- store as upper score, and as move, the first one generated
                            lift $ do
                                let typ = 0
                                    !deltan = nodes1 - nodes0
-                               ttStore de typ (pathScore a) (head es) deltan	-- should be d or de?
+                                   mv = head $ unalt edges	-- not null - we are on "else" of noMove
+                               ttStore de typ (pathScore a) mv deltan
                        if movno nstf > 1
                            then return $! bestPath s a "2"
                            else do
@@ -672,14 +676,18 @@ pvZeroW !_ !b !d !_ _ | d <= 0 = do
 pvZeroW !nst !b !d !lastnull redu = do
     pindent $ ":> " ++ show b
     -- Check if we have it in TT
-    (hdeep, tp, hsc, e', nodes')
+    (hdeep, tp, hsc, e, nodes')
         <- if d >= minToRetr
               then reTrieve >> lift ttRead
               else return (-1, 0, 0, undefined, 0)
     let bsco = pathScore b
     if hdeep >= d && (tp == 2 || tp == 1 && hsc >= bsco || tp == 0 && hsc < bsco)
        then do
-           let ttpath = Path { pathScore = hsc, pathDepth = hdeep, pathMoves = Seq [e'], pathOrig = "TT" }
+           let ttpath = Path { pathScore = hsc, pathDepth = hdeep, pathMoves = Seq [e], pathOrig = "TT" }
+           -- we will treat the beta cut here too, if it happens
+           when (tp == 1 || tp == 2 && hsc >= bsco) $ do
+               adp <- gets absdp
+               lift $ betaCut True adp e
            reSucc nodes' >> return ttpath
        else do
            nmhigh <- nullMoveFailsHigh nst b d lastnull
@@ -694,7 +702,7 @@ pvZeroW !nst !b !d !lastnull redu = do
                 _ -> do
                     -- Use the TT move as best move
                     let nst' = if hdeep > 0 && (tp /= 0 || nullSeq (pvcont nst))
-                                  then nst { pvcont = Seq [e'] }
+                                  then nst { pvcont = Seq [e] }
                                   else nst
                     edges <- genAndSort nst' bGrain b d
                     if noMove edges
@@ -716,21 +724,25 @@ pvZeroW !nst !b !d !lastnull redu = do
                          let s = cursc nstf
                          -- Here we expect bGrain <= s < b -- this must be checked
                          pindent $ "<: " ++ show s
-                         let !de = max d $ pathDepth s
-                             es = unalt edges
-                         when (de >= minToStore && s < b && not (null es)) $ do	-- we failed low
-                             !nodes1 <- gets (sNodes . stats)	-- what if es is null?
-                             -- store as upper score, and as move the first one (generated)
-                             lift $ do
-                                 let typ = 0
-                                     !deltan = nodes1 - nodes0
-                                 ttStore de typ (pathScore bGrain) (head es) deltan
-                         if s > bGrain || movno nstf > 1
+                         if s > bGrain
                             then return s
-                            else do	-- here: store exact mate or stalemate score!
-                                chk <- lift tacticalPos
-                                let s' = if chk then matedPath else staleMate
-                                return $! trimaxPath bGrain b s'
+                            else do
+                                -- we failed low
+                                let !de = max d $ pathDepth s
+                                when (de >= minToStore) $ do
+                                    !nodes1 <- gets (sNodes . stats)
+                                    -- store as upper score, and as move the first one (generated)
+                                    lift $ do
+                                        let typ = 0
+                                            !deltan = nodes1 - nodes0
+                                            mv = head $ unalt edges	-- not null, we are in "else" of noMove
+                                        ttStore de typ (pathScore bGrain) mv deltan
+                                if movno nstf > 1
+                                   then return $! bestPath s bGrain "2a"	-- should be "combinePath s bGrain" here?
+                                   else do	-- here: store exact mate or stalemate score!
+                                       chk <- lift tacticalPos
+                                       let s' = if chk then matedPath else staleMate
+                                       return $! trimaxPath bGrain b s'
     where bGrain = b -: scoreGrain
 
 data NullMoveResult = NoNullMove | NullMoveHigh | NullMoveLow | NullMoveThreat Path
