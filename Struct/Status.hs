@@ -103,6 +103,7 @@ data EvalWeights
           ewBackPOpen       :: !MidEnd,
           ewEnpHanging      :: !MidEnd,
           ewEnpEnPrise      :: !MidEnd,
+          ewDefend          :: !MidEnd,
           ewEnpAttacked     :: !MidEnd,
           ewLastLinePenalty :: !MidEnd,
           ewBishopPair      :: !MidEnd,
@@ -197,6 +198,7 @@ instance CollectParams EvalWeights where
           ewBackPOpen       = tme (-35)    0,
           ewEnpHanging      = tme (-23) (-33),
           ewEnpEnPrise      = tme (-25) (-21),
+          ewDefend          = tme (-24) (-5),
           ewEnpAttacked     = tme (-9) (-13),
           ewLastLinePenalty = tme 115 0,
           ewBishopPair      = tme 363  388,
@@ -262,6 +264,8 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
         ("end.enpHanging",     setEndEnpHanging),
         ("mid.enpEnPrise",     setMidEnpEnPrise),
         ("end.enpEnPrise",     setEndEnpEnPrise),
+        ("mid.defend",         setMidDefend),
+        ("end.defend",         setEndDefend),
         ("mid.enpAttacked",    setMidEnpAttacked),
         ("end.enpAttacked",    setEndEnpAttacked),
         ("mid.lastLinePenalty", setMidLastLinePenalty),
@@ -333,6 +337,8 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
           setEndEnpHanging      v' ew' = ew' { ewEnpHanging      = (ewEnpHanging      ew') { end = round v' }}
           setMidEnpEnPrise      v' ew' = ew' { ewEnpEnPrise      = (ewEnpEnPrise      ew') { mid = round v' }}
           setEndEnpEnPrise      v' ew' = ew' { ewEnpEnPrise      = (ewEnpEnPrise      ew') { end = round v' }}
+          setMidDefend          v' ew' = ew' { ewDefend          = (ewDefend          ew') { mid = round v' }}
+          setEndDefend          v' ew' = ew' { ewDefend          = (ewDefend          ew') { end = round v' }}
           setMidEnpAttacked     v' ew' = ew' { ewEnpAttacked     = (ewEnpAttacked     ew') { mid = round v' }}
           setEndEnpAttacked     v' ew' = ew' { ewEnpAttacked     = (ewEnpAttacked     ew') { end = round v' }}
           setMidLastLinePenalty v' ew' = ew' { ewLastLinePenalty = (ewLastLinePenalty ew') { mid = round v' }}

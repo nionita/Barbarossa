@@ -44,6 +44,7 @@ evalItems = [ EvIt Material,	-- material balance (i.e. white - black material
               EvIt Advers,	-- attacs of adverse squares
               EvIt RookPlc,	-- rooks points for placements
               EvIt EnPrise,	-- when not quiescent - pieces en prise
+              EvIt Defend,	-- malus for defending own lower pieces
               EvIt PaBlo,	-- pawn blocking
               EvIt Izolan,	-- isolated pawns
               EvIt Backward,	-- backward pawns
@@ -655,6 +656,24 @@ enPrise p ew mide = mad (mad (mad mide (ewEnpHanging ew) ha) (ewEnpEnPrise ew) e
               + 5 * popCount epR + 9 * popCount epQ
           !at = popCount atP + 3 * (popCount atN + popCount atB)
               + 5 * popCount atR + 9 * popCount atQ
+
+------ Defend -------
+-- When defending own (attacked) pieces we give a small malus, coz this could restrict our mobility
+-- (i.e. we must stay there to defend them)
+data Defend = Defend
+
+instance EvalItem Defend where
+    evalItem _ _ ew p _ mide = defend p ew mide
+
+-- For now very simple: we just count our attacked pieces, not defended by pawns
+-- and give a malus per piece
+defend :: MyPos -> EvalWeights -> MidEnd -> MidEnd
+defend p ew mide = mad mide (ewDefend ew) def
+    where !myAtt = (myNAttacs p .|. myBAttacs p .|. myRAttacs p .|. myQAttacs p) `less` myPAttacs p
+          !yoAtt = (yoNAttacs p .|. yoBAttacs p .|. yoRAttacs p .|. yoQAttacs p) `less` yoPAttacs p
+          !myAD  = popCount $ myAtt .&. me p .&. yoAttacs p
+          !yoAD  = popCount $ yoAtt .&. yo p .&. myAttacs p
+          !def   = myAD - yoAD
 
 ------ Last Line ------
 data LastLine = LastLine
