@@ -660,17 +660,18 @@ enPrise p ew mide = mad (mad (mad mide (ewEnpHanging ew) ha) (ewEnpEnPrise ew) e
 ------ Defend -------
 -- When defending own (attacked) pieces we give a small malus, coz this could restrict our mobility
 -- (i.e. we must stay there to defend them)
+-- Now just for the queen
 data Defend = Defend
 
 instance EvalItem Defend where
     evalItem _ _ ew p _ mide = defend p ew mide
 
--- For now very simple: we just count our attacked pieces, not defended by pawns
+-- For now very simple: we just count our attacked pieces, defended just by queen,
 -- and give a malus per piece
 defend :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 defend p ew mide = mad mide (ewDefend ew) def
-    where !myAtt = (myNAttacs p .|. myBAttacs p .|. myRAttacs p .|. myQAttacs p) `less` myPAttacs p
-          !yoAtt = (yoNAttacs p .|. yoBAttacs p .|. yoRAttacs p .|. yoQAttacs p) `less` yoPAttacs p
+    where !myAtt = myQAttacs p `less` (myPAttacs p .|. myNAttacs p .|. myBAttacs p .|. myRAttacs p)
+          !yoAtt = yoQAttacs p `less` (yoPAttacs p .|. yoNAttacs p .|. yoBAttacs p .|. yoRAttacs p)
           !myAD  = popCount $ myAtt .&. me p .&. yoAttacs p
           !yoAD  = popCount $ yoAtt .&. yo p .&. myAttacs p
           !def   = myAD - yoAD
