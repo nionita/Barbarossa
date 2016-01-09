@@ -1,10 +1,14 @@
 {-# LANGUAGE BangPatterns #-}
 module Moves.History (
-        History, newHist, toHist, valHist
+        History, newHist, toHist, valHist, histSortMoves
     ) where
 
+import Control.Monad.ST.Unsafe (unsafeIOToST)
+import Control.Monad.ST.Lazy
 import Data.Bits
+import Data.List (delete)
 import qualified Data.Vector.Unboxed.Mutable as V
+import qualified Data.Vector.Unboxed         as U
 import Struct.Struct
 
 type History = V.IOVector Int
@@ -54,3 +58,24 @@ subHist h !ad !p = do
     V.unsafeWrite h ad v
     where higLimit = 1000000000
           higHalf  =  500000000
+
+{-# INLINE histSortMoves #-}
+histSortMoves :: History -> [Move] -> [Move]
+histSortMoves h = mtsList . MTS h
+
+data MovesToSort = MTS History [Move]
+
+mtsList :: MovesToSort -> [Move]
+mtsList (MTS _ []) = []
+mtsList (MTS h ms) = m : mtsList mts
+    where (m, mts) = runST $ do
+              v <- strictToLazyST . unsafeIOToST $ U.unsafeFreeze h
+              let Just (m', _) = foldr (better v) Nothing ms
+              return (m', MTS h (delete m' ms))
+
+better :: U.Vector Int -> Move -> Maybe (Move, Int) -> Maybe (Move, Int)
+better v m Nothing = Just (m, U.unsafeIndex v (adr m))
+better v m old@(Just (_, s0))
+    = let !s = U.unsafeIndex v (adr m)
+      in if s < s0 then Just (m, s)
+                   else old
