@@ -6,7 +6,7 @@ module Moves.History (
 import Control.Monad.ST.Unsafe (unsafeIOToST)
 import Control.Monad.ST.Lazy
 import Data.Bits
-import Data.List (delete)
+import qualified Data.IntSet as S
 import qualified Data.Vector.Unboxed.Mutable as V
 import qualified Data.Vector.Unboxed         as U
 import Struct.Struct
@@ -60,18 +60,22 @@ subHist h !ad !p = do
           higHalf  =  500000000
 
 {-# INLINE histSortMoves #-}
-histSortMoves :: History -> [Move] -> [Move]
-histSortMoves h = mtsList . MTS h
+histSortMoves :: Int -> History -> [Move] -> [Move]
+histSortMoves d h ms
+    | d > 1     = mtsList $ MTS h $ S.fromList $ map (\(Move w) -> fromIntegral w) ms
+    | otherwise = ms
 
-data MovesToSort = MTS History [Move]
+data MovesToSort = MTS History S.IntSet
 
 mtsList :: MovesToSort -> [Move]
-mtsList (MTS _ []) = []
-mtsList (MTS h ms) = m : mtsList mts
+mtsList (MTS h ms)
+    | S.null ms = []
+    | otherwise = m : mtsList mts
     where (m, mts) = runST $ do
               v <- strictToLazyST . unsafeIOToST $ U.unsafeFreeze h
-              let Just (m', _) = foldr (better v) Nothing ms
-              return (m', MTS h (delete m' ms))
+              let Just (m'@(Move w), _)
+                      = foldr (better v) Nothing $ map (Move . fromIntegral) $ S.elems ms
+              return (m', MTS h (S.delete (fromIntegral w) ms))
 
 better :: U.Vector Int -> Move -> Maybe (Move, Int) -> Maybe (Move, Int)
 better v m Nothing = Just (m, U.unsafeIndex v (adr m))
