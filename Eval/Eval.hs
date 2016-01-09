@@ -412,7 +412,7 @@ kingMaterBonus c !myp !mat !ksq
 
 -- Make it longer, for artificially increased distances
 proxyBonusArr :: UArray Int Int    -- 0   1  2  3  4  5  6  7
-proxyBonusArr = listArray (0, 15) $ [55, 20, 8, 4, 3, 2, 1] ++ repeat 0
+proxyBonusArr = listArray (0, 15) $ [220, 80, 32, 16, 12, 8, 4] ++ repeat 0
 
 matKCArr :: UArray Int Int   -- 0              5             10
 matKCArr = listArray (0, 63) $ [0, 0, 0, 1, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12] ++ repeat 12
