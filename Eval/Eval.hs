@@ -358,16 +358,12 @@ promoW, promoB :: Square -> Square
 promoW s = 56 + (s .&. 7)
 promoB s =       s .&. 7
 
--- promoFieldDistIncr :: Int -> Int
--- promoFieldDistIncr = \d -> d + 1
-
 -- We give bonus also for pawn promotion squares, if the pawn is near enough to promote
 -- Give as parameter bitboards for all pawns, white pawns and black pawns for performance
 kingPawnsBonus :: Square -> BBoard -> BBoard -> BBoard -> Int
 kingPawnsBonus !ksq !alp !wpass !bpass = bonus
-    where !bpsqs = sum $ map (proxyBonus . squareDistance ksq) $ bbToSquares alp
-          -- !bqsqs = sum $ map (proxyBonus . promoFieldDistIncr . squareDistance ksq)
-          !bqsqs = sum $ map (proxyBonus . squareDistance ksq)
+    where !bpsqs = sum $ map (pawnBonus . squareDistance ksq) $ bbToSquares alp
+          !bqsqs = sum $ map (pawnBonus . squareDistance ksq)
                        $ map promoW (bbToSquares wpass) ++ map promoB (bbToSquares bpass)
           !bonus = bpsqs + bqsqs
 
@@ -411,22 +407,20 @@ kingMaterBonus c !myp !mat !ksq
           shBH7 = row7 .&. (fileF .|. fileG .|. fileH)
 
 -- Make it longer, for artificially increased distances
-proxyBonusArr :: UArray Int Int     -- 0    1   2   3   4   5  6  7
-proxyBonusArr = listArray (0, 15) $ [220, 120, 70, 35, 23, 14, 7] ++ repeat 0
+proxyBonusArr :: UArray Int Int    -- 0   1  2  3  4  5  6  7
+proxyBonusArr = listArray (0, 15) $ [55, 20, 8, 4, 3, 2, 1] ++ repeat 0
 
-matKCArr :: UArray Int Int   -- 0              5             10
-matKCArr = listArray (0, 63) $ [0, 0, 0, 1, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12] ++ repeat 12
+pawnBonusArr :: UArray Int Int     -- 0    1   2   3   4   5  6  7
+pawnBonusArr = listArray (0, 15) $ [220, 120, 70, 35, 23, 14, 7] ++ repeat 0
 
 proxyBonus :: Int -> Int
 proxyBonus = unsafeAt proxyBonusArr
 
-{--
-proxyLineArr :: UArray Int Int -- 7  6  5  4  3  2   1   0   1   2   3  4  5  6  7
-proxyLineArr = listArray (-7, 7) [0, 1, 2, 3, 5, 10, 25, 75, 25, 10, 5, 3, 2, 1, 0]
+pawnBonus :: Int -> Int
+pawnBonus = unsafeAt pawnBonusArr
 
-proxyLine :: Int -> Square -> Int
-proxyLine line sq = proxyBonusArr `unsafeAt` (unsafeShiftR sq 3 - line)
---}
+matKCArr :: UArray Int Int   -- 0              5             10
+matKCArr = listArray (0, 63) $ [0, 0, 0, 1, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12] ++ repeat 12
 
 ------ Rookm placement points ------
 data RookPlc = RookPlc
