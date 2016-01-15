@@ -127,7 +127,7 @@ instance CollectParams EvalParams where
                     epMaterScale = 1,
                     epMaterBonusScale = 5,
                     epPawnBonusScale  = 1,
-                    epPassKingProx    = 12,	-- max after ~12k Clop games (ELO +23 +- 12)
+                    epPassKingProx    = 13,	-- "best" after ~12k Clop games (with best neighbours)
                     epPassBlockO = 11,
                     epPassBlockA = 17,
                     epPassMin    = 30,
@@ -176,7 +176,7 @@ instance CollectParams EvalWeights where
           ewKingSafe        = tme 1 0,
           ewKingOpen        = tme 12 0,
           ewKingPlaceCent   = tme 6 0,
-          ewKingPlacePwns   = tme 0 6,		-- max after ~12k Clop games (ELO +23 +- 12)
+          ewKingPlacePwns   = tme 0 4,		-- "best" after ~12k Clop games (with best neighbours)
           ewRookHOpen       = tme 171 202,
           ewRookOpen        = tme 219 221,
           ewRookConn        = tme  96  78,
