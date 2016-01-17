@@ -198,7 +198,7 @@ instance CollectParams EvalWeights where
           ewBackPOpen       = tme (-35)    0,
           ewEnpHanging      = tme (-23) (-33),
           ewEnpEnPrise      = tme (-25) (-21),
-          ewDefend          = tme (-24) (-5),
+          ewDefend          = tme (-80) 0,
           ewEnpAttacked     = tme (-9) (-13),
           ewLastLinePenalty = tme 115 0,
           ewBishopPair      = tme 363  388,
