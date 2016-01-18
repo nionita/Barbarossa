@@ -7,6 +7,8 @@ import Control.Monad.ST.Unsafe (unsafeIOToST)
 import Control.Monad.ST.Lazy
 import Data.Bits
 import qualified Data.IntSet as S
+import Data.List (foldl', sortBy)
+import Data.Ord (comparing)
 import qualified Data.Vector.Unboxed.Mutable as V
 import qualified Data.Vector.Unboxed         as U
 import Struct.Struct
@@ -63,7 +65,7 @@ subHist h !ad !p = do
 histSortMoves :: Int -> History -> [Move] -> [Move]
 histSortMoves d h ms
     | d > 1     = mtsList $ MTS h $ S.fromList $ map (\(Move w) -> fromIntegral w) ms
-    | otherwise = ms
+    | otherwise = dirSort h ms
 
 data MovesToSort = MTS History S.IntSet
 
@@ -74,12 +76,17 @@ mtsList (MTS h ms)
     where (m, mts) = runST $ do
               v <- strictToLazyST . unsafeIOToST $ U.unsafeFreeze h
               let Just (m'@(Move w), _)
-                      = foldr (better v) Nothing $ map (Move . fromIntegral) $ S.elems ms
+                      = foldl' (better v) Nothing $ map (Move . fromIntegral) $ S.elems ms
               return (m', MTS h (S.delete (fromIntegral w) ms))
 
-better :: U.Vector Int -> Move -> Maybe (Move, Int) -> Maybe (Move, Int)
-better v m Nothing = Just (m, U.unsafeIndex v (adr m))
-better v m old@(Just (_, s0))
+better :: U.Vector Int -> Maybe (Move, Int) -> Move -> Maybe (Move, Int)
+better v Nothing m = Just (m, U.unsafeIndex v (adr m))
+better v old@(Just (_, s0)) m
     = let !s = U.unsafeIndex v (adr m)
       in if s < s0 then Just (m, s)
                    else old
+
+dirSort :: History -> [Move] -> [Move]
+dirSort h ms = runST $ do
+    v <- strictToLazyST . unsafeIOToST $ U.unsafeFreeze h
+    return $ map fst $ sortBy (comparing snd) $ map (\m -> (m, U.unsafeIndex v (adr m))) ms
