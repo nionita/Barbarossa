@@ -1,16 +1,19 @@
 {-# LANGUAGE BangPatterns #-}
+
 module Moves.History (
         History, newHist, toHist, valHist, histSortMoves
     ) where
 
 import Control.Monad.ST.Unsafe (unsafeIOToST)
-import Control.Monad.ST.Lazy
+import Control.Monad.ST
 import Data.Bits
-import qualified Data.IntSet as S
-import Data.List (foldl', sortBy)
+import qualified Data.Set as S
 import Data.Ord (comparing)
+import qualified Data.Vector.Algorithms.Heap as H	-- Intro sort was slower
 import qualified Data.Vector.Unboxed.Mutable as V
 import qualified Data.Vector.Unboxed         as U
+import Data.Word
+
 import Struct.Struct
 
 type History = V.IOVector Int
@@ -67,26 +70,34 @@ histSortMoves d h ms
     | d > 1     = mtsList $ MTS h $ S.fromList $ map (\(Move w) -> fromIntegral w) ms
     | otherwise = dirSort h ms
 
-data MovesToSort = MTS History S.IntSet
+data MovesToSort = MTS History (S.Set Word16)
 
 mtsList :: MovesToSort -> [Move]
 mtsList (MTS h ms)
     | S.null ms = []
     | otherwise = m : mtsList mts
     where (m, mts) = runST $ do
-              v <- strictToLazyST . unsafeIOToST $ U.unsafeFreeze h
-              let Just (m'@(Move w), _)
-                      = foldl' (better v) Nothing $ map (Move . fromIntegral) $ S.elems ms
-              return (m', MTS h (S.delete (fromIntegral w) ms))
+              let uz = zipVals h $ S.elems ms
+              vz <- U.unsafeThaw uz
+              H.selectBy (comparing snd) vz 1
+              w <- fst <$> V.unsafeRead vz 0
+              return (Move w, MTS h (S.delete w ms))
 
-better :: U.Vector Int -> Maybe (Move, Int) -> Move -> Maybe (Move, Int)
-better v Nothing m = Just (m, U.unsafeIndex v (adr m))
-better v old@(Just (_, s0)) m
-    = let !s = U.unsafeIndex v (adr m)
-      in if s < s0 then Just (m, s)
-                   else old
+zipVals :: History -> [Word16] -> U.Vector (Word16, Int)
+zipVals h ws = runST $ do
+    v  <- unsafeIOToST $ U.unsafeFreeze h
+    let uw = U.fromList ws
+        uv = U.map (\w -> U.unsafeIndex v (adr (Move w))) uw
+    vw <- U.unsafeThaw uw
+    vv <- U.unsafeThaw uv
+    uz <- U.unsafeFreeze $ V.zip vw vv
+    return uz
 
 dirSort :: History -> [Move] -> [Move]
 dirSort h ms = runST $ do
-    v <- strictToLazyST . unsafeIOToST $ U.unsafeFreeze h
-    return $ map fst $ sortBy (comparing snd) $ map (\m -> (m, U.unsafeIndex v (adr m))) ms
+    let uz = zipVals h $ map (\(Move w) -> w) ms
+    vz <- U.unsafeThaw uz
+    H.sortBy (comparing snd) vz
+    us <- U.unsafeFreeze vz
+    let (uw, _) = U.unzip us
+    return $ map Move $ U.toList uw
