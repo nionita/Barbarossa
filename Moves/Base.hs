@@ -135,14 +135,6 @@ checkGenMove p m@(Move w)
           mc = moving p
           wrong mes = Left $ "checkGenMove: " ++ mes ++ " for move "
                             ++ showHex w (" in pos\n" ++ showMyPos p)
-
-sortMovesFromHist :: [Move] -> Game [Move]
-sortMovesFromHist mvs = do
-    s <- get
-    mvsc <- liftIO $ mapM (\m -> valHist (hist s) m) mvs
-    let (posi, zero) = partition ((/=0) . snd) $ zip mvs mvsc
-    -- return $! map fst $ sortBy (comparing snd) posi ++ zero
-    return $ map fst $ sortBy (comparing snd) posi ++ zero	-- does it differ?
 --}
 
 -- massert :: String -> Game Bool -> Game ()
