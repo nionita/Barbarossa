@@ -92,8 +92,14 @@ subHist h !ad !p = do
 -- are expected to change the order between moves anymore
 -- The structure has the history, a zipped vector of move (as Word16 part) and
 -- history address and the index of the last valid move in that vector
-type MoveVect = U.Vector (Word16, Int)	-- move, history index
+type MoveVect = U.Vector (Word16, Word16)	-- move, history index (short form)
 data MovesToSort = MTS History MoveVect !Int
+
+-- We want to alloc a fix amount of memory, and although there are
+-- positions which have more (quiet) moves, they are very rare
+-- and we will ignore them for now
+maxMoves :: Int
+maxMoves = 128
 
 -- For remaining depth 1 and 2 we can't have changed history values between the moves
 -- For 1: every cut will get better history score, but that move is already out of the remaining list
@@ -110,8 +116,8 @@ histSortMoves d h ms
 {-# INLINE makeMTS #-}
 makeMTS :: History -> [Move] -> MovesToSort
 makeMTS h ms = MTS h (U.zip uw ua) k
-    where uw = U.fromList $ map (\(Move w) -> w) ms
-          ua = U.fromList $ adrs ms	-- is fromListN faster?
+    where uw = U.fromListN maxMoves $ map (\(Move w) -> w) ms
+          ua = U.fromListN maxMoves $ map fromIntegral $ adrs ms
           k  = U.length uw - 1
 
 -- Transform the structure lazyli to a move list
@@ -123,16 +129,18 @@ mtsList (MTS h uwa k)
     where (m, mts) = runST $ do
           uh <- unsafeIOToST $ U.unsafeFreeze h
           let (uw, ua) = U.unzip uwa
+              -- Indirect history value:
+              hival = U.unsafeIndex uh . fromIntegral . U.unsafeIndex ua
               -- To find index of min history values
               go !i !i0 !v0
                   | i > k     = i0
                   | otherwise =
-                       let !j = U.unsafeIndex ua i	-- index of this move in history
-                           !v = U.unsafeIndex uh j	-- history value of this move
+                       let v = hival i	-- history value of this position
                        in if v < v0	-- we take minimum coz that trick (bigger is worse)
                              then go (i+1) i  v
                              else go (i+1) i0 v0
-          let !i = go 0 (-1) maxBound
+          let !v0 = hival 0
+              !i = go 1 0 v0
               !w = U.unsafeIndex uw i		-- this is the (first) best move
           -- Now swap the minimum with the last active element for both vectors
           -- to eliminate the used move (if necessary)
@@ -157,8 +165,8 @@ oneMove uwa = [ Move $ U.unsafeIndex uw 0 ]
 dirSort :: History -> [Move] -> [Move]
 dirSort h ms = runST $ do
     uh <- unsafeIOToST $ U.unsafeFreeze h
-    let uw = U.fromList $ map (\(Move w) -> w) ms
-        uv = U.fromList $ map (U.unsafeIndex uh) $ adrs ms
+    let uw = U.fromListN maxMoves $ map (\(Move w) -> w) ms
+        uv = U.fromListN maxMoves $ map (U.unsafeIndex uh) $ adrs ms
         uz = U.zip uw uv
     vz <- U.unsafeThaw uz
     H.sortBy (comparing snd) vz
