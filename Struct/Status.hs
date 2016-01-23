@@ -97,6 +97,7 @@ data EvalWeights
           ewCenterQAtts     :: !MidEnd,
           ewCenterKAtts     :: !MidEnd,
           ewAdvAtts         :: !MidEnd,
+          ewPCenter         :: !MidEnd,
           ewIsolPawns       :: !MidEnd,
           ewIsolPassed      :: !MidEnd,
           ewBackPawns       :: !MidEnd,
@@ -191,6 +192,7 @@ instance CollectParams EvalWeights where
           ewCenterQAtts     = tme  4 62,
           ewCenterKAtts     = tme  0 56,
           ewAdvAtts         = tme  3 16,
+          ewPCenter         = tme 56 36,
           ewIsolPawns       = tme (-38) (-119),
           ewIsolPassed      = tme (-60) (-153),
           ewBackPawns       = tme (-102) (-182),
@@ -250,6 +252,8 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
         ("end.centerKAtts",    setEndCenterKAtts),
         ("mid.adversAtts",     setMidAdvAtts),
         ("end.adversAtts",     setEndAdvAtts),
+        ("mid.pCenter",        setMidPCenter),
+        ("end.pCenter",        setEndPCenter),
         ("mid.isolPawns",      setMidIsolPawns),
         ("end.isolPawns",      setEndIsolPawns),
         ("mid.isolPassed",     setMidIsolPassed),
@@ -321,6 +325,8 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
           setEndCenterKAtts     v' ew' = ew' { ewCenterKAtts     = (ewCenterKAtts     ew') { end = round v' }}
           setMidAdvAtts         v' ew' = ew' { ewAdvAtts         = (ewAdvAtts         ew') { mid = round v' }}
           setEndAdvAtts         v' ew' = ew' { ewAdvAtts         = (ewAdvAtts         ew') { end = round v' }}
+          setMidPCenter         v' ew' = ew' { ewPCenter         = (ewPCenter         ew') { mid = round v' }}
+          setEndPCenter         v' ew' = ew' { ewPCenter         = (ewPCenter         ew') { end = round v' }}
           setMidIsolPawns       v' ew' = ew' { ewIsolPawns       = (ewIsolPawns       ew') { mid = round v' }}
           setEndIsolPawns       v' ew' = ew' { ewIsolPawns       = (ewIsolPawns       ew') { end = round v' }}
           setMidIsolPassed      v' ew' = ew' { ewIsolPassed      = (ewIsolPassed      ew') { mid = round v' }}
