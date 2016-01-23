@@ -1089,7 +1089,7 @@ genAndSort nst a b d = do
 {-# INLINE reduceLmr #-}
 reduceLmr :: Int -> Bool -> Bool -> Int -> Int -> Int -> Int
 reduceLmr !d nearmatea !spec !exd lmrlev w
-    | not lmrActive || spec || exd > 0 || d <= 1 || nearmatea = d
+    | not lmrActive || spec || exd > 0 || d <= 2 || nearmatea = d
     | otherwise                                               = max 1 $ d - lmrArr!(lmrlev, w)
 
 -- Adjust the LMR related parameters in the state
