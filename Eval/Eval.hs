@@ -539,6 +539,10 @@ isolDiff p ew mide = mad (mad mide (ewIsolPawns ew) nd) (ewIsolPassed ew) pd
           !nd = myr - yor
           !pd = myp - yop
 
+-- This is not really isolated pawn: it is
+-- - neither supported by pawn
+-- - nor supporting a pawn
+-- - nor in line with an own pawn
 isol :: BBoard -> BBoard -> (Int, Int)
 isol ps pp = (ris, pis)
     where !myp = ps .&. pp
