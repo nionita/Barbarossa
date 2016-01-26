@@ -191,7 +191,7 @@ instance CollectParams EvalWeights where
           ewCenterQAtts     = tme  4 62,
           ewCenterKAtts     = tme  0 56,
           ewAdvAtts         = tme  3 16,
-          ewIsolPawns       = tme (-56) (-124),
+          ewIsolPawns       = tme (-33) (-124),	-- 3060 clops against ECE (mid)
           ewIsolPassed      = tme (-64) (-160),
           ewBackPawns       = tme (-120) (-180),
           ewBackPOpen       = tme (-35)    0,
@@ -204,7 +204,7 @@ instance CollectParams EvalWeights where
           ewRookPawn        = tme (-50) (-40),
           ewAdvPawn5        = tme   10  130,
           ewAdvPawn6        = tme  440  500,
-          ewPawnBlockP      = tme (-128) (-112),
+          ewPawnBlockP      = tme (-128) (-112),	-- 3060 clops against ECE (mid)
           ewPawnBlockO      = tme (-23) (-27),
           ewPawnBlockA      = tme (-14) (-73),
           ewPassPawnLev     = tme 0 9
