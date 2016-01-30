@@ -192,7 +192,7 @@ instance CollectParams EvalWeights where
           ewCenterKAtts     = tme  0 56,
           ewAdvAtts         = tme  3 16,
           ewIsolPawns       = tme (-33) (-124),	-- 3060 clops against ECE (mid)
-          ewIsolPassed      = tme (-64) (-160),
+          ewIsolPassed      = tme (-56) (-216),	-- 8316 clops, mean, 5+-13 ELO (against pju)
           ewBackPawns       = tme (-120) (-180),
           ewBackPOpen       = tme (-35)    0,
           ewEnpHanging      = tme (-23) (-33),
