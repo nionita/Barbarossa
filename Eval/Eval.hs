@@ -74,8 +74,9 @@ posEval :: MyPos -> EvalState -> (Int, Int)
 posEval !p !sti = (scc, ksd)
     where (sce, ksd) = evalDispatch p sti
           !scl = min matesc $ max (-matesc) sce
-          !scc | granCoarse > 0 = (scl + granCoarse2) .&. granCoarseM
-               | otherwise      = scl
+          -- !scc | granCoarse > 0 = (scl + granCoarse2) .&. granCoarseM
+          --      | otherwise      = scl
+          !scc = (scl + granCoarse2) .&. granCoarseM
 
 evalDispatch :: MyPos -> EvalState -> (Int, Int)
 evalDispatch !p !sti
@@ -104,7 +105,7 @@ normalEval !p !sti = (sc, ksd)
           gph  = gamePhase p
           sc   = ((mid feat + epMovingMid ep) * gph + (end feat + epMovingEnd ep) * (256 - gph))
                    `unsafeShiftR` (shift2Cp + 8)
-          ksd  = eiKSD ei
+          ksd  = eiKSD ei `unsafeShiftR` shift2Cp
 
 {-# INLINE evalFactor #-}
 evalFactor :: (Int, Int) -> Int -> (Int, Int)
@@ -141,7 +142,7 @@ evalNoPawns !p !sti = sc
               | kMxk        = (mateKMajxK p kaloneyo, ksd)	-- simple mate with at least one major
               | lessRook p  = evalFactor (normalEval p sti) 1
               | otherwise   = normalEval p sti
-          ksd = 350
+          ksd = 150
           kaloneme = me p `less` kings p == 0
           kaloneyo = yo p `less` kings p == 0
           onlykings = kaloneme && kaloneyo
