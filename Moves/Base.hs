@@ -8,7 +8,7 @@
 module Moves.Base (
     posToState, getPos, posNewSearch,
     doRealMove, doMove, undoMove, genMoves, genTactMoves, canPruneMove,
-    useHash,
+    useHash, pruneVals,
     staticVal, materVal, tacticalPos, isMoveLegal, isKillCand, isTKillCand, okInSequence,
     betaCut, doNullMove, ttRead, ttStore, curNodes, chooseMove, isTimeout, informCtx,
     mateScore, scoreDiff,
@@ -74,8 +74,8 @@ posToState p c h e = MyState {
                        stats = stats0,
                        evalst = e
                    }
-    where stsc = evalState (posEval p) e
-          p'' = p { staticScore = stsc }
+    where (stsc, ksd) = posEval p e
+          p'' = p { staticScore = stsc, kSafeDiff = ksd }
           stats0 = Stats { nodes = 0, maxmvs = 0 }
 
 posNewSearch :: MyState -> MyState
@@ -222,8 +222,8 @@ doMove m qs = do
                then return Illegal
                else do
                    -- bigCheckPos "doMove" pc (Just m) p'
-                   let sts = evalState (posEval p') (evalst s)
-                       p = p' { staticScore = sts }
+                   let (sts, ksd) = posEval p' (evalst s)
+                       p = p' { staticScore = sts, kSafeDiff = ksd }
                    put s { stack = p : stack s }
                    remis <- if qs then return False else checkRemisRules p'
                    if remis
@@ -236,10 +236,10 @@ doNullMove :: Game ()
 doNullMove = do
     -- logMes "** doMove null"
     s <- get
-    let !p0 = if null (stack s) then error "doNullMove" else head $ stack s
-        !p' = reverseMoving p0
-        !sts = evalState (posEval p') (evalst s)
-        !p = p' { staticScore = sts }
+    let p0 = if null (stack s) then error "doNullMove" else head $ stack s
+        p' = reverseMoving p0
+        (sts, ksd) = posEval p' (evalst s)
+        p = p' { staticScore = sts, kSafeDiff = ksd }
     -- bigCheckPos "doNullMove" p0 Nothing p'
     put s { stack = p : stack s }
 
@@ -320,6 +320,10 @@ okInSequence m1 m2 = do
 staticVal :: Game Int
 staticVal = staticScore <$> getPos
 
+{-# INLINE pruneVals #-}
+pruneVals :: Game (Int, Int)
+pruneVals = ((,) <$> staticScore <*> kSafeDiff) <$> getPos
+
 {-# INLINE finNode #-}
 finNode :: String -> Bool -> Game ()
 finNode str force = do
@@ -394,9 +398,9 @@ canPruneMove m
     | not (moveIsNormal m) = return False
     | otherwise = do
         p <- getPos
-        return $! if moveIsCapture p m
-                     then False
-                     else not $ moveChecks p m
+        if moveIsCapture p m
+           then return False
+           else return $! not $ moveChecks p m
 
 -- Score difference obtained by last move, from POV of the moving part
 -- It considers the fact that static score is for the part which has to move

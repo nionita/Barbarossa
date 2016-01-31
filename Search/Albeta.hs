@@ -1137,15 +1137,11 @@ isPruneFutil d a pv
     | pv && d > maxFutilDepth = return False
     | d > maxFutilDepth + 1   = return False	-- for zero window searches we allow higher futility depth
     | otherwise = do
-        tact <- lift tacticalPos
-        v <- lift staticVal
+        (v, ks) <- lift pruneVals	-- futility margin depends on king safety
         m <- varFutVal	-- variable futility value
         let !margin = futilMargins d m
-            !fusc | tact      = checkFutMargin	-- even worse when in check
-                  | otherwise = 0
             sc = pathScore a
-        return $! v + margin <= sc + fusc
-    where checkFutMargin = 0	-- try it
+        return $! v + (ks `unsafeShiftR` 1) + margin <= sc
 
 -- updateFutil :: Int -> Move -> Search ()
 -- updateFutil sd e = do
