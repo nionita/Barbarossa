@@ -192,7 +192,7 @@ instance CollectParams EvalWeights where
           ewCenterQAtts     = tme  4 62,
           ewCenterKAtts     = tme  0 56,
           ewAdvAtts         = tme  3 16,
-          ewPCenter         = tme 56 36,
+          ewPCenter         = tme 99 76,	-- after 4272 clops against pju (+55+-35, unstable)
           ewIsolPawns       = tme (-38) (-119),
           ewIsolPassed      = tme (-60) (-153),
           ewBackPawns       = tme (-102) (-182),
