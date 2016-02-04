@@ -939,7 +939,8 @@ pvInnerLoopExtenZ b d spec !exd nst redu = do
     -- late move reduction
     let !d1 = d + exd' - 1	-- this is the normal (unreduced) depth for next search
         !d' = if redu
-                 then reduceLmr d1 (pnearmate b) spec exd (lmrlv old) (movno nst - spcno nst)
+                 then reduceLmr d1 (pnearmate b) spec exd (lmrlv old)
+                                (movno nst - spcno nst + killerLMR (killer nst))
                  else d1
     pindent $ "depth " ++ show d ++ " nt " ++ show (crtnt nst)
               ++ " exd' = " ++ show exd' ++ " mvn " ++ show (movno nst) ++ " next depth " ++ show d'
@@ -1411,6 +1412,12 @@ killerToList :: Killer -> [Move]
 killerToList  NoKiller          = []
 killerToList (OneKiller e)      = [e]
 killerToList (TwoKillers e1 e2) = [e1, e2]
+
+-- More LMR when we have some killer
+killerLMR :: Killer -> Int
+killerLMR  NoKiller        = 0
+killerLMR (OneKiller _)    = 1
+killerLMR (TwoKillers _ _) = 2
 
 --- Communication to the outside - some convenience functions ---
 
