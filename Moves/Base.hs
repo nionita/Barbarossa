@@ -18,10 +18,10 @@ module Moves.Base (
 ) where
 
 import Data.Bits
-import Data.List
+-- import Data.List
 import Control.Monad.State
 import Control.Monad.Reader (ask)
-import Data.Ord (comparing)
+-- import Data.Ord (comparing)
 -- import Numeric
 import System.Random
 
@@ -85,17 +85,19 @@ posNewSearch p = p { hash = newGener (hash p) }
 loosingLast :: Bool
 loosingLast = True
 
-genMoves :: Game ([Move], [Move])
-genMoves = do
+genMoves :: Int -> Game ([Move], [Move])
+genMoves d = do
     p <- getPos
     if isCheck p $ moving p
        then return (genMoveFCheck p, [])
        else do
+            h <- gets hist
             let l0 = genMoveCast p
                 l1 = genMovePromo p
                 (l2w, l2l) = genMoveCaptWL p
                 l3' = genMoveNCapt p
-            l3 <- sortMovesFromHist l3'
+                l3 = histSortMoves d h l3'
+            -- l3 <- sortMovesFromHist l3'
             return $! if loosingLast
                          then (l1 ++ l2w, l0 ++ l3 ++ l2l)
                          else (l1 ++ l2w ++ l2l, l0 ++ l3)
@@ -134,14 +136,6 @@ checkGenMove p m@(Move w)
           wrong mes = Left $ "checkGenMove: " ++ mes ++ " for move "
                             ++ showHex w (" in pos\n" ++ showMyPos p)
 --}
-
-sortMovesFromHist :: [Move] -> Game [Move]
-sortMovesFromHist mvs = do
-    s <- get
-    mvsc <- liftIO $ mapM (\m -> valHist (hist s) m) mvs
-    let (posi, zero) = partition ((/=0) . snd) $ zip mvs mvsc
-    -- return $! map fst $ sortBy (comparing snd) posi ++ zero
-    return $ map fst $ sortBy (comparing snd) posi ++ zero	-- does it differ?
 
 -- massert :: String -> Game Bool -> Game ()
 -- massert s mb = do
