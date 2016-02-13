@@ -392,12 +392,11 @@ moveIsCaptPromo p m
 canPruneMove :: Move -> Game Bool
 canPruneMove m
     | not (moveIsNormal m) = return False
-    | moveAdvPawn m        = return False
     | otherwise = do
         p <- getPos
         if moveIsCapture p m
            then return False
-           else if movePassed p m
+           else if moveIs7th m && movePassed p m
                    then return False
                    else if moveChecks p m
                            then return False
