@@ -2,7 +2,7 @@
 module Moves.Board (
     posFromFen, initPos,
     isCheck, inCheck,
-    goPromo, moveIsCapture, movePassed, moveAdvPawn,
+    goPromo, moveIsCapture, movePassed, moveIs7th,
     castKingRookOk, castQueenRookOk,
     genMoveCast, genMoveNCapt, genMovePromo, genMoveFCheck, genMoveCaptWL,
     genMoveNCaptToCheck,
@@ -47,13 +47,11 @@ goPromo p m
 movePassed :: MyPos -> Move -> Bool
 movePassed p m = passed p .&. (uBit $ fromSquare m) /= 0
 
-{-# INLINE moveAdvPawn #-}
-moveAdvPawn :: Move -> Bool
-moveAdvPawn m = movePiece m == Pawn && fw .&. mid /= 0 && tw .&. miid /= 0
-    where fw = uBit $ fromSquare m
-          tw = uBit $ toSquare m
-          mid  = 0x000000FFFF000000
-          miid = 0x0000FFFFFFFF0000
+{-# INLINE moveIs7th #-}
+moveIs7th :: Move -> Bool
+moveIs7th m = tw .&. seven /= 0
+    where tw    = uBit $ toSquare m
+          seven = 0x00FF00000000FF00
 
 genMoveNCapt :: MyPos -> [Move]
 genMoveNCapt !p = map (moveAddColor c)
