@@ -57,7 +57,7 @@ zeroHist = U.replicate vsize 0
 
 -- We initialize a new history with the max mix draft, coz we know the old one is useless
 newHist :: IO History
-newHist = History maxMixDraft zeroHist <$> V.replicate vsize 0
+newHist = History switchDraft zeroHist <$> V.replicate vsize 0
 
 swiHist :: History -> IO History
 swiHist (History _ _ v) = do
@@ -106,24 +106,21 @@ subHist h !ad !p = do
 -- best move (by history values), because we want to use for every selected move
 -- the latest history values - we do this except for depths 1 and 2, where no history changes
 -- are expected to change the order between moves anymore
--- Now we have to mix old/new history for smaller drafts, so we need 2 structures
--- The structures have the vectors (one or two), a zipped vector of move (as Word16 part) and
+-- Now we have to switch old/new history depending on draft
+-- The structures has the old or new vector, a zipped vector of move (as Word16 part) and
 -- history address and the index of the last valid move in that vector
 type MoveVect = U.Vector (Word16, Word16)	-- move, history index (short form)
-data MovesToSort  = MTS                   (V.IOVector Int32) MoveVect !Int
-data MovesToSort2 = MTS2 (U.Vector Int32) (V.IOVector Int32) MoveVect !Int !Int32
+data MovesToSort = MTS (Either (U.Vector Int32) (V.IOVector Int32)) MoveVect !Int
 
--- We want to alloc a fix amount of memory, and although there are
--- positions which have more (quiet) moves, they are very rare
+-- We want to alloc a fix amount of memory, and although there are maybe
+-- positions which have more (quiet) moves, they must be very rare
 -- and we will ignore them for now
 maxMoves :: Int
 maxMoves = 128
 
--- We mix values of old history with those of new history, giving more weight to
--- the new one as we go deeper, but at some max draft we take only the new one
-maxMixShift, maxMixDraft :: Int
-maxMixShift = 3		-- for draft 4 (or 3, for 8)
-maxMixDraft = 1 `unsafeShiftL` maxMixShift
+-- For small drafts we use values of old history, for higher - those of new history
+switchDraft :: Int
+switchDraft = 5
 
 -- For remaining depth 1 and 2 we can't have changed history values between the moves
 -- For 1: every cut will get better history score, but that move is already out of the remaining list
@@ -134,23 +131,16 @@ maxMixDraft = 1 `unsafeShiftL` maxMixShift
 histSortMoves :: Int -> History -> [Move] -> [Move]
 histSortMoves d (History draft hold hnew) ms
     | null ms   = []
-    | d > 2     = if draft >= maxMixDraft
-                     then mtsList  $ makeMTS       hnew ms
-                     else mtsList2 $ makeMTS2 hold hnew ms $ fromIntegral draft
-    | otherwise = if draft >= maxMixDraft
-                     then dirSort       hnew ms
-                     else dirSort2 hold hnew ms $ fromIntegral draft
+    | d > 2     = if draft >= switchDraft
+                     then mtsList $ makeMTS (Right hnew) ms
+                     else mtsList $ makeMTS (Left  hold) ms
+    | otherwise = if draft >= switchDraft
+                     then dirSort (Right hnew) ms
+                     else dirSort (Left  hold) ms
 
 {-# INLINE makeMTS #-}
-makeMTS :: V.IOVector Int32 -> [Move] -> MovesToSort
-makeMTS v ms = MTS v (U.zip uw ua) k
-    where uw = U.fromListN maxMoves $ map (\(Move w) -> w) ms
-          ua = U.fromListN maxMoves $ map fromIntegral $ adrs ms
-          k  = U.length uw - 1
-
-{-# INLINE makeMTS2 #-}
-makeMTS2 :: U.Vector Int32 -> V.IOVector Int32 -> [Move] -> Int32 -> MovesToSort2
-makeMTS2 u v ms d = MTS2 u v (U.zip uw ua) k d
+makeMTS :: Either (U.Vector Int32) (V.IOVector Int32) -> [Move] -> MovesToSort
+makeMTS ev ms = MTS ev (U.zip uw ua) k
     where uw = U.fromListN maxMoves $ map (\(Move w) -> w) ms
           ua = U.fromListN maxMoves $ map fromIntegral $ adrs ms
           k  = U.length uw - 1
@@ -162,7 +152,9 @@ mtsList (MTS h uwa k)
     | k == 0    = oneMove uwa	-- last move: no history value needed
     | otherwise = m : mtsList mts
     where (m, mts) = runST $ do
-          uh <- unsafeIOToST $ U.unsafeFreeze h
+          uh <- case h of
+                    Left  u -> return u
+                    Right v -> unsafeIOToST $ U.unsafeFreeze v
           let (uw, ua) = U.unzip uwa
               -- Indirect history value:
               hival = U.unsafeIndex uh . fromIntegral . U.unsafeIndex ua
@@ -190,46 +182,6 @@ mtsList (MTS h uwa k)
                  ua' <- U.unsafeFreeze va
                  return (Move w, MTS h (U.zip uw' ua') (k-1))
 
--- Transform the structure lazyli to a move list
-mtsList2 :: MovesToSort2 -> [Move]
-mtsList2 (MTS2 u v uwa k d)
-    | k <  0    = []		-- no further moves
-    | k == 0    = oneMove uwa	-- last move: no history value needed
-    | otherwise = m : mtsList2 mts
-    where (m, mts) = runST $ do
-          uh <- unsafeIOToST $ U.unsafeFreeze v
-          let (uw, ua) = U.unzip uwa
-              !dd = fromIntegral maxMixDraft - d
-              -- Indirect history value - now with mix:
-              hival !i = mix
-                  where !a = fromIntegral $ U.unsafeIndex ua i
-                        ho = U.unsafeIndex u  a
-                        hn = U.unsafeIndex uh a
-                        !mix = (ho * dd + hn * d) `unsafeShiftR` maxMixShift
-              -- To find index of min history values
-              go !i !i0 !v0
-                  | i > k     = i0
-                  | otherwise =
-                       let mix = hival i	-- history value of this position
-                       in if mix < v0		-- we take minimum coz that trick (bigger is worse)
-                             then go (i+1) i  mix
-                             else go (i+1) i0 v0
-          let !v0 = hival 0
-              !i = go 1 0 v0
-              !w = U.unsafeIndex uw i		-- this is the (first) best move
-          -- Now swap the minimum with the last active element for both vectors
-          -- to eliminate the used move (if necessary)
-          if i == k	-- when last was best
-             then return (Move w, MTS2 u v uwa (k-1) d)
-             else do
-                 vw <- U.unsafeThaw uw			-- thaw the move vector
-                 va <- U.unsafeThaw ua			-- thaw the history address vector
-                 V.unsafeSwap vw k i
-                 V.unsafeSwap va k i
-                 uw' <- U.unsafeFreeze vw
-                 ua' <- U.unsafeFreeze va
-                 return (Move w, MTS2 u v (U.zip uw' ua') (k-1) d)
-
 {-# INLINE oneMove #-}
 oneMove :: MoveVect -> [Move]
 oneMove uwa = [ Move $ U.unsafeIndex uw 0 ]
@@ -237,30 +189,14 @@ oneMove uwa = [ Move $ U.unsafeIndex uw 0 ]
 
 -- Direct sort, i.e. read the current history values for every move
 -- and sort the moves accordigly (take care of the trick!)
-dirSort :: V.IOVector Int32 -> [Move] -> [Move]
+dirSort :: Either (U.Vector Int32) (V.IOVector Int32) -> [Move] -> [Move]
 dirSort h ms = runST $ do
-    uh <- unsafeIOToST $ U.unsafeFreeze h
+    uh <- case h of
+              Left  u -> return u
+              Right v -> unsafeIOToST $ U.unsafeFreeze v
     let uw = U.fromListN maxMoves $ map (\(Move w) -> w) ms
         uv = U.fromListN maxMoves $ map (U.unsafeIndex uh) $ adrs ms
         uz = U.zip uw uv
-    vz <- U.unsafeThaw uz
-    H.sortBy (comparing snd) vz
-    uz' <- U.unsafeFreeze vz
-    let (uw', _) = U.unzip uz'
-    return $ map Move $ U.toList uw'
-
--- Direct sort for the mix case
-dirSort2 :: U.Vector Int32 -> V.IOVector Int32 -> [Move] -> Int32 -> [Move]
-dirSort2 u v ms d = runST $ do
-    uh <- unsafeIOToST $ U.unsafeFreeze v
-    let !dd = fromIntegral maxMixDraft - d
-        uw = U.fromListN maxMoves $ map (\(Move w) -> w) ms
-        uv = U.fromListN maxMoves $ map hival $ adrs ms
-        uz = U.zip uw uv
-        hival !i = m
-            where ho = U.unsafeIndex u  i
-                  hn = U.unsafeIndex uh i
-                  !m = (ho * dd + hn * d) `unsafeShiftR` maxMixShift
     vz <- U.unsafeThaw uz
     H.sortBy (comparing snd) vz
     uz' <- U.unsafeFreeze vz
