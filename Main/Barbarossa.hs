@@ -37,7 +37,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.4.0"
-progVerSuff = "bpt"
+progVerSuff = "bpt1"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -414,8 +414,8 @@ getTimeParams cs _ c	-- unused: lastsc
 
 -- These parameters should be optimised (i.e.: first made options)
 remTimeFracIni, remTimeFracFin, remTimeFracDev :: Double
-remTimeFracIni = 0.1	-- fraction of remaining time which we can consume at once - initial value
-remTimeFracFin = 0.3	-- same at final (when remaining time is near zero)
+remTimeFracIni = 0.12	-- fraction of remaining time which we can consume at once - initial value
+remTimeFracFin = 0.45	-- same at final (when remaining time is near zero)
 remTimeFracDev = remTimeFracFin - remTimeFracIni
 
 timeReserved :: Int
@@ -510,8 +510,8 @@ searchTheTree tief mtief timx tim tpm mtg lsc lpv rmvs = do
     ms <- if urg || null path then return ms' else correctTime tief (reduceBegin (realPly chg) ms') sc path
     let strtms = srchStrtMs chg
         delta = strtms + ms - currms
-        ms2 = 2 * ms `div` 3
-        halfover = ms > 0 && delta <= ms2  -- time is (almost) half over
+        delmin = 55 * ms `div` 100	-- min 55% of the calculated total time must remain for next draft
+        toolate  = ms > 0 && delta < delmin
         onlyone  = ms > 0 && length rmvsf == 1 && tief >= 4	-- only in normal play
         depthmax = tief >= mtief	--  or maximal depth
         mes = "Depth " ++ show tief ++ " Score " ++ show sc ++ " in ms "
@@ -519,7 +519,7 @@ searchTheTree tief mtief timx tim tpm mtg lsc lpv rmvs = do
                 ++ " path " ++ show path
     ctxLog LogInfo mes
     ctxLog LogInfo $ "compTime: " ++ show ms' ++ " / " ++ show mx
-    if depthmax || timint || halfover || onlyone
+    if depthmax || timint || toolate || onlyone
         then do
             when depthmax $ ctxLog LogInfo "in searchTheTree: max depth reached"
             giveBestMove path
