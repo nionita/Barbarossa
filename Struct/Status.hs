@@ -193,8 +193,8 @@ instance CollectParams EvalWeights where
           ewAdvAtts         = tme  3 16,
           ewIsolPawns       = tme (-42) (-122),
           ewIsolPassed      = tme (-60) (-160),
-          ewBackPawns       = tme (-120) (-180),
-          ewBackPOpen       = tme (-35)    0,
+          ewBackPawns       = tme (-210) (-140),	-- higher malus, new definition
+          ewBackPOpen       = tme (-41)    0,		-- of backward pawns (not the advanced ones)
           ewEnpHanging      = tme (-23) (-33),
           ewEnpEnPrise      = tme (-25) (-21),
           ewEnpAttacked     = tme (-9) (-13),

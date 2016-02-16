@@ -563,17 +563,19 @@ backDiff p ew mide
           bp = pawns p .&. yo p
           (bpw, bpow) = backPawns White wp bp (yoPAttacs p)
           (bpb, bpob) = backPawns Black bp wp (myPAttacs p)
-          !bpd  = popCount bpw  - popCount bpb
-          !bpod = popCount bpow - popCount bpob
+          !bpd  = popCount (bpw  .&. whpart) - popCount (bpb  .&. blpart)
+          !bpod = popCount (bpow .&. whpart) - popCount (bpob .&. blpart)
       in mad (mad mide (ewBackPawns ew) bpd) (ewBackPOpen ew) bpod
     | otherwise
     = let bp = pawns p .&. me p
           wp = pawns p .&. yo p
           (bpw, bpow) = backPawns White wp bp (myPAttacs p)
           (bpb, bpob) = backPawns Black bp wp (yoPAttacs p)
-          !bpd  = popCount bpb  - popCount bpw
-          !bpod = popCount bpob - popCount bpow
+          !bpd  = popCount (bpb  .&. blpart) - popCount (bpw  .&. whpart)
+          !bpod = popCount (bpob .&. blpart) - popCount (bpow .&. whpart)
       in mad (mad mide (ewBackPawns ew) bpd) (ewBackPOpen ew) bpod
+    where whpart = 0x00000000FFFFFFFF
+          blpart = 0xFFFFFFFF00000000
 
 backPawns :: Color -> BBoard -> BBoard -> BBoard -> (BBoard, BBoard)
 backPawns White !mp !op !opa = (bp, bpo)
