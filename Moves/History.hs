@@ -1,7 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 
 module Moves.History (
-        History, newHist, toHist, histSortMoves
+        History, newHist, nexHist, toHist, histSortMoves
     ) where
 
 import Control.Monad.ST.Unsafe (unsafeIOToST)
@@ -51,6 +51,17 @@ ofs' m | moveColor m == White = 0
 
 newHist :: IO History
 newHist = V.replicate vsize 0
+
+-- When we search for the next real move we take the old history
+-- but lower it, so more recent moves get a chance earlier over the older ones,
+-- unless they already were good
+-- Shift 2: is this the correct one? (Try: 1 and 3)
+-- Should be "his" history only shifted by 1?
+nexHist :: History -> IO ()
+nexHist h = go 0
+    where go :: Int -> IO ()
+          go i | i >= vsize = return ()
+               | otherwise  = V.unsafeRead h i >>= V.unsafeWrite h i . (`unsafeShiftR` 2)
 
 {-# INLINE histw #-}
 histw :: Int -> Int32

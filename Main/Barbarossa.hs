@@ -37,7 +37,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.4.0"
-progVerSuff = "bpl"
+progVerSuff = "bph"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -321,8 +321,9 @@ doPosition fen mvs = do
     if working chg
         then ctxLog LogWarning "GUI sent Position while I'm working..."
         else do
-            hi <- liftIO newHist
-            let es = evalst $ crtStatus chg
+            let hi = hist   $ crtStatus chg
+                es = evalst $ crtStatus chg
+            liftIO $ nexHist hi
             (mi, ns) <- newState fen mvs (hash . crtStatus $ chg) hi es
             modifyChanging (\c -> c { crtStatus = ns, realPly = mi, myColor = myCol })
     where newState fpos ms c h es = foldM execMove (stateFromFen fpos c h es) ms
