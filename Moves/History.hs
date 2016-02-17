@@ -62,7 +62,7 @@ nexHist h = go 0
     where go :: Int -> IO ()
           go i | i >= vsize = return ()
                | otherwise  = do
-                   a <- (`unsafeShiftR` 4) <$> V.unsafeRead h i
+                   a <- (`unsafeShiftR` 6) <$> V.unsafeRead h i
                    V.unsafeWrite h i a
                    go (i+1)
 
