@@ -61,7 +61,10 @@ nexHist :: History -> IO ()
 nexHist h = go 0
     where go :: Int -> IO ()
           go i | i >= vsize = return ()
-               | otherwise  = V.unsafeRead h i >>= V.unsafeWrite h i . (`unsafeShiftR` 2)
+               | otherwise  = do
+                   a <- (`unsafeShiftR` 4) <$> V.unsafeRead h i
+                   V.unsafeWrite h i a
+                   go (i+1)
 
 {-# INLINE histw #-}
 histw :: Int -> Int32
