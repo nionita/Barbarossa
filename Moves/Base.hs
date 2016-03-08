@@ -18,11 +18,8 @@ module Moves.Base (
 ) where
 
 import Data.Bits
--- import Data.List
 import Control.Monad.State
 import Control.Monad.Reader (ask)
--- import Data.Ord (comparing)
--- import Numeric
 import System.Random
 
 import Moves.BaseTypes
@@ -388,9 +385,18 @@ canPruneMove m
     | not (moveIsNormal m) = return False
     | otherwise = do
         p <- getPos
-        return $! if moveIsCapture p m
-                     then False
-                     else not $ moveChecks p m
+        if moveIsCapture p m
+           then return False
+           else if moveChecks p m
+                   then return False
+                   else do	-- we would prune, but will give the move sometimes a chance
+                       h  <- gets hist
+                       vh <- liftIO $ valHist h m
+                       -- if popCount vh >= 3
+                       if vh >= vhMax
+                          then return True	-- history val is bad (>), so prune
+                          else return False
+    where vhMax = - (1 `shiftL` 12)
 
 -- Score difference obtained by last move, from POV of the moving part
 -- It considers the fact that static score is for the part which has to move

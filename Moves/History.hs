@@ -1,7 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 
 module Moves.History (
-        History, newHist, toHist, histSortMoves
+        History, newHist, toHist, histSortMoves, valHist
     ) where
 
 import Control.Monad.ST.Unsafe (unsafeIOToST)
@@ -62,11 +62,9 @@ toHist :: History -> Bool -> Move -> Int -> IO ()
 toHist h True  m d = addHist h (adr m) (histw d)
 toHist h False m d = subHist h (adr m) (histw d)
 
-{--
 {-# INLINE valHist #-}
 valHist :: History -> Move -> IO Int32
 valHist !h = V.unsafeRead h . adr
---}
 
 addHist :: History -> Int -> Int32 -> IO ()
 addHist h !ad !p = do
