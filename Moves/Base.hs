@@ -392,11 +392,10 @@ canPruneMove m
                    else do	-- we would prune, but will give the move sometimes a chance
                        h  <- gets hist
                        vh <- liftIO $ valHist h m
-                       -- if popCount vh >= 3
-                       if vh >= vhMax
-                          then return True	-- history val is bad (>), so prune
-                          else return False
-    where vhMax = - (1 `shiftL` 12)
+                       if popCount (vh .&. lastPls) >= 3
+                          then return False	-- last history bits set, looks good, no prune
+                          else return True
+    where lastPls = 0x3F
 
 -- Score difference obtained by last move, from POV of the moving part
 -- It considers the fact that static score is for the part which has to move
