@@ -380,23 +380,16 @@ moveIsCaptPromo p m
 
 -- We will call this function before we do the move
 -- This will spare a heavy operation for pruned moved
-canPruneMove :: Move -> Game Bool
-canPruneMove m
+canPruneMove :: Move -> Int -> Game Bool
+canPruneMove m d
     | not (moveIsNormal m) = return False
     | otherwise = do
         p <- getPos
         if moveIsCapture p m
            then return False
-           else if moveChecks p m
+           else if d > 1 && moveChecks p m
                    then return False
-                   else do	-- we would prune, but will give the move sometimes a chance
-                       h  <- gets hist
-                       vh <- liftIO $ valHist h m
-                       -- if popCount vh >= 3
-                       if vh >= vhMax
-                          then return True	-- history val is bad (>), so prune
-                          else return False
-    where vhMax = - (1 `shiftL` 12)
+                   else return True
 
 -- Score difference obtained by last move, from POV of the moving part
 -- It considers the fact that static score is for the part which has to move

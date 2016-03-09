@@ -823,7 +823,7 @@ pvInnerLoop :: Path 	-- current beta
             -> Search (Bool, NodeState)
 pvInnerLoop b d prune nst e = timeToAbort (True, nst) $ do
          -- What about TT & killer moves???
-         willPrune <- if not prune || movno nst == 1 then return False else lift $ canPruneMove e
+         willPrune <- if not prune || movno nst == 1 then return False else lift $ canPruneMove e d
          if willPrune
             then do
                 let !nst1 = nst { movno = movno nst + 1, pvcont = emptySeq }
@@ -864,7 +864,7 @@ pvInnerLoopZ :: Path 	-- current beta
             -> Search (Bool, NodeState)
 pvInnerLoopZ b d prune nst e redu = timeToAbort (True, nst) $ do
          -- What about TT & killer moves???
-         willPrune <- if not prune then return False else lift $ canPruneMove e
+         willPrune <- if not prune then return False else lift $ canPruneMove e d
          if willPrune
             then do
                 let !nst1 = nst { movno = movno nst + 1, pvcont = emptySeq }
