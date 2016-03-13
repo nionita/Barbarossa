@@ -156,9 +156,7 @@ data PVState
           usedext :: !Int,	-- used extension
           abort   :: !Bool,	-- search aborted (time)
           futme   :: !Int,	-- variable futility score - me
-          forme   :: !Int,	-- variable futility forgetnes - me
           futyo   :: !Int,	-- variable futility score - you
-          foryo   :: !Int,	-- variable futility forgetnes - you
           lmrhi   :: !Int,	-- upper limit of nodes to raise the lmr level
           lmrlv   :: !Int,	-- LMR level
           lmrrs   :: !Int	-- counter for nodes/re-searches, to adapt the LMR level
@@ -285,7 +283,7 @@ tailSeq es
 
 pvsInit :: PVState
 pvsInit = PVState { ronly = pvro00, stats = stt0, absdp = 0, usedext = 0, abort = False,
-                    futme = futIniVal, forme = futDecayW, futyo = futIniVal, foryo = futDecayW,
+                    futme = futIniVal, futyo = futIniVal,
                     lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
 nst0 :: NodeState
 nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore "Zero" 0,
@@ -1149,40 +1147,25 @@ isPruneFutil d a pv
     | pv && d > maxFutilDepth = return False
     | d > maxFutilDepth + 1   = return False	-- for zero window searches we allow higher futility depth
     | otherwise = do
-        tact <- lift tacticalPos
         v <- lift staticVal
         m <- varFutVal	-- variable futility value
-        let !margin = futilMargins d m
-            !fusc | tact      = checkFutMargin	-- even worse when in check
-                  | otherwise = 0
-            sc = pathScore a
-        return $! v + margin <= sc + fusc
-    where checkFutMargin = 0	-- try it
+        return $! v + futilMargins d m <= pathScore a
 
--- updateFutil :: Int -> Move -> Search ()
--- updateFutil sd e = do
 updateFutil :: Int -> Search ()
 updateFutil sd = do
     s <- get
     let !so = futme s
-    if sd > so
-       then do
-           -- let str = "SCOD (" ++ show e ++ "): old = " ++ show so ++ ", new = " ++ show sd
-           -- lift $ finNode str True
-           put s { futme = sd, forme = futDecayW }
-       else put s { forme = forgetScore (forme s) }
+    put s { futme = expFutSlide so sd }
 
-forgetScore :: Int -> Int
-forgetScore x = (x * futDecayW) `unsafeShiftR` futDecayB
+expFutSlide :: Int -> Int -> Int
+expFutSlide o n = (o * futDecayW + max 0 n) `unsafeShiftR` futDecayB
 
 xchangeFutil :: Search ()
 xchangeFutil
-    = modify $ \s -> s { futme = futyo s, forme = foryo s, futyo = futme s, foryo = forme s }
+    = modify $ \s -> s { futme = futyo s, futyo = futme s }
 
 varFutVal :: Search Int
-varFutVal = do
-    s <- get
-    return $! max futMinVal ((futme s * forme s) `unsafeShiftR` futDecayB)
+varFutVal = max futMinVal <$> gets futme
 
 trimaxPath :: Path -> Path -> Path -> Path
 trimaxPath a b x
@@ -1321,8 +1304,7 @@ reportStats = do
                   ++ ", retrieve: " ++ show (sRetr xst) ++ ", succes: " ++ show (sRSuc xst)
        let r = fromIntegral (sBMNo xst) / fromIntegral (sBeta xst) :: Double
        logmes $ "Beta cuts: " ++ show (sBeta xst) ++ ", beta factor: " ++ show r
-       logmes $ "Variable futility params: me = " ++ show (futme s) ++ "/" ++ show (forme s)
-                  ++ ", yo = " ++ show (futyo s) ++ "/" ++ show (foryo s)
+       logmes $ "Variable futility params: me = " ++ show (futme s) ++ ", yo = " ++ show (futyo s)
        logmes $ "Variable LMR: hi = " ++ show (lmrhi s)
                   ++ ", lv = " ++ show (lmrlv s) ++ ", qu = " ++ show (lmrrs s)
        if lmrDebug
