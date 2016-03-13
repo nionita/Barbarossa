@@ -81,9 +81,9 @@ futilMargins d s = s `unsafeShiftL` (d-1)
 
 -- Score statistics parameters for variable futility
 futIniVal, futMinVal, futDecayB, futDecayW :: Int
-futIniVal = 100
+futIniVal = 80
 futMinVal = 30
-futDecayB = 10
+futDecayB = 8
 futDecayW = (1 `unsafeShiftL` futDecayB) - 1
 
 -- Parameters for quiescent search:
@@ -1158,14 +1158,17 @@ updateFutil sd = do
     put s { futme = expFutSlide so sd }
 
 expFutSlide :: Int -> Int -> Int
-expFutSlide o n = (o * futDecayW + max 0 n) `unsafeShiftR` futDecayB
+expFutSlide o n
+    | o > n1    = (o  * futDecayW + n1) `unsafeShiftR` futDecayB
+    | otherwise = n1
+    where !n1 = max 0 n
+
+varFutVal :: Search Int
+varFutVal = gets ((+ futMinVal) . futme)
 
 xchangeFutil :: Search ()
 xchangeFutil
     = modify $ \s -> s { futme = futyo s, futyo = futme s }
-
-varFutVal :: Search Int
-varFutVal = max futMinVal <$> gets futme
 
 trimaxPath :: Path -> Path -> Path -> Path
 trimaxPath a b x
