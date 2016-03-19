@@ -1162,9 +1162,9 @@ updateFutil sd = do
 {-# INLINE expFutSlide #-}
 expFutSlide :: Int -> Int -> Int -> (Int, Int)
 expFutSlide i o n
-    | o > n1    = f $ max (i-1)            1
+    | o > n1    = f $ max (i-2)            1
     | o < n1    = f $ min (i+1) (futDecayW-1)
-    | otherwise = (o, i)
+    | otherwise = (o, max (i-1)            1)
     where n1  = max 0 n
           f x = (((futDecayW - x) * o + x * n) `unsafeShiftR` futDecayB, x)
 
