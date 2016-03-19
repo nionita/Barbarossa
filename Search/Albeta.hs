@@ -156,7 +156,9 @@ data PVState
           usedext :: !Int,	-- used extension
           abort   :: !Bool,	-- search aborted (time)
           futme   :: !Int,	-- variable futility score - me
+          fuime   :: !Int,	-- variable futility weight - me
           futyo   :: !Int,	-- variable futility score - you
+          fuiyo   :: !Int,	-- variable futility weight - you
           lmrhi   :: !Int,	-- upper limit of nodes to raise the lmr level
           lmrlv   :: !Int,	-- LMR level
           lmrrs   :: !Int	-- counter for nodes/re-searches, to adapt the LMR level
@@ -283,7 +285,7 @@ tailSeq es
 
 pvsInit :: PVState
 pvsInit = PVState { ronly = pvro00, stats = stt0, absdp = 0, usedext = 0, abort = False,
-                    futme = futIniVal, futyo = futIniVal,
+                    futme = futIniVal, fuime = 1, futyo = futIniVal, fuiyo = 1,
                     lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
 nst0 :: NodeState
 nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore "Zero" 0,
@@ -1154,15 +1156,21 @@ isPruneFutil d a pv
 updateFutil :: Int -> Search ()
 updateFutil sd = do
     s <- get
-    let !so = futme s
-    put s { futme = expFutSlide so sd }
+    let (fu, fi) = expFutSlide (fuime s) (futme s) sd
+    put s { futme = fu, fuime = fi }
 
-expFutSlide :: Int -> Int -> Int
-expFutSlide o n = (o * futDecayW + max 0 n) `unsafeShiftR` futDecayB
+{-# INLINE expFutSlide #-}
+expFutSlide :: Int -> Int -> Int -> (Int, Int)
+expFutSlide i o n
+    | o > n1    = f $ max (i-1)            1
+    | o < n1    = f $ min (i+1) (futDecayW-1)
+    | otherwise = (o, i)
+    where n1  = max 0 n
+          f x = (((futDecayW - x) * o + x * n) `unsafeShiftR` futDecayB, x)
 
 xchangeFutil :: Search ()
 xchangeFutil
-    = modify $ \s -> s { futme = futyo s, futyo = futme s }
+    = modify $ \s -> s { futme = futyo s, fuime = fuiyo s, futyo = futme s, fuiyo = fuime s }
 
 varFutVal :: Search Int
 varFutVal = max futMinVal <$> gets futme
@@ -1304,7 +1312,8 @@ reportStats = do
                   ++ ", retrieve: " ++ show (sRetr xst) ++ ", succes: " ++ show (sRSuc xst)
        let r = fromIntegral (sBMNo xst) / fromIntegral (sBeta xst) :: Double
        logmes $ "Beta cuts: " ++ show (sBeta xst) ++ ", beta factor: " ++ show r
-       logmes $ "Variable futility params: me = " ++ show (futme s) ++ ", yo = " ++ show (futyo s)
+       logmes $ "Variable futility params: me = " ++ show (futme s) ++ "/" ++ show (fuime s)
+                ++ ", yo = " ++ show (futyo s) ++ "/" ++ show (fuiyo s)
        logmes $ "Variable LMR: hi = " ++ show (lmrhi s)
                   ++ ", lv = " ++ show (lmrlv s) ++ ", qu = " ++ show (lmrrs s)
        if lmrDebug
