@@ -2,7 +2,8 @@
              MultiParamTypeClasses,
              BangPatterns,
              RankNTypes, UndecidableInstances,
-             FlexibleInstances
+             FlexibleInstances,
+             PatternGuards
              #-}
 
 module Moves.Base (
@@ -18,10 +19,8 @@ module Moves.Base (
 ) where
 
 import Data.Bits
--- import Data.List
 import Control.Monad.State
 import Control.Monad.Reader (ask)
--- import Data.Ord (comparing)
 -- import Numeric
 import System.Random
 
@@ -32,6 +31,7 @@ import Struct.Context
 import Struct.Status
 import Hash.TransTab
 import Moves.Board
+import Eval.BasicEval
 import Eval.Eval
 import Moves.ShowMe
 import Moves.History
@@ -221,10 +221,15 @@ doMove m qs = do
                    put s { stack = p : stack s }
                    remis <- if qs then return False else checkRemisRules p'
                    if remis
-                      then return $ Final 0
-                      else do
-                          let dext = if inCheck p then 1 else 0
-                          return $! Exten dext $ moveIsCaptPromo pc m
+                      then return $  Final 0
+                      else return $! Exten (calcExtension pc p m) (moveIsCaptPromo pc m)
+
+calcExtension :: MyPos -> MyPos -> Move -> Int
+calcExtension p0 p1 m = chke + capte
+    where chke  | inCheck p1 = 7
+                | otherwise  = 0
+          capte | Busy c fig <- tabla p0 (toSquare m) = matPiece c fig `unsafeShiftR` 7
+                | otherwise                           = 0
 
 doNullMove :: Game ()
 doNullMove = do

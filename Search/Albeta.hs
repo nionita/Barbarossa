@@ -34,13 +34,13 @@ useAspirWin :: Bool
 useAspirWin = False
 
 -- Some fix search parameter
-scoreGrain, depthForCM, minToStore, minToRetr, maxDepthExt, negHistMNo, minPvDepth :: Int
+scoreGrain, depthForCM, minToStore, minToRetr, extPitch, negHistMNo, minPvDepth :: Int
 useNegHist, useTTinPv :: Bool
 scoreGrain  = 4	-- score granularity
 depthForCM  = 7 -- from this depth inform current move
 minToStore  = 1 -- minimum remaining depth to store the position in hash
 minToRetr   = 1 -- minimum remaining depth to retrieve
-maxDepthExt = 3 -- maximum depth extension
+extPitch    = 16 -- extension value for one ply
 useNegHist  = False	-- when not cutting - negative history
 negHistMNo  = 1		-- how many moves get negative history
 useTTinPv   = False	-- retrieve from TT in PV?
@@ -153,7 +153,7 @@ data PVState
           ronly   :: PVReadOnly,	-- read only parameters
           stats   :: SStats,	-- search statistics
           absdp   :: !Int,	-- absolute depth (root = 0)
-          usedext :: !Int,	-- used extension
+          useext  :: !Int,	-- used extension
           abort   :: !Bool,	-- search aborted (time)
           futme   :: !Int,	-- variable futility score - me
           futyo   :: !Int,	-- variable futility score - you
@@ -282,7 +282,7 @@ tailSeq es
     | otherwise  = Seq $ tail $ unseq es
 
 pvsInit :: PVState
-pvsInit = PVState { ronly = pvro00, stats = stt0, absdp = 0, usedext = 0, abort = False,
+pvsInit = PVState { ronly = pvro00, stats = stt0, absdp = 0, useext = 0, abort = False,
                     futme = futIniVal, futyo = futIniVal,
                     lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
 nst0 :: NodeState
@@ -451,7 +451,7 @@ pvInnerRoot b d nst e = timeToAbort (True, nst) $ do
                          Illegal   -> error "Cannot be illegal here"
                 -- undo the move if it was legal
                 lift undoMove
-                modify $ \s' -> s' { absdp = absdp old, usedext = usedext old }
+                modify $ \s' -> s' { absdp = absdp old, useext = useext old }
                 let s' = addToPath e s
                 pindent $ "<- " ++ show e ++ " (" ++ show s' ++ ")"
                 checkFailOrPVRoot (stats old) b d e s' nst
@@ -461,8 +461,10 @@ pvInnerRoot b d nst e = timeToAbort (True, nst) $ do
 pvInnerRootExten :: Path -> Int -> Int -> NodeState -> Search Path
 pvInnerRootExten b d !exd nst = do
     pindent $ "depth = " ++ show d
-    old <- get
-    exd' <- reserveExtension (usedext old) exd
+    exd' <- reserveExtension exd
+    -- when (exd' > 0) $ lift $ do
+    --     logmes $ "Extension " ++ show exd' ++ " in depth " ++ show d
+    --     finNode "EXTE" True
     let !inPv = crtnt nst == PVNode
         !a  = cursc nst
         !d1 = d + exd' - 1	-- this is the normal (unreduced) depth for the next search
@@ -846,7 +848,7 @@ pvInnerLoop b d prune nst e = timeToAbort (True, nst) $ do
                            Final sco -> return $! pathFromScore "Final" (-sco)
                            Illegal   -> error "Cannot be illegal here"
                        lift undoMove	-- undo the move
-                       modify $ \s' -> s' { absdp = absdp old, usedext = usedext old }
+                       modify $ \s' -> s' { absdp = absdp old, useext = useext old }
                        let s' = addToPath e s
                        pindent $ "<- " ++ show e ++ " (" ++ show s' ++ ")"
                        checkFailOrPVLoop (stats old) b d e s' nst
@@ -895,7 +897,7 @@ pvInnerLoopZ b d prune nst e redu = timeToAbort (True, nst) $ do
                          Final sco -> return $! pathFromScore "Final" (-sco)
                          Illegal   -> error "Cannot be illegal here"
                        lift undoMove	-- undo the move
-                       modify $ \s' -> s' { absdp = absdp old, usedext = usedext old }
+                       modify $ \s' -> s' { absdp = absdp old, useext = useext old }
                        let s' = addToPath e s
                        pindent $ "<- " ++ show e ++ " (" ++ show s' ++ ")"
                        checkFailOrPVLoopZ (stats old) b d e s' nst
@@ -904,17 +906,26 @@ pvInnerLoopZ b d prune nst e redu = timeToAbort (True, nst) $ do
 resetSpc :: NodeState -> NodeState
 resetSpc nst = nst { spcno = movno nst }
 
-reserveExtension :: Int -> Int -> Search Int
-reserveExtension !uex !exd
-    | uex >= maxDepthExt || exd == 0 = return 0
+reserveExtension :: Int -> Search Int
+reserveExtension !exd
+    | exd == 0  = return 0
     | otherwise = do
-        modify $ \s -> s { usedext = usedext s + exd }
-        return exd
+        !uex <- gets useext
+        let !extbud = uex + exd
+        if extbud >= extPitch
+           then do
+               modify $ \s -> s { useext = extbud - extPitch }
+               return 1
+           else do
+               modify $ \s -> s { useext = extbud }
+               return 0
 
 pvInnerLoopExten :: Path -> Int -> Int -> NodeState -> Search Path
 pvInnerLoopExten b d !exd nst = do
-    old <- get
-    exd' <- reserveExtension (usedext old) exd
+    exd' <- reserveExtension exd
+    -- when (exd' > 0) $ lift $ do
+    --     logmes $ "Extension " ++ show exd' ++ " in depth " ++ show d
+    --     finNode "EXTE" True
     let !inPv = crtnt nst == PVNode
         a = cursc nst
         !d1 = d + exd' - 1	-- this is the normal (unreduced) depth for next search
@@ -944,13 +955,17 @@ pvInnerLoopExten b d !exd nst = do
 -- For zero window
 pvInnerLoopExtenZ :: Path -> Int -> Bool -> Int -> NodeState -> Bool -> Search Path
 pvInnerLoopExtenZ b d spec !exd nst redu = do
-    old  <- get
-    exd' <- reserveExtension (usedext old) exd
+    exd' <- reserveExtension exd
+    -- when (exd' > 0) $ lift $ do
+    --     logmes $ "Extension " ++ show exd' ++ " in depth " ++ show d
+    --     finNode "EXTE" True
     -- late move reduction
     let !d1 = d + exd' - 1	-- this is the normal (unreduced) depth for next search
-        !d' = if redu
-                 then reduceLmr d1 (pnearmate b) spec exd (lmrlv old) (movno nst - spcno nst)
-                 else d1
+    !d' <- if redu
+              then do
+                  llv <- gets lmrlv
+                  return $! reduceLmr d1 (pnearmate b) spec exd llv (movno nst - spcno nst)
+              else return d1
     pindent $ "depth " ++ show d ++ " nt " ++ show (crtnt nst)
               ++ " exd' = " ++ show exd' ++ " mvn " ++ show (movno nst) ++ " next depth " ++ show d'
     let onemB = negatePath $ b -: scoreGrain
@@ -1247,7 +1262,7 @@ pvQInnerLoop !b c !a e = timeToAbort (True, b) $ do
                            _        -> do
                              modify $ \s -> s { absdp = absdp s + 1 }
                              !sc <- pvQSearch (-b) (-a) c
-                             modify $ \s -> s { absdp = absdp s - 1 }	-- no usedext here
+                             modify $ \s -> s { absdp = absdp s - 1 }	-- no useext here
                              return (-sc)
                 lift undoMove
                 -- qindent $ "<- " ++ show e ++ " (" ++ show s ++ ")"
