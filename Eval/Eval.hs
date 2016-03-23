@@ -217,14 +217,20 @@ data KingSafe = KingSafe
 instance EvalItem KingSafe where
     evalItem _ _ ew p _ mide = kingSafe p ew mide
 
--- Rewrite of king safety taking into account number and quality
--- of pieces attacking king neighbour squares
--- This function is almost optimised, it could perhaps be faster
--- if we eliminate the lists
+-- Consider the number of undefended squares near king (attacked & not attacked by opponent)
+-- as a malus
 kingSafe :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 kingSafe !p !ew !mide = madm mide (ewKingSafe ew) ksafe
-    where !ksafe = ksSide (yo p) (yoKAttacs p) (myPAttacs p) (myNAttacs p) (myBAttacs p) (myRAttacs p) (myQAttacs p) (myKAttacs p) (myAttacs p)
-                 - ksSide (me p) (myKAttacs p) (yoPAttacs p) (yoNAttacs p) (yoBAttacs p) (yoRAttacs p) (yoQAttacs p) (yoKAttacs p) (yoAttacs p)
+    where !ksafe = ksSide (yo p) (yoKAttacs p)
+                       ((yoPAttacs p) .|. (yoNAttacs p) .|. (yoBAttacs p) .|. (yoRAttacs p)
+                       .|. (yoQAttacs p) .|. (yoKAttacs p))
+                       (myPAttacs p) (myNAttacs p) (myBAttacs p) (myRAttacs p)
+                       (myQAttacs p) (myKAttacs p) (myAttacs p)
+                 - ksSide (me p) (myKAttacs p)
+                       ((myPAttacs p) .|. (myNAttacs p) .|. (myBAttacs p) .|. (myRAttacs p)
+                       .|. (myQAttacs p) .|. (myKAttacs p))
+                       (yoPAttacs p) (yoNAttacs p) (yoBAttacs p) (yoRAttacs p)
+                       (yoQAttacs p) (yoKAttacs p) (yoAttacs p)
 
 -- To make the sum and count in one pass
 data Flc = Flc !Int !Int
@@ -235,11 +241,15 @@ fadd (Flc f1 q1) (Flc f2 q2) = Flc (f1+f2) (q1+q2)
 fmul :: Flc -> Int
 fmul (Flc f q) = f * q
 
-ksSide :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
-ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
+ksSide :: BBoard -> BBoard -> BBoard
+       -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard
+       -> Int
+ksSide !yop !yok !yoa' !myp !myn !myb !myr !myq !myk !mya
     | myq == 0  = 0
     | otherwise = mattacs
     where !freey = popCount $ yok `less` (mya .|. yop)
+          !undeBB = yok `less` yoa'
+          !unat   = popCount $ undeBB .&. mya
           qual a p = let c = popCount $ yok .&. a
                      in Flc (flaCoef `unsafeAt` c) (c * p)
           -- qualWeights = [1, 2, 2, 4, 8, 2]
@@ -250,9 +260,10 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
           !qq = qual myq 8
           !qk = qual myk 2
           !ixm = fmul (fadd qp $ fadd qn $ fadd qb $ fadd qr $ fadd qq qk) `unsafeShiftR` 2
-               + 8 + ksShift - freey
-          !mattacs = attCoef `unsafeAt` ixm
-          ksShift = 5
+               -- + 8 + ksShift - freey + unat
+               + 8 + ksShift - freey + (flaCoef `unsafeAt` unat)
+          !mattacs = (attCoef `unsafeAt` ixm) + unat `unsafeShiftL` 7
+          ksShift = 4
 
 -- We want to eliminate "if yok .&. a /= 0 ..."
 -- by using an array
