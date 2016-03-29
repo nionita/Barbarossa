@@ -517,10 +517,25 @@ instance EvalItem Advers where
     evalItem _ _ ew p _ mide = adversDiff p ew mide
 
 adversDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-adversDiff p ew mide = mad mide (ewAdvAtts ew) ad
-    where !ad = md - yd
-          !md = popCount $ myAttacs p .&. yoH
-          !yd = popCount $ yoAttacs p .&. myH
+adversDiff p ew mide = mad (mad (mad (mad (mad (mad mide (ewAdvPAtts ew) pd) (ewAdvNAtts ew) nd) (ewAdvBAtts ew) bd) (ewAdvRAtts ew) rd) (ewAdvQAtts ew) qd) (ewAdvKAtts ew) kd
+    where !mpa = popCount $ myPAttacs p .&. yoH
+          !ypa = popCount $ yoPAttacs p .&. myH
+          !pd  = mpa - ypa
+          !mna = popCount $ myNAttacs p .&. yoH
+          !yna = popCount $ yoNAttacs p .&. myH
+          !nd  = mna - yna
+          !mba = popCount $ myBAttacs p .&. yoH
+          !yba = popCount $ yoBAttacs p .&. myH
+          !bd  = mba - yba
+          !mra = popCount $ myRAttacs p .&. yoH
+          !yra = popCount $ yoRAttacs p .&. myH
+          !rd  = mra - yra
+          !mqa = popCount $ myQAttacs p .&. yoH
+          !yqa = popCount $ yoQAttacs p .&. myH
+          !qd  = mqa - yqa
+          !mka = popCount $ myKAttacs p .&. yoH
+          !yka = popCount $ yoKAttacs p .&. myH
+          !kd  = mka - yka
           (myH, yoH) | moving p == White = (ah14, ah58)
                      | otherwise         = (ah58, ah14)
           ah14 = 0xFFFFFFFF
