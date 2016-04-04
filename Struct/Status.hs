@@ -100,7 +100,6 @@ data EvalWeights
           ewAdvNAtts        :: !MidEnd,
           ewAdvBAtts        :: !MidEnd,
           ewAdvRAtts        :: !MidEnd,
-          ewAdvQAtts        :: !MidEnd,
           ewIsolPawns       :: !MidEnd,
           ewIsolPassed      :: !MidEnd,
           ewBackPawns       :: !MidEnd,
@@ -195,10 +194,9 @@ instance CollectParams EvalWeights where
           ewCenterQAtts     = tme  4 62,
           ewCenterKAtts     = tme  0 56,
           ewAdvPAtts        = tme  7 19,	-- after 500 clops + 32 bo (early logic)
-          ewAdvNAtts        = tme 30 10,	-- mid & : bo with new logic
-          ewAdvBAtts        = tme  0 30,	-- same same
-          ewAdvRAtts        = tme 17 11,	-- same here
-          ewAdvQAtts        = tme  3  0,	-- same here
+          ewAdvNAtts        = tme 32 10,	-- mid & : bo with new logic
+          ewAdvBAtts        = tme 20 30,	-- same same
+          ewAdvRAtts        = tme 22 11,	-- same here
           ewIsolPawns       = tme (-42) (-122),
           ewIsolPassed      = tme (-60) (-160),
           ewBackPawns       = tme (-120) (-180),
@@ -264,8 +262,6 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
         ("end.adversBAtts",    setEndAdvBAtts),
         ("mid.adversRAtts",    setMidAdvRAtts),
         ("end.adversRAtts",    setEndAdvRAtts),
-        ("mid.adversQAtts",    setMidAdvQAtts),
-        ("end.adversQAtts",    setEndAdvQAtts),
         ("mid.isolPawns",      setMidIsolPawns),
         ("end.isolPawns",      setEndIsolPawns),
         ("mid.isolPassed",     setMidIsolPassed),
@@ -343,8 +339,6 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
           setEndAdvBAtts        v' ew' = ew' { ewAdvBAtts        = (ewAdvBAtts        ew') { end = round v' }}
           setMidAdvRAtts        v' ew' = ew' { ewAdvRAtts        = (ewAdvRAtts        ew') { mid = round v' }}
           setEndAdvRAtts        v' ew' = ew' { ewAdvRAtts        = (ewAdvRAtts        ew') { end = round v' }}
-          setMidAdvQAtts        v' ew' = ew' { ewAdvQAtts        = (ewAdvQAtts        ew') { mid = round v' }}
-          setEndAdvQAtts        v' ew' = ew' { ewAdvQAtts        = (ewAdvQAtts        ew') { end = round v' }}
           setMidIsolPawns       v' ew' = ew' { ewIsolPawns       = (ewIsolPawns       ew') { mid = round v' }}
           setEndIsolPawns       v' ew' = ew' { ewIsolPawns       = (ewIsolPawns       ew') { end = round v' }}
           setMidIsolPassed      v' ew' = ew' { ewIsolPassed      = (ewIsolPassed      ew') { mid = round v' }}
