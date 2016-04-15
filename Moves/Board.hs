@@ -47,9 +47,10 @@ goPromo p m
 movePassed :: MyPos -> Move -> Bool
 movePassed p m = passed p .&. (uBit $ fromSquare m) /= 0
 
+-- Passed pawn moves on 7th rank:
 {-# INLINE moveIs7th #-}
 moveIs7th :: Move -> Bool
-moveIs7th m = tw .&. seven /= 0
+moveIs7th m = (tw .&. seven /= 0) && movePiece m == Pawn
     where tw    = uBit $ toSquare m
           seven = 0x00FF00000000FF00
 

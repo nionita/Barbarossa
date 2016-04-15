@@ -385,16 +385,14 @@ moveIsCaptPromo p m
 -- This will spare a heavy operation for pruned moved
 canPruneMove :: Move -> Game Bool
 canPruneMove m
-    | not (moveIsNormal m) = return False
+    | not (moveIsNormal m) || moveIs7th m = return False
     | otherwise = do
         p <- getPos
         if moveIsCapture p m
            then return False
-           else if moveIs7th m && movePassed p m
+           else if moveChecks p m
                    then return False
-                   else if moveChecks p m
-                           then return False
-                           else return True
+                   else return True
 
 -- Score difference obtained by last move, from POV of the moving part
 -- It considers the fact that static score is for the part which has to move
