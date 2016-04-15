@@ -776,22 +776,18 @@ passPawns gph ep p ew mide = mad mide (ewPassPawnLev ew) dpp
           !yopp = sum $ map (perPassedPawn gph ep p yoc) $ bbToSquares yppbb
           !dpp  = mypp - yopp
 
--- The value of the passed pawn depends answers to this questions:
+-- The value of the passed pawn depends on the answers to this questions:
 -- - is it defended/attacked? by which pieces?
 -- - how many squares ahead are blocked by own/opponent pieces?
 -- - how many squares ahead are controlled by own/opponent pieces?
 -- - does it has a rook behind?
+-- We ignore for now the fact that a passed pawn can be captured immediately
 perPassedPawn :: Int -> EvalParams -> MyPos -> Color -> Square -> Int
-perPassedPawn gph ep p c sq
-    | attacked && not defended
-        && c /= moving p = epPassMin ep	-- but if we have more than one like that?
-    | otherwise          = perPassedPawnOk gph ep p c sq sqbb moi toi moia toia
+perPassedPawn gph ep p c sq = perPassedPawnOk gph ep p c sq sqbb moi toi moia toia
     where !sqbb = 1 `unsafeShiftL` sq
           (!moi, !toi, !moia, !toia)
                | moving p == c = (me p, yo p, myAttacs p, yoAttacs p)
                | otherwise     = (yo p, me p, yoAttacs p, myAttacs p)
-          !defended = moia .&. sqbb /= 0
-          !attacked = toia .&. sqbb /= 0
 
 perPassedPawnOk :: Int -> EvalParams -> MyPos -> Color -> Square -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
 perPassedPawnOk gph ep p c sq sqbb moi toi moia toia = val

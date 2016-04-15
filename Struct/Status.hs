@@ -71,7 +71,6 @@ data EvalParams
           epPassKingProx    :: !Int,
           epPassBlockO :: !Int,
           epPassBlockA :: !Int,
-          epPassMin    :: !Int,
           epPassMyCtrl :: !Int,
           epPassYoCtrl :: !Int
       } deriving Show
@@ -130,7 +129,6 @@ instance CollectParams EvalParams where
                     epPassKingProx    = 12,	-- max after ~12k Clop games (ELO +23 +- 12)
                     epPassBlockO = 11,
                     epPassBlockA = 17,
-                    epPassMin    = 30,
                     epPassMyCtrl = 6,
                     epPassYoCtrl = 7
                 }
@@ -150,7 +148,6 @@ collectEvalParams (s, v) ep = lookApply s v ep [
         ("epPassKingProx",    setEpPassKingProx),
         ("epPassBlockO",      setEpPassBlockO),
         ("epPassBlockA",      setEpPassBlockA),
-        ("epPassMin",         setEpPassMin),
         ("epPassMyCtrl",      setEpPassMyCtrl),
         ("epPassYoCtrl",      setEpPassYoCtrl)
     ]
@@ -165,7 +162,6 @@ collectEvalParams (s, v) ep = lookApply s v ep [
           setEpPassKingProx    v' ep' = ep' { epPassKingProx    = round v' }
           setEpPassBlockO      v' ep' = ep' { epPassBlockO      = round v' }
           setEpPassBlockA      v' ep' = ep' { epPassBlockA      = round v' }
-          setEpPassMin         v' ep' = ep' { epPassMin         = round v' }
           setEpPassMyCtrl      v' ep' = ep' { epPassMyCtrl      = round v' }
           setEpPassYoCtrl      v' ep' = ep' { epPassYoCtrl      = round v' }
 
