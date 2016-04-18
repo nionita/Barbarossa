@@ -195,10 +195,10 @@ instance CollectParams EvalWeights where
           ewCenterQAtts     = tme  4 62,
           ewCenterKAtts     = tme  0 56,
           ewAdvPAtts        = tme  7 19,	-- after 500 clops + 32 bo (early logic)
-          ewAdvNAtts        = tme  9  5,	-- mid & end: bo with new logic
-          ewAdvBAtts        = tme  2 24,	-- for ~190 tournaments
-          ewAdvRAtts        = tme  8 16,	-- 8 params at once
-          ewAdvQAtts        = tme  1 30,	-- same here
+          ewAdvNAtts        = tme  8  7,	-- mid & end: bo with new logic
+          ewAdvBAtts        = tme  8 16,	-- for ~675 short tournaments
+          ewAdvRAtts        = tme  5 16,	-- 8 params
+          ewAdvQAtts        = tme  2 16,	-- at once
           ewIsolPawns       = tme (-42) (-122),
           ewIsolPassed      = tme (-60) (-160),
           ewBackPawns       = tme (-120) (-180),
