@@ -62,6 +62,8 @@ data EvalParams
     = EvalParams {
           epMovingMid  :: !Int,
           epMovingEnd  :: !Int,
+          epKOpenQueen :: !Int,
+          epKOpenMax   :: !Int,
           epMaterMinor :: !Int,
           epMaterRook  :: !Int,
           epMaterQueen :: !Int,
@@ -73,7 +75,12 @@ data EvalParams
           epPassBlockA :: !Int,
           epPassMin    :: !Int,
           epPassMyCtrl :: !Int,
-          epPassYoCtrl :: !Int
+          epPassYoCtrl :: !Int,
+          epMobiMaxN   :: !Int,
+          epMobiMaxB   :: !Int,
+          epMobiMaxR   :: !Int,
+          epMobiMaxQ   :: !Int,
+          epAdvAttMax  :: !Int
       } deriving Show
 
 data EvalWeights
@@ -121,6 +128,8 @@ instance CollectParams EvalParams where
     npColInit = EvalParams {
                     epMovingMid  = 160,		-- after Clop optimisation
                     epMovingEnd  = 130,		-- with 3700 games at 15+0.25 s
+                    epKOpenQueen = 4,
+                    epKOpenMax   = 150,
                     epMaterMinor = 1,
                     epMaterRook  = 4,
                     epMaterQueen = 13,
@@ -132,7 +141,12 @@ instance CollectParams EvalParams where
                     epPassBlockA = 17,
                     epPassMin    = 30,
                     epPassMyCtrl = 6,
-                    epPassYoCtrl = 7
+                    epPassYoCtrl = 7,
+                    epMobiMaxN   = 7,
+                    epMobiMaxB   = 12,
+                    epMobiMaxR   = 12,
+                    epMobiMaxQ   = 10,
+                    epAdvAttMax  = 9
                 }
     npColParm = collectEvalParams
     npSetParm = id
@@ -141,6 +155,8 @@ collectEvalParams :: (String, Double) -> EvalParams -> EvalParams
 collectEvalParams (s, v) ep = lookApply s v ep [
         ("epMovingMid",       setEpMovingMid),
         ("epMovingEnd",       setEpMovingEnd),
+        ("epKOpenQueen",      setEpKOpenQueen),
+        ("epKOpenMax",        setEpKOpenMax),
         ("epMaterMinor",      setEpMaterMinor),
         ("epMaterRook",       setEpMaterRook),
         ("epMaterQueen",      setEpMaterQueen),
@@ -152,10 +168,17 @@ collectEvalParams (s, v) ep = lookApply s v ep [
         ("epPassBlockA",      setEpPassBlockA),
         ("epPassMin",         setEpPassMin),
         ("epPassMyCtrl",      setEpPassMyCtrl),
-        ("epPassYoCtrl",      setEpPassYoCtrl)
+        ("epPassYoCtrl",      setEpPassYoCtrl),
+        ("epMobiMaxN",        setEpMobiMaxN),
+        ("epMobiMaxB",        setEpMobiMaxB),
+        ("epMobiMaxR",        setEpMobiMaxR),
+        ("epMobiMaxQ",        setEpMobiMaxQ),
+        ("epAdvAttMax",       setEpAdvAttMax)
     ]
     where setEpMovingMid       v' ep' = ep' { epMovingMid       = round v' }
           setEpMovingEnd       v' ep' = ep' { epMovingEnd       = round v' }
+          setEpKOpenQueen      v' ep' = ep' { epKOpenQueen      = round v' }
+          setEpKOpenMax        v' ep' = ep' { epKOpenMax        = round v' }
           setEpMaterMinor      v' ep' = ep' { epMaterMinor      = round v' }
           setEpMaterRook       v' ep' = ep' { epMaterRook       = round v' }
           setEpMaterQueen      v' ep' = ep' { epMaterQueen      = round v' }
@@ -168,6 +191,11 @@ collectEvalParams (s, v) ep = lookApply s v ep [
           setEpPassMin         v' ep' = ep' { epPassMin         = round v' }
           setEpPassMyCtrl      v' ep' = ep' { epPassMyCtrl      = round v' }
           setEpPassYoCtrl      v' ep' = ep' { epPassYoCtrl      = round v' }
+          setEpMobiMaxN        v' ep' = ep' { epMobiMaxN        = round v' }
+          setEpMobiMaxB        v' ep' = ep' { epMobiMaxB        = round v' }
+          setEpMobiMaxR        v' ep' = ep' { epMobiMaxR        = round v' }
+          setEpMobiMaxQ        v' ep' = ep' { epMobiMaxQ        = round v' }
+          setEpAdvAttMax       v' ep' = ep' { epAdvAttMax       = round v' }
 
 instance CollectParams EvalWeights where
     type CollectFor EvalWeights = EvalWeights
@@ -180,8 +208,8 @@ instance CollectParams EvalWeights where
           ewRookHOpen       = tme 171 202,
           ewRookOpen        = tme 219 221,
           ewRookConn        = tme  96  78,
-          ewMobilityKnight  = tme 50 71,	-- Evalo 200 steps:
-          ewMobilityBishop  = tme 57 33,	-- length 10, depth 6, batch 128
+          ewMobilityKnight  = tme 50 71,
+          ewMobilityBishop  = tme 57 33,
           ewMobilityRook    = tme 28 26,
           ewMobilityQueen   = tme  4  6,
           ewCenterPAtts     = tme 84 68,

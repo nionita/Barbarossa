@@ -289,11 +289,11 @@ materDiff p ew mide = mad mide (ewMaterialDiff ew) md
 data KingOpen = KingOpen
 
 instance EvalItem KingOpen where
-    evalItem _ _ ew p _ mide = kingOpen p ew mide
+    evalItem _ ep ew p _ mide = kingOpen ep p ew mide
 
 -- Openness can be tought only with pawns (like we take) or all pieces
-kingOpen :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-kingOpen p ew mide = mad mide (ewKingOpen ew) ko
+kingOpen :: EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
+kingOpen ep p ew mide = mad mide (ewKingOpen ew) ko
     where !ko = adv - own
           moprooks   = popCount $ rooks p .&. yo p
           mopqueens  = popCount $ queens p .&. yo p
@@ -306,7 +306,8 @@ kingOpen p ew mide = mad mide (ewKingOpen ew) ko
           paw = pawns p
           msq = kingSquare (kings p) $ me p
           ysq = kingSquare (kings p) $ yo p
-          comb !oR !oQ !wb !wr = let !v = oR * wr + 2 * oQ * (wb + wr) in v
+          comb !oR !oQ !wb !wr = let !v = oR * wr + epKOpenQueen ep * oQ * (wb + wr)
+                                 in min (epKOpenMax ep) v	-- maximum is 55 * (2+q)
           own = comb moprooks mopqueens mwb mwr
           adv = comb yoprooks yopqueens ywb ywr
           lastrs = 0xFF000000000000FF	-- approx: take out last row which cant be covered by pawns
@@ -459,21 +460,21 @@ perRook allp myp rsq (ho, op)
 data Mobility = Mobility	-- "safe" moves
 
 instance EvalItem Mobility where
-    evalItem _ _ ew p _ mide = mobDiff p ew mide
+    evalItem _ ep ew p _ mide = mobDiff ep p ew mide
 
 -- Here we do not calculate pawn mobility (which, calculated as attacs, is useless)
-mobDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-mobDiff p ew mide = mad (mad (mad (mad mide (ewMobilityKnight ew) n) (ewMobilityBishop ew) b) (ewMobilityRook ew) r) (ewMobilityQueen ew) q
-    where !myN = popCount $ myNAttacs p `less` (me p .|. yoPAttacs p)
-          !myB = popCount $ myBAttacs p `less` (me p .|. yoPAttacs p)
-          !myR = popCount $ myRAttacs p `less` (me p .|. yoA1)
-          !myQ = popCount $ myQAttacs p `less` (me p .|. yoA2)
+mobDiff :: EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
+mobDiff ep p ew mide = mad (mad (mad (mad mide (ewMobilityKnight ew) n) (ewMobilityBishop ew) b) (ewMobilityRook ew) r) (ewMobilityQueen ew) q
+    where !myN = min (epMobiMaxN ep) $ popCount $ myNAttacs p `less` (me p .|. yoPAttacs p)
+          !myB = min (epMobiMaxB ep) $ popCount $ myBAttacs p `less` (me p .|. yoPAttacs p)
+          !myR = min (epMobiMaxR ep) $ popCount $ myRAttacs p `less` (me p .|. yoA1)
+          !myQ = min (epMobiMaxQ ep) $ popCount $ myQAttacs p `less` (me p .|. yoA2)
           !yoA1 = yoPAttacs p .|. yoNAttacs p .|. yoBAttacs p
           !yoA2 = yoA1 .|. yoRAttacs p
-          !yoN = popCount $ yoNAttacs p `less` (yo p .|. myPAttacs p)
-          !yoB = popCount $ yoBAttacs p `less` (yo p .|. myPAttacs p)
-          !yoR = popCount $ yoRAttacs p `less` (yo p .|. myA1)
-          !yoQ = popCount $ yoQAttacs p `less` (yo p .|. myA2)
+          !yoN = min (epMobiMaxN ep) $ popCount $ yoNAttacs p `less` (yo p .|. myPAttacs p)
+          !yoB = min (epMobiMaxB ep) $ popCount $ yoBAttacs p `less` (yo p .|. myPAttacs p)
+          !yoR = min (epMobiMaxR ep) $ popCount $ yoRAttacs p `less` (yo p .|. myA1)
+          !yoQ = min (epMobiMaxQ ep) $ popCount $ yoQAttacs p `less` (yo p .|. myA2)
           !myA1 = myPAttacs p .|. myNAttacs p .|. myBAttacs p
           !myA2 = myA1 .|. myRAttacs p
           !n = myN - yoN
@@ -514,13 +515,13 @@ centerDiff p ew mide = mad (mad (mad (mad (mad (mad mide (ewCenterPAtts ew) pd) 
 data Advers = Advers
 
 instance EvalItem Advers where
-    evalItem _ _ ew p _ mide = adversDiff p ew mide
+    evalItem _ ep ew p _ mide = adversDiff ep p ew mide
 
-adversDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-adversDiff p ew mide = mad mide (ewAdvAtts ew) ad
+adversDiff :: EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
+adversDiff ep p ew mide = mad mide (ewAdvAtts ew) ad
     where !ad = md - yd
-          !md = popCount $ myAttacs p .&. yoH
-          !yd = popCount $ yoAttacs p .&. myH
+          !md = min (epAdvAttMax ep) $ popCount $ myAttacs p .&. yoH
+          !yd = min (epAdvAttMax ep) $ popCount $ yoAttacs p .&. myH
           (myH, yoH) | moving p == White = (ah14, ah58)
                      | otherwise         = (ah58, ah14)
           ah14 = 0xFFFFFFFF
