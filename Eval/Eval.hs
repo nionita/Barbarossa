@@ -306,7 +306,9 @@ kingOpen p ew mide = mad mide (ewKingOpen ew) ko
           paw = pawns p
           msq = kingSquare (kings p) $ me p
           ysq = kingSquare (kings p) $ yo p
-          comb !oR !oQ !wb !wr = let !v = oR * wr + 2 * oQ * (wb + wr) in v
+          comb !oR !oQ !wb !wr = let r = oR * wr
+                                     q = oQ * (wb + wr)
+                                 in r + q*q
           own = comb moprooks mopqueens mwb mwr
           adv = comb yoprooks yopqueens ywb ywr
           lastrs = 0xFF000000000000FF	-- approx: take out last row which cant be covered by pawns

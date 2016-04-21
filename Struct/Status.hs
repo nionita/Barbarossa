@@ -174,7 +174,7 @@ instance CollectParams EvalWeights where
     npColInit = EvalWeights {
           ewMaterialDiff    = tme 8 8,
           ewKingSafe        = tme 1 0,
-          ewKingOpen        = tme 12 0,
+          ewKingOpen        = tme 5 0,
           ewKingPlaceCent   = tme 6 0,
           ewKingPlacePwns   = tme 0 6,		-- max after ~12k Clop games (ELO +23 +- 12)
           ewRookHOpen       = tme 171 202,
