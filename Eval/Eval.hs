@@ -298,11 +298,13 @@ kingOpen p ew mide = mad mide (ewKingOpen ew) ko
           moprooks   = popCount $ rooks p .&. yo p
           mopqueens  = popCount $ queens p .&. yo p
           mwb = popCount $ bAttacs paw msq `less` paw
-          mwr = popCount $ rAttacs paw msq `less` (paw .|. lastrs)
+          -- mwr = popCount $ rAttacs paw msq `less` (paw .|. lastrs)
+          mwr = popCount $ rAttacs paw msq `less` paw
           yoprooks   = popCount $ rooks p .&. me p
           yopqueens  = popCount $ queens p .&. me p
           ywb = popCount $ bAttacs paw ysq `less` paw
-          ywr = popCount $ rAttacs paw ysq `less` (paw .|. lastrs)
+          -- ywr = popCount $ rAttacs paw ysq `less` (paw .|. lastrs)
+          ywr = popCount $ rAttacs paw ysq `less` paw
           paw = pawns p
           msq = kingSquare (kings p) $ me p
           ysq = kingSquare (kings p) $ yo p
@@ -311,7 +313,7 @@ kingOpen p ew mide = mad mide (ewKingOpen ew) ko
                                  in r + q*q
           own = comb moprooks mopqueens mwb mwr
           adv = comb yoprooks yopqueens ywb ywr
-          lastrs = 0xFF000000000000FF	-- approx: take out last row which cant be covered by pawns
+          -- lastrs = 0xFF000000000000FF	-- approx: take out last row which cant be covered by pawns
 
 ------ King placement ------
 data KingPlace = KingPlace
