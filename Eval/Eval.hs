@@ -322,8 +322,8 @@ instance EvalItem KingPlace where
 -- be in some corner, in endgame it should be near some (passed) pawn(s)
 kingPlace :: EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
 kingPlace ep p ew mide = made (madm mide (ewKingPlaceCent ew) kcd) (ewKingPlacePwns ew) kpd
-    where !kcd = (mpl - ypl) `unsafeShiftR` epMaterBonusScale ep
-          !kpd = (mpi - ypi) `unsafeShiftR` epPawnBonusScale  ep
+    where !kcd = (mpl - ypl)        `unsafeShiftR` epMaterBonusScale ep
+          !kpd = (mpi - ypi + mywp) `unsafeShiftR` epPawnBonusScale  ep
           !mks = kingSquare (kings p) $ me p
           !yks = kingSquare (kings p) $ yo p
           !mkm = materFun yminor yrooks yqueens
@@ -331,13 +331,13 @@ kingPlace ep p ew mide = made (madm mide (ewKingPlaceCent ew) kcd) (ewKingPlaceP
           (!mpl, !ypl, !mpi, !ypi)
               | moving p == White = ( kingMaterBonus White mpawns mkm mks
                                     , kingMaterBonus Black ypawns ykm yks
-                                    , kingPawnsBonus mks (passed p) mpassed ypassed wpwns
-                                    , kingPawnsBonus yks (passed p) mpassed ypassed wpwns
+                                    , kingPawnsBonus mks (passed p) mpassed ypassed
+                                    , kingPawnsBonus yks (passed p) mpassed ypassed
                                     )
               | otherwise         = ( kingMaterBonus Black mpawns mkm mks
                                     , kingMaterBonus White ypawns ykm yks
-                                    , kingPawnsBonus mks (passed p) ypassed mpassed wpwns
-                                    , kingPawnsBonus yks (passed p) ypassed mpassed wpwns
+                                    , kingPawnsBonus mks (passed p) ypassed mpassed
+                                    , kingPawnsBonus yks (passed p) ypassed mpassed
                                     )
           !mro     = rooks p .&. me p
           !mrooks  = popCount mro
@@ -354,6 +354,7 @@ kingPlace ep p ew mide = made (madm mide (ewKingPlaceCent ew) kcd) (ewKingPlaceP
           !mwpwns  = mpawns `less` myPAttacs p
           !ywpwns  = ypawns `less` yoPAttacs p
           !wpwns   = mwpwns .|. ywpwns
+          !mywp    = kingWeakPawns mks yks wpwns
           materFun m r q = (m * epMaterMinor ep + r * epMaterRook ep + q * epMaterQueen ep)
                                `unsafeShiftR` epMaterScale ep
 
@@ -363,14 +364,23 @@ promoB s =       s .&. 7
 
 -- We give bonus also for pawn promotion squares, if the pawn is near enough to promote
 -- Give as parameter bitboards for all pawns, white pawns and black pawns for performance
--- Also now we give a bonus for king beeing near a weak pawn
-kingPawnsBonus :: Square -> BBoard -> BBoard -> BBoard -> BBoard -> Int
-kingPawnsBonus !ksq !alp !wpass !bpass !wpwns = bonus
+kingPawnsBonus :: Square -> BBoard -> BBoard -> BBoard -> Int
+kingPawnsBonus !ksq !alp !wpass !bpass = bonus
     where !bpsqs = sum $ map (pawnBonus . squareDistance ksq) $ bbToSquares alp
           !bqsqs = sum $ map (pawnBonus . squareDistance ksq)
                        $ map promoW (bbToSquares wpass) ++ map promoB (bbToSquares bpass)
-          !bwps  = sum $ map (pawnBonus . squareDistance ksq) $ bbToSquares wpwns
-          !bonus = bpsqs + bqsqs + bwps
+          !bonus = bpsqs + bqsqs
+
+-- We also give now a bonus for king beeing near a weak pawn
+kingWeakPawns :: Square -> Square -> BBoard -> Int
+kingWeakPawns msq ysq weaks
+    | pcw > 4   = 0
+    | otherwise = dw
+    where !pcw = popCount weaks
+          f sq d = let !m = pawnBonus (pcw + squareDistance msq sq)
+                       !y = pawnBonus (pcw + squareDistance ysq sq)
+                   in d + m - y
+          dw = foldr f 0 $ bbToSquares weaks
 
 -- This is a bonus for the king beeing near one corner
 -- It's bigger when the enemy has more material (only pieces)
