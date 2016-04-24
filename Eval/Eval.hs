@@ -289,31 +289,33 @@ materDiff p ew mide = mad mide (ewMaterialDiff ew) md
 data KingOpen = KingOpen
 
 instance EvalItem KingOpen where
-    evalItem _ _ ew p _ mide = kingOpen p ew mide
+    evalItem _ ep ew p _ mide = kingOpen ep p ew mide
 
 -- Openness can be tought only with pawns (like we take) or all pieces
-kingOpen :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-kingOpen p ew mide = mad mide (ewKingOpen ew) ko
-    where !ko = adv - own
+kingOpen :: EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
+kingOpen ep p ew mide = mad mide (ewKingOpen ew) ko
+    where !ko = (adv - own) `unsafeShiftR` 4	-- we work in smaller units
           moprooks   = popCount $ rooks p .&. yo p
           mopqueens  = popCount $ queens p .&. yo p
           mwb = popCount $ bAttacs paw msq `less` paw
-          -- mwr = popCount $ rAttacs paw msq `less` (paw .|. lastrs)
           mwr = popCount $ rAttacs paw msq `less` paw
           yoprooks   = popCount $ rooks p .&. me p
           yopqueens  = popCount $ queens p .&. me p
           ywb = popCount $ bAttacs paw ysq `less` paw
-          -- ywr = popCount $ rAttacs paw ysq `less` (paw .|. lastrs)
           ywr = popCount $ rAttacs paw ysq `less` paw
           paw = pawns p
           msq = kingSquare (kings p) $ me p
           ysq = kingSquare (kings p) $ yo p
-          comb !oR !oQ !wb !wr = let r = oR * wr
-                                     q = oQ * (wb + wr)
-                                 in r + q*q
+          comb !oR !oQ !wb !wr = let r  = oR * wr
+                                     q  = oQ * (wb + wr)
+                                     r1 = epKingOpenR  ep * r
+                                     r2 = epKingOpenRR ep * r * r
+                                     rq = epKingOpenRQ ep * r * q
+                                     q1 = epKingOpenQ  ep * q
+                                     q2 = epKingOpenQQ ep * q * q
+                                 in r1 + r2 + rq + q1 + q2
           own = comb moprooks mopqueens mwb mwr
           adv = comb yoprooks yopqueens ywb ywr
-          -- lastrs = 0xFF000000000000FF	-- approx: take out last row which cant be covered by pawns
 
 ------ King placement ------
 data KingPlace = KingPlace

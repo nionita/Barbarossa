@@ -62,6 +62,11 @@ data EvalParams
     = EvalParams {
           epMovingMid  :: !Int,
           epMovingEnd  :: !Int,
+          epKingOpenR  :: !Int,
+          epKingOpenRR :: !Int,
+          epKingOpenRQ :: !Int,
+          epKingOpenQ  :: !Int,
+          epKingOpenQQ :: !Int,
           epMaterMinor :: !Int,
           epMaterRook  :: !Int,
           epMaterQueen :: !Int,
@@ -121,6 +126,11 @@ instance CollectParams EvalParams where
     npColInit = EvalParams {
                     epMovingMid  = 160,		-- after Clop optimisation
                     epMovingEnd  = 130,		-- with 3700 games at 15+0.25 s
+                    epKingOpenR  = 16,
+                    epKingOpenRR = 0,
+                    epKingOpenRQ = 0,
+                    epKingOpenQ  = 16,
+                    epKingOpenQQ = 0,
                     epMaterMinor = 1,
                     epMaterRook  = 4,
                     epMaterQueen = 13,
@@ -141,6 +151,11 @@ collectEvalParams :: (String, Double) -> EvalParams -> EvalParams
 collectEvalParams (s, v) ep = lookApply s v ep [
         ("epMovingMid",       setEpMovingMid),
         ("epMovingEnd",       setEpMovingEnd),
+        ("epKingOpenR",       setEpKingOpenR),
+        ("epKingOpenRR",      setEpKingOpenRR),
+        ("epKingOpenRQ",      setEpKingOpenRQ),
+        ("epKingOpenQ",       setEpKingOpenQ),
+        ("epKingOpenQQ",      setEpKingOpenQQ),
         ("epMaterMinor",      setEpMaterMinor),
         ("epMaterRook",       setEpMaterRook),
         ("epMaterQueen",      setEpMaterQueen),
@@ -156,6 +171,11 @@ collectEvalParams (s, v) ep = lookApply s v ep [
     ]
     where setEpMovingMid       v' ep' = ep' { epMovingMid       = round v' }
           setEpMovingEnd       v' ep' = ep' { epMovingEnd       = round v' }
+          setEpKingOpenR       v' ep' = ep' { epKingOpenR       = round v' }
+          setEpKingOpenRR      v' ep' = ep' { epKingOpenRR      = round v' }
+          setEpKingOpenRQ      v' ep' = ep' { epKingOpenRQ      = round v' }
+          setEpKingOpenQ       v' ep' = ep' { epKingOpenQ       = round v' }
+          setEpKingOpenQQ      v' ep' = ep' { epKingOpenQQ      = round v' }
           setEpMaterMinor      v' ep' = ep' { epMaterMinor      = round v' }
           setEpMaterRook       v' ep' = ep' { epMaterRook       = round v' }
           setEpMaterQueen      v' ep' = ep' { epMaterQueen      = round v' }
