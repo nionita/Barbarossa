@@ -461,25 +461,56 @@ data Mobility = Mobility	-- "safe" moves
 instance EvalItem Mobility where
     evalItem _ _ ew p _ mide = mobDiff p ew mide
 
--- Here we do not calculate pawn mobility (which, calculated as attacs, is useless)
+-- Just an experiment with the mobility style of Stockfish
+-- The schema does not match our logic, coz mobility in Stockfish is non-linear
+-- Because of this we need to take the mobility for every piece
+-- (not for every piece type, as we had)
 mobDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-mobDiff p ew mide = mad (mad (mad (mad mide (ewMobilityKnight ew) n) (ewMobilityBishop ew) b) (ewMobilityRook ew) r) (ewMobilityQueen ew) q
-    where !myN = popCount $ myNAttacs p `less` (me p .|. yoPAttacs p)
-          !myB = popCount $ myBAttacs p `less` (me p .|. yoPAttacs p)
-          !myR = popCount $ myRAttacs p `less` (me p .|. yoA1)
-          !myQ = popCount $ myQAttacs p `less` (me p .|. yoA2)
-          !yoA1 = yoPAttacs p .|. yoNAttacs p .|. yoBAttacs p
-          !yoA2 = yoA1 .|. yoRAttacs p
-          !yoN = popCount $ yoNAttacs p `less` (yo p .|. myPAttacs p)
-          !yoB = popCount $ yoBAttacs p `less` (yo p .|. myPAttacs p)
-          !yoR = popCount $ yoRAttacs p `less` (yo p .|. myA1)
-          !yoQ = popCount $ yoQAttacs p `less` (yo p .|. myA2)
-          !myA1 = myPAttacs p .|. myNAttacs p .|. myBAttacs p
-          !myA2 = myA1 .|. myRAttacs p
-          !n = myN - yoN
-          !b = myB - yoB
-          !r = myR - yoR
-          !q = myQ - yoQ
+mobDiff p _ mide = mide <+> MidEnd md ed
+    where !myok = complement (me p .|. yoPAttacs p)
+          !yook = complement (yo p .|. myPAttacs p)
+          nonLAdd :: UArray Int Int -> UArray Int Int -> Int -> MidEnd -> MidEnd
+          nonLAdd midA endA x mien = mien <+> MidEnd (midA `unsafeAt` x) (endA `unsafeAt` x)
+          !my1 = foldr (nonLAdd moNM moNE) (MidEnd 0 0)
+                    $ map (popCount . (.&. myok) . nAttacs) $ bbToSquares $ me p .&. knights p
+          !yo1 = foldr (nonLAdd moNM moNE) (MidEnd 0 0)
+                    $ map (popCount . (.&. yook) . nAttacs) $ bbToSquares $ yo p .&. knights p
+          !my2 = foldr (nonLAdd moBM moBE) my1
+                    $ map (popCount . (.&. myok) . bAttacs (occup p)) $ bbToSquares $ me p .&. bishops p
+          !yo2 = foldr (nonLAdd moBM moBE) yo1
+                    $ map (popCount . (.&. yook) . bAttacs (occup p)) $ bbToSquares $ yo p .&. bishops p
+          !my3 = foldr (nonLAdd moRM moRE) my2
+                    $ map (popCount . (.&. myok) . rAttacs (occup p)) $ bbToSquares $ me p .&. rooks p
+          !yo3 = foldr (nonLAdd moRM moRE) yo2
+                    $ map (popCount . (.&. yook) . rAttacs (occup p)) $ bbToSquares $ yo p .&. rooks p
+          !mym = foldr (nonLAdd moQM moQE) my3
+                    $ map (popCount . (.&. myok) . qAttacs (occup p)) $ bbToSquares $ me p .&. queens p
+          !yom = foldr (nonLAdd moQM moQE) yo3
+                    $ map (popCount . (.&. yook) . qAttacs (occup p)) $ bbToSquares $ yo p .&. queens p
+          MidEnd mmi men = mym
+          MidEnd ymi yen = yom
+          !md = mmi - ymi
+          !ed = men - yen
+          lev = 6
+          -- The mobility scores, per piece type and game phase, are here in centipawns
+          -- we will have to multiply by 8 at the end
+          moNM, moNE, moBM, moBE, moRM, moRE, moQM, moQE :: UArray Int Int
+          moNM = listArray (0, 8)  $ (map (*lev)) [-75, -56,  -9,  -2, 6, 15, 22, 30, 36]
+          moNE = listArray (0, 8)  $ (map (*lev)) [-76, -54, -26, -10, 5, 11, 26, 28, 29]
+          moBM = listArray (0, 13) $ (map (*lev)) [-48, -21, 16, 26, 37, 51, 54, 63, 65,
+                                                    71, 79, 81, 92, 97]
+          moBE = listArray (0, 13) $ (map (*lev)) [-58, -19, -2, 12, 22, 42, 54, 58, 63,
+                                                    70, 74, 86, 90, 94]
+          moRM = listArray (0, 14) $ (map (*lev)) [-56, -25, -11, -5, -4, -1, 8, 14, 21,
+                                                    23, 31, 32, 43, 49, 59]
+          moRE = listArray (0, 14) $ (map (*lev)) [-78, -18, 26, 55, 70, 81, 109, 120, 128,
+                                                    143, 154, 160, 165, 168, 169]
+          moQM = listArray (0, 27) $ (map (*lev)) [-40, -25, 2, 4, 14, 24, 25, 40, 43, 47,
+                                                    54, 56, 60, 70, 72, 73, 75, 77, 85, 94,
+                                                    99, 108, 112, 113, 118, 119, 123, 128]
+          moQE = listArray (0, 27) $ (map (*lev)) [-35, -12, 7, 19, 37, 55, 62, 76, 79, 87,
+                                                    94, 102, 111, 116, 118, 122, 128, 130, 133,
+                                                   136, 140, 157, 158, 161, 174, 177, 191, 199]
 
 ------ Center control ------
 data Center = Center

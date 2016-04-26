@@ -8,7 +8,7 @@ module Struct.Status (
     EvalParams(..),
     EvalWeights(..),
     MidEnd(..),
-    mad, madm, made, tme
+    mad, madm, made, tme, (<+>)
 ) where
 
 import Struct.Struct
@@ -49,9 +49,9 @@ made !mide0 !mide !v = mide0 { end = end mide0 + end mide * v }
 mad :: MidEnd -> MidEnd -> Int -> MidEnd
 mad !mide0 !mide !v = MidEnd { mid = mid mide0 + mid mide * v, end = end mide0 + end mide * v }
 
--- {-# INLINE (<+>) #-}
--- (<+>) :: MidEnd -> MidEnd -> MidEnd
--- mide1 <+> mide2 = MidEnd { mid = mid mide1 + mid mide2, end = end mide1 + end mide2 }
+{-# INLINE (<+>) #-}
+(<+>) :: MidEnd -> MidEnd -> MidEnd
+mide1 <+> mide2 = MidEnd { mid = mid mide1 + mid mide2, end = end mide1 + end mide2 }
 
 {-# INLINE tme #-}
 tme :: Int -> Int -> MidEnd
