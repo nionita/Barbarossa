@@ -68,6 +68,10 @@ data EvalParams
           epMaterScale :: !Int,
           epMaterBonusScale :: !Int,
           epPawnBonusScale  :: !Int,
+          epWeakPawn   :: !Int,		-- weak pawns
+          epWeakPawnO  :: !Int,		-- in relation to kings
+          epWeakPawnA  :: !Int,		-- parameters
+          epWeakPawnB  :: !Int,
           epPassKingProx    :: !Int,
           epPassBlockO :: !Int,
           epPassBlockA :: !Int,
@@ -127,7 +131,11 @@ instance CollectParams EvalParams where
                     epMaterScale = 1,
                     epMaterBonusScale = 5,
                     epPawnBonusScale  = 1,
-                    epPassKingProx    = 12,	-- max after ~12k Clop games (ELO +23 +- 12)
+                    epWeakPawn   =  40,
+                    epWeakPawnO  =  32,
+                    epWeakPawnA  = 120,
+                    epWeakPawnB  =  36,
+                    epPassKingProx = 12,	-- max after ~12k Clop games (ELO +23 +- 12)
                     epPassBlockO = 11,
                     epPassBlockA = 17,
                     epPassMin    = 30,
@@ -147,6 +155,10 @@ collectEvalParams (s, v) ep = lookApply s v ep [
         ("epMaterScale",      setEpMaterScale),
         ("epMaterBonusScale", setEpMaterBonusScale),
         ("epPawnBonusScale",  setEpPawnBonusScale),
+        ("epWeakPawn",        setEpWeakPawn),
+        ("epWeakPawnO",       setEpWeakPawnO),
+        ("epWeakPawnA",       setEpWeakPawnA),
+        ("epWeakPawnB",       setEpWeakPawnB),
         ("epPassKingProx",    setEpPassKingProx),
         ("epPassBlockO",      setEpPassBlockO),
         ("epPassBlockA",      setEpPassBlockA),
@@ -162,6 +174,10 @@ collectEvalParams (s, v) ep = lookApply s v ep [
           setEpMaterScale      v' ep' = ep' { epMaterScale      = round v' }
           setEpMaterBonusScale v' ep' = ep' { epMaterBonusScale = round v' }
           setEpPawnBonusScale  v' ep' = ep' { epPawnBonusScale  = round v' }
+          setEpWeakPawn        v' ep' = ep' { epWeakPawn        = round v' }
+          setEpWeakPawnO       v' ep' = ep' { epWeakPawnO       = round v' }
+          setEpWeakPawnA       v' ep' = ep' { epWeakPawnA       = round v' }
+          setEpWeakPawnB       v' ep' = ep' { epWeakPawnB       = round v' }
           setEpPassKingProx    v' ep' = ep' { epPassKingProx    = round v' }
           setEpPassBlockO      v' ep' = ep' { epPassBlockO      = round v' }
           setEpPassBlockA      v' ep' = ep' { epPassBlockA      = round v' }

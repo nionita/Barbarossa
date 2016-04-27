@@ -355,7 +355,7 @@ kingPlace ep p ew mide = made (madm mide (ewKingPlaceCent ew) kcd) (ewKingPlaceP
           !mweaks  = mpawns `less` mpstro
           !ypstro  = yoPAttacs p .|. bbLeft ypawns .|. bbRight ypawns
           !yweaks  = ypawns `less` ypstro
-          !mywp    = kingWeakPawns (myKAttacs p) mweaks (yoKAttacs p) yweaks
+          !mywp    = kingWeakPawns ep (myKAttacs p) mweaks (yoKAttacs p) yweaks
           materFun m r q = (m * epMaterMinor ep + r * epMaterRook ep + q * epMaterQueen ep)
                                `unsafeShiftR` epMaterScale ep
 
@@ -373,24 +373,22 @@ kingPawnsBonus !ksq !alp !wpass !bpass = bonus
           !bonus = bpsqs + bqsqs
 
 -- Relation between kings and weak pawns (malus)
-kingWeakPawns :: BBoard -> BBoard -> BBoard -> BBoard -> Int
-kingWeakPawns mka mweaks yka yweaks = dwm+dwb+dwy+dwf
-    where !mwb = mweaks .&. mka .&. yka		-- my weaks near both kings
+kingWeakPawns :: EvalParams -> BBoard -> BBoard -> BBoard -> BBoard -> Int
+kingWeakPawns ep mka mweaks yka yweaks = dwm+dwb+dwy+dwf
+    where !may = mka .&. yka		-- my and your king attacks
+          !mwb = mweaks .&. may		-- my weaks near both kings
+          !ywb = yweaks .&. may		-- your weaks near both kings
           !mwm = (mweaks .&. mka) `less` mwb	-- my weaks near my king
           !mwy = (mweaks .&. yka) `less` mwb	-- my weaks near your king
-          !mwf = mweaks `less` (mka .|. yka)	-- my weaks near no king
-          !ywb = yweaks .&. mka .&. yka		-- your weaks near both kings
           !ywy = (yweaks .&. yka) `less` ywb	-- your weaks near my king
           !ywm = (yweaks .&. mka) `less` ywb	-- your weaks near your king
-          !ywf = yweaks `less` (mka .|. yka)	-- your weaks near no king
-          !dwm = fWeakO * (popCount mwm - popCount ywy)	-- difference: near own king
-          !dwb = fWeakB * (popCount mwb - popCount ywb)	-- difference: near both kings
-          !dwy = fWeakA * (popCount mwy - popCount ywm)	-- difference: near opponent king
-          !dwf = fWeak  * (popCount mwf - popCount ywf)	-- difference: near no king
-          fWeak  =  40	-- cp malus for one weak pawn (16 is 1 cp)
-          fWeakO =  32	-- cp malus for one weak pawn near own king
-          fWeakA = 120	-- cp malus for one weak pawn near adversary king
-          fWeakB =  36	-- cp malus for one weak pawn near both kings
+          !moy = complement (mka .|. yka)	-- not my nor your king attacks
+          !mwf = mweaks .&. moy			-- my weaks near no king
+          !ywf = yweaks .&. moy			-- your weaks near no king
+          !dwm = epWeakPawnO ep * (popCount mwm - popCount ywy)	-- difference: near own king
+          !dwb = epWeakPawnB ep * (popCount mwb - popCount ywb)	-- difference: near both kings
+          !dwy = epWeakPawnA ep * (popCount mwy - popCount ywm)	-- difference: near opponent king
+          !dwf = epWeakPawn  ep * (popCount mwf - popCount ywf)	-- difference: near no king
 
 -- This is a bonus for the king beeing near one corner
 -- It's bigger when the enemy has more material (only pieces)
