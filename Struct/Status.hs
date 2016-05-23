@@ -126,11 +126,11 @@ instance CollectParams EvalParams where
     npColInit = EvalParams {
                     epMovingMid  = 160,		-- after Clop optimisation
                     epMovingEnd  = 130,		-- with 3700 games at 15+0.25 s
-                    epKingOpenR  =  37,		-- these 5 params + mid.kingOpen
-                    epKingOpenRR =   1,		-- tuned with 157 short tournaments
-                    epKingOpenRQ =  20,		-- with BO
-                    epKingOpenQ  = 245,		-- 8 games per tournament
-                    epKingOpenQQ = -22,		-- against fsl13, kop1, ECE 11 and Clarabit 1
+                    epKingOpenR  = -177,	-- these 5 params + mid.kingOpen
+                    epKingOpenRR =  -3,		-- tuned again with short tournaments
+                    epKingOpenRQ =  32,		-- with BO
+                    epKingOpenQ  = -256,
+                    epKingOpenQQ = 3,		-- against fsl13, kop1, ECE 11 and Clarabit 1
                     epMaterMinor = 1,
                     epMaterRook  = 4,
                     epMaterQueen = 13,
