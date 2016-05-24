@@ -781,8 +781,8 @@ type LMove = Word64
 moveToLMove :: Int -> Piece -> Piece -> Move -> LMove
 moveToLMove see attacker victim (Move w)
     =   (vicval `unsafeShiftL` 56)
-    .|. (attval `unsafeShiftL` 48)
-    .|. (seeval `unsafeShiftL` 16)
+    .|. (seeval `unsafeShiftL` 48)
+    .|. (attval `unsafeShiftL` 16)
     .|. fromIntegral w
     where kingval = fromEnum King
           !vicval = eight $ kingval - fromEnum victim	-- pseudo negate
