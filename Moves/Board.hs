@@ -783,9 +783,10 @@ moveToLMove attacker victim (Move w)
     =   (vicval `unsafeShiftL` 24)
     .|. (attval `unsafeShiftL` 16)
     .|. fromIntegral w
-    where kingval  = fromEnum King
-          !vicval  = fromIntegral $ kingval - fromEnum victim	-- pseudo negate
-          !attval  = fromIntegral $ fromEnum attacker
+    where kingval = fromEnum King
+          !vicval = eight $ kingval - fromEnum victim	-- pseudo negate
+          !attval = eight $ fromEnum attacker
+          eight   = fromIntegral . ((.&.) 0xFF)
 
 {-# INLINE lmoveToMove #-}
 lmoveToMove :: LMove -> Move
@@ -805,11 +806,11 @@ perCaptFieldWL pos mypc advdefence sq mvlst
                   in           foldr (addHangingP     pcto sq) mvlst1 prAgrsqs	-- for promotions
     | otherwise = let mvlst1 = foldr (perCaptWL pos myAttRec False pcto valto sq) mvlst  reAgrsqs
                   in           foldr (perCaptWL pos myAttRec True  pcto valto sq) mvlst1 prAgrsqs
-    where !myAttRec = theAttacs pos sq
+    where !hanging  = (advdefence .&. uBit sq) == 0
+          !myAttRec = theAttacs pos sq
           myattacs = mypc .&. atAtt myAttRec
           Busy _ pcto = tabla pos sq
           valto = value pcto
-          hanging = not (advdefence `testBit` sq)
           prAgrsqs = bbToSquares prPawns
           reAgrsqs = bbToSquares reAtts
           (prPawns, reAtts)
