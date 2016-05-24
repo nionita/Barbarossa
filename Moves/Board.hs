@@ -767,10 +767,10 @@ genMoveCaptWL !pos = (map f $ sort ws, map f $ sort ls)
           epcs  = genEPCapts pos
           c     = moving pos
           (ws, ls) = foldr (perCaptFieldWL pos (me pos) (yoAttacs pos)) (lepcs,[]) $ bbToSquares capts
-          lepcs = map (moveToLMove Pawn Pawn) epcs
+          lepcs = map (moveToLMove 0 Pawn Pawn) epcs
           f = moveAddColor c . lmoveToMove
 
-type LMove = Word32
+type LMove = Word64
 
 -- We want to sort MVVLVA, which means first victim, then attacker
 -- Victim is "negate" so that the normal sort will pick higher victims first
@@ -778,14 +778,16 @@ type LMove = Word32
 -- is from low to high value (i.e. pawn, knight, bishop, rook, queen, king)
 -- Otherwise this will not work!
 {-# INLINE moveToLMove #-}
-moveToLMove :: Piece -> Piece -> Move -> LMove
-moveToLMove attacker victim (Move w)
-    =   (vicval `unsafeShiftL` 24)
-    .|. (attval `unsafeShiftL` 16)
+moveToLMove :: Int -> Piece -> Piece -> Move -> LMove
+moveToLMove see attacker victim (Move w)
+    =   (vicval `unsafeShiftL` 56)
+    .|. (attval `unsafeShiftL` 48)
+    .|. (seeval `unsafeShiftL` 16)
     .|. fromIntegral w
     where kingval = fromEnum King
           !vicval = eight $ kingval - fromEnum victim	-- pseudo negate
           !attval = eight $ fromEnum attacker
+          !seeval = fromIntegral $ 0xFFFFFFFF .&. (20000 - see)
           eight   = fromIntegral . ((.&.) 0xFF)
 
 {-# INLINE lmoveToMove #-}
@@ -830,20 +832,23 @@ approximateEasyCapts = True	-- when capturing a better piece: no SEE, it is alwa
 perCaptWL :: MyPos -> Attacks -> Bool -> Piece -> Int -> Square -> Square
           -> ([LMove], [LMove]) -> ([LMove], [LMove])
 perCaptWL !pos !attacks promo vict !gain0 !sq !sqfa (wsqs, lsqs)
-    | promo = ((moveToLMove Pawn vict $ makePromo Queen sqfa sq) : wsqs, lsqs)
-    | approx || adv <= gain0 = (ss:wsqs, lsqs)
-    | otherwise = (wsqs, ss:lsqs)
-    where ss = moveToLMove attc vict $ moveAddPiece attc $ moveFromTo sqfa sq
-          approx = approximateEasyCapts && gain0 >= v0
+    | promo        = ((moveToLMove q0 Pawn vict $ makePromo Queen sqfa sq) : wsqs, lsqs)
+    | approx       = (ss (gain0 - v0) : wsqs, lsqs)
+    | adv <= gain0 = (ss adv : wsqs, lsqs)
+    | otherwise    = (wsqs, ss (-adv) : lsqs)
+    where approx = approximateEasyCapts && gain0 >= v0
+          ss x = moveToLMove x attc vict $ moveAddPiece attc $ moveFromTo sqfa sq
           Busy _ attc = tabla pos sqfa
           v0  = value attc
           adv = seeMoveValue pos attacks sqfa sq v0
+          q0  = value Queen
 
 -- Captures of hanging pieces are always winning
 addHanging :: MyPos -> Piece -> Square -> Square -> ([LMove], [LMove]) -> ([LMove], [LMove])
 addHanging pos vict to from (wsqs, lsqs)
-    = ((moveToLMove apiece vict $ moveAddPiece apiece (moveFromTo from to)) : wsqs, lsqs)
+    = ((moveToLMove 0 apiece vict $ moveAddPiece apiece (moveFromTo from to)) : wsqs, lsqs)
     where Busy _ apiece = tabla pos from
 
 addHangingP :: Piece -> Square -> Square -> ([LMove], [LMove]) -> ([LMove], [LMove])
-addHangingP vict to from (wsqs, lsqs) = ((moveToLMove Pawn vict $ makePromo Queen from to) : wsqs, lsqs)
+addHangingP vict to from (wsqs, lsqs)
+    = ((moveToLMove 0 Pawn vict $ makePromo Queen from to) : wsqs, lsqs)
