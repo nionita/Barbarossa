@@ -131,10 +131,10 @@ instance CollectParams EvalParams where
                     epMaterScale = 1,
                     epMaterBonusScale = 5,
                     epPawnBonusScale  = 1,
-                    epWeakPawn   =  40,
-                    epWeakPawnO  =  32,
-                    epWeakPawnA  = 120,
-                    epWeakPawnB  =  36,
+                    epWeakPawn   =  46,		-- after some BO optimisation
+                    epWeakPawnO  =   0,		-- but the limits were wrong
+                    epWeakPawnA  = 300,		-- only positive
+                    epWeakPawnB  = 275,
                     epPassKingProx = 12,	-- max after ~12k Clop games (ELO +23 +- 12)
                     epPassBlockO = 11,
                     epPassBlockA = 17,
