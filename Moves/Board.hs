@@ -770,7 +770,7 @@ genMoveCaptWL !pos = (map f $ sort ws, map f $ sort ls)
           lepcs = map (moveToLMove 0 Pawn Pawn) epcs
           f = moveAddColor c . lmoveToMove
 
-type LMove = Word64
+type LMove = Word32
 
 -- We want to sort MVVLVA, which means first victim, then attacker
 -- Victim is "negate" so that the normal sort will pick higher victims first
@@ -780,15 +780,14 @@ type LMove = Word64
 {-# INLINE moveToLMove #-}
 moveToLMove :: Int -> Piece -> Piece -> Move -> LMove
 moveToLMove see attacker victim (Move w)
-    =   (vicval `unsafeShiftL` 56)
-    .|. (attval `unsafeShiftL` 48)
+    =   (vicval `unsafeShiftL` 29)
+    .|. (attval `unsafeShiftL` 26)
     .|. (seeval `unsafeShiftL` 16)
     .|. fromIntegral w
     where kingval = fromEnum King
-          !vicval = eight $ kingval - fromEnum victim	-- pseudo negate
-          !attval = eight $ fromEnum attacker
-          !seeval = fromIntegral $ 0xFFFFFFFF .&. (20000 - see)
-          eight   = fromIntegral . ((.&.) 0xFF)
+          !vicval = fromIntegral $ kingval - fromEnum victim	-- pseudo negate
+          !attval = fromIntegral $ fromEnum attacker
+          !seeval = fromIntegral $ 0x3FF .&. (1024 - see)	-- what if losing a queen?
 
 {-# INLINE lmoveToMove #-}
 lmoveToMove :: LMove -> Move
@@ -833,15 +832,15 @@ perCaptWL :: MyPos -> Attacks -> Bool -> Piece -> Int -> Square -> Square
           -> ([LMove], [LMove]) -> ([LMove], [LMove])
 perCaptWL !pos !attacks promo vict !gain0 !sq !sqfa (wsqs, lsqs)
     | promo        = ((moveToLMove q0 Pawn vict $ makePromo Queen sqfa sq) : wsqs, lsqs)
-    | approx       = (ss (gain0 - v0) : wsqs, lsqs)
-    | adv <= gain0 = (ss adv : wsqs, lsqs)
-    | otherwise    = (wsqs, ss (-adv) : lsqs)
+    | approx       = (ss (gain0 - v0)  : wsqs, lsqs)
+    | adv <= gain0 = (ss (gain0 - adv) : wsqs, lsqs)
+    | otherwise    = (wsqs, ss 0 : lsqs)
     where approx = approximateEasyCapts && gain0 >= v0
           ss x = moveToLMove x attc vict $ moveAddPiece attc $ moveFromTo sqfa sq
           Busy _ attc = tabla pos sqfa
           v0  = value attc
           adv = seeMoveValue pos attacks sqfa sq v0
-          q0  = value Queen
+          q0  = value Rook	-- keep it under 10 bits
 
 -- Captures of hanging pieces are always winning
 addHanging :: MyPos -> Piece -> Square -> Square -> ([LMove], [LMove]) -> ([LMove], [LMove])
