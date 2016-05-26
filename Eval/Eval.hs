@@ -84,13 +84,19 @@ evalDispatch p sti
       pawns p .&. yo p == 0 = evalSideNoPawns p sti
     | kings p .|. pawns p == occup p,
       Just r <- pawnEndGame p = r
-    | otherwise    = normalEval p sti
+    | otherwise    = normalEval p sti True
 
 itemEval :: Int -> EvalParams -> EvalWeights -> MyPos -> AnyEvalItem -> MidEnd -> MidEnd
 itemEval gph ep ew p (EvIt a) = evalItem gph ep ew p a
 
-normalEval :: MyPos -> EvalState -> Int
-normalEval p !sti = sc
+normalEval :: MyPos -> EvalState -> Bool -> Int
+normalEval p !sti pcorr
+    | pcorr = if sc >= matesc || sc <= -matesc
+                 then sc
+                 else if gph < 64 && popCount (pawns p) == 1
+                         then sc `unsafeShiftR` 1
+                         else sc
+    | otherwise = sc
     where feat = foldr (itemEval gph ep ew p) (MidEnd 0 0) evalItems
           ep   = esEParams  sti
           ew   = esEWeights sti
@@ -109,9 +115,9 @@ gamePhase p = g
 evalSideNoPawns :: MyPos -> EvalState -> Int
 evalSideNoPawns p sti
     | npwin && insufficient = 0
-    | npwin && lessRook p   = nsc `div` 4
+    | npwin && lessRook p   = nsc `unsafeShiftR` 2
     | otherwise             = nsc
-    where nsc = normalEval p sti
+    where nsc = normalEval p sti False
           npside = if pawns p .&. me p == 0 then me p else yo p
           npwin = npside == me p && nsc > 0 || npside == yo p && nsc < 0
           insufficient = majorcnt == 0 && (minorcnt == 1 || minorcnt == 2 && bishopcnt == 0)
@@ -127,8 +133,8 @@ evalNoPawns p sti = sc
               | kbbk        = mateKBBK p kaloneyo	-- 2 bishops
               | kbnk        = mateKBNK p kaloneyo	-- bishop + knight
               | kMxk        = mateKMajxK p kaloneyo	-- simple mate with at least one major
-              | lessRook p  = (normalEval p sti) `div` 2
-              | otherwise   = normalEval p sti
+              | lessRook p  = (normalEval p sti False) `unsafeShiftR` 1
+              | otherwise   = normalEval p sti False
           kaloneme = me p `less` kings p == 0
           kaloneyo = yo p `less` kings p == 0
           onlykings = kaloneme && kaloneyo
@@ -146,8 +152,8 @@ evalNoPawns p sti = sc
 -- In this case it is drawish (if the winning part has no pawns)
 -- This is a primitive first approach
 lessRook :: MyPos -> Bool
-lessRook p | mq == yq && mr == yr = mb + mn - yb - yn `elem` [-1, 0, 1]
-           | otherwise = False
+lessRook p | md < 5 && md > -5 = True
+           | otherwise         = False
     where !mq = popCount $ queens  p .&. me p
           !yq = popCount $ queens  p .&. yo p
           !mr = popCount $ rooks   p .&. me p
@@ -156,6 +162,9 @@ lessRook p | mq == yq && mr == yr = mb + mn - yb - yn `elem` [-1, 0, 1]
           !yb = popCount $ bishops p .&. yo p
           !mn = popCount $ knights p .&. me p
           !yn = popCount $ knights p .&. yo p
+          !mf = mq * 9 + mr * 5 + (mb + mn) * 3
+          !yf = yq * 9 + yr * 5 + (yb + yn) * 3
+          !md = mf - yf
 
 winBonus :: Int
 winBonus = 200	-- when it's known win
