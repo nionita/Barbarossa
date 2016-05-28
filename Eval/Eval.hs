@@ -858,16 +858,10 @@ advPawns p ew mide = mad ap6 (ewAdvPawn6 ew) $ mad ap5 (ewAdvPawn5 ew) mide
 -- pawn race: when both colors have at least one escaped pp
 -- winning promotion: when only one side has it
 -- Both are only valid in pawn endings
--- The pawn race is tricky when equal:
--- 1. What if the first promoting part gives check (or even mate)? Or what if after both promotions,
--- the first one can check and evntually capture the opposite queen? We just hope this situations are
--- 2. What about the rest of pawns? Here we make a trick: we shift the passed
--- pawns virtually one row back, which gives less points for the possibly remaining
--- passed pawns - now with queens)
+-- The equal pawn race will be left for normal eval
 pawnEndGame :: MyPos -> Maybe Int
 pawnEndGame p
-    -- | null mescds && null yescds             = Nothing
-    | not (null mescds) && not (null yescds) = Just dpr
+    | not (null mescds) && not (null yescds) = dpr
     | not (null mescds)                      = Just myrace
     |                      not (null yescds) = Just yorace
     | otherwise                              = Nothing
@@ -877,34 +871,22 @@ pawnEndGame p
           !yfpbb = passed p .&. yo p
           !myking = kingSquare (kings p) (me p)
           !yoking = kingSquare (kings p) (yo p)
-          (escMe, escYo, maDiff)
-              | moving p == White = (escMeWhite yoking, escYoBlack myking,   mater p)
-              | otherwise         = (escMeBlack yoking, escYoWhite myking, - mater p)
+          (escMe, escYo)
+              | moving p == White = (escMeWhite yoking, escYoBlack myking)
+              | otherwise         = (escMeBlack yoking, escYoWhite myking)
           mpsqs  = map escMe $ bbToSquares mfpbb	-- my pp squares & distances to promotion
           !mescds = map snd $ filter fst mpsqs		-- my escaped passed pawns
           ypsqs  = map escYo $ bbToSquares yfpbb	-- your pp squares & distances to promotion
           !yescds = map snd $ filter fst ypsqs		-- your escaped passed pawns
-          -- mesc = not . null $ mescds
-          -- yesc = not . null $ yescds
-          dpr | mim < miy     =  promoBonus - distMalus mim
-              | mim > miy + 1 = -promoBonus + distMalus miy
-              | otherwise     =  withQueens     -- Here: this is more complex, e.g. if check while promoting
-                                       -- or direct after promotion + queen capture?
-          -- (mim, msq) = minimumBy (comparing snd) mescds      -- who is promoting first?
-          -- (miy, ysq) = minimumBy (comparing snd) yescds
+          dpr | mim < miy     = Just $ promoBonus - distMalus mim
+              | mim > miy + 1 = Just $ -promoBonus + distMalus miy
+              | otherwise     =  Nothing	-- we let normal eval decide
           mim = fst $ minimumBy (comparing snd) mescds      -- who is promoting first?
           miy = fst $ minimumBy (comparing snd) yescds
           myrace =  promoBonus - distMalus mim
           yorace = -promoBonus + distMalus miy
           promoBonus = 1000     -- i.e. almost a queen (here the unit is 1 cp)
           distMalus x = unsafeShiftL x 3        -- to bring at least 8 cp per move until promotion
-          -- We try to estimate static what will be after promotions of both queens
-          -- This will be another specialized evaluation function...
-          -- But now we consider only the material difference (which consists only of pawns)
-          withQueens = maDiff
-          -- This one is for prunning: so match we can win at most
-          -- yoPawnCount = popCount $ pawns p .&. yo p
-          -- speg = simplePawnEndGame p	-- just to see how it works...
  
 escMeWhite :: Square -> Square -> (Bool, (Square, Int))
 escMeWhite !ksq !psq = (esc, (psq, dis))
