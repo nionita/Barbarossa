@@ -38,20 +38,16 @@ data MidEnd = MidEnd { mid, end :: !Int } deriving Show
 
 -- Helper for MidEnd operations:
 {-# INLINE madm #-}
-madm :: MidEnd -> MidEnd -> Int -> MidEnd
-madm !mide0 !mide !v = mide0 { mid = mid mide0 + mid mide * v }
+madm :: Int -> MidEnd -> MidEnd -> MidEnd
+madm !v !mide !mide0 = mide0 { mid = mid mide0 + mid mide * v }
 
 {-# INLINE made #-}
-made :: MidEnd -> MidEnd -> Int -> MidEnd
-made !mide0 !mide !v = mide0 { end = end mide0 + end mide * v }
+made :: Int -> MidEnd -> MidEnd -> MidEnd
+made !v !mide !mide0 = mide0 { end = end mide0 + end mide * v }
 
 {-# INLINE mad #-}
-mad :: MidEnd -> MidEnd -> Int -> MidEnd
-mad !mide0 !mide !v = MidEnd { mid = mid mide0 + mid mide * v, end = end mide0 + end mide * v }
-
--- {-# INLINE (<+>) #-}
--- (<+>) :: MidEnd -> MidEnd -> MidEnd
--- mide1 <+> mide2 = MidEnd { mid = mid mide1 + mid mide2, end = end mide1 + end mide2 }
+mad :: Int -> MidEnd -> MidEnd -> MidEnd
+mad !v !mide !mide0 = MidEnd { mid = mid mide0 + mid mide * v, end = end mide0 + end mide * v }
 
 {-# INLINE tme #-}
 tme :: Int -> Int -> MidEnd
