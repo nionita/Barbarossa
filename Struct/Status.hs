@@ -126,11 +126,11 @@ instance CollectParams EvalParams where
     npColInit = EvalParams {
                     epMovingMid  = 160,		-- after Clop optimisation
                     epMovingEnd  = 130,		-- with 3700 games at 15+0.25 s
-                    epKingOpenR  = 16,
-                    epKingOpenRR = 0,
-                    epKingOpenRQ = 0,
-                    epKingOpenQ  = 16,
-                    epKingOpenQQ = 0,
+                    epKingOpenR  = 4,
+                    epKingOpenRR = 5,
+                    epKingOpenRQ = -21,
+                    epKingOpenQ  = -256,
+                    epKingOpenQQ = 30,
                     epMaterMinor = 1,
                     epMaterRook  = 4,
                     epMaterQueen = 13,
@@ -194,7 +194,7 @@ instance CollectParams EvalWeights where
     npColInit = EvalWeights {
           ewMaterialDiff    = tme 8 8,
           ewKingSafe        = tme 1 0,
-          ewKingOpen        = tme 5 0,
+          ewKingOpen        = tme 3 0,
           ewKingPlaceCent   = tme 6 0,
           ewKingPlacePwns   = tme 0 6,		-- max after ~12k Clop games (ELO +23 +- 12)
           ewRookHOpen       = tme 171 202,
