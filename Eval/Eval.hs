@@ -829,8 +829,8 @@ perPassedPawnOk gph ep p c sq sqbb moi toi moia toia mypat = val
           !kingprx = ((mdis - ydis) * epPassKingProx ep * (256 - gph)) `unsafeShiftR` 8
           !val1 = (pmax * (128 - kingprx) * (128 - epPassBlockO ep * mblo)) `unsafeShiftR` 14
           !val2	-- ~10% more value if it is sustained by an own pawn
-              | sqbb .&. mypat /= 0 = (val1 * (128 - epPassBlockA ep * yblo) * 137) `unsafeShiftR` 14
-              | otherwise           = (val1 * (128 - epPassBlockA ep * yblo) * 125) `unsafeShiftR` 14
+              | sqbb .&. mypat /= 0 = (val1 * (128 - epPassBlockA ep * yblo) * 145) `unsafeShiftR` 14
+              | otherwise           = (val1 * (128 - epPassBlockA ep * yblo) * 123) `unsafeShiftR` 14
           !val  = (val2 * (128 + epPassMyCtrl ep * myctrl) * (128 - epPassYoCtrl ep * yoctrl))
                     `unsafeShiftR` 14
 
