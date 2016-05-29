@@ -790,16 +790,16 @@ perPassedPawn :: Int -> EvalParams -> MyPos -> Color -> Square -> Int
 perPassedPawn gph ep p c sq
     | attacked && not defended
         && c /= moving p = epPassMin ep	-- but if we have more than one like that?
-    | otherwise          = perPassedPawnOk gph ep p c sq sqbb moi toi moia toia
+    | otherwise          = perPassedPawnOk gph ep p c sq sqbb moi toi moia toia mypat
     where !sqbb = 1 `unsafeShiftL` sq
-          (!moi, !toi, !moia, !toia)
-               | moving p == c = (me p, yo p, myAttacs p, yoAttacs p)
-               | otherwise     = (yo p, me p, yoAttacs p, myAttacs p)
+          (!moi, !toi, !moia, !toia, !mypat)
+               | moving p == c = (me p, yo p, myAttacs p, yoAttacs p, myPAttacs p)
+               | otherwise     = (yo p, me p, yoAttacs p, myAttacs p, yoPAttacs p)
           !defended = moia .&. sqbb /= 0
           !attacked = toia .&. sqbb /= 0
 
-perPassedPawnOk :: Int -> EvalParams -> MyPos -> Color -> Square -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
-perPassedPawnOk gph ep p c sq sqbb moi toi moia toia = val
+perPassedPawnOk :: Int -> EvalParams -> MyPos -> Color -> Square -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
+perPassedPawnOk gph ep p c sq sqbb moi toi moia toia mypat = val
     where (!way, !behind) | c == White = (shadowUp sqbb, shadowDown sqbb)
                           | otherwise  = (shadowDown sqbb, shadowUp sqbb)
           !mblo = popCount $ moi .&. way
@@ -828,7 +828,9 @@ perPassedPawnOk gph ep p c sq sqbb moi toi moia toia = val
           !ydis = squareDistance sq yoking
           !kingprx = ((mdis - ydis) * epPassKingProx ep * (256 - gph)) `unsafeShiftR` 8
           !val1 = (pmax * (128 - kingprx) * (128 - epPassBlockO ep * mblo)) `unsafeShiftR` 14
-          !val2 = (val1 * (128 - epPassBlockA ep * yblo)) `unsafeShiftR` 7
+          !val2	-- ~10% more value if it is sustained by an own pawn
+              | sqbb .&. mypat /= 0 = (val1 * (128 - epPassBlockA ep * yblo) * 137) `unsafeShiftR` 14
+              | otherwise           = (val1 * (128 - epPassBlockA ep * yblo) * 125) `unsafeShiftR` 14
           !val  = (val2 * (128 + epPassMyCtrl ep * myctrl) * (128 - epPassYoCtrl ep * yoctrl))
                     `unsafeShiftR` 14
 
