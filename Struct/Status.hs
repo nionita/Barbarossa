@@ -106,6 +106,7 @@ data EvalWeights
           ewEnpAttacked     :: !MidEnd,
           ewLastLinePenalty :: !MidEnd,
           ewBishopPair      :: !MidEnd,
+          ewGoodBishop      :: !MidEnd,
           ewRedundanceRook  :: !MidEnd,
           ewRookPawn        :: !MidEnd,
           ewAdvPawn6        :: !MidEnd,
@@ -199,7 +200,8 @@ instance CollectParams EvalWeights where
           ewEnpEnPrise      = tme (-25) (-21),
           ewEnpAttacked     = tme (-9) (-13),
           ewLastLinePenalty = tme 115 0,
-          ewBishopPair      = tme 363  388,
+          ewBishopPair      = tme 363 388,
+          ewGoodBishop      = tme  20  50,
           ewRedundanceRook  = tme   0 (-105),
           ewRookPawn        = tme (-50) (-40),
           ewAdvPawn5        = tme   10  130,
@@ -268,6 +270,8 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
         ("end.lastLinePenalty", setEndLastLinePenalty),
         ("mid.bishopPair",      setMidBishopPair),
         ("end.bishopPair",      setEndBishopPair),
+        ("mid.goodBishop",      setMidGoodBishop),
+        ("end.goodBishop",      setEndGoodBishop),
         ("mid.redundanceRook",  setMidRedundanceRook),
         ("end.redundanceRook",  setEndRedundanceRook),
         ("mid.rookPawn",        setMidRookPawn),
@@ -339,6 +343,8 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
           setEndLastLinePenalty v' ew' = ew' { ewLastLinePenalty = (ewLastLinePenalty ew') { end = round v' }}
           setMidBishopPair      v' ew' = ew' { ewBishopPair      = (ewBishopPair      ew') { mid = round v' }}
           setEndBishopPair      v' ew' = ew' { ewBishopPair      = (ewBishopPair      ew') { end = round v' }}
+          setMidGoodBishop      v' ew' = ew' { ewGoodBishop      = (ewGoodBishop      ew') { mid = round v' }}
+          setEndGoodBishop      v' ew' = ew' { ewGoodBishop      = (ewGoodBishop      ew') { end = round v' }}
           setMidRedundanceRook  v' ew' = ew' { ewRedundanceRook  = (ewRedundanceRook  ew') { mid = round v' }}
           setEndRedundanceRook  v' ew' = ew' { ewRedundanceRook  = (ewRedundanceRook  ew') { end = round v' }}
           setMidRookPawn        v' ew' = ew' { ewRookPawn        = (ewRookPawn        ew') { mid = round v' }}
