@@ -119,8 +119,8 @@ data EvalWeights
 instance CollectParams EvalParams where
     type CollectFor EvalParams = EvalParams
     npColInit = EvalParams {
-                    epMovingMid  = 160,		-- after Clop optimisation
-                    epMovingEnd  = 130,		-- with 3700 games at 15+0.25 s
+                    epMovingMid  = 106,		-- white advantage is 12 cp in out long term
+                    epMovingEnd  =  90,		-- statistic, so we try this
                     epMaterMinor = 1,
                     epMaterRook  = 4,
                     epMaterQueen = 13,
@@ -174,21 +174,21 @@ instance CollectParams EvalWeights where
     npColInit = EvalWeights {
           ewMaterialDiff    = tme 8 8,
           ewKingSafe        = tme 1 0,
-          ewKingOpen        = tme 5 0,
+          ewKingOpen        = tme 4 1,		-- variation
           ewKingPlaceCent   = tme 6 0,
           ewKingPlacePwns   = tme 0 6,		-- max after ~12k Clop games (ELO +23 +- 12)
-          ewRookHOpen       = tme 171 202,
-          ewRookOpen        = tme 219 221,
-          ewRookConn        = tme  96  78,
-          ewMobilityKnight  = tme 50 71,	-- Evalo 200 steps:
-          ewMobilityBishop  = tme 57 33,	-- length 10, depth 6, batch 128
-          ewMobilityRook    = tme 28 26,
+          ewRookHOpen       = tme 162 192,	-- 5% less
+          ewRookOpen        = tme 208 210,	-- 5% less
+          ewRookConn        = tme  91  74,
+          ewMobilityKnight  = tme 49 69,	-- 3% less
+          ewMobilityBishop  = tme 55 32,	-- 3% less
+          ewMobilityRook    = tme 27 25,	-- 3% less
           ewMobilityQueen   = tme  4  6,
-          ewCenterPAtts     = tme 84 68,
-          ewCenterNAtts     = tme 52 48,
-          ewCenterBAtts     = tme 60 41,
-          ewCenterRAtts     = tme 11 36,
-          ewCenterQAtts     = tme  4 62,
+          ewCenterPAtts     = tme 81 66,	-- 3% less
+          ewCenterNAtts     = tme 50 47,	-- 3% less
+          ewCenterBAtts     = tme 58 40,	-- 3% less
+          ewCenterRAtts     = tme 11 35,	-- 3% less
+          ewCenterQAtts     = tme  4 60,
           ewCenterKAtts     = tme  0 56,
           ewAdvAtts         = tme  3 16,
           ewIsolPawns       = tme (-42) (-122),
@@ -196,7 +196,7 @@ instance CollectParams EvalWeights where
           ewBackPawns       = tme (-120) (-180),
           ewBackPOpen       = tme (-35)    0,
           ewEnpHanging      = tme (-23) (-33),
-          ewEnpEnPrise      = tme (-25) (-21),
+          ewEnpEnPrise      = tme (-24) (-20),	-- 5% less
           ewEnpAttacked     = tme (-9) (-13),
           ewLastLinePenalty = tme 115 0,
           ewBishopPair      = tme 363  388,
@@ -205,7 +205,7 @@ instance CollectParams EvalWeights where
           ewAdvPawn5        = tme   10  130,
           ewAdvPawn6        = tme  440  500,
           ewPawnBlockP      = tme (-124)(-110),
-          ewPawnBlockO      = tme (-23) (-27),
+          ewPawnBlockO      = tme (-22) (-26),	-- 5% less
           ewPawnBlockA      = tme (-14) (-73),
           ewPassPawnLev     = tme 0 9
         }
