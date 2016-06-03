@@ -225,11 +225,13 @@ doMove m qs = do
                       else return $! Exten (calcExtension pc p m) (moveIsCaptPromo pc m)
 
 calcExtension :: MyPos -> MyPos -> Move -> Int
-calcExtension p0 p1 m = chke + capte
-    where chke  | inCheck p1 = 7
-                | otherwise  = 0
-          capte | Busy c fig <- tabla p0 (toSquare m) = matPiece c fig `unsafeShiftR` 7
-                | otherwise                           = 0
+calcExtension p0 p1 m = exte
+    where !chke  | inCheck p1 = 16
+                 | otherwise  =  0
+          !capte | Busy _ fig <- cpt = (matPiece White fig `unsafeShiftR` 6) - 1
+                 | otherwise         = 0
+          !exte = chke + capte
+          cpt = tabla p0 (toSquare m)
 
 doNullMove :: Game ()
 doNullMove = do

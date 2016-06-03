@@ -910,8 +910,7 @@ reserveExtension :: Int -> Search Int
 reserveExtension !exd
     | exd == 0  = return 0
     | otherwise = do
-        !uex <- gets useext
-        let !extbud = uex + exd
+        !extbud <- gets $ (exd +) . useext
         if extbud >= extPitch
            then do
                modify $ \s -> s { useext = extbud - extPitch }
