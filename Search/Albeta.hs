@@ -431,7 +431,7 @@ pvInnerRoot :: Path 	-- current beta
 pvInnerRoot b d nst e = timeToAbort (True, nst) $ do
          pindent $ "-> " ++ show e
          -- do the move
-         exd <- lift $ doMove e False
+         exd <- lift $ doMove e False (pathScore $ cursc nst)
          if legalResult exd
             then do
                 old <- get
@@ -829,7 +829,7 @@ pvInnerLoop b d prune nst e = timeToAbort (True, nst) $ do
             else do
                 old <- get
                 pindent $ "-> " ++ show e
-                exd <- lift $ doMove e False	-- do the move
+                exd <- lift $ doMove e False (pathScore $ cursc nst)	-- do the move
                 if legalResult exd
                    then do
                        newNode
@@ -870,7 +870,7 @@ pvInnerLoopZ b d prune nst e redu = timeToAbort (True, nst) $ do
             else do
                 old <- get
                 pindent $ "-> " ++ show e
-                exd <- lift $ doMove e False	-- do the move
+                exd <- lift $ doMove e False (pathScore $ cursc nst)	-- do the move
                 -- even the legality could be checked before, maybe much cheaper
                 if legalResult exd
                    then do
@@ -1238,7 +1238,7 @@ pvQInnerLoop :: Int -> Int -> Int -> Move -> Search (Bool, Int)
 pvQInnerLoop !b c !a e = timeToAbort (True, b) $ do
          -- here: delta pruning: captured piece + 200 > a? then go on, else return
          -- qindent $ "-> " ++ show e
-         r <-  lift $ doMove e True
+         r <-  lift $ doMove e True 0
          if legalResult r
             then do
                 newNodeQS

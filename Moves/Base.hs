@@ -192,8 +192,8 @@ doRealMove m = do
                    return $ Exten 0 False
 
 -- Move from a node to a descendent - the search version
-doMove :: Move -> Bool -> Game DoResult
-doMove m qs = do
+doMove :: Move -> Bool -> Int -> Game DoResult
+doMove m qs alpha = do
     -- logMes $ "** doMove " ++ show m
     statNodes   -- when counting all visited nodes
     s  <- get
@@ -219,7 +219,7 @@ doMove m qs = do
                    let sts = evalState (posEval p') (evalst s)
                        p = p' { staticScore = sts }
                    put s { stack = p : stack s }
-                   remis <- if qs then return False else checkRemisRules p'
+                   remis <- if qs then return False else checkRemisRules p' alpha
                    if remis
                       then return $ Final 0
                       else do
@@ -256,8 +256,8 @@ bigCheckPos loc pin mmv pou = do
         logMes $ "MyPos p:   " ++ show p
 --}
 
-checkRemisRules :: MyPos -> Game Bool
-checkRemisRules p = do
+checkRemisRules :: MyPos -> Int -> Game Bool
+checkRemisRules p alpha = do
     s <- get
     if remis50Moves p
        then return True
@@ -265,8 +265,9 @@ checkRemisRules p = do
          let revers = map zobkey $ takeWhile isReversible $ stack s
              equal  = filter (== zobkey p) revers	-- if keys are equal, pos is equal
          case equal of
-            (_:_:_)    -> return True
-            _          -> return False
+	    (_:_:_:_) -> return True
+            (_:_:_)   -> return (alpha >= 0)
+            _         -> return False
 
 {-# INLINE undoMove #-}
 undoMove :: Game ()
