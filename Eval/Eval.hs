@@ -54,7 +54,7 @@ evalItems = [ EvIt Material,	-- material balance (i.e. white - black material
 ------------------------------------------------------------------
 -- Parameters of this module ------------
 granCoarse, granCoarse2, granCoarseM, shift2Cp :: Int
-granCoarse    = 4	-- coarse granularity
+granCoarse    = 0	-- coarse granularity
 granCoarse2   = granCoarse `div` 2
 granCoarseM   = complement (granCoarse - 1)
 shift2Cp      = 3	-- we have 2^shift2Cp units per centipawn

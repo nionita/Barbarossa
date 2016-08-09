@@ -36,7 +36,7 @@ useAspirWin = False
 -- Some fix search parameter
 scoreGrain, depthForCM, minToStore, minToRetr, maxDepthExt, negHistMNo, minPvDepth :: Int
 useNegHist, useTTinPv :: Bool
-scoreGrain  = 4	-- score granularity
+scoreGrain  = 1	-- score granularity
 depthForCM  = 7 -- from this depth inform current move
 minToStore  = 1 -- minimum remaining depth to store the position in hash
 minToRetr   = 1 -- minimum remaining depth to retrieve
@@ -101,8 +101,8 @@ nulMoves :: Int
 nulMoves    = 1	-- how many null moves in sequence are allowed (one or two)
 nulMargin, nulSubmrg, nulTrig :: Int
 nulMargin   = 1		-- margin to search the null move (over beta) (in scoreGrain units!)
-nulSubmrg   = 2		-- improved margin (in scoreGrain units!)
-nulTrig     = -15	-- static margin to beta, to trigger null move (in scoreGrain units!)
+nulSubmrg   = 8		-- improved margin (in scoreGrain units!)
+nulTrig     = -60	-- static margin to beta, to trigger null move (in scoreGrain units!)
 nulSubAct :: Bool
 nulSubAct   = True
 
