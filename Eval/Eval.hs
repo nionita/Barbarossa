@@ -512,7 +512,7 @@ centerDiff p ew mide = mad (mad (mad (mad (mad (mad mide (ewCenterPAtts ew) pd) 
           !mka = popCount $ myKAttacs p .&. center
           !yka = popCount $ yoKAttacs p .&. center
           !kd  = mka - yka
-          center = 0x0000001818000000
+          center = 0x0000003C3C000000
 
 -------- Attacks to adverse squares ----------
 data Advers = Advers
