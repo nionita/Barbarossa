@@ -107,11 +107,11 @@ maxMoves = 128
 -- So for d==1 or d==2 we make direct sort, which must be very fast, as this is the most effort
 -- The question is, if no direct sort is much better than the MTS method - to be tested...
 {-# INLINE histSortMoves #-}
-histSortMoves :: Int -> History -> [Move] -> [Move]
-histSortMoves d h ms
+histSortMoves :: Int -> History -> Maybe Square -> [Move] -> [Move]
+histSortMoves d h msq ms
     | null ms   = []
     | d > 2     = mtsList $ makeMTS h ms
-    | otherwise = dirSort h ms
+    | otherwise = dirSort h msq ms
 
 {-# INLINE makeMTS #-}
 makeMTS :: History -> [Move] -> MovesToSort
@@ -162,14 +162,35 @@ oneMove uwa = [ Move $ U.unsafeIndex uw 0 ]
 
 -- Direct sort, i.e. read the current history values for every move
 -- and sort the moves accordigly (take care of the trick!)
-dirSort :: History -> [Move] -> [Move]
-dirSort h ms = runST $ do
+-- If we have a threat move (from null move) give better history values
+-- for those moves which move the threatened piece
+dirSort :: History -> Maybe Square -> [Move] -> [Move]
+dirSort h msq ms = runST $ do
     uh <- unsafeIOToST $ U.unsafeFreeze h
-    let uw = U.fromListN maxMoves $ map (\(Move w) -> w) ms
-        uv = U.fromListN maxMoves $ map (U.unsafeIndex uh) $ adrs ms
-        uz = U.zip uw uv
+    let uz = case msq of
+                 Nothing ->
+                     let uw  = U.fromListN maxMoves $ map (\(Move w) -> w) ms
+                         uv  = U.fromListN maxMoves $ map (U.unsafeIndex uh) $ adrs ms
+                         uzr = U.zip uw uv
+                     in uzr
+                 Just sq ->	-- here we apply a correction of -1 to moves that "escape"
+                     let uwc = U.fromListN maxMoves $ map (movesAndCorr sq) ms
+                         uv  = U.fromListN maxMoves $ map (U.unsafeIndex uh) $ adrs ms
+                         (uw, uc) = U.unzip uwc
+                         uzr = U.zip uw $ U.zipWith (+) uc uv
+                     in uzr
     vz <- U.unsafeThaw uz
     H.sortBy (comparing snd) vz
     uz' <- U.unsafeFreeze vz
     let (uw', _) = U.unzip uz'
     return $ map Move $ U.toList uw'
+
+-- Helper to give bonus for moves that "escape" the threat
+-- By subtracting 1 we try to bring them earlier in the move list
+-- (but of course the history value is much more stronger usually, so this will
+-- affect either equal history moves or such which have a very low value)
+{-# INLINE movesAndCorr #-}
+movesAndCorr :: Square -> Move -> (Word16, Int32)
+movesAndCorr sq mv@(Move w)
+    | fromSquare mv == sq = (w, -1)
+    | otherwise           = (w,  0)

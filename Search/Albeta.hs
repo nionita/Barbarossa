@@ -365,7 +365,7 @@ pvRootSearch a b d lastpath rmvs aspir = do
                 then do
                     let a' = pathFromScore "a" a
                         b' = pathFromScore "b" b
-                    genAndSort nst0 { pvcont = lastpath } a' b' d	-- this will never really do IID as d==1
+                    genAndSort nst0 { pvcont = lastpath } a' b' d Nothing	-- this will never really do IID as d==1
                 else case lastpath of
                          Seq []    -> return rmvs	-- probably this never happens... - check to simplify!
                          Seq (e:_) -> return $ Alt $ e : delete e (unalt rmvs)
@@ -620,7 +620,7 @@ pvSearch nst !a !b !d = do
            let nst' = if hdeep > 0 && (tp /= 0 || nullSeq (pvcont nst))
                          then nst { pvcont = Seq [e] }
                          else nst
-           edges <- genAndSort nst' a b d
+           edges <- genAndSort nst' a b d Nothing
            if noMove edges
               then do
                 chk <- lift tacticalPos
@@ -702,7 +702,7 @@ pvZeroW !nst !b !d !lastnull redu = do
                     let nst' = if hdeep > 0 && (tp /= 0 || nullSeq (pvcont nst))
                                   then nst { pvcont = Seq [e] }
                                   else nst
-                    edges <- genAndSort nst' bGrain b d
+                    edges <- genAndSort nst' bGrain b d (nmThreat nmhigh)
                     if noMove edges
                        then do
                          chk <- lift tacticalPos
@@ -744,6 +744,10 @@ pvZeroW !nst !b !d !lastnull redu = do
     where bGrain = b -: scoreGrain
 
 data NullMoveResult = NoNullMove | NullMoveHigh | NullMoveLow | NullMoveThreat Path
+
+nmThreat :: NullMoveResult -> Maybe Path
+nmThreat (NullMoveThreat p) = Just p
+nmThreat _                  = Nothing
 
 nullMoveFailsHigh :: NodeState -> Path -> Int -> Int -> Search NullMoveResult
 nullMoveFailsHigh nst b d lastnull
@@ -1081,15 +1085,21 @@ newTKiller d s
 -- We don't sort the moves here, they have to come sorted from genMoves
 -- But we consider the best moves first (from previous iteration, TT or IID)
 -- and the killers
-genAndSort :: NodeState -> Path -> Path -> Int -> Search (Alt Move)
-genAndSort nst a b d = do
+genAndSort :: NodeState -> Path -> Path -> Int -> Maybe Path -> Search (Alt Move)
+genAndSort nst a b d mtpath = do
     let path' = unseq $ pvcont nst
     path <- if null path' && useIID
                then bestMoveFromIID nst a b d	-- it will do nothing for AllNode
                else return path'		-- if not null
     lift $ do
         kl  <- filterM isMoveLegal $ killerToList (killer nst)
-        esp <- genMoves d
+        let mmv = case mtpath of
+                      Nothing    -> Nothing
+                      Just tpath -> let mvs = pathMoves tpath
+                                    in if nullSeq mvs
+                                          then Nothing
+                                          else Just $ head $ unseq mvs
+        esp <- genMoves d mmv
         let es = bestFirst path kl esp
         return $ Alt es
 
@@ -1186,7 +1196,7 @@ pvQSearch !a !b !c = do				   -- to avoid endless loops
     !tact <- lift tacticalPos
     if tact
        then do
-           (es1, es2) <- lift $ genMoves 0
+           (es1, es2) <- lift $ genMoves 0 Nothing
            let edges = Alt $ es1 ++ es2
            if noMove edges
               then do

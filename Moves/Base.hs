@@ -85,8 +85,8 @@ posNewSearch p = p { hash = newGener (hash p) }
 loosingLast :: Bool
 loosingLast = True
 
-genMoves :: Int -> Game ([Move], [Move])
-genMoves d = do
+genMoves :: Int -> Maybe Move -> Game ([Move], [Move])
+genMoves d mmv = do
     p <- getPos
     if isCheck p $ moving p
        then return (genMoveFCheck p, [])
@@ -95,8 +95,14 @@ genMoves d = do
             let l0 = genMoveCast p
                 l1 = genMovePromo p
                 (l2w, l2l) = genMoveCaptWL p
+                msq = case mmv of
+                          Nothing -> Nothing
+                          Just mv -> let !sq = toSquare mv
+                                     in case tabla p sq of
+                                            Empty -> Nothing
+                                            _     -> Just sq
                 l3' = genMoveNCapt p
-                l3 = histSortMoves d h l3'
+                l3 = histSortMoves d h msq l3'
             -- l3 <- sortMovesFromHist l3'
             return $! if loosingLast
                          then (l1 ++ l2w, l0 ++ l3 ++ l2l)
