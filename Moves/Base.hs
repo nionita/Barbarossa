@@ -31,7 +31,6 @@ import Struct.Context
 import Struct.Status
 import Hash.TransTab
 import Moves.Board
-import Eval.BasicEval
 import Eval.Eval
 import Moves.ShowMe
 import Moves.History
@@ -228,9 +227,9 @@ calcExtension :: MyPos -> MyPos -> Move -> Int
 calcExtension p0 p1 m = exte
     where !chke  | inCheck p1 = 16
                  | otherwise  =  0
-          !capte | Busy _ Queen <- cpt = 16
-                 | Busy _ Rook  <- cpt =  9
-                 | otherwise           =  0
+          !capte | Busy _ Queen <- cpt = 8
+                 | Busy _ Rook  <- cpt = 4
+                 | otherwise           = 0
           !exte = chke + capte
           cpt = tabla p0 (toSquare m)
 
