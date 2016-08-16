@@ -714,11 +714,16 @@ pvZeroW !nst !b !d !lastnull redu = do
                          -- futility pruning:
                          prune <- isPruneFutil d bGrain False
                          -- Loop thru the moves
-                         kill1 <- case nmhigh of
-                                      NullMoveThreat s -> newTKiller d s
-                                      _                -> return NoKiller
+                         (kill1, dd)
+                           <- case nmhigh of
+                                   NullMoveThreat s -> do
+                                     k <- newTKiller d s
+                                     if nearmate $ pathScore s
+                                        then return (k, d+1)
+                                        else return (k, d)
+                                   _      -> return (NoKiller, d)
                          let !nsti = resetNSt bGrain kill1 nst'
-                         nstf <- pvZLoop b d prune redu nsti edges
+                         nstf <- pvZLoop b dd prune redu nsti edges
                          let s = cursc nstf
                          -- Here we expect bGrain <= s < b -- this must be checked
                          pindent $ "<: " ++ show s
