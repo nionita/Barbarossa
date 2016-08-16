@@ -228,8 +228,9 @@ calcExtension :: MyPos -> MyPos -> Move -> Int
 calcExtension p0 p1 m = exte
     where !chke  | inCheck p1 = 16
                  | otherwise  =  0
-          !capte | Busy _ fig <- cpt = (matPiece White fig `unsafeShiftR` 6) - 1
-                 | otherwise         = 0
+          !capte | Busy _ Queen <- cpt = 16
+                 | Busy _ Rook  <- cpt =  9
+                 | otherwise           =  0
           !exte = chke + capte
           cpt = tabla p0 (toSquare m)
 
