@@ -52,7 +52,7 @@ lmrActive   = True
 lmrDebug    = False
 lmrInitLv, lmrInitLim, lmrLevMin, lmrLevMax :: Int
 lmrInitLv   = 8
-lmrInitLim  = 8500
+lmrInitLim  = 10000
 lmrLevMin   = 0
 lmrLevMax   = 15
 
@@ -1104,22 +1104,22 @@ reduceLmr !d nearmatea !spec !exd lmrlev w
 
 -- Adjust the LMR related parameters in the state
 moreLMR :: Bool -> Int -> Search ()
-moreLMR more !d = do
+moreLMR good !d = do
     s <- get
-    let !i  | more      = 1
+    let !i  | good      = 1
             | otherwise = - (1 `unsafeShiftL` d)
         !i1 = lmrrs s + i
     if i1 < 0
        then if lmrlv s <= lmrLevMin
-               then put s { lmrhi = find (lmrhi s), lmrrs = 0 }
-               else put s { lmrlv = lmrlv s - 1, lmrrs = 0 }
+               then put s { lmrhi = less (lmrhi s), lmrrs = 0 }
+               else put s { lmrhi = less (lmrhi s), lmrlv = lmrlv s - 1, lmrrs = 0 }
        else if i1 > lmrhi s
                then if lmrlv s >= lmrLevMax
-                       then put s { lmrhi = fdir (lmrhi s), lmrrs = 0 }
-                       else put s { lmrlv = lmrlv s + 1, lmrrs = 0 }
+                       then put s { lmrhi = more (lmrhi s), lmrrs = 0 }
+                       else put s { lmrhi = more (lmrhi s), lmrlv = lmrlv s + 1, lmrrs = 0 }
                else put s { lmrrs = i1 }
-    where fdir x = x `unsafeShiftL` 2
-          find x = max 1 $ x `unsafeShiftR` 1
+    where more x =         x `unsafeShiftL` 1
+          less x = max 1 $ x `unsafeShiftR` 1
 
 -- This is a kind of monadic fold optimized for (beta) cut
 -- {-# INLINE pvLoop #-}
