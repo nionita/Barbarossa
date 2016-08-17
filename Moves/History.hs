@@ -93,7 +93,7 @@ subHist h !ad !p = do
 -- The structure has the history, a zipped vector of move (as Word16 part) and
 -- history address and the index of the last valid move in that vector
 type MoveVect = U.Vector (Word16, Word16)	-- move, history index (short form)
-data MovesToSort = MTS History MoveVect !Int
+data MovesToSort = MTS History MoveVect !Int !Int32 !(Maybe Square)
 
 -- We want to alloc a fix amount of memory, and although there are
 -- positions which have more (quiet) moves, they are very rare
@@ -110,19 +110,20 @@ maxMoves = 128
 histSortMoves :: Int -> History -> Maybe Square -> [Move] -> [Move]
 histSortMoves d h msq ms
     | null ms   = []
-    | d > 2     = mtsList $ makeMTS h ms
-    | otherwise = dirSort h msq ms
+    | d > 2     = mtsList $ makeMTS h d msq ms
+    | otherwise = dirSort h d msq ms
 
 {-# INLINE makeMTS #-}
-makeMTS :: History -> [Move] -> MovesToSort
-makeMTS h ms = MTS h (U.zip uw ua) k
+makeMTS :: History -> Int -> Maybe Square -> [Move] -> MovesToSort
+makeMTS h d msq ms = MTS h (U.zip uw ua) k bonus msq
     where uw = U.fromListN maxMoves $ map (\(Move w) -> w) ms
           ua = U.fromListN maxMoves $ map fromIntegral $ adrs ms
           k  = U.length uw - 1
+          bonus = fromIntegral d
 
 -- Transform the structure lazyli to a move list
 mtsList :: MovesToSort -> [Move]
-mtsList (MTS h uwa k)
+mtsList (MTS h uwa k bonus msq)
     | k <  0    = []		-- no further moves
     | k == 0    = oneMove uwa	-- last move: no history value needed
     | otherwise = m : mtsList mts
@@ -135,8 +136,13 @@ mtsList (MTS h uwa k)
               go !i !i0 !v0
                   | i > k     = i0
                   | otherwise =
-                       let v = hival i	-- history value of this position
-                       in if v < v0	-- we take minimum coz that trick (bigger is worse)
+                       let v   = hival i	-- history value of this position
+                           !vb = case msq of
+                                     Nothing -> v
+                                     Just sq -> if sq == (fromSquare $ Move $ U.unsafeIndex uw i)
+                                                   then v - bonus
+                                                   else v
+                       in if vb < v0	-- we take minimum coz that trick (bigger is worse)
                              then go (i+1) i  v
                              else go (i+1) i0 v0
           let !v0 = hival 0
@@ -145,7 +151,7 @@ mtsList (MTS h uwa k)
           -- Now swap the minimum with the last active element for both vectors
           -- to eliminate the used move (if necessary)
           if i == k	-- when last was best
-             then return (Move w, MTS h uwa (k-1))
+             then return (Move w, MTS h uwa (k-1) bonus msq)
              else do
                  vw <- U.unsafeThaw uw			-- thaw the move vector
                  va <- U.unsafeThaw ua			-- thaw the history address vector
@@ -153,7 +159,7 @@ mtsList (MTS h uwa k)
                  V.unsafeSwap va k i
                  uw' <- U.unsafeFreeze vw
                  ua' <- U.unsafeFreeze va
-                 return (Move w, MTS h (U.zip uw' ua') (k-1))
+                 return (Move w, MTS h (U.zip uw' ua') (k-1) bonus msq)
 
 {-# INLINE oneMove #-}
 oneMove :: MoveVect -> [Move]
@@ -164,8 +170,8 @@ oneMove uwa = [ Move $ U.unsafeIndex uw 0 ]
 -- and sort the moves accordigly (take care of the trick!)
 -- If we have a threat move (from null move) give better history values
 -- for those moves which move the threatened piece
-dirSort :: History -> Maybe Square -> [Move] -> [Move]
-dirSort h msq ms = runST $ do
+dirSort :: History -> Int -> Maybe Square -> [Move] -> [Move]
+dirSort h d msq ms = runST $ do
     uh <- unsafeIOToST $ U.unsafeFreeze h
     let uz = case msq of
                  Nothing ->
@@ -174,7 +180,7 @@ dirSort h msq ms = runST $ do
                          uzr = U.zip uw uv
                      in uzr
                  Just sq ->	-- here we apply a correction of -1 to moves that "escape"
-                     let uwc = U.fromListN maxMoves $ map (movesAndCorr sq) ms
+                     let uwc = U.fromListN maxMoves $ map (movesAndCorr d sq) ms
                          uv  = U.fromListN maxMoves $ map (U.unsafeIndex uh) $ adrs ms
                          (uw, uc) = U.unzip uwc
                          uzr = U.zip uw $ U.zipWith (+) uc uv
@@ -186,11 +192,10 @@ dirSort h msq ms = runST $ do
     return $ map Move $ U.toList uw'
 
 -- Helper to give bonus for moves that "escape" the threat
--- By subtracting 1 we try to bring them earlier in the move list
--- (but of course the history value is much more stronger usually, so this will
--- affect either equal history moves or such which have a very low value)
+-- We give a bonus (depending on depth) to bring them earlier in the move list
 {-# INLINE movesAndCorr #-}
-movesAndCorr :: Square -> Move -> (Word16, Int32)
-movesAndCorr sq mv@(Move w)
-    | fromSquare mv == sq = (w, -1)
-    | otherwise           = (w,  0)
+movesAndCorr :: Int -> Square -> Move -> (Word16, Int32)
+movesAndCorr d sq mv@(Move w)
+    | fromSquare mv == sq = (w, bonus)
+    | otherwise           = (w,     0)
+    where bonus = - (fromIntegral d)
