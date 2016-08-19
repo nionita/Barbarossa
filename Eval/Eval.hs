@@ -460,30 +460,63 @@ perRook allp myp rsq (ho, op)
           rcolls = listArray (0, 7) [ fileA, fileB, fileC, fileD, fileE, fileF, fileG, fileH ]
 
 ------ Mobility ------
-data Mobility = Mobility	-- "safe" moves
+data Mobility = Mobility	-- We take all attacks not occupied by own pieces (like Stockfish)
 
 instance EvalItem Mobility where
-    evalItem _ _ ew p _ mide = mobDiff p ew mide
+    evalItem _ _ _ p _ mide = mobDiff p mide
 
--- Here we do not calculate pawn mobility (which, calculated as attacs, is useless)
-mobDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-mobDiff p ew mide = mad (mad (mad (mad mide (ewMobilityKnight ew) n) (ewMobilityBishop ew) b) (ewMobilityRook ew) r) (ewMobilityQueen ew) q
-    where !myN = popCount $ myNAttacs p `less` (me p .|. yoPAttacs p)
-          !myB = popCount $ myBAttacs p `less` (me p .|. yoPAttacs p)
-          !myR = popCount $ myRAttacs p `less` (me p .|. yoA1)
-          !myQ = popCount $ myQAttacs p `less` (me p .|. yoA2)
-          !yoA1 = yoPAttacs p .|. yoNAttacs p .|. yoBAttacs p
-          !yoA2 = yoA1 .|. yoRAttacs p
-          !yoN = popCount $ yoNAttacs p `less` (yo p .|. myPAttacs p)
-          !yoB = popCount $ yoBAttacs p `less` (yo p .|. myPAttacs p)
-          !yoR = popCount $ yoRAttacs p `less` (yo p .|. myA1)
-          !yoQ = popCount $ yoQAttacs p `less` (yo p .|. myA2)
-          !myA1 = myPAttacs p .|. myNAttacs p .|. myBAttacs p
-          !myA2 = myA1 .|. myRAttacs p
-          !n = myN - yoN
-          !b = myB - yoB
-          !r = myR - yoR
-          !q = myQ - yoQ
+-- The mobility weights are not parameterised for now!
+mobDiff :: MyPos -> MidEnd -> MidEnd
+mobDiff p mide = memo <-> yomo
+    where myN = map (mideFromArray knightMobility . popCount . (.&. notme) . nAttacs)
+                    $ bbToSquares (knights p .&. me p)
+          yoN = map (mideFromArray knightMobility . popCount . (.&. notyo) . nAttacs)
+                    $ bbToSquares (knights p .&. yo p)
+          myB = map (mideFromArray bishopMobility . popCount . (.&. notme) . bAttacs (occup p))
+                    $ bbToSquares (bishops p .&. me p)
+          yoB = map (mideFromArray bishopMobility . popCount . (.&. notyo) . bAttacs (occup p))
+                    $ bbToSquares (bishops p .&. yo p)
+          myR = map (mideFromArray rookMobility . popCount . (.&. notme) . rAttacs (occup p))
+                    $ bbToSquares (rooks p .&. me p)
+          yoR = map (mideFromArray rookMobility . popCount . (.&. notyo) . rAttacs (occup p))
+                    $ bbToSquares (rooks p .&. yo p)
+          myQ = map (mideFromArray queenMobility . popCount . (.&. notme) . qAttacs (occup p))
+                    $ bbToSquares (queens p .&. me p)
+          yoQ = map (mideFromArray queenMobility . popCount . (.&. notyo) . qAttacs (occup p))
+                    $ bbToSquares (queens p .&. yo p)
+          memo = foldr (<+>) mide      $ myN ++ myB ++ myR ++ myQ
+          yomo = foldr (<+>) (tme 0 0) $ yoN ++ yoB ++ yoR ++ yoQ
+          !notme = complement $ me p
+          !notyo = complement $ yo p
+
+{-# INLINE mideFromArray #-}
+mideFromArray :: UArray Int Int -> Int -> MidEnd
+mideFromArray a i = tme mi en
+    where !mi = a `unsafeAt` x
+          !en = a `unsafeAt` (x+1)
+          !x = i + i
+
+-- The mobility bonuses will be stored in successive entries of an unboxed array
+-- (one array per piece type) indexed by number of attacks (without those occupied
+-- by own pieces) x2: first the mid value, then the end value
+-- We copied the weights from Stockfish, where they are in centipawns
+-- so we have to multiply them by 8 here
+knightMobility :: UArray Int Int
+knightMobility = listArray (0, 17) $ map (*8)
+    [ -65, -50, -42, -30, -9, -10, 3, 0, 15, 10, 27, 20, 37, 28, 42, 31, 44, 33 ]
+bishopMobility :: UArray Int Int
+bishopMobility = listArray (0, 27) $ map (*8)
+    [ -52, -47, -28, -23, 6, 1, 20, 15, 34, 29, 48, 43, 60, 55, 68, 63, 74, 68,
+       77, 72, 80, 75, 82, 77, 84, 79, 86, 81 ]
+rookMobility :: UArray Int Int
+rookMobility = listArray (0, 29) $ map (*8)
+    [ -47, -53, -31, -26, -5, 0, 1, 16, 7, 32, 13, 48, 18, 64, 22, 80, 26, 96,
+       29, 109, 31, 115, 33, 119, 35, 122, 36, 123, 37, 124 ]
+queenMobility :: UArray Int Int
+queenMobility = listArray (0, 55) $ map (*8)
+    [ -42, -40, -28, -23, -5, -7, 0, 0, 6, 10, 11, 19, 13, 29, 18, 38, 20, 40, 21, 41,
+       22, 41, 22, 41, 22, 41, 23, 41, 24, 41, 25, 41, 25, 41, 25, 41, 25, 41, 25, 41,
+       25, 41, 25, 41, 25, 41, 25, 41, 25, 41, 25, 41, 25, 41, 25, 41 ]
 
 ------ Center control ------
 data Center = Center
