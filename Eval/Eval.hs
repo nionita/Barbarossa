@@ -463,26 +463,26 @@ perRook allp myp rsq (ho, op)
 data Mobility = Mobility	-- We take all attacks not occupied by own pieces (like Stockfish)
 
 instance EvalItem Mobility where
-    evalItem _ _ _ p _ mide = mobDiff p mide
+    evalItem _ _ ew p _ mide = mobDiff p ew mide
 
 -- The mobility weights are not parameterised for now!
-mobDiff :: MyPos -> MidEnd -> MidEnd
-mobDiff p mide = memo <-> yomo
-    where myN = map (mideFromArray knightMobility . popCount . (.&. notme) . nAttacs)
+mobDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
+mobDiff p ew mide = memo <-> yomo
+    where myN = map (mideFromArray knightMobility (ewMoKnightMul ew) (ewMoKnightAdd ew) . popCount . (.&. notme) . nAttacs)
                     $ bbToSquares (knights p .&. me p)
-          yoN = map (mideFromArray knightMobility . popCount . (.&. notyo) . nAttacs)
+          yoN = map (mideFromArray knightMobility (ewMoKnightMul ew) (ewMoKnightAdd ew) . popCount . (.&. notyo) . nAttacs)
                     $ bbToSquares (knights p .&. yo p)
-          myB = map (mideFromArray bishopMobility . popCount . (.&. notme) . bAttacs (occup p))
+          myB = map (mideFromArray bishopMobility (ewMoBishopMul ew) (ewMoBishopAdd ew) . popCount . (.&. notme) . bAttacs (occup p))
                     $ bbToSquares (bishops p .&. me p)
-          yoB = map (mideFromArray bishopMobility . popCount . (.&. notyo) . bAttacs (occup p))
+          yoB = map (mideFromArray bishopMobility (ewMoBishopMul ew) (ewMoBishopAdd ew) . popCount . (.&. notyo) . bAttacs (occup p))
                     $ bbToSquares (bishops p .&. yo p)
-          myR = map (mideFromArray rookMobility . popCount . (.&. notme) . rAttacs (occup p))
+          myR = map (mideFromArray rookMobility (ewMoRookMul ew) (ewMoRookAdd ew) . popCount . (.&. notme) . rAttacs (occup p))
                     $ bbToSquares (rooks p .&. me p)
-          yoR = map (mideFromArray rookMobility . popCount . (.&. notyo) . rAttacs (occup p))
+          yoR = map (mideFromArray rookMobility (ewMoRookMul ew) (ewMoRookAdd ew) . popCount . (.&. notyo) . rAttacs (occup p))
                     $ bbToSquares (rooks p .&. yo p)
-          myQ = map (mideFromArray queenMobility . popCount . (.&. notme) . qAttacs (occup p))
+          myQ = map (mideFromArray queenMobility (ewMoQueenMul ew) (ewMoQueenAdd ew) . popCount . (.&. notme) . qAttacs (occup p))
                     $ bbToSquares (queens p .&. me p)
-          yoQ = map (mideFromArray queenMobility . popCount . (.&. notyo) . qAttacs (occup p))
+          yoQ = map (mideFromArray queenMobility (ewMoQueenMul ew) (ewMoQueenAdd ew) . popCount . (.&. notyo) . qAttacs (occup p))
                     $ bbToSquares (queens p .&. yo p)
           memo = foldr (<+>) mide      $ myN ++ myB ++ myR ++ myQ
           yomo = foldr (<+>) (tme 0 0) $ yoN ++ yoB ++ yoR ++ yoQ
@@ -490,33 +490,36 @@ mobDiff p mide = memo <-> yomo
           !notyo = complement $ yo p
 
 {-# INLINE mideFromArray #-}
-mideFromArray :: UArray Int Int -> Int -> MidEnd
-mideFromArray a i = tme mi en
-    where !mi = a `unsafeAt` x
-          !en = a `unsafeAt` (x+1)
-          !x = i + i
+mideFromArray :: UArray Int Int -> MidEnd -> MidEnd -> Int -> MidEnd
+mideFromArray a (MidEnd { mid = mmid, end = mend }) (MidEnd { mid = amid, end = aend }) i
+    = tme mi en
+    where !y = a `unsafeAt` i
+          !mi = (mmid * y `unsafeShiftR` 10) + amid
+          !en = (mend * y `unsafeShiftR` 10) + aend
+
+-- This generates a list of values of a parabel (y = a*x**2 + b*x + c)
+-- with given xmax, xMax and y0 = -1, which are maximum desired x, x for maximum & y at 0
+-- The generated values are in fix point representation (i.e. * 1024)
+-- so that we can scale the result (multiply by scale and divide by 1024)
+paraBol :: Int -> Int -> [Int]
+paraBol xmax xMax = [ round (1024 * f (fromIntegral x)) | x <- [0..xmax] ]
+    where f :: Double -> Double
+          f x = (a * x + b) * x - 1
+          xi = 1 / (fromIntegral xMax)
+          a  = - (xi * xi)
+          b  = 2 * xi
 
 -- The mobility bonuses will be stored in successive entries of an unboxed array
 -- (one array per piece type) indexed by number of attacks (without those occupied
 -- by own pieces) x2: first the mid value, then the end value
--- We copied the weights from Stockfish, where they are in centipawns
--- so we have to multiply them by 8 here
 knightMobility :: UArray Int Int
-knightMobility = listArray (0, 17) $ map (*8)
-    [ -65, -50, -42, -30, -9, -10, 3, 0, 15, 10, 27, 20, 37, 28, 42, 31, 44, 33 ]
+knightMobility = listArray (0,  8) $ paraBol 8 12
 bishopMobility :: UArray Int Int
-bishopMobility = listArray (0, 27) $ map (*8)
-    [ -52, -47, -28, -23, 6, 1, 20, 15, 34, 29, 48, 43, 60, 55, 68, 63, 74, 68,
-       77, 72, 80, 75, 82, 77, 84, 79, 86, 81 ]
+bishopMobility = listArray (0, 13) $ paraBol 13 20
 rookMobility :: UArray Int Int
-rookMobility = listArray (0, 29) $ map (*8)
-    [ -47, -53, -31, -26, -5, 0, 1, 16, 7, 32, 13, 48, 18, 64, 22, 80, 26, 96,
-       29, 109, 31, 115, 33, 119, 35, 122, 36, 123, 37, 124 ]
+rookMobility   = listArray (0, 14) $ paraBol 14 21
 queenMobility :: UArray Int Int
-queenMobility = listArray (0, 55) $ map (*8)
-    [ -42, -40, -28, -23, -5, -7, 0, 0, 6, 10, 11, 19, 13, 29, 18, 38, 20, 40, 21, 41,
-       22, 41, 22, 41, 22, 41, 23, 41, 24, 41, 25, 41, 25, 41, 25, 41, 25, 41, 25, 41,
-       25, 41, 25, 41, 25, 41, 25, 41, 25, 41, 25, 41, 25, 41, 25, 41 ]
+queenMobility  = listArray (0, 27) $ paraBol 27 27
 
 ------ Center control ------
 data Center = Center

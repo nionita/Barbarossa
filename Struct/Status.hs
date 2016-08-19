@@ -90,10 +90,14 @@ data EvalWeights
           ewRookHOpen       :: !MidEnd,
           ewRookOpen        :: !MidEnd,
           ewRookConn        :: !MidEnd,
-          ewMobilityKnight  :: !MidEnd,
-          ewMobilityBishop  :: !MidEnd,
-          ewMobilityRook    :: !MidEnd,
-          ewMobilityQueen   :: !MidEnd,
+          ewMoKnightMul  :: !MidEnd,
+          ewMoBishopMul  :: !MidEnd,
+          ewMoRookMul    :: !MidEnd,
+          ewMoQueenMul   :: !MidEnd,
+          ewMoKnightAdd  :: !MidEnd,
+          ewMoBishopAdd  :: !MidEnd,
+          ewMoRookAdd    :: !MidEnd,
+          ewMoQueenAdd   :: !MidEnd,
           ewCenterPAtts     :: !MidEnd,
           ewCenterNAtts     :: !MidEnd,
           ewCenterBAtts     :: !MidEnd,
@@ -184,10 +188,14 @@ instance CollectParams EvalWeights where
           ewRookHOpen       = tme 171 202,
           ewRookOpen        = tme 219 221,
           ewRookConn        = tme  96  78,
-          ewMobilityKnight  = tme 50 71,	-- Evalo 200 steps:
-          ewMobilityBishop  = tme 57 33,	-- length 10, depth 6, batch 128
-          ewMobilityRook    = tme 28 26,
-          ewMobilityQueen   = tme  4  6,
+          ewMoKnightMul     = tme 400 400,	-- These mobility parameters are now multipiers & offsets
+          ewMoBishopMul     = tme 740 430,	-- to transform the non-linear mobility arrays
+          ewMoRookMul       = tme 350 400,	-- used in evaluation
+          ewMoQueenMul      = tme  75 160,
+          ewMoKnightAdd     = tme 300 360,	-- These mobility parameters are now multipiers & offsets
+          ewMoBishopAdd     = tme 560 360,	-- to transform the non-linear mobility arrays
+          ewMoRookAdd       = tme 210 300,	-- used in evaluation
+          ewMoQueenAdd      = tme  55 120,
           ewCenterPAtts     = tme 84 68,
           ewCenterNAtts     = tme 49 45,
           ewCenterBAtts     = tme 57 39,
@@ -232,14 +240,22 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
         ("end.rookOpen",       setEndRookOpen),
         ("mid.rookConn",       setMidRookConn),
         ("end.rookConn",       setEndRookConn),
-        ("mid.mobilityKnight", setMidMobilityKnight),
-        ("end.mobilityKnight", setEndMobilityKnight),
-        ("mid.mobilityBishop", setMidMobilityBishop),
-        ("end.mobilityBishop", setEndMobilityBishop),
-        ("mid.mobilityRook",   setMidMobilityRook),
-        ("end.mobilityRook",   setEndMobilityRook),
-        ("mid.mobilityQueen",  setMidMobilityQueen),
-        ("end.mobilityQueen",  setEndMobilityQueen),
+        ("mid.moKnightMul", setMidMoKnightMul),
+        ("end.moKnightMul", setEndMoKnightMul),
+        ("mid.moBishopMul", setMidMoBishopMul),
+        ("end.moBishopMul", setEndMoBishopMul),
+        ("mid.moRookMul",   setMidMoRookMul),
+        ("end.moRookMul",   setEndMoRookMul),
+        ("mid.moQueenMul",  setMidMoQueenMul),
+        ("end.moQueenMul",  setEndMoQueenMul),
+        ("mid.moKnightAdd", setMidMoKnightAdd),
+        ("end.moKnightAdd", setEndMoKnightAdd),
+        ("mid.moBishopAdd", setMidMoBishopAdd),
+        ("end.moBishopAdd", setEndMoBishopAdd),
+        ("mid.moRookAdd",   setMidMoRookAdd),
+        ("end.moRookAdd",   setEndMoRookAdd),
+        ("mid.moQueenAdd",  setMidMoQueenAdd),
+        ("end.moQueenAdd",  setEndMoQueenAdd),
         ("mid.centerPAtts",    setMidCenterPAtts),
         ("end.centerPAtts",    setEndCenterPAtts),
         ("mid.centerNAtts",    setMidCenterNAtts),
@@ -303,14 +319,22 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
           setEndRookOpen        v' ew' = ew' { ewRookOpen        = (ewRookOpen        ew') { end = round v' }}
           setMidRookConn        v' ew' = ew' { ewRookConn        = (ewRookConn        ew') { mid = round v' }}
           setEndRookConn        v' ew' = ew' { ewRookConn        = (ewRookConn        ew') { end = round v' }}
-          setMidMobilityKnight  v' ew' = ew' { ewMobilityKnight  = (ewMobilityKnight  ew') { mid = round v' }}
-          setEndMobilityKnight  v' ew' = ew' { ewMobilityKnight  = (ewMobilityKnight  ew') { end = round v' }}
-          setMidMobilityBishop  v' ew' = ew' { ewMobilityBishop  = (ewMobilityBishop  ew') { mid = round v' }}
-          setEndMobilityBishop  v' ew' = ew' { ewMobilityBishop  = (ewMobilityBishop  ew') { end = round v' }}
-          setMidMobilityRook    v' ew' = ew' { ewMobilityRook    = (ewMobilityRook    ew') { mid = round v' }}
-          setEndMobilityRook    v' ew' = ew' { ewMobilityRook    = (ewMobilityRook    ew') { end = round v' }}
-          setMidMobilityQueen   v' ew' = ew' { ewMobilityQueen   = (ewMobilityQueen   ew') { mid = round v' }}
-          setEndMobilityQueen   v' ew' = ew' { ewMobilityQueen   = (ewMobilityQueen   ew') { end = round v' }}
+          setMidMoKnightMul  v' ew' = ew' { ewMoKnightMul  = (ewMoKnightMul  ew') { mid = round v' }}
+          setEndMoKnightMul  v' ew' = ew' { ewMoKnightMul  = (ewMoKnightMul  ew') { end = round v' }}
+          setMidMoBishopMul  v' ew' = ew' { ewMoBishopMul  = (ewMoBishopMul  ew') { mid = round v' }}
+          setEndMoBishopMul  v' ew' = ew' { ewMoBishopMul  = (ewMoBishopMul  ew') { end = round v' }}
+          setMidMoRookMul    v' ew' = ew' { ewMoRookMul    = (ewMoRookMul    ew') { mid = round v' }}
+          setEndMoRookMul    v' ew' = ew' { ewMoRookMul    = (ewMoRookMul    ew') { end = round v' }}
+          setMidMoQueenMul   v' ew' = ew' { ewMoQueenMul   = (ewMoQueenMul   ew') { mid = round v' }}
+          setEndMoQueenMul   v' ew' = ew' { ewMoQueenMul   = (ewMoQueenMul   ew') { end = round v' }}
+          setMidMoKnightAdd  v' ew' = ew' { ewMoKnightAdd  = (ewMoKnightAdd  ew') { mid = round v' }}
+          setEndMoKnightAdd  v' ew' = ew' { ewMoKnightAdd  = (ewMoKnightAdd  ew') { end = round v' }}
+          setMidMoBishopAdd  v' ew' = ew' { ewMoBishopAdd  = (ewMoBishopAdd  ew') { mid = round v' }}
+          setEndMoBishopAdd  v' ew' = ew' { ewMoBishopAdd  = (ewMoBishopAdd  ew') { end = round v' }}
+          setMidMoRookAdd    v' ew' = ew' { ewMoRookAdd    = (ewMoRookAdd    ew') { mid = round v' }}
+          setEndMoRookAdd    v' ew' = ew' { ewMoRookAdd    = (ewMoRookAdd    ew') { end = round v' }}
+          setMidMoQueenAdd   v' ew' = ew' { ewMoQueenAdd   = (ewMoQueenAdd   ew') { mid = round v' }}
+          setEndMoQueenAdd   v' ew' = ew' { ewMoQueenAdd   = (ewMoQueenAdd   ew') { end = round v' }}
           setMidCenterPAtts     v' ew' = ew' { ewCenterPAtts     = (ewCenterPAtts     ew') { mid = round v' }}
           setEndCenterPAtts     v' ew' = ew' { ewCenterPAtts     = (ewCenterPAtts     ew') { end = round v' }}
           setMidCenterNAtts     v' ew' = ew' { ewCenterNAtts     = (ewCenterNAtts     ew') { mid = round v' }}
