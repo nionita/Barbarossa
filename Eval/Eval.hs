@@ -382,10 +382,10 @@ kingMaterBonus c !myp !mat !ksq
                 | otherwise                                      = prxWA
           !prxb | squareDistance ksq bg <= squareDistance ksq bb = prxBH
                 | otherwise                                      = prxBA
-          prxWA = (unsafeShiftL (opawns shWA2) 1 + opawns shWA3) * (prxBoQ wa + prxBo wb)
-          prxWH = (unsafeShiftL (opawns shWH2) 1 + opawns shWH3) * (prxBoQ wh + prxBo wg)
-          prxBA = (unsafeShiftL (opawns shBA7) 1 + opawns shBA6) * (prxBoQ ba + prxBo bb)
-          prxBH = (unsafeShiftL (opawns shBH7) 1 + opawns shBH6) * (prxBoQ bh + prxBo bg)
+          prxWA = (unsafeShiftL (opawns shWA2) 2 + opawns shWA3) * (prxBoQ wa + prxBo wb)
+          prxWH = (unsafeShiftL (opawns shWH2) 2 + opawns shWH3) * (prxBoQ wh + prxBo wg)
+          prxBA = (unsafeShiftL (opawns shBA7) 2 + opawns shBA6) * (prxBoQ ba + prxBo bb)
+          prxBH = (unsafeShiftL (opawns shBH7) 2 + opawns shBH6) * (prxBoQ bh + prxBo bg)
           opawns = popCount . (.&. myp)
           prxBo  = proxyBonus . squareDistance ksq
           prxBoQ = flip unsafeShiftR 2 . prxBo
@@ -421,8 +421,8 @@ proxyBonus = unsafeAt proxyBonusArr
 pawnBonus :: Int -> Int
 pawnBonus = unsafeAt pawnBonusArr
 
-matKCArr :: UArray Int Int   -- 0              5               10
-matKCArr = listArray (0, 63) $ [0, 0, 0, 1, 1, 3, 5, 7, 9, 13, 17, 19, 21] ++ repeat 12
+matKCArr :: UArray Int Int   -- 0              5             10
+matKCArr = listArray (0, 63) $ [0, 0, 0, 1, 1, 2, 3, 4, 5, 6, 9, 10, 11] ++ repeat 12
 
 ------ Rookm placement points ------
 data RookPlc = RookPlc
