@@ -472,22 +472,27 @@ mobDiff p ew mide = memo <-> yomo
                     $ bbToSquares (knights p .&. me p)
           yoN = map (mideFromArray knightMobility (ewMoKnightMul ew) (ewMoKnightAdd ew) . popCount . (.&. notyo) . nAttacs)
                     $ bbToSquares (knights p .&. yo p)
-          myB = map (mideFromArray bishopMobility (ewMoBishopMul ew) (ewMoBishopAdd ew) . popCount . (.&. notme) . bAttacs (occup p))
+          myB = map (mideFromArray bishopMobility (ewMoBishopMul ew) (ewMoBishopAdd ew) . popCount . (.&. notme) . bAttacs ocpb)
                     $ bbToSquares (bishops p .&. me p)
-          yoB = map (mideFromArray bishopMobility (ewMoBishopMul ew) (ewMoBishopAdd ew) . popCount . (.&. notyo) . bAttacs (occup p))
+          yoB = map (mideFromArray bishopMobility (ewMoBishopMul ew) (ewMoBishopAdd ew) . popCount . (.&. notyo) . bAttacs ocpb)
                     $ bbToSquares (bishops p .&. yo p)
-          myR = map (mideFromArray rookMobility (ewMoRookMul ew) (ewMoRookAdd ew) . popCount . (.&. notme) . rAttacs (occup p))
+          myR = map (mideFromArray rookMobility (ewMoRookMul ew) (ewMoRookAdd ew) . popCount . (.&. notme) . rAttacs ocpr)
                     $ bbToSquares (rooks p .&. me p)
-          yoR = map (mideFromArray rookMobility (ewMoRookMul ew) (ewMoRookAdd ew) . popCount . (.&. notyo) . rAttacs (occup p))
+          yoR = map (mideFromArray rookMobility (ewMoRookMul ew) (ewMoRookAdd ew) . popCount . (.&. notyo) . rAttacs ocpr)
                     $ bbToSquares (rooks p .&. yo p)
-          myQ = map (mideFromArray queenMobility (ewMoQueenMul ew) (ewMoQueenAdd ew) . popCount . (.&. notme) . qAttacs (occup p))
+          myQ = map (mideFromArray queenMobility (ewMoQueenMul ew) (ewMoQueenAdd ew) . popCount . (.&. notqme) . qAttacs (occup p))
                     $ bbToSquares (queens p .&. me p)
-          yoQ = map (mideFromArray queenMobility (ewMoQueenMul ew) (ewMoQueenAdd ew) . popCount . (.&. notyo) . qAttacs (occup p))
+          yoQ = map (mideFromArray queenMobility (ewMoQueenMul ew) (ewMoQueenAdd ew) . popCount . (.&. notqyo) . qAttacs (occup p))
                     $ bbToSquares (queens p .&. yo p)
           memo = foldr (<+>) mide      $ myN ++ myB ++ myR ++ myQ
           yomo = foldr (<+>) (tme 0 0) $ yoN ++ yoB ++ yoR ++ yoQ
-          !notme = complement $ me p
-          !notyo = complement $ yo p
+          !notme = complement $ yoPAttacs p .|. (me p .&. pandk)
+          !notyo = complement $ myPAttacs p .|. (yo p .&. pandk)
+          !pandk = pawns p .|. kings p
+          !ocpb  = occup p `less` bishops p
+          !ocpr  = occup p `less` (queens p .|. rooks p)
+          !notqme = notme `less` (yoNAttacs p .|. yoBAttacs p .|. yoRAttacs p)
+          !notqyo = notyo `less` (myNAttacs p .|. myBAttacs p .|. myRAttacs p)
 
 {-# INLINE mideFromArray #-}
 mideFromArray :: UArray Int Int -> MidEnd -> MidEnd -> Int -> MidEnd
