@@ -537,7 +537,7 @@ spaceDiff p ew mide = mad mide (ewSpace ew) sd
 
 {-# INLINE spaceWhite #-}
 spaceWhite :: BBoard -> BBoard -> BBoard -> BBoard -> Int
-spaceWhite !mpawns !matts !ypatts !yatts = spa
+spaceWhite !mpawns !matts !ypatts !yatts = spa * spa
     where yard = (fileC .|. fileD .|. fileE .|. fileF) .&. (row2 .|. row3 .|. row4)
           safe = yard .&. (matts .|. complement yatts) `less` (mpawns .|. ypatts)
           behi = mpawns .|. shadowDown mpawns
@@ -545,7 +545,7 @@ spaceWhite !mpawns !matts !ypatts !yatts = spa
 
 {-# INLINE spaceBlack #-}
 spaceBlack :: BBoard -> BBoard -> BBoard -> BBoard -> Int
-spaceBlack !mpawns !matts !ypatts !yatts = spa
+spaceBlack !mpawns !matts !ypatts !yatts = spa * spa
     where yard = (fileC .|. fileD .|. fileE .|. fileF) .&. (row7 .|. row6 .|. row5)
           safe = yard .&. (matts .|. complement yatts) `less` (mpawns .|. ypatts)
           behi = mpawns .|. shadowUp mpawns
