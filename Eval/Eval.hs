@@ -41,6 +41,7 @@ evalItems = [ EvIt Material,	-- material balance (i.e. white - black material
               EvIt LastLine,	-- malus for pieces on last line (except rooks and king)
               EvIt Mobility,	-- pieces mobility
               EvIt Center,	-- attacs of center squares
+              EvIt Space,	-- space in own courtyard not attacked by enemy
               EvIt Advers,	-- attacs of adverse squares
               EvIt RookPlc,	-- rooks points for placements
               EvIt EnPrise,	-- when not quiescent - pieces en prise
@@ -513,6 +514,42 @@ centerDiff p ew mide = mad (mad (mad (mad (mad (mad mide (ewCenterPAtts ew) pd) 
           !yka = popCount $ yoKAttacs p .&. center
           !kd  = mka - yka
           center = 0x0000003C3C000000
+
+-------- Space for own pieces in our courtyard -----------
+-- This is implemented exactly like in Stockfish, only the weights are a bit different
+data Space = Space
+
+instance EvalItem Space where
+    evalItem _ _ ew p _ mide = spaceDiff p ew mide
+
+spaceDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
+spaceDiff p ew mide = mad mide (ewSpace ew) sd
+    where !sd = ms - ys
+          (ms, ys)
+              | moving p == White = (
+                  spaceWhite (pawns p .&. me p) (myAttacs p) (yoPAttacs p) (yoAttacs p),
+                  spaceBlack (pawns p .&. yo p) (yoAttacs p) (myPAttacs p) (myAttacs p)
+                  )
+              | otherwise = (
+                  spaceBlack (pawns p .&. me p) (myAttacs p) (yoPAttacs p) (yoAttacs p),
+                  spaceWhite (pawns p .&. yo p) (yoAttacs p) (myPAttacs p) (myAttacs p)
+                  )
+
+{-# INLINE spaceWhite #-}
+spaceWhite :: BBoard -> BBoard -> BBoard -> BBoard -> Int
+spaceWhite !mpawns !matts !ypatts !yatts = spa
+    where yard = (fileC .|. fileD .|. fileE .|. fileF) .&. (row2 .|. row3 .|. row4)
+          safe = yard .&. (matts .|. complement yatts) `less` (mpawns .|. ypatts)
+          behi = mpawns .|. shadowDown mpawns
+          !spa = popCount $ (safe `unsafeShiftL` 32) .|. (behi .&. safe)
+
+{-# INLINE spaceBlack #-}
+spaceBlack :: BBoard -> BBoard -> BBoard -> BBoard -> Int
+spaceBlack !mpawns !matts !ypatts !yatts = spa
+    where yard = (fileC .|. fileD .|. fileE .|. fileF) .&. (row7 .|. row6 .|. row5)
+          safe = yard .&. (matts .|. complement yatts) `less` (mpawns .|. ypatts)
+          behi = mpawns .|. shadowUp mpawns
+          !spa = popCount $ (safe `unsafeShiftR` 32) .|. (behi .&. safe)
 
 -------- Attacks to adverse squares ----------
 data Advers = Advers
