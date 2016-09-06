@@ -524,7 +524,14 @@ instance EvalItem Space where
 
 spaceDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 spaceDiff p ew mide = mad mide (ewSpace ew) sd
-    where !sd = ms - ys
+    where !sd = msw - ysw
+          !mi = bishops p .|. knights p
+          !mmi = mi .&. me p
+          !ymi = mi .&. yo p
+          !msw | mmi == 0  = 0
+               | otherwise = ms * popCount mmi
+          !ysw | ymi == 0  = 0
+               | otherwise = ys * popCount ymi
           (ms, ys)
               | moving p == White = (
                   spaceWhite (pawns p .&. me p) (myAttacs p) (yoPAttacs p) (yoAttacs p),
