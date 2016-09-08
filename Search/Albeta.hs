@@ -41,8 +41,8 @@ depthForCM  = 7 -- from this depth inform current move
 minToStore  = 1 -- minimum remaining depth to store the position in hash
 minToRetr   = 1 -- minimum remaining depth to retrieve
 maxDepthExt = 3 -- maximum depth extension
-useNegHist  = False	-- when not cutting - negative history
-negHistMNo  = 1		-- how many moves get negative history
+useNegHist  = True	-- when not cutting - negative history
+negHistMNo  = 0		-- how many moves get negative history (0: all)
 useTTinPv   = False	-- retrieve from TT in PV?
 minPvDepth  = 2		-- from this depth we use alpha beta search
 
@@ -514,7 +514,7 @@ checkFailOrPVRoot xstats b d e s nst = timeToAbort (True, nst) $ do
                     then do	-- failed low
                       -- when in a cut node and the move dissapointed - negative history
                       -- when (useNegHist && forpv nst && a == b - 1 && mn <= negHistMNo) -- Check this!
-                      --      $ lift $ betaCut False (absdp sst) e
+                      --     $ lift $ betaCut False (absdp sst) e
                       -- if crtnt nst == PVNode
                       --    then return (True, nst { cursc = s })	-- i.e we failed low in aspiration with 1st move
                       --    else do
@@ -997,6 +997,8 @@ checkFailOrPVLoop xstats b d e s nst = do
     if s <= cursc nst
        then do
             -- when in a cut node and the move dissapointed - negative history
+            when (useNegHist && (negHistMNo == 0 || mn <= negHistMNo))
+                $ lift $ betaCut False (absdp sst) e
             !kill1 <- newKiller d s nst
             let !nst1 = nst { movno = mn+1, killer = kill1, pvcont = emptySeq }
             return (False, nst1)
@@ -1037,7 +1039,7 @@ checkFailOrPVLoopZ xstats b d e s nst = do
     if s < b	-- failed low
        then do
             -- when in a cut node and the move dissapointed - negative history - ???
-            when (useNegHist && mn <= negHistMNo)
+            when (useNegHist && (negHistMNo == 0 || mn <= negHistMNo))
                  $ lift $ betaCut False (absdp sst) e
             !kill1 <- newKiller d s nst
             let !nst1 = nst { movno = mn+1, killer = kill1, pvcont = emptySeq }
