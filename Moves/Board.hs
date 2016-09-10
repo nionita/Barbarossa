@@ -167,8 +167,8 @@ genMoveFCheck !p
           chkAtt (QueenCheck f s)  = fAttacs s f ocp1
           -- This head is safe becase chklist is first checked in the pattern of the function
           (r1, r2) = case head chklist of	-- this is needed only when simple check
-                 NormalCheck Pawn sq   -> (beatAtP p (bit sq), [])  -- cannot block pawn
-                 NormalCheck Knight sq -> (beatAt  p (bit sq), [])  -- or knight check
+                 NormalCheck Pawn sq   -> (beatAtP p (uBit sq), [])  -- cannot block pawn
+                 NormalCheck Knight sq -> (beatAt  p (uBit sq), [])  -- or knight check
                  NormalCheck Bishop sq -> beatOrBlock Bishop p sq
                  NormalCheck Rook sq   -> beatOrBlock Rook p sq
                  QueenCheck pt sq      -> beatOrBlock pt p sq
@@ -243,7 +243,7 @@ blockAt p !bb = pawnBlockAt p bb ++ defendAt p bb
 -- Defend a check from a sliding piece: beat it or block it
 beatOrBlock :: Piece -> MyPos -> Square -> ([Move], [Move])
 beatOrBlock f !p sq = (beat, block)
-    where !beat = beatAt p $ bit sq
+    where !beat = beatAt p $ uBit sq
           !aksq = firstOne $ me p .&. kings p
           !line = findLKA f aksq sq
           !block = blockAt p line
@@ -441,7 +441,7 @@ canMove Pawn p src dst
          map snd $ pAll1Moves col pw (occup p) ++ pAll2Moves col pw (occup p)
     | otherwise = pAttacs col src `uTestBit` dst
     where col = moving p
-          pw = bit src
+          pw = uBit src
 canMove fig p src dst = fAttacs src fig (occup p) `uTestBit` dst
 
 mvBit :: Square -> Square -> BBoard -> BBoard
@@ -618,7 +618,7 @@ findLKA :: Piece -> Square -> Int -> BBoard
 findLKA Queen !ksq !psq
     | rAttacs bpsq ksq .&. bpsq == 0 = findLKA0 Bishop ksq psq
     | otherwise                      = findLKA0 Rook   ksq psq
-    where !bpsq = bit psq
+    where !bpsq = uBit psq
 findLKA pt !ksq !psq = findLKA0 pt ksq psq
 
 findLKA0 :: Piece -> Square -> Int -> BBoard
@@ -627,8 +627,8 @@ findLKA0 pt ksq psq
     | pt == Rook   = go rAttacs
     | otherwise    = 0	-- it will not be called with other pieces
     where go f = bb
-              where !kp = f (bit psq) ksq
-                    !pk = f (bit ksq) psq
+              where !kp = f (uBit psq) ksq
+                    !pk = f (uBit ksq) psq
                     !bb = kp .&. pk
 
 -- The new SEE functions (swap-based)
