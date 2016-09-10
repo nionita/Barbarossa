@@ -444,20 +444,12 @@ canMove Pawn p src dst
           pw = uBit src
 canMove fig p src dst = fAttacs src fig (occup p) `uTestBit` dst
 
+-- See http://stackoverflow.com/questions/47981/how-do-you-set-clear-and-toggle-a-single-bit-in-c-c
+-- I combined "Checking a bit" with "Changing the nth bit to x"
+-- We have also to clear dst bit
 mvBit :: Square -> Square -> BBoard -> BBoard
-mvBit !src !dst !w	-- = w `xor` ((w `xor` (shifted .&. nbsrc)) .&. mask)
-    | wsrc == 0 = case wdst of
-                      0 -> w
-                      _ -> w .&. nbdst
-    | otherwise = case wdst of
-                      0 -> w .&. nbsrc .|. bdst
-                      _ -> w .&. nbsrc
-    where bsrc = uBit src
-          !bdst = uBit dst
-          wsrc = w .&. bsrc
-          wdst = w .&. bdst
-          nbsrc = complement bsrc
-          nbdst = complement bdst
+mvBit !src !dst !w = (w `xor` mx) .&. (complement $ uBit src)
+    where !mx = ((complement ((w `unsafeShiftR` src) .&. 1) + 1) `xor` w) .&. (uBit dst)
 
 {-# INLINE moveAndClearEp #-}
 moveAndClearEp :: BBoard -> BBoard
