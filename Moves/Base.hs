@@ -9,7 +9,8 @@ module Moves.Base (
     posToState, getPos, posNewSearch,
     doRealMove, doMove, undoMove, genMoves, genTactMoves, canPruneMove,
     useHash,
-    staticVal, materVal, tacticalPos, isMoveLegal, isKillCand, isTKillCand, okInSequence,
+    -- staticVal, materVal,
+    tacticalPos, isMoveLegal, isKillCand, isTKillCand,
     betaCut, doNullMove, ttRead, ttStore, curNodes, chooseMove, isTimeout, informCtx,
     mateScore, scoreDiff,
     finNode,
@@ -18,11 +19,8 @@ module Moves.Base (
 ) where
 
 import Data.Bits
--- import Data.List
 import Control.Monad.State
 import Control.Monad.Reader (ask)
--- import Data.Ord (comparing)
--- import Numeric
 import System.Random
 
 import Moves.BaseTypes
@@ -111,36 +109,7 @@ genTactMoves = do
        else do
            let l1  = genMovePromo p
                l2w = fst $ genMoveCaptWL p
-           -- return $ checkGenMoves p mvs
            return $ l1 ++ l2w
-
-{--
-checkGenMoves :: MyPos -> [Move] -> [Move]
-checkGenMoves p = map $ toError . checkGenMove p
-    where toError (Left str) = error str
-          toError (Right m)  = m
-
-checkGenMove :: MyPos -> Move -> Either String Move
-checkGenMove p m@(Move w)
-    = case tabla p f of
-          Empty     -> wrong "empty src"
-          Busy c pc -> if moveColor m /= c
-                          then if mc == c
-                                  then wrong $ "wrong move color (should be " ++ show mc ++ ")"
-                                  else wrong $ "wrong pos src color (should be " ++ show mc ++ ")"
-                          else if movePiece m /= pc
-                                  then wrong $ "wrong move piece (should be " ++ show pc ++ ")"
-                                  else Right m
-    where f  = fromSquare m
-          mc = moving p
-          wrong mes = Left $ "checkGenMove: " ++ mes ++ " for move "
-                            ++ showHex w (" in pos\n" ++ showMyPos p)
---}
-
--- massert :: String -> Game Bool -> Game ()
--- massert s mb = do
---     b <- mb
---     if b then return () else error s
 
 {-# INLINE statNodes #-}
 statNodes :: Game ()
@@ -249,44 +218,33 @@ undoMove = modify $ \s -> s { stack = tail $ stack s }
 -- Tactical positions will be searched complete in quiescent search
 -- Currently only when in in check
 {-# INLINE tacticalPos #-}
-tacticalPos :: Game Bool
-tacticalPos = do
-    t <- getPos
-    return $! check t /= 0
+tacticalPos :: MyPos -> Bool
+tacticalPos = (/= 0) . check
 
 {-# INLINE isMoveLegal #-}
-isMoveLegal :: Move -> Game Bool
-isMoveLegal m = do
-    t <- getPos
-    return $! legalMove t m
+isMoveLegal :: MyPos -> Move -> Bool
+isMoveLegal = legalMove
 
 -- Why not just like isTKillCand?
 -- Also: if not normal, it is useless, as now it is not recognized as legal...
-isKillCand :: Move -> Move -> Game Bool
-isKillCand mm ym
-    | toSquare mm == toSquare ym = return False
-    | otherwise = do
-        t <- getPos
-        return $! not $ moveIsCapture t ym
+{-# INLINE isKillCand #-}
+isKillCand :: MyPos -> Move -> Move -> Bool
+isKillCand p mm ym
+    | toSquare mm == toSquare ym = False
+    | otherwise                  = not $ moveIsCapture p ym
 
 -- If not normal, it is useless, as now it is not recognized as legal...
-isTKillCand :: Move -> Game Bool
-isTKillCand mm = do
-    t <- getPos
-    return $! not $ moveIsCapture t mm
-
-okInSequence :: Move -> Move -> Game Bool
-okInSequence m1 m2 = do
-    t <- getPos
-    return $! alternateMoves t m1 m2
+{-# INLINE isTKillCand #-}
+isTKillCand :: MyPos -> Move -> Bool
+isTKillCand p mm = not $ moveIsCapture p mm
 
 -- Static evaluation function
 -- This does not detect mate or stale mate, it only returns the calculated
 -- static score from a position which has already to be valid
 -- Mate/stale mate has to be detected by search!
-{-# INLINE staticVal #-}
-staticVal :: Game Int
-staticVal = staticScore <$> getPos
+-- {-# INLINE staticVal #-}
+-- staticVal :: Game Int
+-- staticVal = staticScore <$> getPos
 
 {-# INLINE finNode #-}
 finNode :: String -> Bool -> Game ()
@@ -303,6 +261,7 @@ finNode str force = do
         --               ++ concatMap (\(n, v) -> " " ++ n ++ "=" ++ show v)
         --                            (("score", staticScore p) : weightPairs (staticFeats p))
 
+{--
 materVal :: Game Int
 materVal = do
     t <- getPos
@@ -310,6 +269,7 @@ materVal = do
     return $! case moving t of
                    White -> m
                    _     -> -m
+--}
 
 {-# INLINE ttRead #-}
 ttRead :: Game (Int, Int, Int, Move, Int)
@@ -357,14 +317,12 @@ moveIsCaptPromo p m
 
 -- We will call this function before we do the move
 -- This will spare a heavy operation for pruned moved
-canPruneMove :: Move -> Game Bool
-canPruneMove m
-    | not (moveIsNormal m) = return False
-    | otherwise = do
-        p <- getPos
-        return $! if moveIsCapture p m
-                     then False
-                     else not $ moveChecks p m
+{-# INLINE canPruneMove #-}
+canPruneMove :: MyPos -> Move -> Bool
+canPruneMove p m
+    | not (moveIsNormal m) = False
+    | moveIsCapture p m    = False
+    | otherwise            = not $ moveChecks p m
 
 -- Score difference obtained by last move, from POV of the moving part
 -- It considers the fact that static score is for the part which has to move
