@@ -168,11 +168,11 @@ data NodeState
     = NSt {
           crtnt  :: !NodeType,	-- parent node type (actually expected)
           nxtnt  :: !NodeType,	-- expected child node type
-          cursc  :: !Path,	-- current alpha value (now plus path & depth)
           movno  :: !Int,	-- current move number
           spcno  :: !Int,	-- last move number of a special move
-          killer :: !Killer,	-- the current killer moves
           albe   :: !Bool,	-- in alpha/beta search (for small depths)
+          cursc  :: Path,	-- current alpha value (now plus path & depth)
+          killer :: Killer,	-- the current killer moves
           cpos   :: MyPos,	-- current position for this node
           pvsl   :: [Pvsl],	-- principal variation list (at root) with node statistics
           pvcont :: Seq Move	-- a pv continuation from the previous iteration, if available
