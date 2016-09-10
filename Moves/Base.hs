@@ -194,32 +194,28 @@ doRealMove m = do
 -- Move from a node to a descendent - the search version
 doMove :: Move -> Bool -> Game DoResult
 doMove m qs = do
-    -- logMes $ "** doMove " ++ show m
     statNodes   -- when counting all visited nodes
     s  <- get
     let (pc:_) = stack s	-- we never saw an empty stack error until now
         -- Moving a non-existent piece?
-        il = occup pc `uBitClear` fromSquare m
+        il  = occup pc `uBitClear` fromSquare m
         -- Capturing one king?
-        kc = kings pc `uBitSet` toSquare m
-        p' = doFromToMove m pc
-        cok = checkOk p'
+        kc  = kings pc `uBitSet` toSquare m
+        sts = evalState (posEval p) (evalst s)
+        p   = doFromToMove m pc { staticScore = sts }
     if (il || kc)
        then do
            logMes $ "Illegal move or position: move = " ++ show m
                     ++ ", il = " ++ show il ++ ", kc = " ++ show kc ++ "\n"
-           logMes $ "Illegal position (after the move):\n" ++ showMyPos p'
+           logMes $ "Illegal position (after the move):\n" ++ showMyPos p
            logMes $ "Stack:\n" ++ showStack 3 (stack s)
            -- After an illegal result there must be no undo!
            return Illegal
-       else if not cok
+       else if not $ checkOk p
                then return Illegal
                else do
-                   -- bigCheckPos "doMove" pc (Just m) p'
-                   let sts = evalState (posEval p') (evalst s)
-                       p = p' { staticScore = sts }
                    put s { stack = p : stack s }
-                   remis <- if qs then return False else checkRemisRules p'
+                   remis <- if qs then return False else checkRemisRules p
                    if remis
                       then return $ Final 0
                       else do
@@ -228,33 +224,11 @@ doMove m qs = do
 
 doNullMove :: Game ()
 doNullMove = do
-    -- logMes "** doMove null"
     s <- get
-    let !p0 = if null (stack s) then error "doNullMove" else head $ stack s
-        !p' = reverseMoving p0
-        !sts = evalState (posEval p') (evalst s)
-        !p = p' { staticScore = sts }
-    -- bigCheckPos "doNullMove" p0 Nothing p'
+    let (pc:_) = stack s	-- we never saw an empty stack error until now
+        sts = evalState (posEval p) (evalst s)
+        p   = reverseMoving pc { staticScore = sts }
     put s { stack = p : stack s }
-
-{-- Activae when used:
-bigCheckPos :: String -> MyPos -> Maybe Move -> MyPos -> Game ()
-bigCheckPos loc pin mmv pou = do
-    let fpou = posToFen pou
-        p    = posFromFen fpou
-    -- when (pou { staticScore = 0, staticFeats = [] } /= p { staticScore = 0, staticFeats = [] }) $ do
-    when (zobkey pou /= zobkey p) $ do
-        let fpin = posToFen pin
-        logMes $ "Wrong pos in " ++ loc
-        logMes $ "Input:  " ++ fpin
-        case mmv of
-            Just mv -> logMes $ "Move:   " ++ toNiceNotation pin mv
-            Nothing -> logMes $ "Move:   null move"
-        logMes $ "Output: " ++ fpou
-        logMes $ "Outget: " ++ fpou
-        logMes $ "MyPos pou: " ++ show pou
-        logMes $ "MyPos p:   " ++ show p
---}
 
 checkRemisRules :: MyPos -> Game Bool
 checkRemisRules p = do
