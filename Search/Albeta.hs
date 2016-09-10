@@ -1173,15 +1173,9 @@ trimaxPath a b x
     | x > b     = b
     | otherwise = x
 
-trimax :: Int -> Int -> Int -> Int
-trimax a b x
-    | x < a     = a
-    | x > b     = b
-    | otherwise = x
-
 -- PV Quiescent Search
 pvQSearch :: Int -> Int -> Int -> Search Int
-pvQSearch !a !b !c = do				   -- to avoid endless loops
+pvQSearch !a !b !c = do
     -- qindent $ "=> " ++ show a ++ ", " ++ show b
     !tact <- lift tacticalPos
     if tact
@@ -1191,35 +1185,35 @@ pvQSearch !a !b !c = do				   -- to avoid endless loops
            if noMove edges
               then do
                   lift $ finNode "MATE" False
-                  return $! trimax a b (-mateScore)
+                  return (-mateScore)
               else if c >= qsMaxChess
                       then do
                           lift $ finNode "ENDL" False
-                          return $! trimax a b inEndlessCheck
+                          return inEndlessCheck
                       else do
                           -- for check extensions in case of very few moves (1 or 2):
-                          -- if 1 move: search even deeper
-                          -- if 2 moves: same depth
-                          -- if 3 or more: no extension
+                          -- if 1 moves: same depth (i.e. extend 1)
+                          -- if 2 or more: no extension
                           let !esc = lenmax2 $ unalt edges
                               !nc = c + esc - 1
-                          pvQLoop b nc a edges
+                          -- When no legal moves: mated
+                          pvQLoop b nc (-mateScore) edges
        else do
             !stp <- lift staticVal
             if qsBetaCut && stp >= b
                then do
                    lift $ finNode "BETA" False
-                   return b
+                   return stp
                else if qsDeltaCut && stp + qsDelta < a
                       then do
                           lift $ finNode "DELT" False
-                          return a
+                          return stp
                       else do
                           edges <- liftM Alt $ lift genTactMoves
                           if noMove edges
                              then do
                                  lift $ finNode "NOCA" False
-                                 return $! trimax a b stp	-- no capture
+                                 return stp	-- no capture
                              else if stp > a
                                      then pvQLoop b c stp edges
                                      else pvQLoop b c a   edges
@@ -1236,7 +1230,6 @@ pvQLoop b c = go
 
 pvQInnerLoop :: Int -> Int -> Int -> Move -> Search (Bool, Int)
 pvQInnerLoop !b c !a e = timeToAbort (True, b) $ do
-         -- here: delta pruning: captured piece + 200 > a? then go on, else return
          -- qindent $ "-> " ++ show e
          r <-  lift $ doMove e True
          if legalResult r
