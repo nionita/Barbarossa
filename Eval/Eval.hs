@@ -523,8 +523,9 @@ instance EvalItem Space where
     evalItem _ _ ew p _ mide = spaceDiff p ew mide
 
 spaceDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-spaceDiff p ew mide = mad mide (ewSpace ew) sd
-    where !sd = ms - ys
+spaceDiff p ew mide = mad (mad mide (ewSpaceL ew) sl) (ewSpaceQ ew) sq
+    where !sl =    ms -    ys
+          !sq = ms*ms - ys*ys
           (ms, ys)
               | moving p == White = (
                   spaceWhite (pawns p .&. me p) (myAttacs p) (yoPAttacs p) (yoAttacs p),
@@ -537,7 +538,7 @@ spaceDiff p ew mide = mad mide (ewSpace ew) sd
 
 {-# INLINE spaceWhite #-}
 spaceWhite :: BBoard -> BBoard -> BBoard -> BBoard -> Int
-spaceWhite !mpawns !matts !ypatts !yatts = spa * spa
+spaceWhite !mpawns !matts !ypatts !yatts = spa
     where yard = (fileC .|. fileD .|. fileE .|. fileF) .&. (row2 .|. row3 .|. row4)
           safe = yard .&. (matts .|. complement yatts) `less` (mpawns .|. ypatts)
           behi = mpawns .|. shadowDown mpawns
@@ -545,7 +546,7 @@ spaceWhite !mpawns !matts !ypatts !yatts = spa * spa
 
 {-# INLINE spaceBlack #-}
 spaceBlack :: BBoard -> BBoard -> BBoard -> BBoard -> Int
-spaceBlack !mpawns !matts !ypatts !yatts = spa * spa
+spaceBlack !mpawns !matts !ypatts !yatts = spa
     where yard = (fileC .|. fileD .|. fileE .|. fileF) .&. (row7 .|. row6 .|. row5)
           safe = yard .&. (matts .|. complement yatts) `less` (mpawns .|. ypatts)
           behi = mpawns .|. shadowUp mpawns
