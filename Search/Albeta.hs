@@ -1197,7 +1197,7 @@ pvQSearch !a !b !c = do
                           let !esc = lenmax2 $ unalt edges
                               !nc = c + esc - 1
                           -- When no legal moves: mated
-                          pvQLoop b nc (-mateScore) edges
+                          pvQLoop a b nc (-mateScore) edges
        else do
             !stp <- lift staticVal
             if qsBetaCut && stp >= b
@@ -1215,41 +1215,41 @@ pvQSearch !a !b !c = do
                                  lift $ finNode "NOCA" False
                                  return stp	-- no capture
                              else if stp > a
-                                     then pvQLoop b c stp edges
-                                     else pvQLoop b c a   edges
+                                     then pvQLoop stp b c stp edges
+                                     else pvQLoop a   b c stp edges
     where lenmax2 (_:_:_) = 2
           lenmax2 _       = 1	-- we know here it is not empty
 
-pvQLoop :: Int -> Int -> Int -> Alt Move -> Search Int
-pvQLoop b c = go
-    where go !s (Alt [])     = return s
-          go !s (Alt (e:es)) = do
-              (!cut, !s') <- pvQInnerLoop b c s e
-              if cut then return s'
-                     else go s' $ Alt es
+pvQLoop :: Int -> Int -> Int -> Int -> Alt Move -> Search Int
+pvQLoop !a' !b !c = go a'
+    where go !_ !s (Alt [])     = return s
+          go  a  s (Alt (e:es)) = do
+              !s' <- pvQInnerLoop a b c s e
+              if s' >= b
+                 then return s'
+                 else if s' > a
+                         then go s' s' $ Alt es
+                         else go a  s' $ Alt es
 
-pvQInnerLoop :: Int -> Int -> Int -> Move -> Search (Bool, Int)
-pvQInnerLoop !b c !a e = timeToAbort (True, b) $ do
+pvQInnerLoop :: Int -> Int -> Int -> Int -> Move -> Search Int
+pvQInnerLoop !a !b !c !s e = timeToAbort b $ do
          -- qindent $ "-> " ++ show e
-         r <-  lift $ doMove e True
+         r <- lift $ doMove e True
          if legalResult r
             then do
                 newNodeQS
-                !sc <- case r of
+                sc <- case r of
                            Final sc -> return (-sc)
                            _        -> do
-                             modify $ \s -> s { absdp = absdp s + 1 }
+                             -- We don't use at the moment the absolute depth in QS
+                             -- modify $ \st -> st { absdp = absdp st + 1 }
                              !sc <- pvQSearch (-b) (-a) c
-                             modify $ \s -> s { absdp = absdp s - 1 }	-- no usedext here
+                             -- modify $ \st -> st { absdp = absdp st - 1 }	-- no usedext here
                              return (-sc)
                 lift undoMove
                 -- qindent $ "<- " ++ show e ++ " (" ++ show s ++ ")"
-                if sc >= b
-                   then return (True, b)
-                   else if sc > a
-                           then return (False, sc)
-                           else return (False, a)
-            else return (False, a)
+                return sc
+            else return s
 
 {-# INLINE bestMoveFromIID #-}
 bestMoveFromIID :: NodeState -> Path -> Path -> Int -> Search [Move]
