@@ -235,7 +235,8 @@ combinePath p1 p2 = p1 { pathScore = pathScore p2,
 -- (which actually is no limit, it is -infinite or +infinite), then make the selection of
 -- the path more explicitely, and the negation too (whatever this really means...)
 negatePath :: Path -> Path
-negatePath p = p { pathScore = - pathScore p, pathDepth = 0, pathMoves = Seq [],
+-- negatePath p = p { pathScore = - pathScore p, pathDepth = 0, pathMoves = Seq [],
+negatePath p = p { pathScore = - pathScore p, pathMoves = Seq [],
                    pathOrig = "negatePath (" ++ pathOrig p ++ ")" }
 
 -- This should be used only when scores are equal
@@ -253,7 +254,7 @@ pnearmate :: Path -> Bool
 pnearmate = nearmate . pathScore
 
 pnextlev :: Path -> Path
-pnextlev p = p { pathScore = - pathScore p }
+pnextlev p = p { pathScore = - pathScore p, pathOrig = "pnextlev (" ++ pathOrig p ++ ")" }
 
 -- If we compare depths when equal scores, then nothing works anymore!
 instance Eq Path where
@@ -478,16 +479,22 @@ pvInnerRootExten b d !exd nst = do
        else do
            -- no futility pruning & no LMR for root moves!
            -- Here we expect to fail low
-           !s1 <- fmap pnextlev (pvZeroW nst nega d1 nulMoves True)
+           negs1 <- pvZeroW nst nega d1 nulMoves True
+           let s1 = pnextlev negs1
            abrt <- gets abort
            if abrt || s1 <= a -- we failed low as expected
               then return s1
-              else  do
+              else do
                  -- Here we didn't fail low and need re-search
                  -- As we don't reduce (beeing in a PV node), re-search is full window
                  pindent $ "Research! (" ++ show s1 ++ ")"
+                 lift $ do
+                     logmes "Research:"
+                     logmes $ "a  = " ++ show a
+                     logmes $ "s1 = " ++ show s1
                  let pvc  = if nullSeq (pathMoves s1) then pvcont nst else pathMoves s1
                      nst' = nst { crtnt = PVNode, nxtnt = PVNode, pvcont = pvc }
+                 -- fmap pnextlev (pvSearch nst' negb (combinePath nega negs1) d1)
                  fmap pnextlev (pvSearch nst' negb nega d1)
 
 checkFailOrPVRoot :: SStats -> Path -> Int -> Move -> Path
@@ -929,7 +936,8 @@ pvInnerLoopExten b d !exd nst = do
        else do
           -- Here we must be in a Cut node (will fail low)
           -- and we should have: crtnt = CutNode, nxtnt = AllNode
-          !s1 <- fmap pnextlev (pvZeroW nst nega d1 nulMoves True)
+          negs1 <- pvZeroW nst nega d1 nulMoves True
+          let s1 = pnextlev negs1
           abrt <- gets abort
           if abrt || s1 <= a
              then return s1	-- failed low (as expected) or aborted
@@ -939,6 +947,7 @@ pvInnerLoopExten b d !exd nst = do
                let nst1 = if nullSeq (pathMoves s1)
                              then nst { crtnt = PVNode, nxtnt = PVNode }
                              else nst { crtnt = PVNode, nxtnt = PVNode, pvcont = pathMoves s1 }
+               -- fmap pnextlev (pvSearch nst1 negb (combinePath nega negs1) d1)
                fmap pnextlev (pvSearch nst1 negb nega d1)
 
 -- For zero window
