@@ -172,8 +172,7 @@ data NodeState
           spcno  :: !Int,	-- last move number of a special move
           killer :: !Killer,	-- the current killer moves
           albe   :: !Bool,	-- in alpha/beta search (for small depths)
-          pvsl   :: [Pvsl],	-- principal variation list (at root) with node statistics
-          pvcont :: Seq Move	-- a pv continuation from the previous iteration, if available
+          pvsl   :: [Pvsl]	-- principal variation list (at root) with node statistics
       } deriving Show
 
 deepNSt :: NodeState -> NodeState
@@ -246,24 +245,18 @@ nullSeq (Seq es) = null es
 emptySeq :: Seq Move
 emptySeq = Seq []
 
-tailSeq :: Seq Move -> Seq Move
-tailSeq es
-    | nullSeq es = emptySeq
-    | otherwise  = Seq $ tail $ unseq es
-
 pvsInit :: PVState
 pvsInit = PVState { ronly = pvro00, stats = stt0, absdp = 0, usedext = 0, abort = False,
                     futme = futIniVal, futyo = futIniVal,
                     lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
 nst0 :: NodeState
 nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore "Zero" 0,
-             movno = 1, spcno = 1, killer = NoKiller, albe = False, pvsl = [], pvcont = emptySeq }
+             movno = 1, spcno = 1, killer = NoKiller, albe = False, pvsl = [] }
              -- we start with spcno = 1 as we consider the first move as special
              -- to avoid in any way reducing the tt move
 
 resetNSt :: Path -> Killer -> NodeState -> NodeState
-resetNSt !sc !kill nst
-    = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, pvcont = tailSeq (pvcont nst) }
+resetNSt !sc !kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill }
 
 stt0 :: SStats
 stt0 = SStats { sNodes = 0, sNodesQS = 0, sRetr = 0, sRSuc = 0,
@@ -332,12 +325,11 @@ pvRootSearch :: Int -> Int -> Int -> Seq Move -> Alt Move -> Bool
              -> Search (Int, Seq Move, Alt Move)
 pvRootSearch a b d lastpath rmvs aspir = do
     edges <- if null (unalt rmvs)	-- only when d==1, but we could have lastpath from the previous real move
-                then genAndSort nst0 { pvcont = lastpath } a b d	-- this will never really do IID as d==1
+                then genAndSort nst0 Nothing a b d	-- this will never really do IID as d==1
                 else case lastpath of
                          Seq []    -> return rmvs	-- probably this never happens... - check to simplify!
                          Seq (e:_) -> return $ Alt $ e : delete e (unalt rmvs)
-    -- pvcont is the pv continuation from the last iteration
-    let !nsti = nst0 { cursc = pathFromScore "Alpha" a, pvcont = tailSeq lastpath }
+    let !nsti = nst0 { cursc = pathFromScore "Alpha" a }
     nstf <- pvLoop (pvInnerRoot b d) nsti edges
     reportStats
     let failedlow = (a, emptySeq, edges)	-- just to permit aspiration to retry
@@ -453,8 +445,7 @@ pvInnerRootExten b d !exd nst = do
                  -- As we don't reduce (beeing in a PV node), re-search is full window
                  pindent $ "Research! (" ++ show s1 ++ ")"
                  lift $ logmes $ "Research: a = " ++ show a ++ ", s1 = " ++ show s1
-                 let pvc  = if nullSeq (pathMoves s1) then pvcont nst else pathMoves s1
-                     nst' = nst { crtnt = PVNode, nxtnt = PVNode, pvcont = pvc }
+                 let nst' = nst { crtnt = PVNode, nxtnt = PVNode }
                  pnextlev <$> pvSearch nst' (-b) (-a) d1
 
 checkFailOrPVRoot :: SStats -> Int -> Int -> Move -> Path
@@ -476,7 +467,7 @@ checkFailOrPVRoot xstats b d e s nst = timeToAbort (True, nst) $ do
                  let xpvslg = if pathScore s > a
                                  then insertToPvs d pvg (pvsl nst)	-- the good
                                  else insertToPvs d pvb (pvsl nst)	-- the bad (when aspiration)
-                 return (False, nst {movno = mn + 1, pvsl = xpvslg, pvcont = emptySeq})
+                 return (False, nst {movno = mn + 1, pvsl = xpvslg })
             else if pathScore s <= a
                     then do	-- failed low
                       -- when in a cut node and the move dissapointed - negative history
@@ -487,7 +478,7 @@ checkFailOrPVRoot xstats b d e s nst = timeToAbort (True, nst) $ do
                       --    else do
                            kill1 <- newKiller d s nst
                            let xpvslb = insertToPvs d pvb (pvsl nst)	-- the bad
-                               nst1 = nst { movno = mn + 1, pvsl = xpvslb, killer = kill1, pvcont = emptySeq }
+                               nst1 = nst { movno = mn + 1, pvsl = xpvslb, killer = kill1 }
                            return (False, nst1)
                     else if pathScore s >= b
                       then do
@@ -499,7 +490,7 @@ checkFailOrPVRoot xstats b d e s nst = timeToAbort (True, nst) $ do
                             betaCut True (absdp sst) e
                         let xpvslg = insertToPvs d pvg (pvsl nst)	-- the good
                             csc = s { pathScore = b }
-                            nst1 = nst { cursc = csc, pvsl = xpvslg, pvcont = emptySeq }
+                            nst1 = nst { cursc = csc, pvsl = xpvslg }
                         pindent $ "beta cut: " ++ show csc
                         return (True, nst1)
                       else do	-- means: > a && < b
@@ -513,7 +504,7 @@ checkFailOrPVRoot xstats b d e s nst = timeToAbort (True, nst) $ do
                             betaCut True (absdp sst) e	-- not really cut, but good move
                         let xpvslg = insertToPvs d pvg (pvsl nst)	-- the good
                             nst1 = nst { cursc = s, nxtnt = nextNodeType (nxtnt nst),
-                                         movno = mn + 1, pvsl = xpvslg, pvcont = emptySeq }
+                                         movno = mn + 1, pvsl = xpvslg }
                         return (False, nst1)
 
 insertToPvs :: Int -> Pvsl -> [Pvsl] -> [Pvsl]
@@ -589,10 +580,10 @@ pvSearch nst !a !b !d = do
        else do
            -- Here: when ab we should do null move search
            -- Use the found TT move as best move
-           let nst' = if hdeep > 0 && (tp /= 0 || nullSeq (pvcont nst))
-                         then nst { pvcont = Seq [e] }
-                         else nst
-           edges <- genAndSort nst' a b d
+           let mttmv = if hdeep > 0	-- && (tp /= 0 || nullSeq (pvcont nst))
+                          then Just e
+                          else Nothing
+           edges <- genAndSort nst mttmv a b d
            if noMove edges
               then do
                 chk <- lift tacticalPos
@@ -604,7 +595,7 @@ pvSearch nst !a !b !d = do
                 -- futility pruning:
                 prune <- isPruneFutil d a True
                 -- Loop thru the moves
-                let !nsti = resetNSt (pathFromScore "low limit" a) NoKiller nst'
+                let !nsti = resetNSt (pathFromScore "low limit" a) NoKiller nst
                 nstf <- pvSLoop b d prune nsti edges
                 let s = cursc nstf
                 pindent $ "<= " ++ show s	-- not really...
@@ -671,10 +662,10 @@ pvZeroW !nst !b !d !lastnull redu = do
                   return s
                 _ -> do
                     -- Use the TT move as best move
-                    let nst' = if hdeep > 0 && (tp /= 0 || nullSeq (pvcont nst))
-                                  then nst { pvcont = Seq [e] }
-                                  else nst
-                    edges <- genAndSort nst' bGrain b d
+                    let mttmv = if hdeep > 0	-- && (tp /= 0 || nullSeq (pvcont nst))
+                                   then Just e
+                                   else Nothing
+                    edges <- genAndSort nst mttmv bGrain b d
                     if noMove edges
                        then do
                          chk <- lift tacticalPos
@@ -689,7 +680,7 @@ pvZeroW !nst !b !d !lastnull redu = do
                          kill1 <- case nmhigh of
                                       NullMoveThreat s -> newTKiller d s
                                       _                -> return NoKiller
-                         let !nsti = resetNSt (pathFromScore "low limit" bGrain) kill1 nst'
+                         let !nsti = resetNSt (pathFromScore "low limit" bGrain) kill1 nst
                          nstf <- pvZLoop b d prune redu nsti edges
                          let s = cursc nstf
                          checkFailHard "pvZLoop" bGrain b (pathScore s)
@@ -733,7 +724,7 @@ nullMoveFailsHigh nst b d lastnull
                       lift doNullMove	-- do null move
                       newNode
                       xchangeFutil
-                      let nst' = deepNSt $ nst { pvcont = emptySeq }
+                      let nst' = deepNSt nst
                       val <- if v > b + bigDiff
                                 then fmap pnextlev $ pvZeroW nst' (-nma) d2 lastnull1 True
                                 else fmap pnextlev $ pvZeroW nst' (-nma) d1 lastnull1 True
@@ -793,7 +784,7 @@ pvInnerLoop b d prune nst e = timeToAbort (True, nst) $ do
          willPrune <- if not prune || movno nst == 1 then return False else lift $ canPruneMove e
          if willPrune
             then do
-                let !nst1 = nst { movno = movno nst + 1, pvcont = emptySeq }
+                let !nst1 = nst { movno = movno nst + 1 }
                 return (False, nst1)
             else do
                 old <- get
@@ -834,7 +825,7 @@ pvInnerLoopZ b d prune nst e redu = timeToAbort (True, nst) $ do
          willPrune <- if not prune then return False else lift $ canPruneMove e
          if willPrune
             then do
-                let !nst1 = nst { movno = movno nst + 1, pvcont = emptySeq }
+                let !nst1 = nst { movno = movno nst + 1 }
                 return (False, nst1)
             else do
                 old <- get
@@ -903,9 +894,7 @@ pvInnerLoopExten b d !exd nst = do
              else do
                -- we didn't fail low and need re-search: full window
                pindent $ "Research! (" ++ show s1 ++ ")"
-               let nst1 = if nullSeq (pathMoves s1)
-                             then nst { crtnt = PVNode, nxtnt = PVNode }
-                             else nst { crtnt = PVNode, nxtnt = PVNode, pvcont = pathMoves s1 }
+               let nst1 = nst { crtnt = PVNode, nxtnt = PVNode }
                pnextlev <$> pvSearch nst1 (-b) (-a) d1
 
 -- For zero window
@@ -951,9 +940,7 @@ pvInnerLoopExtenZ b d spec !exd nst redu = do
                 incReSe nodre	-- so many nodes we wasted by reducing this time
                 moreLMR False d'	-- less LMR
                 -- Now we expect to fail high, i.e. exchange the crt/nxt node type
-                let nst1 = if nullSeq (pathMoves sr)
-                              then nst { crtnt = nxtnt nst, nxtnt = crtnt nst } 
-                              else nst { crtnt = nxtnt nst, nxtnt = crtnt nst, pvcont = pathMoves sr }
+                let nst1 = nst { crtnt = nxtnt nst, nxtnt = crtnt nst } 
                 sf <- pnextlev <$> pvZeroW nst1 onemB d1 nulMoves True
                 when (pathScore sf >= b) $ moreLMR False d1
                 return sf
@@ -966,8 +953,8 @@ checkFailOrPVLoop xstats b d e s nst = do
     if s <= cursc nst
        then do
             -- when in a cut node and the move dissapointed - negative history
-            !kill1 <- newKiller d s nst
-            let !nst1 = nst { movno = mn+1, killer = kill1, pvcont = emptySeq }
+            kill1 <- newKiller d s nst
+            let nst1 = nst { movno = mn+1, killer = kill1 }
             return (False, nst1)
        else do
          let nodes0 = sNodes xstats
@@ -984,7 +971,7 @@ checkFailOrPVLoop xstats b d e s nst = do
               incBeta mn
               -- when debug $ logmes $ "<-- pvInner: beta cut: " ++ show s ++ ", return " ++ show b
               let csc = s { pathScore = b }
-                  nst1 = nst { cursc = csc, pvcont = emptySeq }
+                  nst1 = nst { cursc = csc }
               pindent $ "beta cut: " ++ show csc
               return (True, nst1)
             else do	-- means: > a && < b
@@ -993,8 +980,7 @@ checkFailOrPVLoop xstats b d e s nst = do
                       let typ = 2	-- score is exact
                       ttStore de typ (pathScore s) e nodes'
                   betaCut True (absdp sst) e -- not really a cut, but good move here
-              let nst1 = nst { cursc = s, nxtnt = nextNodeType (nxtnt nst),
-                               movno = mn+1, pvcont = emptySeq }
+              let nst1 = nst { cursc = s, nxtnt = nextNodeType (nxtnt nst), movno = mn+1 }
               return (False, nst1)
 
 -- For zero window
@@ -1008,8 +994,8 @@ checkFailOrPVLoopZ xstats b d e s nst = do
             -- when in a cut node and the move dissapointed - negative history - ???
             when (useNegHist && mn <= negHistMNo)
                  $ lift $ betaCut False (absdp sst) e
-            !kill1 <- newKiller d s nst
-            let !nst1 = nst { movno = mn+1, killer = kill1, pvcont = emptySeq }
+            kill1 <- newKiller d s nst
+            let nst1 = nst { movno = mn+1, killer = kill1 }
             return (False, nst1)
        else do	-- here is s >= b: failed high
          let nodes0 = sNodes xstats
@@ -1023,7 +1009,7 @@ checkFailOrPVLoopZ xstats b d e s nst = do
              betaCut True (absdp sst) e -- anounce a beta move (for example, update history)
          incBeta mn
          let csc = s { pathScore = b }
-             nst1 = nst { cursc = csc, pvcont = emptySeq }
+             nst1 = nst { cursc = csc }
          pindent $ "beta cut: " ++ show csc
          return (True, nst1)
 
@@ -1048,14 +1034,14 @@ newTKiller d s
     | otherwise = return $ NoKiller
 
 -- We don't sort the moves here, they have to come sorted from genMoves
--- But we consider the best moves first (from previous iteration, TT or IID)
--- and the killers
-genAndSort :: NodeState -> Int -> Int -> Int -> Search (Alt Move)
-genAndSort nst a b d = do
-    let path' = unseq $ pvcont nst
-    path <- if null path' && useIID
-               then bestMoveFromIID nst a b d	-- it will do nothing for AllNode
-               else return path'		-- if not null
+-- But we consider the best move first (TT or IID) and the killers
+genAndSort :: NodeState -> Maybe Move -> Int -> Int -> Int -> Search (Alt Move)
+genAndSort nst mttmv a b d = do
+    path <- case mttmv of
+                Just mv -> return [mv]
+                Nothing -> if useIID
+                              then bestMoveFromIID nst a b d	-- it will do nothing for AllNode
+                              else return []		-- if not null
     lift $ do
         kl  <- filterM isMoveLegal $ killerToList (killer nst)
         esp <- genMoves d
