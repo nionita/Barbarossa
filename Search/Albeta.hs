@@ -580,7 +580,7 @@ pvSearch nst !a !b !d = do
        else do
            -- Here: when ab we should do null move search
            -- Use the found TT move as best move
-           let mttmv = if hdeep > 0	-- && (tp /= 0 || nullSeq (pvcont nst))
+           let mttmv = if hdeep > 0 && (tp /= 0 || hsc > a)
                           then Just e
                           else Nothing
            edges <- genAndSort nst mttmv a b d
@@ -662,7 +662,7 @@ pvZeroW !nst !b !d !lastnull redu = do
                   return s
                 _ -> do
                     -- Use the TT move as best move
-                    let mttmv = if hdeep > 0	-- && (tp /= 0 || nullSeq (pvcont nst))
+                    let mttmv = if hdeep > 0 && (tp /= 0 || hsc >= b)
                                    then Just e
                                    else Nothing
                     edges <- genAndSort nst mttmv bGrain b d
