@@ -106,6 +106,10 @@ nulTrig     = -15	-- static margin to beta, to trigger null move (in scoreGrain 
 nulSubAct :: Bool
 nulSubAct   = True
 
+-- Parameters for fail low move from TT entry
+flmMargin :: Int
+flmMargin = -100
+
 -- Parameters for internal iterative deepening
 useIID :: Bool
 useIID      = True
@@ -580,7 +584,7 @@ pvSearch nst !a !b !d = do
        else do
            -- Here: when ab we should do null move search
            -- Use the found TT move as best move
-           let mttmv = if hdeep > 0 && (tp /= 0 || hsc > a)
+           let mttmv = if hdeep > 0 && (tp /= 0 || hsc > a + flmMargin)
                           then Just e
                           else Nothing
            edges <- genAndSort nst mttmv a b d
@@ -662,7 +666,7 @@ pvZeroW !nst !b !d !lastnull redu = do
                   return s
                 _ -> do
                     -- Use the TT move as best move
-                    let mttmv = if hdeep > 0 && (tp /= 0 || hsc >= b)
+                    let mttmv = if hdeep > 0 && (tp /= 0 || hsc >= b + flmMargin)
                                    then Just e
                                    else Nothing
                     edges <- genAndSort nst mttmv bGrain b d
