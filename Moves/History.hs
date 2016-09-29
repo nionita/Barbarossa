@@ -7,8 +7,6 @@ module Moves.History (
 import Control.Monad.ST.Unsafe (unsafeIOToST)
 import Control.Monad.ST
 import Data.Bits
-import Data.Ord (comparing)
-import qualified Data.Vector.Algorithms.Heap as H	-- Intro sort was slower
 import qualified Data.Vector.Unboxed.Mutable as V
 import qualified Data.Vector.Unboxed         as U
 import Data.Int
@@ -101,17 +99,11 @@ data MovesToSort = MTS History MoveVect !Int
 maxMoves :: Int
 maxMoves = 128
 
--- For remaining depth 1 and 2 we can't have changed history values between the moves
--- For 1: every cut will get better history score, but that move is already out of the remaining list
--- For 2: we are trying moves of the other party, which will not be changed in depth 1
--- So for d==1 or d==2 we make direct sort, which must be very fast, as this is the most effort
--- The question is, if no direct sort is much better than the MTS method - to be tested...
 {-# INLINE histSortMoves #-}
-histSortMoves :: Int -> History -> [Move] -> [Move]
-histSortMoves d h ms
+histSortMoves :: History -> [Move] -> [Move]
+histSortMoves h ms
     | null ms   = []
-    | d > 2     = mtsList $ makeMTS h ms
-    | otherwise = dirSort h ms
+    | otherwise = mtsList $ makeMTS h ms
 
 {-# INLINE makeMTS #-}
 makeMTS :: History -> [Move] -> MovesToSort
@@ -159,17 +151,3 @@ mtsList (MTS h uwa k)
 oneMove :: MoveVect -> [Move]
 oneMove uwa = [ Move $ U.unsafeIndex uw 0 ]
     where (uw, _) = U.unzip uwa
-
--- Direct sort, i.e. read the current history values for every move
--- and sort the moves accordigly (take care of the trick!)
-dirSort :: History -> [Move] -> [Move]
-dirSort h ms = runST $ do
-    uh <- unsafeIOToST $ U.unsafeFreeze h
-    let uw = U.fromListN maxMoves $ map (\(Move w) -> w) ms
-        uv = U.fromListN maxMoves $ map (U.unsafeIndex uh) $ adrs ms
-        uz = U.zip uw uv
-    vz <- U.unsafeThaw uz
-    H.sortBy (comparing snd) vz
-    uz' <- U.unsafeFreeze vz
-    let (uw', _) = U.unzip uz'
-    return $ map Move $ U.toList uw'
