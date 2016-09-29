@@ -260,20 +260,20 @@ isMoveLegal m = do
     t <- getPos
     return $! legalMove t m
 
--- Why not just like isTKillCand?
--- Also: if not normal, it is useless, as now it is not recognized as legal...
+-- Killer must be a normal non capture move or a castle move
+{-# INLINE isKillCand #-}
 isKillCand :: Move -> Move -> Game Bool
 isKillCand mm ym
     | toSquare mm == toSquare ym = return False
     | otherwise = do
         t <- getPos
-        return $! not $ moveIsCapture t ym
+        return $ moveIsCastle ym || not (moveIsPromo ym || moveIsCapture t ym)
 
--- If not normal, it is useless, as now it is not recognized as legal...
+{-# INLINE isTKillCand #-}
 isTKillCand :: Move -> Game Bool
 isTKillCand mm = do
     t <- getPos
-    return $! not $ moveIsCapture t mm
+    return $ moveIsCastle mm || not (moveIsPromo mm || moveIsCapture t mm)
 
 okInSequence :: Move -> Move -> Game Bool
 okInSequence m1 m2 = do
@@ -343,28 +343,26 @@ betaCut good absdp m
     | moveIsNormal m = do
         s <- get
         t <- getPos
-        case tabla t (toSquare m) of
-            Empty -> liftIO $ toHist (hist s) good m absdp
-            _     -> return ()
+        if moveIsCapture t m
+           then return ()
+           else liftIO $ toHist (hist s) good m absdp
     | otherwise = return ()
 
 -- Will not be pruned nor LMR reduced
 -- Now: only for captures or promotions (but check that with LMR!!!)
+{-# INLINE moveIsCaptPromo #-}
 moveIsCaptPromo :: MyPos -> Move -> Bool
-moveIsCaptPromo p m
-    | moveIsPromo m || moveIsEnPas m = True
-    | otherwise                      = moveIsCapture p m
+moveIsCaptPromo p m = moveIsCapture p m || moveIsPromo m
 
 -- We will call this function before we do the move
 -- This will spare a heavy operation for pruned moved
+{-# INLINE canPruneMove #-}
 canPruneMove :: Move -> Game Bool
 canPruneMove m
     | not (moveIsNormal m) = return False
     | otherwise = do
         p <- getPos
-        return $! if moveIsCapture p m
-                     then False
-                     else not $ moveChecks p m
+        return $ not $ moveIsCapture p m || moveChecks p m
 
 -- Score difference obtained by last move, from POV of the moving part
 -- It considers the fact that static score is for the part which has to move

@@ -433,7 +433,7 @@ specialMoveIsLegal _ _ = False
 
 {-# INLINE moveIsCapture #-}
 moveIsCapture :: MyPos -> Move -> Bool
-moveIsCapture p m = occup p .&. (uBit (toSquare m)) /= 0
+moveIsCapture p m = moveIsEnPas m || occup p .&. (uBit (toSquare m)) /= 0
 
 canMove :: Piece -> MyPos -> Square -> Square -> Bool
 canMove Pawn p src dst
