@@ -733,12 +733,18 @@ instance EvalItem PaBlo where
 
 pawnBl :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 pawnBl p ew mide
-    | moving p == White = let (wp, wo, wa) = pawnBloWhite mer mef yof
-                              (bp, bo, ba) = pawnBloBlack yor yof mef
-                          in mad (mad (mad mide (ewPawnBlockP ew) (wp-bp)) (ewPawnBlockO ew) (wo-bo)) (ewPawnBlockA ew) (wa-ba)
-    | otherwise         = let (wp, wo, wa) = pawnBloWhite yor yof mef
-                              (bp, bo, ba) = pawnBloBlack mer mef yof
-                          in mad (mad (mad mide (ewPawnBlockP ew) (bp-wp)) (ewPawnBlockO ew) (bo-wo)) (ewPawnBlockA ew) (ba-wa)
+    | moving p == White = let (wp, wo, wa, wc) = pawnBloWhite mer mef yof yop
+                              (bp, bo, ba, bc) = pawnBloBlack yor yof mef mep
+                              m1 = mad mide (ewPawnBlockP ew) (wp-bp)
+                              m2 = mad m1   (ewPawnBlockO ew) (wo-bo)
+                              m3 = mad m2   (ewPawnBlockA ew) (wa-ba)
+                          in mad m3 (ewPawnBlockC ew) (wc-bc)
+    | otherwise         = let (wp, wo, wa, wc) = pawnBloWhite yor yof mef mep
+                              (bp, bo, ba, bc) = pawnBloBlack mer mef yof yop
+                              m1 = mad mide (ewPawnBlockP ew) (bp-wp)
+                              m2 = mad m1   (ewPawnBlockO ew) (bo-wo)
+                              m3 = mad m2   (ewPawnBlockA ew) (ba-wa)
+                          in mad m3 (ewPawnBlockC ew) (bc-wc)
     where !mep = pawns p .&. me p	-- my pawns
           !mes = mep .&. passed p	-- my passed pawns
           !mer = mep `less` mes		-- my rest pawns
@@ -748,17 +754,33 @@ pawnBl p ew mide
           !mef = me p `less` mep	-- my figures
           !yof = yo p `less` yop	-- your figures
 
-cntPaBlo :: BBoard -> BBoard -> BBoard -> BBoard -> (Int, Int, Int)
-cntPaBlo !ps !op !ofi !afi = (f op, f ofi, f afi)
-    where f = popCount . (ps .&.)
+-- Center pawns blocked on 2nd or 3rd rank get a malus
+cntPaBlo :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard
+         -> (Int, Int, Int, Int)
+cntPaBlo !ba2 !ba3 !ps !op !ofi !afi !ap = (f op, f ofi, f afi, bt)
+    where f  = popCount . (ps .&.)
+          b2op = popCount $ op  .&. ba2
+          b2of = popCount $ ofi .&. ba2
+          b2af = popCount $ afi .&. ba2
+          b2ap = popCount $ ap  .&. ba2
+          b3op = popCount $ op  .&. ba3
+          b3of = popCount $ ofi .&. ba3
+          b3af = popCount $ afi .&. ba3
+          b3ap = popCount $ ap  .&. ba3
+          bt = 2 * (4 * b2ap + 2 * b2op + b2of + b2af)
+                 + (    b3ap +     b3op + b3of + b3af)
 
-pawnBloWhite :: BBoard -> BBoard -> BBoard -> (Int, Int, Int)
-pawnBloWhite !pa !op !tp = cntPaBlo p1 pa op tp
+pawnBloWhite :: BBoard -> BBoard -> BBoard -> BBoard -> (Int, Int, Int, Int)
+pawnBloWhite !pa = cntPaBlo ba2 ba3 p1 pa
     where !p1 = pa `unsafeShiftL` 8
+          ba2 = (fileD .|. fileE) .&. row3
+          ba3 = (fileD .|. fileE) .&. row4
 
-pawnBloBlack :: BBoard -> BBoard -> BBoard -> (Int, Int, Int)
-pawnBloBlack !pa !op !tp = cntPaBlo p1 pa op tp
+pawnBloBlack :: BBoard -> BBoard -> BBoard -> BBoard -> (Int, Int, Int, Int)
+pawnBloBlack !pa = cntPaBlo ba2 ba3 p1 pa
     where !p1 = pa `unsafeShiftR` 8
+          ba2 = (fileD .|. fileE) .&. row6
+          ba3 = (fileD .|. fileE) .&. row5
 
 ------ Pass pawns ------
 data PassPawns = PassPawns

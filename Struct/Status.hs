@@ -113,6 +113,7 @@ data EvalWeights
           ewPawnBlockP      :: !MidEnd,
           ewPawnBlockO      :: !MidEnd,
           ewPawnBlockA      :: !MidEnd,
+          ewPawnBlockC      :: !MidEnd,
           ewPassPawnLev     :: !MidEnd
       } deriving Show
 
@@ -207,6 +208,7 @@ instance CollectParams EvalWeights where
           ewPawnBlockP      = tme (-124)(-110),
           ewPawnBlockO      = tme (-23) (-27),
           ewPawnBlockA      = tme (-14) (-73),
+          ewPawnBlockC      = tme (-20) (-30),
           ewPassPawnLev     = tme 0 9
         }
     npColParm = collectEvalWeights
@@ -282,6 +284,8 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
         ("end.pawnBlockO",      setEndPawnBlockO),
         ("mid.pawnBlockA",      setMidPawnBlockA),
         ("end.pawnBlockA",      setEndPawnBlockA),
+        ("mid.pawnBlockC",      setMidPawnBlockC),
+        ("end.pawnBlockC",      setEndPawnBlockC),
         ("mid.passPawnLev",     setMidPassPawnLev),
         ("end.passPawnLev",     setEndPassPawnLev)
     ]
@@ -353,5 +357,7 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
           setEndPawnBlockO      v' ew' = ew' { ewPawnBlockO      = (ewPawnBlockO      ew') { end = round v' }}
           setMidPawnBlockA      v' ew' = ew' { ewPawnBlockA      = (ewPawnBlockA      ew') { mid = round v' }}
           setEndPawnBlockA      v' ew' = ew' { ewPawnBlockA      = (ewPawnBlockA      ew') { end = round v' }}
+          setMidPawnBlockC      v' ew' = ew' { ewPawnBlockC      = (ewPawnBlockC      ew') { mid = round v' }}
+          setEndPawnBlockC      v' ew' = ew' { ewPawnBlockC      = (ewPawnBlockC      ew') { end = round v' }}
           setMidPassPawnLev     v' ew' = ew' { ewPassPawnLev     = (ewPassPawnLev     ew') { mid = round v' }}
           setEndPassPawnLev     v' ew' = ew' { ewPassPawnLev     = (ewPassPawnLev     ew') { end = round v' }}
