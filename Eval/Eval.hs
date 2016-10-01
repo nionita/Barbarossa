@@ -11,7 +11,7 @@ module Eval.Eval (
 import Data.Array.Base (unsafeAt)
 import Data.Bits
 import Data.List (minimumBy)
-import Control.Monad.State.Lazy
+import Control.Monad.State.Lazy hiding (ap)
 import Data.Array.Unboxed
 import Data.Ord (comparing)
 
@@ -767,7 +767,7 @@ cntPaBlo !ba2 !ba3 !ps !op !ofi !afi !ap = (f op, f ofi, f afi, bt)
           b3of = popCount $ ofi .&. ba3
           b3af = popCount $ afi .&. ba3
           b3ap = popCount $ ap  .&. ba3
-          bt = 2 * (4 * b2ap + 2 * b2op + b2of + b2af)
+          bt = 3 * (4 * b2ap + 2 * b2op + b2of + b2af)
                  + (    b3ap +     b3op + b3of + b3af)
 
 pawnBloWhite :: BBoard -> BBoard -> BBoard -> BBoard -> (Int, Int, Int, Int)
