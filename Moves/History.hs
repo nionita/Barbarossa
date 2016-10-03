@@ -18,7 +18,7 @@ import Struct.Struct
 type History = V.IOVector Int32
 
 rows, cols, vsize :: Int
-rows = 12
+rows = 16
 cols = 64
 vsize = rows * cols
 
@@ -31,21 +31,18 @@ adr m = ofs' m + adr' m
 -- as they have all the same color, so the offset needs to be calsulated only once
 {-# INLINE adrs #-}
 adrs :: [Move] -> [Int]
-adrs []       = []
-adrs ms@(m:_) = map (f . adr') ms
-    where off = ofs' m
-          f x = off + x
+adrs []     = []
+adrs (m:ms) = off + adr' m : map f ms
+    where !off = ofs' m
+          f x = off + adr' x
 
 {-# INLINE adr' #-}
 adr' :: Move -> Int
-adr' m = cols * p + t
-    where p = fromEnum $ movePiece m
-          t = toSquare m
+adr' m = cols * moveHisAdr m + toSquare m
 
 {-# INLINE ofs' #-}
 ofs' :: Move -> Int
-ofs' m | moveColor m == White = 0
-       | otherwise            = 6 * cols
+ofs' m = 8 * cols * moveHisOfs m
 
 newHist :: IO History
 newHist = V.replicate vsize 0
@@ -123,16 +120,29 @@ mtsList (MTS h uwa k)
           let (uw, ua) = U.unzip uwa
               -- Indirect history value:
               hival = U.unsafeIndex uh . fromIntegral . U.unsafeIndex ua
+              mvsco = moveScore . U.unsafeIndex uw
               -- To find index of min history values
-              go !i !i0 !v0
+              go !i !i0 !v0 !s0
                   | i > k     = i0
                   | otherwise =
                        let v = hival i	-- history value of this position
                        in if v < v0	-- we take minimum coz that trick (bigger is worse)
-                             then go (i+1) i  v
-                             else go (i+1) i0 v0
+                             then go (i+1) i v 0
+                             else if v > v0
+                                     then go (i+1) i0 v0 s0
+                                     else do	-- equal history, use preference score
+                                         let s = mvsco i
+                                         case s0 of
+                                             0 -> do
+                                                 let s' = mvsco i0
+                                                 if s' >= s
+                                                    then go (i+1) i0 v0 s'
+                                                    else go (i+1) i  v  s
+                                             _ -> if s0 >= s
+                                                     then go (i+1) i0 v0 s0
+                                                     else go (i+1) i  v  s
           let !v0 = hival 0
-              !i = go 1 0 v0
+              !i = go 1 0 v0 0
               !w = U.unsafeIndex uw i		-- this is the (first) best move
           -- Now swap the minimum with the last active element for both vectors
           -- to eliminate the used move (if necessary)
@@ -151,3 +161,13 @@ mtsList (MTS h uwa k)
 oneMove :: MoveVect -> [Move]
 oneMove uwa = [ Move $ U.unsafeIndex uw 0 ]
     where (uw, _) = U.unzip uwa
+
+-- For equal history we prefer some move over others
+-- Value 0 is reserved to code "not yet calculated" so that we avoid Maybe
+moveScore :: Word16 -> Word32
+moveScore w
+    | moveIsCastle m         = 3
+    | moveIsNormal m
+      && movePiece m == Pawn = 2
+    | otherwise              = 1
+    where m = Move w
