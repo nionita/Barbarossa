@@ -7,6 +7,7 @@ module Struct.Struct (
          tabla, emptyPos, isReversible, remis50Moves, set50Moves, reset50Moves, addHalfMove,
          fromSquare, toSquare, isSlide, isDiag, isKkrq,
          moveIsNormal, moveIsCastle, moveIsPromo, moveIsEnPas, moveColor, movePiece,
+         moveHisAdr, moveHisOfs,
          movePromoPiece, moveEnPasDel, makeEnPas, moveAddColor, moveAddPiece,
          makeCastleFor, makePromo, moveFromTo, showWord64,
          activatePromo, fromColRow, checkCastle, checkEnPas, toString,
@@ -395,7 +396,6 @@ makeCastleFor Black False = Move 0xFF3A	-- black, queenside
 encodeFromTo :: Square -> Square -> Word16
 encodeFromTo f t = fromIntegral t .|. (fromIntegral f `unsafeShiftL` 6)
 
--- {-# INLINE movePiece #-}
 movePiece :: Move -> Piece
 movePiece m@(Move w)
     | moveIsNormal m
@@ -405,6 +405,16 @@ movePiece m@(Move w)
     | moveIsCastle m = King
     | otherwise      = error $ "Wrong move type: " ++ showHex w ""
     where r = fromIntegral $ (w `unsafeShiftR` 12) .&. 0x7
+
+-- For history purposes we calculate a quick 'n' dirty "piece"
+{-# INLINE moveHisAdr #-}
+moveHisAdr :: Move -> Int
+moveHisAdr (Move w) = fromIntegral $ (w `unsafeShiftR` 12) .&. 0x7
+
+-- For history purposes we calculate a quick 'n' dirty "color"
+{-# INLINE moveHisOfs #-}
+moveHisOfs :: Move -> Int
+moveHisOfs (Move w) = fromIntegral $ (w `unsafeShiftR` 15) .&. 0x1
 
 -- {-# INLINE fromSquare #-}
 fromSquare :: Move -> Square
