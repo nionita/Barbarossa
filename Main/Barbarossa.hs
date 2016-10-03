@@ -37,7 +37,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.4.0"
-progVerSuff = "npvc"
+progVerSuff = "npvct"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -414,7 +414,7 @@ getTimeParams cs _ c	-- unused: lastsc
 
 -- These parameters should be optimised (i.e.: first made options)
 remTimeFracIni, remTimeFracFin, remTimeFracDev :: Double
-remTimeFracIni = 0.15	-- fraction of remaining time which we can consume at once - initial value
+remTimeFracIni = 0.13	-- fraction of remaining time which we can consumed at once - initial value
 remTimeFracFin = 0.5	-- same at final (when remaining time is near zero)
 remTimeFracDev = remTimeFracFin - remTimeFracIni
 
@@ -422,7 +422,7 @@ timeReserved :: Int
 timeReserved   = 70	-- milliseconds reserved for move communication
 
 -- This function calculates the normal time for the next search loop,
--- the maximum of that (whch cannot be exceeded)
+-- the maximum of that (which cannot be exceeded)
 -- and if we are in time troubles or not
 compTime :: Int -> Int -> Int -> Int -> (Int, Int, Bool)
 compTime tim tpm fixmtg lastsc
@@ -443,11 +443,12 @@ compTime tim tpm fixmtg lastsc
           ttroub = short || over
 
 estMvsToGo :: Array Int Int
-estMvsToGo = listArray (0, 8) [30, 28, 24, 18, 12, 10, 8, 6, 3]
+---------------------------------0  50 100 150 200 250 300 350 400 450 500 550 600
+estMvsToGo = listArray (0, 12) [78, 72, 55, 32, 25, 20, 16, 13, 11,  9,  7,  5,  3]
 
 estimateMovesToGo :: Int -> Int
 estimateMovesToGo sc = estMvsToGo ! mvidx
-    where mvidx = min 8 $ abs sc `div` 100
+    where mvidx = min 12 $ abs sc `div` 50
 
 newThread :: CtxIO () -> CtxIO ThreadId
 newThread a = do
