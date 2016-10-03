@@ -30,7 +30,7 @@ adr :: Move -> Int
 adr m = ofs' m + adr' m
 
 -- These functions are used to calculate faster the addresses of a list of moves
--- as they have all the same color, so the offset needs to be calsulated only once
+-- as they have all the same color, so the offset needs to be calculated only once
 {-# INLINE adrs #-}
 adrs :: [Move] -> [Int]
 adrs []     = []
@@ -130,27 +130,15 @@ mtsList (MTS h uwa k)
               hival = U.unsafeIndex uh . fromIntegral . U.unsafeIndex ua
               mvsco = moveScore . U.unsafeIndex uw
               -- To find index of min history values
-              go !i !i0 !v0 !s0
+              go !i !i0 !v0
                   | i > k     = i0
                   | otherwise =
-                       let v = hival i	-- history value of this position
+                       let v = hival i + mvsco i	-- history value + move score
                        in if v < v0	-- we take minimum coz that trick (bigger is worse)
-                             then go (i+1) i v 0
-                             else if v > v0
-                                     then go (i+1) i0 v0 s0
-                                     else do	-- equal history, use preference score
-                                         let s = mvsco i
-                                         case s0 of
-                                             0 -> do
-                                                 let s' = mvsco i0
-                                                 if s' >= s
-                                                    then go (i+1) i0 v0 s'
-                                                    else go (i+1) i  v  s
-                                             _ -> if s0 >= s
-                                                     then go (i+1) i0 v0 s0
-                                                     else go (i+1) i  v  s
-          let !v0 = hival 0
-              !i = go 1 0 v0 0
+                             then go (i+1) i  v
+                             else go (i+1) i0 v0
+          let !v0 = hival 0 + mvsco 0
+              !i = go 1 0 v0
               !w = U.unsafeIndex uw i		-- this is the (first) best move
           -- Now swap the minimum with the last active element for both vectors
           -- to eliminate the used move (if necessary)
@@ -184,12 +172,11 @@ dirSort h ms = runST $ do
     let (uw', _) = U.unzip uz'
     return $ map Move $ U.toList uw'
 
--- For equal history we prefer some move over others
--- Value 0 is reserved to code "not yet calculated" so that we avoid Maybe
-moveScore :: Word16 -> Word32
+-- Move score added to history
+moveScore :: Word16 -> Int32
 moveScore w
-    | moveIsCastle m         = 3
+    | moveIsCastle m         = 2
     | moveIsNormal m
-      && movePiece m == Pawn = 2
-    | otherwise              = 1
+      && movePiece m == Pawn = 1
+    | otherwise              = 0
     where m = Move w
