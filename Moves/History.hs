@@ -17,10 +17,10 @@ import Struct.Struct
 -- Int32 should be enough for now with max depth 20
 type History = V.IOVector Int32
 
-rows, cols, vsize :: Int
-rows = 16
-cols = 64
-vsize = rows * cols
+pieces, squares, vsize :: Int
+pieces  = 16
+squares = 6	-- for 64 squares
+vsize = pieces `unsafeShiftL` squares
 
 -- Did we play with this layout? Could be some other layout better for cache?
 {-# INLINE adr #-}
@@ -38,11 +38,12 @@ adrs (m:ms) = off + adr' m : map f ms
 
 {-# INLINE adr' #-}
 adr' :: Move -> Int
-adr' m = cols * moveHisAdr m + toSquare m
+adr' m = (moveHisAdr m `unsafeShiftL` squares) + toSquare m
 
 {-# INLINE ofs' #-}
 ofs' :: Move -> Int
-ofs' m = 8 * cols * moveHisOfs m
+ofs' m = moveHisOfs m `unsafeShiftL` sq3	-- this is 0 or 8 * squares
+    where sq3 = squares + 3
 
 newHist :: IO History
 newHist = V.replicate vsize 0
@@ -125,11 +126,13 @@ mtsList (MTS h uwa k)
               go !i !i0 !v0
                   | i > k     = i0
                   | otherwise =
-                       let v = hival i + mvsco i	-- history value + move score
+                       -- Lower v is better because the trick
+                       -- So we subtract the score, which is: higher is better
+                       let v = hival i - mvsco i	-- history value - move score
                        in if v < v0	-- we take minimum coz that trick (bigger is worse)
                              then go (i+1) i  v
                              else go (i+1) i0 v0
-          let !v0 = hival 0 + mvsco 0
+          let !v0 = hival 0 - mvsco 0
               !i = go 1 0 v0
               !w = U.unsafeIndex uw i		-- this is the (first) best move
           -- Now swap the minimum with the last active element for both vectors
@@ -150,11 +153,9 @@ oneMove :: MoveVect -> [Move]
 oneMove uwa = [ Move $ U.unsafeIndex uw 0 ]
     where (uw, _) = U.unzip uwa
 
--- Move score added to history
+-- Move score "added" to history
+-- Higher score is better
+-- We prefer pawn moves over other - they are irreversible
 moveScore :: Word16 -> Int32
-moveScore w
-    | moveIsCastle m         = 2
-    | moveIsNormal m
-      && movePiece m == Pawn = 1
-    | otherwise              = 0
+moveScore w = - (fromIntegral $ moveHisAdr m)
     where m = Move w
