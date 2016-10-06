@@ -34,12 +34,10 @@ useAspirWin :: Bool
 useAspirWin = False
 
 -- Some fix search parameter
-scoreGrain, depthForCM, minToStore, minToRetr, maxDepthExt, negHistMNo, minPvDepth :: Int
+scoreGrain, depthForCM, maxDepthExt, negHistMNo, minPvDepth :: Int
 useNegHist, useTTinPv :: Bool
 scoreGrain  = 4	-- score granularity
 depthForCM  = 7 -- from this depth inform current move
-minToStore  = 1 -- minimum remaining depth to store the position in hash
-minToRetr   = 1 -- minimum remaining depth to retrieve
 maxDepthExt = 3 -- maximum depth extension
 useNegHist  = False	-- when not cutting - negative history
 negHistMNo  = 1		-- how many moves get negative history
@@ -461,9 +459,9 @@ checkFailOrPVRoot xstats b d e s nst = timeToAbort (True, nst) $ do
              pvb    = Pvsl s nodes' False	-- the bad
              de = max d $ pathDepth s
          if d == 1
-            then  do
+            then do
                  let typ = 2
-                 when (de >= minToStore) $ lift $  ttStore de typ (pathScore s) e nodes'
+                 lift $ ttStore de typ (pathScore s) e nodes'
                  let xpvslg = if pathScore s > a
                                  then insertToPvs d pvg (pvsl nst)	-- the good
                                  else insertToPvs d pvb (pvsl nst)	-- the bad (when aspiration)
@@ -484,9 +482,8 @@ checkFailOrPVRoot xstats b d e s nst = timeToAbort (True, nst) $ do
                       then do
                         -- what when a root move fails high? We are in aspiration
                         lift $ do
-                            when (de >= minToStore) $ do
-                                let typ = 1	-- beta cut (score is lower limit) with move e
-                                ttStore de typ b e nodes'
+                            let typ = 1	-- beta cut (score is lower limit) with move e
+                            ttStore de typ b e nodes'
                             betaCut True (absdp sst) e
                         let xpvslg = insertToPvs d pvg (pvsl nst)	-- the good
                             csc = s { pathScore = b }
@@ -498,9 +495,8 @@ checkFailOrPVRoot xstats b d e s nst = timeToAbort (True, nst) $ do
                             pa = unseq $ pathMoves s
                         informBest (scoreToExtern sc $ length pa) (draft $ ronly sst) pa
                         lift $ do
-                            when (de >= minToStore) $ do
-                                let typ = 2	-- best move so far (score is exact)
-                                ttStore de typ sc e nodes'
+                            let typ = 2	-- best move so far (score is exact)
+                            ttStore de typ sc e nodes'
                             betaCut True (absdp sst) e	-- not really cut, but good move
                         let xpvslg = insertToPvs d pvg (pvsl nst)	-- the good
                             nst1 = nst { cursc = s, nxtnt = nextNodeType (nxtnt nst),
@@ -523,6 +519,7 @@ insertToPvs d p ps@(q:qs)
           pmate   = pnearmate $ pvPath p
           qmate   = pnearmate $ pvPath q
 
+{--
 {-# INLINE mustQSearch #-}
 mustQSearch :: Int -> Int -> Search (Int, Int)
 mustQSearch !a !b = do
@@ -531,6 +528,7 @@ mustQSearch !a !b = do
     nodes1 <- gets (sNodes . stats)
     let deltan = nodes1 - nodes0
     return (v, deltan)
+--}
 
 checkFailHard :: String -> Int -> Int -> Int -> Search ()
 checkFailHard s a b c =
@@ -540,11 +538,10 @@ checkFailHard s a b c =
 -- PV Search
 pvSearch :: NodeState -> Int -> Int -> Int -> Search Path
 pvSearch _ !a !b !d | d <= 0 = do
-    -- Now that we moved the ttRead call under pvSearch we are not prepared
-    -- to handle correctly the case minToRetr = 0
-    (v, ns) <- mustQSearch a b
+    -- (v, ns) <- mustQSearch a b
+    v <- pvQSearch a b 0
     checkFailHard "QS" a b v
-    when (minToStore == 0) $ lift $ ttStore 0 2 v (Move 0) ns
+    -- when (minToStore == 0) $ lift $ ttStore 0 2 v (Move 0) ns
     let !esc = pathFromScore ("pvQSearch 1:" ++ show v) v	-- ok: fail hard in QS
     pindent $ "<> " ++ show esc
     return esc
@@ -555,10 +552,7 @@ pvSearch nst !a !b !d = do
     -- Here we are always in PV if enough depth:
     when (not $ inPv || ab) $ lift $ absurd $ "pvSearch: not inPv, not ab, nst = " ++ show nst
     -- Check first for a TT entry of the position to search
-    (hdeep, tp, hsc, e, nodes')
-        <- if d >= minToRetr
-              then reTrieve >> lift ttRead
-              else return (-1, 0, 0, undefined, 0)
+    (hdeep, tp, hsc, e, nodes') <- reTrieve >> lift ttRead
     -- tp == 1 => score >= hsc, so if hsc >= asco then we improved,
     --    but can we use hsc in PV? This score is not exact!
     --    Idea: return only if better than beta, else search for exact score
@@ -608,14 +602,13 @@ pvSearch nst !a !b !d = do
                            then do
                                -- here we failed low
                                let de = max d $ pathDepth s
-                               when (de >= minToStore) $ do
-                                   nodes1 <- gets (sNodes . stats)
-                                   -- store as upper score, and as move, the first one generated
-                                   lift $ do
-                                       let typ = 0
-                                           !deltan = nodes1 - nodes0
-                                           mv = head $ unalt edges	-- not null - we are on "else" of noMove
-                                       ttStore de typ a mv deltan
+                               nodes1 <- gets (sNodes . stats)
+                               -- store as upper score, and as move, the first one generated
+                               lift $ do
+                                   let typ = 0
+                                       !deltan = nodes1 - nodes0
+                                       mv = head $ unalt edges	-- not null - we are on "else" of noMove
+                                   ttStore de typ a mv deltan
                                checkFailHard "pvSLoop low" a b (pathScore s)
                                return s
                            else do
@@ -625,11 +618,10 @@ pvSearch nst !a !b !d = do
 -- PV Zero Window
 pvZeroW :: NodeState -> Int -> Int -> Int -> Bool -> Search Path
 pvZeroW !_ !b !d !_ _ | d <= 0 = do
-    -- Now that we moved the ttRead call under pvZeroW we are not prepared
-    -- to handle correctly the case minToRetr = 0
-    (v, ns) <- mustQSearch bGrain b
+    -- (v, ns) <- mustQSearch bGrain b
+    v <- pvQSearch bGrain b 0
     checkFailHard "QS" bGrain b v
-    when (minToStore == 0) $ lift $ ttStore 0 2 v (Move 0) ns
+    -- when (minToStore == 0) $ lift $ ttStore 0 2 v (Move 0) ns
     let !esc = pathFromScore ("pvQSearch 21:" ++ show v) v
     pindent $ "<> " ++ show esc
     return esc
@@ -637,10 +629,7 @@ pvZeroW !_ !b !d !_ _ | d <= 0 = do
 pvZeroW !nst !b !d !lastnull redu = do
     pindent $ ":> " ++ show b
     -- Check if we have it in TT
-    (hdeep, tp, hsc, e, nodes')
-        <- if d >= minToRetr
-              then reTrieve >> lift ttRead
-              else return (-1, 0, 0, undefined, 0)
+    (hdeep, tp, hsc, e, nodes') <- reTrieve >> lift ttRead
     if hdeep >= d && (tp == 2 || tp == 1 && hsc >= b || tp == 0 && hsc < b)
        then do
            let ttpath = Path { pathScore = trimax bGrain b hsc, pathDepth = hdeep,
@@ -691,14 +680,13 @@ pvZeroW !nst !b !d !lastnull redu = do
                             else if movno nstf > 1 -- we failed low
                                    then do
                                        let !de = max d $ pathDepth s
-                                       when (de >= minToStore) $ do
-                                           !nodes1 <- gets (sNodes . stats)
-                                           -- store as upper score, and as move the first one (generated)
-                                           lift $ do
-                                               let typ = 0
-                                                   !deltan = nodes1 - nodes0
-                                                   mv = head $ unalt edges	-- not null, we are in "else" of noMove
-                                               ttStore de typ bGrain mv deltan
+                                       !nodes1 <- gets (sNodes . stats)
+                                       -- store as upper score, and as move the first one (generated)
+                                       lift $ do
+                                           let typ = 0
+                                               !deltan = nodes1 - nodes0
+                                               mv = head $ unalt edges	-- not null, we are in "else" of noMove
+                                           ttStore de typ bGrain mv deltan
                                        return s
                                    else do	-- here: store exact mate or stalemate score!
                                        chk <- lift tacticalPos
@@ -964,9 +952,8 @@ checkFailOrPVLoop xstats b d e s nst = do
          if pathScore s >= b
             then do
               lift $ do
-                  when (de >= minToStore) $ do
-                      let typ = 1	-- best move is e and is beta cut (score is lower limit)
-                      ttStore de typ b e nodes'
+                  let typ = 1	-- best move is e and is beta cut (score is lower limit)
+                  ttStore de typ b e nodes'
                   betaCut True (absdp sst) e -- anounce a beta move (for example, update history)
               incBeta mn
               -- when debug $ logmes $ "<-- pvInner: beta cut: " ++ show s ++ ", return " ++ show b
@@ -976,9 +963,8 @@ checkFailOrPVLoop xstats b d e s nst = do
               return (True, nst1)
             else do	-- means: > a && < b
               lift $ do
-                  when (de >= minToStore) $ do
-                      let typ = 2	-- score is exact
-                      ttStore de typ (pathScore s) e nodes'
+                  let typ = 2	-- score is exact
+                  ttStore de typ (pathScore s) e nodes'
                   betaCut True (absdp sst) e -- not really a cut, but good move here
               let nst1 = nst { cursc = s, nxtnt = nextNodeType (nxtnt nst), movno = mn+1 }
               return (False, nst1)
@@ -1003,9 +989,8 @@ checkFailOrPVLoopZ xstats b d e s nst = do
              nodes' = nodes1 - nodes0
              !de = max d $ pathDepth s
          lift $ do
-             when (de >= minToStore) $ do
-                 let typ = 1	-- best move is e and is beta cut (score is lower limit)
-                 ttStore de typ b e nodes'
+             let typ = 1	-- best move is e and is beta cut (score is lower limit)
+             ttStore de typ b e nodes'
              betaCut True (absdp sst) e -- anounce a beta move (for example, update history)
          incBeta mn
          let csc = s { pathScore = b }
@@ -1133,48 +1118,81 @@ trimax a b x
 
 -- PV Quiescent Search
 pvQSearch :: Int -> Int -> Int -> Search Int
-pvQSearch !a !b !c = do				   -- to avoid endless loops
+pvQSearch !a !b !c = do
     -- qindent $ "=> " ++ show a ++ ", " ++ show b
-    !tact <- lift tacticalPos
-    if tact
-       then do
-           (es1, es2) <- lift $ genMoves 0
-           let edges = Alt $ es1 ++ es2
-           if noMove edges
-              then do
-                  lift $ finNode "MATE" False
-                  return $! trimax a b (-mateScore)
-              else if c >= qsMaxChess
-                      then do
-                          lift $ finNode "ENDL" False
-                          return $! trimax a b inEndlessCheck
-                      else do
-                          -- for check extensions in case of very few moves (1 or 2):
-                          -- if 1 move: search even deeper
-                          -- if 2 moves: same depth
-                          -- if 3 or more: no extension
-                          let !esc = lenmax2 $ unalt edges
-                              !nc = c + esc - 1
-                          pvQLoop b nc a edges
+    -- TODO: use e as first move if legal
+    -- (hdeep, tp, hsc, e, _) <- reTrieve >> lift ttRead
+    (hdeep, tp, hsc, _, _) <- reTrieve >> lift ttRead
+    -- tp == 1 => score >= hsc, so if hsc > a then we improved
+    -- tp == 0 => score <= hsc, so if hsc <= asco then we fail low and
+    --    can terminate the search
+    if hdeep >= 0 && (
+            tp == 2		-- exact score: always good
+         || tp == 1 && hsc >= b	-- we will fail high
+         || tp == 0 && hsc <= a	-- we will fail low
+       )
+       then reSucc 1 >> return (trimax a b hsc)
        else do
-            !stp <- lift staticVal
-            if qsBetaCut && stp >= b
-               then do
-                   lift $ finNode "BETA" False
-                   return b
-               else if qsDeltaCut && stp + qsDelta < a
-                      then do
-                          lift $ finNode "DELT" False
-                          return a
-                      else do
-                          edges <- liftM Alt $ lift genTactMoves
-                          if noMove edges
+           !tact <- lift tacticalPos
+           if tact
+              then do
+                  (es1, es2) <- lift $ genMoves 0
+                  let edges = Alt $ es1 ++ es2
+                  if noMove edges
+                     then do
+                         lift $ do
+                             finNode "MATE" False
+                             let typ = 2
+                             ttStore 0 typ (-mateScore) (Move 0) 1
+                         return $! trimax a b (-mateScore)
+                     else if c >= qsMaxChess
                              then do
-                                 lift $ finNode "NOCA" False
-                                 return $! trimax a b stp	-- no capture
-                             else if stp > a
-                                     then pvQLoop b c stp edges
-                                     else pvQLoop b c a   edges
+                                 lift $ finNode "ENDL" False
+                                 return $! trimax a b inEndlessCheck
+                             else do
+                                 -- for check extensions in case of very few moves (1 or 2):
+                                 -- if 1 move: extend 1 (same depth)
+                                 -- if 2 moves: no extension
+                                 let !esc = lenmax2 $ unalt edges
+                                     !nc = c + esc - 1
+                                 sc <- pvQLoop b nc a edges
+                                 when (sc <= a) $ lift $ do
+                                     let typ = 0
+                                     ttStore 0 typ sc (Move 0) 1
+                                 return sc
+              else do
+                  !stp <- lift staticVal
+                  if qsBetaCut && stp >= b
+                     then do
+                         lift $ do
+                             finNode "BETA" False
+                             let typ = 1
+                             ttStore 0 typ b (Move 0) 1
+                         return b
+                     else if qsDeltaCut && stp + qsDelta < a
+                             then do
+                                 lift $ do
+                                     finNode "DELT" False
+                                     let typ = 0
+                                     ttStore 0 typ a (Move 0) 1
+                                 return a
+                             else do
+                                 edges <- liftM Alt $ lift genTactMoves
+                                 if noMove edges
+                                    then do	-- no more captures
+                                        lift $ do
+                                            finNode "NOCA" False
+                                            let typ = 2
+                                            ttStore 0 typ stp (Move 0) 1
+                                        return $! trimax a b stp
+                                    else do
+                                        sc <- if stp > a
+                                                 then pvQLoop b c stp edges
+                                                 else pvQLoop b c a   edges
+                                        when (sc <= a) $ lift $ do
+                                            let typ = 0
+                                            ttStore 0 typ sc (Move 0) 1
+                                        return sc
     where lenmax2 (_:_:_) = 2
           lenmax2 _       = 1	-- we know here it is not empty
 
@@ -1190,7 +1208,7 @@ pvQInnerLoop :: Int -> Int -> Int -> Move -> Search (Bool, Int)
 pvQInnerLoop !b c !a e = timeToAbort (True, b) $ do
          -- here: delta pruning: captured piece + 200 > a? then go on, else return
          -- qindent $ "-> " ++ show e
-         r <-  lift $ doMove e True
+         r <- lift $ doMove e True
          if legalResult r
             then do
                 newNodeQS
@@ -1204,9 +1222,15 @@ pvQInnerLoop !b c !a e = timeToAbort (True, b) $ do
                 lift undoMove
                 -- qindent $ "<- " ++ show e ++ " (" ++ show s ++ ")"
                 if sc >= b
-                   then return (True, b)
+                   then do
+                       let typ = 1
+                       lift $ ttStore 0 typ b (Move 0) 1
+                       return (True, b)
                    else if sc > a
-                           then return (False, sc)
+                           then do
+                               let typ = 2
+                               lift $ ttStore 0 typ sc (Move 0) 1
+                               return (False, sc)
                            else return (False, a)
             else return (False, a)
 
