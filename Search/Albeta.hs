@@ -14,6 +14,7 @@ import Control.Monad.State hiding (gets, modify)
 import Data.Array.Base (unsafeAt)
 import Data.Array.Unboxed
 import Data.Bits
+import Data.Int
 import Data.List (delete, sortBy)
 import Data.Ord (comparing)
 import Data.Maybe (fromMaybe)
@@ -35,7 +36,7 @@ useAspirWin = False
 
 -- Some fix search parameter
 scoreGrain, depthForCM, maxDepthExt, negHistMNo, minPvDepth :: Int
-useNegHist, useTTinPv :: Bool
+useNegHist, useTTinPv, useTTinQS :: Bool
 scoreGrain  = 4	-- score granularity
 depthForCM  = 7 -- from this depth inform current move
 maxDepthExt = 3 -- maximum depth extension
@@ -43,11 +44,11 @@ useNegHist  = False	-- when not cutting - negative history
 negHistMNo  = 1		-- how many moves get negative history
 useTTinPv   = False	-- retrieve from TT in PV?
 minPvDepth  = 2		-- from this depth we use alpha beta search
+useTTinQS   = True
 
 -- Parameters for late move reduction:
-lmrActive, lmrDebug :: Bool
+lmrActive :: Bool
 lmrActive   = True
-lmrDebug    = False
 lmrInitLv, lmrInitLim, lmrLevMin, lmrLevMax :: Int
 lmrInitLv   = 8
 lmrInitLim  = 8500
@@ -92,9 +93,8 @@ qsMaxChess :: Int
 qsMaxChess = 2		-- max number of chess for a quiet search path
 
 -- Parameters for null move pruning
-nulActivate, nulDebug :: Bool
+nulActivate :: Bool
 nulActivate = True		-- activate null move reduction
-nulDebug    = False
 nulMoves :: Int
 nulMoves    = 1	-- how many null moves in sequence are allowed (one or two)
 nulMargin, nulSubmrg, nulTrig :: Int
@@ -130,7 +130,7 @@ beta0  = maxBound - 2000
 
 data Pvsl = Pvsl {
         pvPath :: Path,		-- pv path
-        pvNodes :: !Int,	-- number of nodes in the current search
+        pvNodes :: !Int64,	-- number of nodes in the current search
         pvGood  :: !Bool	-- beta cut or alpha improvement
     } deriving Show
 
@@ -175,10 +175,6 @@ data NodeState
 
 deepNSt :: NodeState -> NodeState
 deepNSt nst = nst { crtnt = nxtnt nst, nxtnt = deepNodeType (nxtnt nst) }
-
-data SStats = SStats {
-        sNodes, sNodesQS, sRetr, sRSuc, sBeta, sBMNo, sRedu, sReMi, sReBe, sReSe, sReNo :: !Int
-    } deriving Show
 
 -- The node type is the expected node type of the new (child) node, which
 -- is obtained by making one move from the current (parent) node
@@ -244,7 +240,7 @@ emptySeq :: Seq Move
 emptySeq = Seq []
 
 pvsInit :: PVState
-pvsInit = PVState { ronly = pvro00, stats = stt0, absdp = 0, usedext = 0, abort = False,
+pvsInit = PVState { ronly = pvro00, stats = ssts0, absdp = 0, usedext = 0, abort = False,
                     futme = futIniVal, futyo = futIniVal,
                     lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
 nst0 :: NodeState
@@ -255,10 +251,6 @@ nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore "Zero" 0,
 
 resetNSt :: Path -> Killer -> NodeState -> NodeState
 resetNSt !sc !kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill }
-
-stt0 :: SStats
-stt0 = SStats { sNodes = 0, sNodesQS = 0, sRetr = 0, sRSuc = 0,
-                sBeta = 0, sBMNo = 0, sRedu = 0, sReMi = 0, sReBe = 0, sReSe = 0, sReNo = 0 }
 
 pvro00 :: PVReadOnly
 pvro00 = PVReadOnly { draft = 0, albest = False, timeli = False, abmili = 0 }
@@ -393,7 +385,7 @@ pvInnerRoot b d nst e = timeToAbort (True, nst) $ do
             then do
                 old <- get
                 when (draft (ronly old) >= depthForCM) $ lift $ informCM e $ movno nst
-                newNode
+                newNode d
                 modify $ \s -> s { absdp = absdp s + 1 }
                 s <- case exd of
                          Exten exd' spc -> do
@@ -553,6 +545,7 @@ pvSearch nst !a !b !d = do
     when (not $ inPv || ab) $ lift $ absurd $ "pvSearch: not inPv, not ab, nst = " ++ show nst
     -- Check first for a TT entry of the position to search
     (hdeep, tp, hsc, e, nodes') <- reTrieve >> lift ttRead
+    when (hdeep < 0) reFail
     -- tp == 1 => score >= hsc, so if hsc >= asco then we improved,
     --    but can we use hsc in PV? This score is not exact!
     --    Idea: return only if better than beta, else search for exact score
@@ -630,6 +623,7 @@ pvZeroW !nst !b !d !lastnull redu = do
     pindent $ ":> " ++ show b
     -- Check if we have it in TT
     (hdeep, tp, hsc, e, nodes') <- reTrieve >> lift ttRead
+    when (hdeep < 0) reFail
     if hdeep >= d && (tp == 2 || tp == 1 && hsc >= b || tp == 0 && hsc < b)
        then do
            let ttpath = Path { pathScore = trimax bGrain b hsc, pathDepth = hdeep,
@@ -710,7 +704,7 @@ nullMoveFailsHigh nst b d lastnull
                   else do
                       when nulDebug $ incReBe 1
                       lift doNullMove	-- do null move
-                      newNode
+                      newNode d
                       xchangeFutil
                       let nst' = deepNSt nst
                       val <- if v > b + bigDiff
@@ -724,7 +718,7 @@ nullMoveFailsHigh nst b d lastnull
                               when nulDebug $ do
                                   incReMi
                                   when (not $ nullSeq (pathMoves val)) $ lift $ do
-                                      finNode "NMLO" True
+                                      finNode "NMLO" 0
                                       logmes $ "fail low path: " ++ show val
                               if nullSeq (pathMoves val)
                                  then return $ NullMoveLow
@@ -780,7 +774,7 @@ pvInnerLoop b d prune nst e = timeToAbort (True, nst) $ do
                 exd <- lift $ doMove e False	-- do the move
                 if legalResult exd
                    then do
-                       newNode
+                       newNode d
                        modify $ \s -> s { absdp = absdp s + 1 }
                        s <- case exd of
                            Exten exd' spc -> do
@@ -822,7 +816,7 @@ pvInnerLoopZ b d prune nst e redu = timeToAbort (True, nst) $ do
                 -- even the legality could be checked before, maybe much cheaper
                 if legalResult exd
                    then do
-                       newNode
+                       newNode d
                        modify $ \s -> s { absdp = absdp s + 1 }
                        s <- case exd of
                          Exten exd' spc -> do
@@ -917,7 +911,7 @@ pvInnerLoopExtenZ b d spec !exd nst redu = do
                incReBe (nodnr - nodre)	-- so many nodes we spare by reducing
                when (pathScore sr < b && pathScore s1 >= b) $ do
                    incReMi	-- LMR missed the point
-                   lift $ finNode "LMRM" True
+                   lift $ finNode "LMRM" 0
            if pathScore sr < b
               then do
                   moreLMR True 1	-- more LMR
@@ -1122,11 +1116,15 @@ pvQSearch !a !b !c = do
     -- qindent $ "=> " ++ show a ++ ", " ++ show b
     -- TODO: use e as first move if legal
     -- (hdeep, tp, hsc, e, _) <- reTrieve >> lift ttRead
-    (hdeep, tp, hsc, _, _) <- reTrieve >> lift ttRead
+    (hdeep, tp, hsc, _, _)
+        <- if useTTinQS
+              then reTrieve >> lift ttRead
+              else return (-1, undefined, undefined, undefined, undefined)
+    when (useTTinQS && hdeep < 0) reFail
     -- tp == 1 => score >= hsc, so if hsc > a then we improved
     -- tp == 0 => score <= hsc, so if hsc <= asco then we fail low and
     --    can terminate the search
-    if hdeep >= 0 && (
+    if useTTinQS && hdeep >= 0 && (
             tp == 2		-- exact score: always good
          || tp == 1 && hsc >= b	-- we will fail high
          || tp == 0 && hsc <= a	-- we will fail low
@@ -1140,14 +1138,17 @@ pvQSearch !a !b !c = do
                   let edges = Alt $ es1 ++ es2
                   if noMove edges
                      then do
+                         n <- gets $ sNodes . stats
                          lift $ do
-                             finNode "MATE" False
-                             let typ = 2
-                             ttStore 0 typ (-mateScore) (Move 0) 1
+                             finNode "MATE" n
+                             when useTTinQS $ do
+                                 let typ = 2
+                                 ttStore 0 typ (-mateScore) (Move 0) 1
                          return $! trimax a b (-mateScore)
                      else if c >= qsMaxChess
                              then do
-                                 lift $ finNode "ENDL" False
+                                 n <- gets $ sNodes . stats
+                                 lift $ finNode "ENDL" n
                                  return $! trimax a b inEndlessCheck
                              else do
                                  -- for check extensions in case of very few moves (1 or 2):
@@ -1156,7 +1157,7 @@ pvQSearch !a !b !c = do
                                  let !esc = lenmax2 $ unalt edges
                                      !nc = c + esc - 1
                                  sc <- pvQLoop b nc a edges
-                                 when (sc <= a) $ lift $ do
+                                 when (useTTinQS && sc <= a) $ lift $ do
                                      let typ = 0
                                      ttStore 0 typ sc (Move 0) 1
                                  return sc
@@ -1164,32 +1165,38 @@ pvQSearch !a !b !c = do
                   !stp <- lift staticVal
                   if qsBetaCut && stp >= b
                      then do
+                         n <- gets $ sNodes . stats
                          lift $ do
-                             finNode "BETA" False
-                             let typ = 1
-                             ttStore 0 typ b (Move 0) 1
+                             finNode "BETA" n
+                             when useTTinQS $ do
+                                 let typ = 1
+                                 ttStore 0 typ b (Move 0) 1
                          return b
                      else if qsDeltaCut && stp + qsDelta < a
                              then do
+                                 n <- gets $ sNodes . stats
                                  lift $ do
-                                     finNode "DELT" False
-                                     let typ = 0
-                                     ttStore 0 typ a (Move 0) 1
+                                     finNode "DELT" n
+                                     when useTTinQS $ do
+                                         let typ = 0
+                                         ttStore 0 typ a (Move 0) 1
                                  return a
                              else do
                                  edges <- liftM Alt $ lift genTactMoves
                                  if noMove edges
                                     then do	-- no more captures
+                                        n <- gets $ sNodes . stats
                                         lift $ do
-                                            finNode "NOCA" False
-                                            let typ = 2
-                                            ttStore 0 typ stp (Move 0) 1
+                                            finNode "NOCA" n
+                                            when useTTinQS $ do
+                                                let typ = 2
+                                                ttStore 0 typ stp (Move 0) 1
                                         return $! trimax a b stp
                                     else do
                                         sc <- if stp > a
                                                  then pvQLoop b c stp edges
                                                  else pvQLoop b c a   edges
-                                        when (sc <= a) $ lift $ do
+                                        when (useTTinQS && sc <= a) $ lift $ do
                                             let typ = 0
                                             ttStore 0 typ sc (Move 0) 1
                                         return sc
@@ -1223,13 +1230,15 @@ pvQInnerLoop !b c !a e = timeToAbort (True, b) $ do
                 -- qindent $ "<- " ++ show e ++ " (" ++ show s ++ ")"
                 if sc >= b
                    then do
-                       let typ = 1
-                       lift $ ttStore 0 typ b (Move 0) 1
+                       when useTTinQS $ do
+                           let typ = 1
+                           lift $ ttStore 0 typ b (Move 0) 1
                        return (True, b)
                    else if sc > a
                            then do
-                               let typ = 2
-                               lift $ ttStore 0 typ sc (Move 0) 1
+                               when useTTinQS $ do
+                                   let typ = 2
+                                   lift $ ttStore 0 typ sc (Move 0) 1
                                return (False, sc)
                            else return (False, a)
             else return (False, a)
@@ -1274,23 +1283,13 @@ reportStats :: Search ()
 reportStats = do
     s <- get
     lift $ do
-       let !xst = stats s
+       let dst = stats s
+       draftStats dst
        logmes $ "Search statistics after draft " ++ show (draft $ ronly s) ++ ":"
-       logmes $ "Nodes: " ++ show (sNodes xst) ++ ", in QS: " ++ show (sNodesQS xst)
-                  ++ ", retrieve: " ++ show (sRetr xst) ++ ", succes: " ++ show (sRSuc xst)
-       let r = fromIntegral (sBMNo xst) / fromIntegral (sBeta xst) :: Double
-       logmes $ "Beta cuts: " ++ show (sBeta xst) ++ ", beta factor: " ++ show r
+       mapM_ logmes $ formatStats dst
        logmes $ "Variable futility params: me = " ++ show (futme s) ++ ", yo = " ++ show (futyo s)
        logmes $ "Variable LMR: hi = " ++ show (lmrhi s)
-                  ++ ", lv = " ++ show (lmrlv s) ++ ", qu = " ++ show (lmrrs s)
-       if lmrDebug
-          then logmes $ "Reduced: " ++ show (sRedu xst) ++ ", Re-benefits: " ++ show (sReBe xst)
-                 ++ ", ReSearchs: " ++ show (sReSe xst) ++ ", Re-waste: " ++ show (sReNo xst)
-                 ++ ", missed: " ++ show (sReMi xst) ++ ", net benefit: "
-                 ++ show (sReBe xst - sReNo xst)
-          else if nulDebug
-                  then logmes $ "Null moves: " ++ show (sReBe xst) ++ ", Low: " ++ show (sReMi xst)
-                  else logmes $ "Reduced: " ++ show (sRedu xst) ++ ", ReSearchs: " ++ show (sReSe xst)
+                    ++ ", lv = " ++ show (lmrlv s) ++ ", qu = " ++ show (lmrrs s)
 
 -- Functions to keep statistics
 modStat :: (SStats -> SStats) -> Search ()
@@ -1305,19 +1304,25 @@ modRetStat f g = do
     return $! g ss
 --}
 
-incNodes, incNodesQS :: SStats -> SStats
-incNodes   s = case sNodes s + 1 of n1 -> s { sNodes = n1 }
+incNodes :: Int -> SStats -> SStats
+incNodes 1 s = incNodesQS s	-- d can't be < 0 here
+incNodes _ s = case sNodes s + 1 of n1 -> s { sNodes = n1 }
+
+incNodesQS :: SStats -> SStats
 incNodesQS s = case sNodes s + 1 of
                  n1 -> case sNodesQS s + 1 of n2 -> s { sNodes = n1, sNodesQS = n2 }
 
 incReTrieve :: SStats -> SStats
 incReTrieve s = case sRetr s + 1 of n1 -> s { sRetr = n1 }
 
-addReSucc :: Int -> SStats -> SStats
-addReSucc n s = case sRSuc s + n of n1 -> s { sRSuc = n1 }
+incReFail :: SStats -> SStats
+incReFail s = case sRFal s + 1 of n1 -> s { sRFal = n1 }
 
-newNode :: Search ()
-newNode   = modStat incNodes
+addReSucc :: Int64 -> SStats -> SStats
+addReSucc n s = s { sRFnd = sRFnd s + 1, sRSuc = sRSuc s + n }
+
+newNode :: Int -> Search ()
+newNode   = modStat . incNodes
 
 newNodeQS :: Search ()
 newNodeQS = modStat incNodesQS
@@ -1325,19 +1330,25 @@ newNodeQS = modStat incNodesQS
 reTrieve :: Search ()
 reTrieve  = modStat incReTrieve
 
-reSucc :: Int -> Search ()
+reFail :: Search ()
+reFail = modStat incReFail
+
+reSucc :: Int64 -> Search ()
 reSucc n  = modStat (addReSucc n)
 
 incBeta :: Int -> Search ()
-incBeta n = modStat $ \s -> s { sBeta = sBeta s + 1, sBMNo = sBMNo s + n }
+incBeta 1 = modStat $ \s -> s { sBeta = sBeta s + 1, sBM1  = sBM1  s + 1 }
+incBeta 2 = modStat $ \s -> s { sBeta = sBeta s + 1, sBM2  = sBM2  s + 1 }
+incBeta 3 = modStat $ \s -> s { sBeta = sBeta s + 1, sBM3  = sBM3  s + 1 }
+incBeta _ = modStat $ \s -> s { sBeta = sBeta s + 1, sBM4p = sBM4p s + 1 }
 
-incReSe :: Int -> Search ()
+incReSe :: Int64 -> Search ()
 incReSe n = modStat $ \s -> s { sReSe = sReSe s + 1, sReNo = sReNo s + n }
 
 incRedu :: Search ()
 incRedu = modStat $ \s -> s { sRedu = sRedu s + 1 }
 
-incReBe :: Int -> Search ()
+incReBe :: Int64 -> Search ()
 incReBe n = modStat $ \s -> s { sReBe = sReBe s + n }
 
 incReMi :: Search ()
@@ -1384,7 +1395,7 @@ killerToList (TwoKillers e1 e2) = [e1, e2]
 
 --- Communication to the outside - some convenience functions ---
 
-informBM :: Int -> Int -> Int -> [Move] -> Game ()
+informBM :: Int -> Int -> Int64 -> [Move] -> Game ()
 informBM a b c d = informCtx (BestMv a b c d)
 
 informCM :: Move -> Int -> Game ()

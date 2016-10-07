@@ -2,7 +2,6 @@
 {-# LANGUAGE TypeFamilies #-}
 
 module Struct.Status (
-    Stats(..),
     MyState(..),
     EvalState(..),
     EvalParams(..),
@@ -15,17 +14,14 @@ import Struct.Struct
 import Struct.Config
 import Moves.History
 import Hash.TransTab
-
-data Stats = Stats {
-        nodes :: !Int,
-        maxmvs :: !Int
-    } deriving Show
+import Search.AlbetaTypes
 
 data MyState = MyState {
-        stack :: [MyPos],	-- stack of played positions
-        hash  :: Cache,		-- transposition table
-        hist  :: History,	-- history table
-        stats :: !Stats,	-- statistics
+        stack  :: [MyPos],	-- stack of played positions
+        hash   :: Cache,	-- transposition table
+        hist   :: History,	-- history table
+        mstats :: SStats,	-- per move search search statistics
+        gstats :: SStats,	-- global search statistics
         evalst :: EvalState	-- eval status (parameter & statistics)
     }
 

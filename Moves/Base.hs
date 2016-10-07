@@ -12,16 +12,16 @@ module Moves.Base (
     staticVal, materVal, tacticalPos, isMoveLegal, isKillCand, isTKillCand, okInSequence,
     betaCut, doNullMove, ttRead, ttStore, curNodes, chooseMove, isTimeout, informCtx,
     mateScore, scoreDiff,
+    draftStats,
     finNode,
     showMyPos, logMes,
     nearmate
 ) where
 
 import Data.Bits
--- import Data.List
+import Data.Int
 import Control.Monad.State
 import Control.Monad.Reader (ask)
--- import Data.Ord (comparing)
 -- import Numeric
 import System.Random
 
@@ -47,16 +47,18 @@ nearmate i = i >= mateScore - 255 || i <= -mateScore + 255
 useHash :: Bool
 useHash = True
 
-scoreDiffEqual, printEvalInt :: Int
+scoreDiffEqual :: Int
 scoreDiffEqual = 4 -- under this score difference moves are considered to be equal (choose random)
+
+printEvalInt :: Int64
 printEvalInt   = 2 `shiftL` 12 - 1	-- if /= 0: print eval info every so many nodes
 
 mateScore :: Int
 mateScore = 20000
 
-curNodes :: Game Int
+curNodes :: Game Int64
 {-# INLINE curNodes #-}
-curNodes = gets (nodes . stats)
+curNodes = gets (sNodes . mstats)
 
 {-# INLINE getPos #-}
 getPos :: Game MyPos
@@ -71,15 +73,20 @@ posToState p c h e = MyState {
                        stack = [p''],
                        hash = c,
                        hist = h,
-                       stats = stats0,
+                       mstats = ssts0,
+                       gstats = ssts0,
                        evalst = e
                    }
     where stsc = evalState (posEval p) e
           p'' = p { staticScore = stsc }
-          stats0 = Stats { nodes = 0, maxmvs = 0 }
 
 posNewSearch :: MyState -> MyState
 posNewSearch p = p { hash = newGener (hash p) }
+
+draftStats :: SStats -> Game ()
+draftStats dst = do
+    s <- get
+    put s { mstats = addStats (mstats s) dst, gstats = addStats (gstats s) dst }
 
 -- Loosing captures after non-captures?
 loosingLast :: Bool
@@ -97,7 +104,6 @@ genMoves d = do
                 (l2w, l2l) = genMoveCaptWL p
                 l3' = genMoveNCapt p
                 l3 = histSortMoves d h l3'
-            -- l3 <- sortMovesFromHist l3'
             return $! if loosingLast
                          then (l1 ++ l2w, l0 ++ l3 ++ l2l)
                          else (l1 ++ l2w ++ l2l, l0 ++ l3)
@@ -142,15 +148,6 @@ checkGenMove p m@(Move w)
 --     b <- mb
 --     if b then return () else error s
 
-{-# INLINE statNodes #-}
-statNodes :: Game ()
-statNodes = do
-    s <- get
-    let st = stats s
-        !n = nodes st + 1
-        !s1 = s { stats = st { nodes = n } }
-    put s1
-
 showMyPos :: MyPos -> String
 showMyPos p = showTab (black p) (slide p) (kkrq p) (diag p) ++ "================ " ++ mc ++ "\n"
     where mc = if moving p == White then "w" else "b"
@@ -194,8 +191,7 @@ doRealMove m = do
 -- Move from a node to a descendent - the search version
 doMove :: Move -> Bool -> Game DoResult
 doMove m qs = do
-    statNodes   -- when counting all visited nodes
-    s  <- get
+    s <- get
     let (pc:_) = stack s	-- we never saw an empty stack error until now
         -- Moving a non-existent piece?
         il  = occup pc `uBitClear` fromSquare m
@@ -289,10 +285,10 @@ staticVal :: Game Int
 staticVal = staticScore <$> getPos
 
 {-# INLINE finNode #-}
-finNode :: String -> Bool -> Game ()
-finNode str force = do
-    s <- get
-    when (printEvalInt /= 0 && (force || nodes (stats s) .&. printEvalInt == 0)) $ do
+finNode :: String -> Int64 -> Game ()
+finNode str nodes =
+    when (printEvalInt /= 0 && (nodes .&. printEvalInt == 0)) $ do
+        s <- get
         let (p:_) = stack s	-- we never saw an empty stack error until now
             fen = posToFen p
             -- mv = case tail $ words fen of
@@ -312,7 +308,7 @@ materVal = do
                    _     -> -m
 
 {-# INLINE ttRead #-}
-ttRead :: Game (Int, Int, Int, Move, Int)
+ttRead :: Game (Int, Int, Int, Move, Int64)
 ttRead = if not useHash then return empRez else do
     -- when debug $ lift $ ctxLog "Debug" $ "--> ttRead "
     s <- get
@@ -327,7 +323,7 @@ ttRead = if not useHash then return empRez else do
     where empRez = (-1, 0, 0, Move 0, 0)
 
 {-# INLINE ttStore #-}
-ttStore :: Int -> Int -> Int -> Move -> Int -> Game ()
+ttStore :: Int -> Int -> Int -> Move -> Int64 -> Game ()
 ttStore !deep !tp !sc !bestm !nds = if not useHash then return () else do
     s <- get
     p <- getPos
