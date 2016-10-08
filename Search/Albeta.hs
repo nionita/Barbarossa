@@ -43,8 +43,8 @@ maxDepthExt = 3 -- maximum depth extension
 useNegHist  = False	-- when not cutting - negative history
 negHistMNo  = 1		-- how many moves get negative history
 useTTinPv   = False	-- retrieve from TT in PV?
-minPvDepth  = 2		-- from this depth we use alpha beta search
-useTTinQS   = True
+minPvDepth  = 3		-- from this depth we use alpha beta search
+useTTinQS   = False
 
 -- Parameters for late move reduction:
 lmrActive :: Bool
@@ -413,14 +413,15 @@ pvInnerRootExten b d !exd nst = do
     old <- get
     exd' <- reserveExtension (usedext old) exd
     let !inPv = crtnt nst == PVNode
-        !a  = pathScore $ cursc nst
-        !d1 = d + exd' - 1	-- this is the normal (unreduced) depth for the next search
+        !d1   = d + exd' - 1	-- this is the normal (unreduced) depth for the next search
+        a     = pathScore $ cursc nst
     pindent $ "depth " ++ show d ++ " nt " ++ show (crtnt nst)
               ++ " exd' = " ++ show exd'
               ++ " mvn " ++ show (movno nst) ++ " next depth " ++ show d1
     if inPv || d <= minPvDepth	-- search of principal variation
        then do
-           let nst' = if d <= minPvDepth then nst { albe = True } else nst
+           -- Set albe only when not in PV and not already set (to spare a copy)
+           let nst' = if not (inPv || albe nst) then nst { albe = True } else nst
            pnextlev <$> pvSearch nst' (-b) (-a) d1
        else do
            -- no futility pruning & no LMR for root moves!
@@ -443,12 +444,12 @@ checkFailOrPVRoot :: SStats -> Int -> Int -> Move -> Path
 checkFailOrPVRoot xstats b d e s nst = timeToAbort (True, nst) $ do
          sst <- get
          let !mn     = movno nst
-             !a      = pathScore $ cursc nst
+             a       = pathScore $ cursc nst
              !nodes0 = sNodes xstats + sRSuc xstats
              !nodes1 = sNodes (stats sst) + sRSuc (stats sst)
              !nodes' = nodes1 - nodes0
-             pvg    = Pvsl s nodes' True	-- the good
-             pvb    = Pvsl s nodes' False	-- the bad
+             pvg     = Pvsl s nodes' True	-- the good
+             pvb     = Pvsl s nodes' False	-- the bad
              de = max d $ pathDepth s
          if d == 1
             then do
@@ -481,6 +482,7 @@ checkFailOrPVRoot xstats b d e s nst = timeToAbort (True, nst) $ do
                             csc = s { pathScore = b }
                             nst1 = nst { cursc = csc, pvsl = xpvslg }
                         pindent $ "beta cut: " ++ show csc
+                        incBeta mn
                         return (True, nst1)
                       else do	-- means: > a && < b
                         let sc = pathScore s
@@ -551,7 +553,7 @@ pvSearch nst !a !b !d = do
     --    Idea: return only if better than beta, else search for exact score
     -- tp == 0 => score <= hsc, so if hsc <= asco then we fail low and
     --    can terminate the search
-    if (useTTinPv || (not inPv && ab)) && hdeep >= d && (
+    if (useTTinPv || ab) && hdeep >= d && (
             tp == 2		-- exact score: always good
          || tp == 1 && hsc >= b	-- we will fail high
          || tp == 0 && hsc <= a	-- we will fail low
@@ -858,13 +860,14 @@ pvInnerLoopExten b d !exd nst = do
     old <- get
     exd' <- reserveExtension (usedext old) exd
     let !inPv = crtnt nst == PVNode
-        a = pathScore $ cursc nst
-        !d1 = d + exd' - 1	-- this is the normal (unreduced) depth for next search
+        !d1   = d + exd' - 1	-- this is the normal (unreduced) depth for next search
+        a     = pathScore $ cursc nst
     pindent $ "depth " ++ show d ++ " nt " ++ show (crtnt nst)
            ++ " exd' = " ++ show exd' ++ " mvn " ++ show (movno nst) ++ " next depth " ++ show d1
     if inPv || d <= minPvDepth
        then do
-          let nst' = if d <= minPvDepth then nst { albe = True } else nst
+          -- Set albe only when not in PV and not already set (to spare a copy)
+          let nst' = if not (inPv || albe nst) then nst { albe = True } else nst
           pnextlev <$> pvSearch nst' (-b) (-a) d1
        else do
           -- Here we must be in a Cut node (will fail low)
