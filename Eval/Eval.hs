@@ -828,11 +828,18 @@ perPassedPawnOk gph ep p c sq sqbb moi toi moia toia = val
           !yoking = kingSquare (kings p) toi
           !mdis = squareDistance myking asq
           !ydis = squareDistance yoking asq
-          !kingprx = ((mdis - ydis) * epPassKingProx ep * (256 - gph)) `unsafeShiftR` 8
+          !kingprx = (kdDist (mdis - ydis) * epPassKingProx ep * (256 - gph)) `unsafeShiftR` 8
           !val1 = (pmax * (128 - kingprx) * (128 - epPassBlockO ep * mblo)) `unsafeShiftR` 14
           !val2 = (val1 * (128 - epPassBlockA ep * yblo)) `unsafeShiftR` 7
           !val  = (val2 * (128 + epPassMyCtrl ep * myctrl) * (128 - epPassYoCtrl ep * yoctrl))
                     `unsafeShiftR` 14
+
+kdDistArr :: UArray Int Int  --  -7 -6 -5 -4 -3 -2 -1  0  1  2  3  4  5  6  7
+kdDistArr = listArray (0, 14) $ [-4,-3,-3,-3,-2,-2,-1, 0, 1, 2, 2, 3, 3, 3, 4]
+
+kdDist :: Int -> Int
+kdDist = (kdDistArr `unsafeAt`) . (7+)
+
 
 ------ Advanced pawns, on 6th & 7th rows (not passed) ------
 data AdvPawns = AdvPawns
