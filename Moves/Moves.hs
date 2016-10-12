@@ -27,54 +27,42 @@ movesInit
           n = nAttacs 3
           w = r .|. b .|. k .|. n
 
+-- To implement Array of Structures, we use 3 entries of an array of bitboards
+-- per square and do manually the index and masking computations
+
 -- Move tables and hash function for sliding pieces
 data SlMoves = SlMoves {
-        database :: DbArray,
-        dbbegins :: ShArray,
-        shifts   :: ShArray,
-        masks    :: MaArray,
-        magics   :: MaArray
+        database :: !DbArray,
+        sqmagics :: !MaArray
     }
 
-bdb, rdb :: DbArray
-bdbb, rdbb :: ShArray
-(bdb, bdbb) = genDatabase genBishop
-(rdb, rdbb) = genDatabase genRook
+sliderMoves :: (Square -> [(Int, BBoard)]) -> (Square -> BBoard) -> ShArray -> MaArray -> SlMoves
+sliderMoves genSlider genSlMask sBits sMagic = SlMoves { database = bdb, sqmagics = mgarr }
+    where (bdb, bdbb) = genDatabase genSlider
+          mgarr = listArray (0, ub) $ concatMap f [0..63]
+          ub = 64 * 3 - 1
+          f sq = [ begsh, msk, mag ]
+              where beg = bdbb  `unsafeAt` sq
+                    sh  = sBits `unsafeAt` sq
+                    msk = genSlMask sq
+                    mag = sMagic `unsafeAt` sq
+                    begsh = (fromIntegral beg `unsafeShiftL` 16) .|. fromIntegral sh
 
-bishopMoves :: SlMoves
-bishopMoves = SlMoves {
-    database = bdb, dbbegins = bdbb, shifts = bBits,
-    masks = mskBishop, magics = bMagic
-        }
-
-rookMoves :: SlMoves
-rookMoves = SlMoves {
-    database = rdb, dbbegins = rdbb, shifts = rBits,
-    masks = mskRook, magics = rMagic
-        }
+rookMoves, bishopMoves :: SlMoves
+rookMoves = sliderMoves genRook genRookMask rBits rMagic
+bishopMoves = sliderMoves genBishop genBishopMask bBits bMagic
 
 {-# INLINE smoves #-}
 smoves :: SlMoves -> BBoard -> Square -> BBoard
 smoves bbmoves occ sq = database bbmoves `unsafeAt` idx
-    where idx = dbbegins bbmoves `unsafeAt` sq + off
-          off = fromIntegral
-                    $ ((occ .&. masks bbmoves `unsafeAt` sq) * magics bbmoves `unsafeAt` sq)
-                        `unsafeShiftR` (shifts bbmoves `unsafeAt` sq)
-
-{-# INLINE smoves2 #-}
-smoves2 :: SlMoves -> SlMoves -> BBoard -> Square -> BBoard
-smoves2 bbmoves1 bbmoves2 occ sq
-    = bb1 .|. bb2
-    where bb1 = database bbmoves1 `unsafeAt` idx1
-          bb2 = database bbmoves2 `unsafeAt` idx2
-          idx1 = dbbegins bbmoves1 `unsafeAt` sq + off1
-          idx2 = dbbegins bbmoves2 `unsafeAt` sq + off2
-          off1 = fromIntegral
-                    $ ((occ .&. masks bbmoves1 `unsafeAt` sq) * magics bbmoves1 `unsafeAt` sq)
-                        `unsafeShiftR` (shifts bbmoves1 `unsafeAt` sq)
-          off2 = fromIntegral
-                    $ ((occ .&. masks bbmoves2 `unsafeAt` sq) * magics bbmoves2 `unsafeAt` sq)
-                        `unsafeShiftR` (shifts bbmoves2 `unsafeAt` sq)
+    where sq3   = sq + sq + sq
+          begsh = sqmagics bbmoves `unsafeAt` sq3
+          msk   = sqmagics bbmoves `unsafeAt` (sq3+1)
+          mag   = sqmagics bbmoves `unsafeAt` (sq3+2)
+          beg = fromIntegral (begsh `unsafeShiftR` 16)
+          sh  = fromIntegral (begsh .&. 0xFFFF)
+          off = fromIntegral $ ((occ .&. msk) * mag) `unsafeShiftR` sh
+          idx = beg + off
 
 {-# INLINE fmoves #-}
 fmoves :: MaArray -> Square -> BBoard
@@ -88,10 +76,10 @@ fmoves = unsafeAt
 kAttacs, nAttacs :: Square -> BBoard
 rAttacs, bAttacs, qAttacs :: BBoard -> Square -> BBoard
 kAttacs = fmoves movKings
+nAttacs = fmoves movKnights
 rAttacs = smoves rookMoves
 bAttacs = smoves bishopMoves
-qAttacs = smoves2 bishopMoves rookMoves
-nAttacs = fmoves movKnights
+qAttacs occ sq = smoves bishopMoves occ sq .|. smoves rookMoves occ sq
 
 -- The moves of a white pawn (no captures)
 pawnSlideW :: Square -> BBoard -> BBoard

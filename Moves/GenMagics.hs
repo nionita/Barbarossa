@@ -1,7 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 module Moves.GenMagics (
     genDatabase, genBishop, genRook,
-    mskBishop, mskRook,
+    genRookMask, genBishopMask,
     movKings, movKnights
     ) where
 
@@ -41,6 +41,14 @@ toNoWe len  = confToBB (7*len) (-7) len
 toSoWe len  = confToBB (-9*len) 9 len
 toSoEa len  = confToBB (-7*len) 7 len
 
+{-# INLINE genBishopMask #-}
+genBishopMask :: Square -> BBoard
+genBishopMask = genSlMask False
+
+{-# INLINE genRookMask #-}
+genRookMask :: Square -> BBoard
+genRookMask = genSlMask True
+
 -- Generate the mask for sliding pieces per square
 genSlMask :: Bool -> Square -> BBoard
 genSlMask isrook sq = ma1 .|. ma2 .|. ma3 .|. ma4
@@ -56,14 +64,6 @@ genSlMask isrook sq = ma1 .|. ma2 .|. ma3 .|. ma4
           ma4 = if isrook then toSouth q4 sq all1
                           else toSoEa  q4 sq all1
 
--- Rook masks per square
-mskRook :: MaArray
-mskRook = listArray (0, 63) $ map (genSlMask True) [0..63]
-
--- Bishop masks per square
-mskBishop :: MaArray
-mskBishop = listArray (0,63) $ map (genSlMask False) [0..63]
-
 movKnights :: MaArray
 movKnights = array (0, 63) $ genArray 0x0000000A1100110A 18
 
@@ -75,7 +75,7 @@ genBishop :: Square -> [(Int, BBoard)]
 genBishop sq = S.elems . S.fromList $ zip has rez
     where inpr = genInpRez False sq
           inps = map fst inpr
-          rez = map snd inpr 
+          rez = map snd inpr
           has = map (compHash sq bBits bMagic) inps
 
 -- Generate the list of rook moves by occupancy for one square
@@ -83,7 +83,7 @@ genRook :: Square -> [(Int, BBoard)]
 genRook sq = S.elems . S.fromList $ zip has rez
     where inpr = genInpRez True sq
           inps = map fst inpr
-          rez = map snd inpr 
+          rez = map snd inpr
           has = map (compHash sq rBits rMagic) inps
 
 genDatabase :: (Square -> [(Int, BBoard)]) -> (DbArray, ShArray)
