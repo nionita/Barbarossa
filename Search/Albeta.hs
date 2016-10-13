@@ -841,7 +841,7 @@ pvInnerLoopZ b d prune nst e redu = timeToAbort (True, nst) $ do
                              if spc
                                 then do
                                     xchangeFutil
-                                    s <- pvInnerLoopExtenZ b d spc exd' (deepNSt $ resetSpc nst) redu
+                                    s <- pvInnerLoopExtenZ b d exd' (deepNSt $ resetSpc nst) redu
                                     xchangeFutil
                                     return s
                                 else do
@@ -849,7 +849,7 @@ pvInnerLoopZ b d prune nst e redu = timeToAbort (True, nst) $ do
                                         sdiff <- lift scoreDiff
                                         updateFutil sdiff	-- e
                                     xchangeFutil
-                                    s <- pvInnerLoopExtenZ b d spc exd' (deepNSt nst) redu
+                                    s <- pvInnerLoopExtenZ b d exd' (deepNSt nst) redu
                                     xchangeFutil
                                     return s
                          Final sco -> return $! pathFromScore "Final" (-sco)
@@ -905,14 +905,14 @@ pvInnerLoopExten b d !exd nst = do
                pnextlev <$> pvSearch nst1 (-b) (-a) d1
 
 -- For zero window
-pvInnerLoopExtenZ :: Int -> Int -> Bool -> Int -> NodeState -> Bool -> Search Path
-pvInnerLoopExtenZ b d spec !exd nst redu = do
+pvInnerLoopExtenZ :: Int -> Int -> Int -> NodeState -> Bool -> Search Path
+pvInnerLoopExtenZ b d !exd nst redu = do
     old  <- get
     exd' <- reserveExtension (usedext old) exd
     -- late move reduction
     let !d1 = d + exd' - 1	-- this is the normal (unreduced) depth for next search
         !d' = if redu
-                 then reduceLmr d1 (nearmate b) spec exd (lmrlv old) (movno nst - spcno nst)
+                 then reduceLmr d1 (nearmate b) exd (lmrlv old) (movno nst - spcno nst)
                  else d1
     pindent $ "depth " ++ show d ++ " nt " ++ show (crtnt nst)
               ++ " exd' = " ++ show exd' ++ " mvn " ++ show (movno nst) ++ " next depth " ++ show d'
@@ -1059,10 +1059,10 @@ genAndSort nst mttmv a b d = do
 -- With a variable lmrlev the reduction should stay in a region
 -- where the number of researches has an acceptable level
 {-# INLINE reduceLmr #-}
-reduceLmr :: Int -> Bool -> Bool -> Int -> Int -> Int -> Int
-reduceLmr !d nearmatea !spec !exd lmrlev w
-    | not lmrActive || spec || exd > 0 || d <= 1 || nearmatea = d
-    | otherwise                                               = max 1 $ d - lmrArr!(lmrlev, w)
+reduceLmr :: Int -> Bool -> Int -> Int -> Int -> Int
+reduceLmr !d nearmatea !exd lmrlev w
+    | not lmrActive || exd > 0 || d <= 1 || nearmatea = d
+    | otherwise                                       = max 1 $ d - lmrArr!(lmrlev, w)
 
 -- Adjust the LMR related parameters in the state
 moreLMR :: Bool -> Int -> Search ()
