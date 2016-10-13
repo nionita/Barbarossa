@@ -861,8 +861,15 @@ pvInnerLoopZ b d prune nst e redu = timeToAbort (True, nst) $ do
                        checkFailOrPVLoopZ (stats old) b d e s' nst
                    else return (False, nst)
 
+-- Special means here: capture or promotion
+-- For LMR we use spcno to count the non-captures and LMR more if higher
+-- The bad captures are after the non captures, so in order to reduce them
+-- we reset spcno only if it is not too far from moveno, which is not the
+-- case for the bad captures (given there would be at least 1 non-capture in between)
 resetSpc :: NodeState -> NodeState
-resetSpc nst = nst { spcno = movno nst }
+resetSpc nst
+   | spcno nst > movno nst + 1 = nst
+   | otherwise                 = nst { spcno = movno nst }
 
 reserveExtension :: Int -> Int -> Search Int
 reserveExtension !uex !exd
