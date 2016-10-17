@@ -537,19 +537,30 @@ spaceDiff p ew mide = mad mide (ewSpace ew) sd
 
 {-# INLINE spaceWhite #-}
 spaceWhite :: BBoard -> BBoard -> BBoard -> BBoard -> Int
-spaceWhite !mpawns !matts !ypatts !yatts = spa * spa
+spaceWhite !mpawns !matts !ypatts !yatts = sv
     where yard = (fileC .|. fileD .|. fileE .|. fileF) .&. (row2 .|. row3 .|. row4)
-          safe = yard .&. (matts .|. complement yatts) `less` (mpawns .|. ypatts)
-          behi = mpawns .|. shadowDown mpawns
-          !spa = popCount $ (safe `unsafeShiftL` 32) .|. (behi .&. safe)
+          safe = (yard .&. (matts .|. complement yatts)) `less` (mpawns .|. ypatts)
+          behi = shadowDown mpawns
+          spa = popCount $ (safe `unsafeShiftL` 32) .|. (behi .&. safe)
+          !sv = spaceVals `unsafeAt` spa
 
 {-# INLINE spaceBlack #-}
 spaceBlack :: BBoard -> BBoard -> BBoard -> BBoard -> Int
-spaceBlack !mpawns !matts !ypatts !yatts = spa * spa
+spaceBlack !mpawns !matts !ypatts !yatts = sv
     where yard = (fileC .|. fileD .|. fileE .|. fileF) .&. (row7 .|. row6 .|. row5)
-          safe = yard .&. (matts .|. complement yatts) `less` (mpawns .|. ypatts)
-          behi = mpawns .|. shadowUp mpawns
-          !spa = popCount $ (safe `unsafeShiftR` 32) .|. (behi .&. safe)
+          safe = (yard .&. (matts .|. complement yatts)) `less` (mpawns .|. ypatts)
+          behi = shadowUp mpawns
+          spa = popCount $ (safe `unsafeShiftR` 32) .|. (behi .&. safe)
+          !sv = spaceVals `unsafeAt` spa
+
+-- Non linear space values:
+-- span1: 150
+-- span2: 200
+-- span3: 300
+spaceVals :: UArray Int Int
+spaceVals = listArray (0, 24) $ map f [0..24]
+    where f x = round $ spf * sqrt x
+          spf = 300 :: Double
 
 -------- Attacks to adverse squares ----------
 data Advers = Advers
