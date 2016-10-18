@@ -554,13 +554,13 @@ spaceBlack !mpawns !matts !ypatts !yatts = sv
           !sv = spaceVals `unsafeAt` spa
 
 -- Non linear space values:
--- span2r: 200
--- span3r: 300
--- span4r: 400
+-- span1q: 10
+-- span2q: 15
+-- span3q: 20
 spaceVals :: UArray Int Int
 spaceVals = listArray (0, 24) $ map f [1..25]
-    where f x = round $ spf * (sqrt x - 1)
-          spf = 300 :: Double
+    where f x = round $ spf * (x * sqrt x - 1)
+          spf = 10 :: Double
 
 -------- Attacks to adverse squares ----------
 data Advers = Advers
