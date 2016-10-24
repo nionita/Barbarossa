@@ -37,7 +37,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.4.0"
-progVerSuff = "aos"
+progVerSuff = "aost"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -413,10 +413,11 @@ getTimeParams cs _ c	-- unused: lastsc
 
 
 -- These parameters should be optimised (i.e.: first made options)
-remTimeFracIni, remTimeFracFin, remTimeFracDev :: Double
+remTimeFracIni, remTimeFracFin, remTimeFracDev, draftFactor :: Double
 remTimeFracIni = 0.15	-- fraction of remaining time which we can consume at once - initial value
 remTimeFracFin = 0.5	-- same at final (when remaining time is near zero)
 remTimeFracDev = remTimeFracFin - remTimeFracIni
+draftFactor    = 7	-- time factor from one draft to the next
 
 timeReserved :: Int
 timeReserved   = 70	-- milliseconds reserved for move communication
@@ -443,7 +444,7 @@ compTime tim tpm fixmtg lastsc
           ttroub = short || over
 
 estMvsToGo :: Array Int Int
-estMvsToGo = listArray (0, 8) [30, 28, 24, 18, 12, 10, 8, 6, 3]
+estMvsToGo = listArray (0, 8) [30, 28, 24, 18, 11, 8, 6, 3, 1]
 
 estimateMovesToGo :: Int -> Int
 estimateMovesToGo sc = estMvsToGo ! mvidx
@@ -497,25 +498,30 @@ ctxCatch a f = do
 
 -- Search with the given depth
 searchTheTree :: Int -> Int -> Int -> Int -> Int -> Int -> Maybe Int -> [Move] -> [Move] -> CtxIO Int
-searchTheTree tief mtief timx tim tpm mtg lsc lpv rmvs = do
+searchTheTree draft maxdraft timx tim tpm mtg lsc lpv rmvs = do
     ctx <- ask
     chg <- readChanging
     ctxLog LogInfo $ "Time = " ++ show tim ++ " Timx = " ++ show timx
-    (path, sc, rmvsf, timint, stfin) <- bestMoveCont tief timx (crtStatus chg) lsc lpv rmvs
+    dtimei <- lift $ currMilli (startSecond ctx)
+    (path, sc, rmvsf, timint, stfin) <- bestMoveCont draft timx (crtStatus chg) lsc lpv rmvs
     case length path of _ -> return () -- because of lazyness!
     storeBestMove path sc	-- write back in status
     modifyChanging (\c -> c { crtStatus = stfin })
-    currms <- lift $ currMilli (startSecond ctx)
+    dtimef <- lift $ currMilli (startSecond ctx)
     let (ms', mx, urg) = compTime tim tpm mtg sc
-    ms <- if urg || null path then return ms' else correctTime tief (reduceBegin (realPly chg) ms') sc path
+    ms <- if urg || null path
+             then return ms'
+             else correctTime draft (reduceBegin (realPly chg) ms') sc path
     let strtms = srchStrtMs chg
-        delta = strtms + ms - currms
-        ms2 = ms `div` 2
-        onlyone = ms > 0 && length rmvsf == 1 && tief >= 4	-- only in normal play
+        delta  = ms - (dtimef - strtms)	-- remaining thinking time as calculated
+        ms2    = ms `div` 2		-- half of total calculated thinking time
+        onlyone  = ms > 0 && length rmvsf == 1 && draft >= 4	-- only in normal play
         halfover = ms > 0 && delta <= ms2  -- time is half over
-        depthmax = tief >= mtief	--  or maximal depth
-        mes = "Depth " ++ show tief ++ " Score " ++ show sc ++ " in ms "
-                ++ show currms ++ " remaining " ++ show delta
+        depthmax = draft >= maxdraft	--  reached maximal depth
+        mxstop = if mx == 0 then 0 else strtms + min mx (max delta dmx)
+        dmx = round $ sqrt (fromIntegral draft) * fromIntegral (dtimef - dtimei) * draftFactor
+        mes = "Depth " ++ show draft ++ " Score " ++ show sc ++ " in ms "
+                ++ show dtimef ++ " remaining " ++ show delta
                 ++ " path " ++ show path
     ctxLog LogInfo mes
     ctxLog LogInfo $ "compTime: " ++ show ms' ++ " / " ++ show mx
@@ -527,9 +533,7 @@ searchTheTree tief mtief timx tim tpm mtg lsc lpv rmvs = do
         else do
             chg' <- readChanging
             if working chg'
-                then if mx == 0	-- no time constraint
-                        then searchTheTree (tief + 1) mtief 0             tim tpm mtg (Just sc) path rmvsf
-                        else searchTheTree (tief + 1) mtief (strtms + mx) tim tpm mtg (Just sc) path rmvsf
+                then searchTheTree (draft+1) maxdraft mxstop tim tpm mtg (Just sc) path rmvsf
                 else do
                     ctxLog DebugUci "in searchTheTree: not working"
                     giveBestMove path -- was stopped
@@ -552,7 +556,7 @@ correctTime draft ms sc path = do
                 func = \c -> c { prvMvInfo = Just pmi }
             return (ms, func)
         Just (PrevMvInfo { pmiBestSc = osc, pmiChanged = ok, pmiBMSoFar = obsf }) -> do
-            -- We have previous moves, update and calculate time factor
+            -- We have previous moves: update and calculate time factor
             let pmi = PrevMvInfo { pmiBestSc = sc, pmiChanged = k, pmiBMSoFar = bsf }
                 (k, bsf, cha) =
                     case path of
@@ -571,6 +575,7 @@ correctTime draft ms sc path = do
                                        ++ " / " ++ show sc
                                        ++ " / " ++ show k
                                        ++ " / " ++ show bsf
+                                       ++ " --> " ++ show ms'
             return (ms', func)
     modifyChanging func
     return ti
