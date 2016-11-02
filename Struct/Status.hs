@@ -185,14 +185,14 @@ instance CollectParams EvalWeights where
           ewMobilityBishop  = tme 57 33,	-- length 10, depth 6, batch 128
           ewMobilityRook    = tme 28 26,
           ewMobilityQueen   = tme  4  6,
-          ewCenterPAtts     = tme 58 68,	-- cora5vf: visual cora after 5 runs, max vals filtered
+          ewCenterPAtts     = tme 126 68,	-- cora6vf: visual cora after 6 runs, max vals filtered
           ewCenterNAtts     = tme 49 45,
           ewCenterBAtts     = tme 57 39,
           ewCenterRAtts     = tme 10 34,
           ewCenterQAtts     = tme  4 59,
           ewCenterKAtts     = tme  0 53,
           ewSpace           = tme  1  0,
-          ewAdvAtts         = tme  2 16,	-- cora5vf: visual cora after 5 runs, max vals filtered
+          ewAdvAtts         = tme  6 16,	-- cora6vf: visual cora after 6 runs, max vals filtered
           ewIsolPawns       = tme (-42) (-122),
           ewIsolPassed      = tme (-60) (-160),
           ewBackPawns       = tme (-120) (-180),
