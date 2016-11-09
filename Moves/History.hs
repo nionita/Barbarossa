@@ -120,7 +120,7 @@ maxMoves = 128
 
 -- For small drafts we use values of old history, for higher - those of new history
 switchDraft :: Int
-switchDraft = 5
+switchDraft = 3
 
 -- For remaining depth 1 and 2 we can't have changed history values between the moves
 -- For 1: every cut will get better history score, but that move is already out of the remaining list
