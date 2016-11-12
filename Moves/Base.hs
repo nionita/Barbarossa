@@ -8,10 +8,9 @@
 module Moves.Base (
     posToState, getPos, posNewSearch,
     doRealMove, doMove, undoMove, genMoves, genTactMoves, canPruneMove,
-    useHash,
     staticVal, materVal, tacticalPos, isMoveLegal, isKillCand, isTKillCand, okInSequence,
     betaCut, doNullMove, ttRead, ttStore, curNodes, chooseMove, isTimeout, informCtx,
-    mateScore, scoreDiff,
+    mateScore, scoreDiff, qsDelta,
     finNode,
     showMyPos, logMes,
     nearmate
@@ -32,6 +31,7 @@ import Struct.Context
 import Struct.Status
 import Hash.TransTab
 import Moves.Board
+import Eval.BasicEval
 import Eval.Eval
 import Moves.ShowMe
 import Moves.History
@@ -42,11 +42,8 @@ nearmate :: Int -> Bool
 nearmate i = i >= mateScore - 255 || i <= -mateScore + 255
 
 -- Some options and parameters:
--- debug, useHash :: Bool
--- debug       = False
-useHash :: Bool
-useHash = True
-
+-- debug :: Bool
+-- debug = False
 scoreDiffEqual, printEvalInt :: Int
 scoreDiffEqual = 4 -- under this score difference moves are considered to be equal (choose random)
 printEvalInt   = 2 `shiftL` 12 - 1	-- if /= 0: print eval info every so many nodes
@@ -311,10 +308,23 @@ materVal = do
                    White -> m
                    _     -> -m
 
+{-# INLINE qsDelta #-}
+qsDelta :: Game Int
+qsDelta = do
+    p <- getPos
+    if yo p .&. queens p /= 0
+       then return $! matPiece White Queen
+       else if yo p .&. rooks p /= 0
+           then return $! matPiece White Rook
+           else if yo p .&. bishops p /= 0
+               then return $! matPiece White Bishop
+               else if yo p .&. knights p /= 0
+                   then return $! matPiece White Knight
+                   else return $! matPiece White Pawn
+
 {-# INLINE ttRead #-}
 ttRead :: Game (Int, Int, Int, Move, Int)
-ttRead = if not useHash then return empRez else do
-    -- when debug $ lift $ ctxLog "Debug" $ "--> ttRead "
+ttRead = do
     s <- get
     p <- getPos
     mhr <- liftIO $ do
@@ -328,7 +338,7 @@ ttRead = if not useHash then return empRez else do
 
 {-# INLINE ttStore #-}
 ttStore :: Int -> Int -> Int -> Move -> Int -> Game ()
-ttStore !deep !tp !sc !bestm !nds = if not useHash then return () else do
+ttStore !deep !tp !sc !bestm !nds = do
     s <- get
     p <- getPos
     -- We use the type: 0 - upper limit, 1 - lower limit, 2 - exact score

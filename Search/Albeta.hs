@@ -87,9 +87,6 @@ futDecayB = 13
 futDecayW = (1 `unsafeShiftL` futDecayB) - 1
 
 -- Parameters for quiescent search:
-qsBetaCut, qsDeltaCut :: Bool
-qsBetaCut  = True	-- use beta cut in QS?
-qsDeltaCut = True	-- use delta prune in QS?
 qsMaxChess :: Int
 qsMaxChess = 2		-- max number of chess for a quiet search path
 
@@ -120,9 +117,10 @@ iidNewDepth :: Int -> Int
 iidNewDepth = subtract 1
 
 -- Parameter for quiescenst search
-inEndlessCheck, qsDelta :: Int
+-- inEndlessCheck, qsDelta :: Int
+inEndlessCheck :: Int
 inEndlessCheck = -scoreGrain	-- there is a risk to be left in check
-qsDelta     = 1100
+-- qsDelta     = 1100
 
 type Search a = CState PVState Game a
 
@@ -1158,11 +1156,13 @@ pvQSearch !a !b !c = do				   -- to avoid endless loops
                           pvQLoop b nc a edges
        else do
             !stp <- lift staticVal
-            if qsBetaCut && stp >= b
+            if stp >= b
                then do
                    lift $ finNode "BETA" False
                    return b
-               else if qsDeltaCut && stp + qsDelta < a
+               else do
+                   !qsdelta <- lift qsDelta
+                   if stp + qsdelta < a
                       then do
                           lift $ finNode "DELT" False
                           return a
