@@ -312,15 +312,11 @@ materVal = do
 qsDelta :: Game Int
 qsDelta = do
     p <- getPos
-    if yo p .&. queens p /= 0
+    if yo p .&. queens p .&. myAttacs p /= 0
        then return $! matPiece White Queen
-       else if yo p .&. rooks p /= 0
+       else if yo p .&. rooks p .&. myAttacs p /= 0
            then return $! matPiece White Rook
-           else if yo p .&. bishops p /= 0
-               then return $! matPiece White Bishop
-               else if yo p .&. knights p /= 0
-                   then return $! matPiece White Knight
-                   else return $! matPiece White Pawn
+           else return $! matPiece White Bishop
 
 {-# INLINE ttRead #-}
 ttRead :: Game (Int, Int, Int, Move, Int)
