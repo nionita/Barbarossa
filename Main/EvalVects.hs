@@ -5,7 +5,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Main where
-import Control.Monad
+-- import Control.Monad
 import Control.Monad.Reader
 -- import Control.Monad.State
 import Control.Concurrent
@@ -13,7 +13,7 @@ import Control.Concurrent
 import Data.List (intersperse)
 -- import Data.List.Split (splitOn)
 import Data.Maybe
-import Data.Ord
+-- import Data.Ord
 -- import Data.Monoid
 -- import Network
 import Numeric (showHex)
@@ -154,88 +154,98 @@ main = do
 
 filterFile :: FilePath -> FilePath -> Maybe Int -> CtxIO ()
 filterFile fi fo mn = do
-    inp <- liftIO $ readFile fi
-    lift $ do
-        putStrLn $ "Vectorizing " ++ fi
-        putStrLn $ "Results to  " ++ fo
     chg <- readChanging
     let crts = crtStatus chg
-    h <- liftIO $ openFile fo WriteMode
+        fom = fo ++ ".mid"
+        foe = fo ++ ".end"
+        mfi = markerEval (evalst crts) initPos
+    lift $ do
+        putStrLn $ "Vectorizing " ++ fi
+        putStrLn $ "Mid results to  " ++ fom
+        putStrLn $ "End results to  " ++ foe
+        putStrLn $ "Marker: " ++ show mfi
+    hm <- liftIO $ openFile fom WriteMode
+    he <- liftIO $ openFile foe WriteMode
+    inp <- liftIO $ readFile fi
     case mn of
-        Nothing -> mapM_ (makeMovePos crts (Just h)) $ lines inp
-        Just n  -> mapM_ (makeMovePos crts (Just h)) $ take n $ lines inp
-    liftIO $ hClose h
+        Nothing -> mapM_ (makeMovePos crts hm he) $ lines inp
+        Just n  -> mapM_ (makeMovePos crts hm he) $ take n $ lines inp
+    liftIO $ hClose hm
+    liftIO $ hClose he
 
-makeMovePos :: MyState -> Maybe Handle -> String -> CtxIO ()
-makeMovePos crts mh fen = do
+makeMovePos :: MyState -> Handle -> Handle -> String -> CtxIO ()
+makeMovePos crts hm he fen = do
     let pos  = posFromFen fen
         mystate = posToState pos (hash crts) (hist crts) (evalst crts)
     mfs <- runCState (searchTestPos (evalst crts)) mystate
     case fst mfs of
         Nothing       -> return ()
-        Just (f0, fi) -> case mh of
-            Nothing -> liftIO $ do
-                putStrLn $ serialize f0
-                mapM_ (putStrLn . (("  - " ++) . serialize)) fi
-            Just h  -> liftIO $ do
-                hPutStrLn h $ serialize f0
-                mapM_ (hPutStrLn h . (("  - " ++) . serialize)) fi
+        Just (f0, fi) -> liftIO $ do
+            -- hPutStrLn h fen
+            hPutStrLn hm $ serialize $ midPhase f0
+            mapM_ (hPutStrLn hm . (("  - " ++) . serialize . midPhase)) fi
+            hPutStrLn he $ serialize $ endPhase f0
+            mapM_ (hPutStrLn he . (("  - " ++) . serialize . endPhase)) fi
 
-serialize :: Feats -> String
-serialize = show
+serialize :: [Int] -> String
+serialize is = "Feats " ++ show is
+
+midPhase :: Feats -> [Int]
+midPhase (Feats ph fts) = map (* ph) fts
+
+endPhase :: Feats -> [Int]
+endPhase (Feats ph fts) = map (* (256-ph)) fts
 
 -- Some utilities:
 debugMes, logmes :: String -> Game ()
 logmes = lift . lift . putStrLn
--- debugMes = lift . lift . putStrLn
 debugMes _ = return ()
 
 dumpMove :: Move -> String
 dumpMove m@(Move w) = show m ++ " (0x" ++ showHex w ")"
 
 -- We analyse the current position and the positions after every legal move
--- Analise in this context means:
--- Make a QS without any pruning and return the best score together with the position
--- which got it, then extract the features from the position
+-- Analyse in this context means:
+-- extract the features from the position and the descendants
 -- We write the features of the basic position, followed by number of nodes,
 -- followed by features of every node, in binary format, to the output file
 -- The optimisation procedure (done in a different programm) will minimise the function
 --
 -- e(x) = sum (abs (x * f0 + min (x * fi)))
 --
--- minimum is done for all children of position f0, sum is done over all position
+-- minimum is done for all children of position f0, sum is done over all positions
 -- x is the parameter vector, * is scalar product
+-- Because we have mid & end weights, we also need to write the game phase!
+-- And also take care of it when calculating the scores
 searchTestPos :: EvalState -> Game (Maybe (Feats, [Feats]))
 searchTestPos est = do
-    mvs <- uncurry (++) <$> genMoves
+    mvs <- uncurry (++) <$> genMoves 1
     -- We ignore positions with more than 63 descendents, cause we want to write a fix
     -- file format in the output with max 64 vectors (f0, f1, ..., f63)
     -- Ok, sometimes there are pseudo-legal move there, for simplity we ignore this
     if length mvs > 63
        then return Nothing
        else do
-    forM_ mvs $ \e -> debugMes $ "move: " ++ dumpMove e
-    -- n0 <- gets $ nodes . stats
-    f0 <- featsEval est . pos <$> pvQSearch 0 minBound maxBound
-    fi <- map (featsEval est . pos) . catMaybes <$> mapM searchQ mvs
-    -- n1 <- gets $ nodes . stats
-    return $ Just (f0, fi)
+           f0 <- featsEval est <$> getPos
+           fi <- map (featsEval est) . catMaybes <$> mapM movPos mvs
+           return $ Just (f0, fi)
 
-{--
-searchAB :: Move -> Game (Maybe Int)
-searchAB m = do
-    debugMes $ "--> SearchAB move: " ++ show m
+movPos :: Move -> Game (Maybe MyPos)
+movPos m = do
+    debugMes $ "  --> movPos move: " ++ show m
     r <- doMove m False
     case r of
         Illegal -> return Nothing
+        Final _ -> do	-- this would be a remis
+            undoMove	-- we don't want to mess with it
+            return Nothing
         _       -> do
-            mvs <- uncurry (++) <$> genMoves
-            !s <- negate <$> foldM searchQ minScore mvs
+            p <- getPos
             undoMove
-            debugMes $ "<-- SearchAB move: " ++ show m ++ " score = " ++ show s
-            return $ Just s
---}
+            return $ Just p
 
+{--
+-- With QS this is a mess, coz we don't know where the QS stops and miss the signs!
 searchQ :: Move -> Game (Maybe Score)
 searchQ m = do
     debugMes $ "  --> SearchQ move: " ++ show m
@@ -332,3 +342,4 @@ pvQSearch !lev !a !b = do
                      else if sta > score a
                              then pvQLoop lev b (Score { score = sta, pos = p}) mvs
                              else pvQLoop lev b a                               mvs
+--}

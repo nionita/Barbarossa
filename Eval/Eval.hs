@@ -5,7 +5,7 @@
 
 module Eval.Eval (
     initEvalState,
-    posEval, featsEval
+    posEval, featsEval, markerEval
 ) where
 
 import Data.Array.Base (unsafeAt)
@@ -104,6 +104,13 @@ featsEval !sti p = foldr (itemEval gph ep ew p) (Feats gph []) evalItems
     where ep   = esEParams  sti
           ew   = esEWeights sti
           gph  = gamePhase p
+
+markerEval :: EvalState -> MyPos -> [Int]
+markerEval !sti p = foldr (itemEval gph ep ew p) [] evalItems
+    where ep   = esEParams  sti
+          ew   = weightsMarker
+          gph  = gamePhase p
+
 
 gamePhase :: MyPos -> Int
 gamePhase p = g
@@ -550,8 +557,8 @@ data Space = Space
 instance EvalItem Space where
     evalItem _ _ ew p _ mide = spaceDiff p ew mide
 
-spaceDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-spaceDiff p ew mide = mad mide (ewSpace ew) sd
+spaceDiff :: Accum a => MyPos -> EvalWeights -> a -> a
+spaceDiff p ew mide = acc mide (ewSpace ew) sd
     where !sd = ms - ys
           (ms, ys)
               | moving p == White = (

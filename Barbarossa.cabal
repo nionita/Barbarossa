@@ -18,6 +18,12 @@ Executable Barbarossa
   Main-is:	Main/Barbarossa.hs
   Build-depends: base >= 4.5, array, old-time, containers, mtl, parsec, vector,
                  vector-algorithms, random, directory, transformers, QuickCheck, text
+  Other-modules: Eval.BasicEval, Eval.Eval, Eval.FileParams, Hash.TransTab, Hash.Zobrist,
+                 Moves.Base, Moves.BaseTypes, Moves.BitBoard, Moves.Board, Moves.Fen,
+                 Moves.GenMagics, Moves.History, Moves.Magics, Moves.Moves, Moves.Notation,
+                 Moves.Pattern, Moves.ShowMe, Search.AlbetaTypes, Search.CStateMonad,
+                 Search.Albeta, Struct.Config, Struct.Context, Struct.Status, Struct.Struct,
+                 Uci.UCI, Uci.UciGlue
   GHC-Options: -O2 -Wall
                -funbox-strict-fields -threaded -rtsopts
                -fspec-constr-count=24
@@ -37,13 +43,23 @@ Executable Evolve
   Main-is:	Main/Evolve.hs
   Build-depends: base >= 4.5, async, transformers, directory, filepath, process,
                  old-time, old-locale, containers, random
+  Other-modules: Eval.BasicEval, Eval.Eval, Eval.FileParams, Hash.TransTab, Hash.Zobrist,
+                 Moves.Base, Moves.BaseTypes, Moves.BitBoard, Moves.Board, Moves.Fen,
+                 Moves.GenMagics, Moves.History, Moves.Magics, Moves.Moves, Moves.Notation,
+                 Moves.Pattern, Moves.ShowMe, Search.AlbetaTypes, Search.CStateMonad,
+                 Struct.Config, Struct.Context, Struct.Status, Struct.Struct
   GHC-Options: -O2 -Wall -threaded
                -fno-warn-tabs
 
 Executable EvalVects
   Main-is:	Main/EvalVects.hs
   Build-depends: base >= 4.5, array, old-time, containers, mtl, parsec, vector,
-                 random, directory, transformers, QuickCheck, network >= 2.4, text
+                 vector-algorithms, random, directory, transformers, QuickCheck, network >= 2.4, text
+  Other-modules: Eval.BasicEval, Eval.Eval, Eval.FileParams, Hash.TransTab, Hash.Zobrist,
+                 Moves.Base, Moves.BaseTypes, Moves.BitBoard, Moves.Board, Moves.Fen,
+                 Moves.GenMagics, Moves.History, Moves.Magics, Moves.Moves, Moves.Notation,
+                 Moves.Pattern, Moves.ShowMe, Search.AlbetaTypes, Search.CStateMonad,
+                 Struct.Config, Struct.Context, Struct.Status, Struct.Struct
   GHC-Options: -O2 -Wall
                -funbox-strict-fields -threaded -rtsopts
                -fspec-constr-count=24

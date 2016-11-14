@@ -1,5 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Struct.Status (
     Stats(..),
@@ -10,6 +11,7 @@ module Struct.Status (
     Accum(..),
     MidEnd(..),
     Feats(..),
+    weightsMarker
 ) where
 
 import Struct.Struct
@@ -65,6 +67,51 @@ mad !mide0 !mide !v = MidEnd { mid = mid mide0 + mid mide * v, end = end mide0 +
 {-# INLINE tme #-}
 tme :: Int -> Int -> MidEnd
 tme a b = MidEnd a b
+
+-- A marker to check the feature order in the feature vector:
+instance Accum [Int] where
+    acc is (MidEnd i _) _ = i:is
+
+weightsMarker :: EvalWeights
+weightsMarker = EvalWeights {
+          ewMaterialDiff    = tme  1 8,
+          ewKingSafe        = tme  2 0,
+          ewKingOpen        = tme  3 0,
+          ewKingPlaceCent   = tme  4 0,
+          ewKingPlacePwns   = tme  5 6,		-- max after ~12k Clop games (ELO +23 +- 12)
+          ewRookHOpen       = tme  6 202,
+          ewRookOpen        = tme  7 221,
+          ewRookConn        = tme  8  78,
+          ewMobilityKnight  = tme  9 71,	-- Evalo 200 steps:
+          ewMobilityBishop  = tme 10 33,	-- length 10, depth 6, batch 128
+          ewMobilityRook    = tme 11 26,
+          ewMobilityQueen   = tme 12  6,
+          ewCenterPAtts     = tme 13 68,
+          ewCenterNAtts     = tme 14 45,
+          ewCenterBAtts     = tme 15 39,
+          ewCenterRAtts     = tme 16 34,
+          ewCenterQAtts     = tme 17 59,
+          ewCenterKAtts     = tme 18 53,
+          ewSpace           = tme 19  0,
+          ewAdvAtts         = tme 20 16,
+          ewIsolPawns       = tme 21 (-122),
+          ewIsolPassed      = tme 22 (-160),
+          ewBackPawns       = tme 23 (-180),
+          ewBackPOpen       = tme 24    0,
+          ewEnpHanging      = tme 25 (-33),
+          ewEnpEnPrise      = tme 26 (-21),
+          ewEnpAttacked     = tme 27 (-13),
+          ewLastLinePenalty = tme 28 0,
+          ewBishopPair      = tme 29  388,
+          ewRedundanceRook  = tme 30 (-105),
+          ewRookPawn        = tme 31 (-40),
+          ewAdvPawn5        = tme 32  130,
+          ewAdvPawn6        = tme 33  500,
+          ewPawnBlockP      = tme 34 (-110),
+          ewPawnBlockO      = tme 35 (-27),
+          ewPawnBlockA      = tme 36 (-73),
+          ewPassPawnLev     = tme 37 9
+        }
 
 -- This is the parameter record for characteristics evaluation
 data EvalParams

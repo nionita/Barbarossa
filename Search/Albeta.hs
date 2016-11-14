@@ -572,7 +572,7 @@ pvSearch nst !a !b !d = do
        )
        then do
            let ttpath = Path { pathScore = trimax a b hsc, pathDepth = hdeep,
-                               pathMoves = Seq [e], pathOrig = "TT" }
+                               pathMoves = Seq [e], pathOrig = "TT", pathPos = Nothing }
            -- we will treat the beta cut here too, if it happens
            when (tp == 1 || tp == 2 && hsc > a) $ do
                adp <- gets absdp
@@ -645,7 +645,7 @@ pvZeroW !nst !b !d !lastnull redu = do
     if hdeep >= d && (tp == 2 || tp == 1 && hsc >= b || tp == 0 && hsc < b)
        then do
            let ttpath = Path { pathScore = trimax bGrain b hsc, pathDepth = hdeep,
-                               pathMoves = Seq [e], pathOrig = "TT" }
+                               pathMoves = Seq [e], pathOrig = "TT", pathPos = Nothing }
            -- we will treat the beta cut here too, if it happens
            when (tp == 1 || tp == 2 && hsc >= b) $ do
                adp <- gets absdp
