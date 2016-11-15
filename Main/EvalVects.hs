@@ -5,15 +5,10 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Main where
--- import Control.Monad
 import Control.Monad.Reader
--- import Control.Monad.State
 import Control.Concurrent
--- import Control.Applicative ((<$>))
 import Data.List (intersperse)
--- import Data.List.Split (splitOn)
 import Data.Maybe
--- import Data.Ord
 -- import Data.Monoid
 -- import Network
 import Numeric (showHex)
@@ -32,7 +27,6 @@ import Search.AlbetaTypes
 import Moves.Base
 import Moves.Board (posFromFen, initPos)
 import Moves.History
--- import Moves.Notation
 import Search.CStateMonad (runCState)
 import Eval.FileParams (makeEvalState)
 import Eval.Eval
@@ -44,7 +38,9 @@ data Options = Options {
         optNThreads :: Int,		-- number of threads
         optNFens    :: Maybe Int,	-- number of fens (Nothing = all)
         optAFenFile :: FilePath,	-- fen file with usual positions
-        optFOutFile :: FilePath		-- output file for filter option
+        optFOutFile :: FilePath,	-- output file for filter option
+        optMinMid   :: Int,		-- minimum phase for mid parameters
+        optMaxEnd   :: Int		-- maximum phase for end parameters
     }
 
 defaultOptions :: Options
@@ -54,8 +50,10 @@ defaultOptions = Options {
         optLogging  = DebugUci,
         optNThreads = 1,
         optNFens    = Nothing,
-        optAFenFile = "fen.fen",
-        optFOutFile = "vect.bin"
+        optAFenFile = "alle.epd",
+        optFOutFile = "vect",
+        optMinMid   = 156,
+        optMaxEnd   = 100
     }
 
 setConfFile :: String -> Options -> Options
@@ -78,6 +76,12 @@ setLogging lev opt = opt { optLogging = llev }
 addNThrds :: String -> Options -> Options
 addNThrds ns opt = opt { optNThreads = read ns }
 
+addMinMid :: String -> Options -> Options
+addMinMid ns opt = opt { optMinMid = read ns }
+
+addMaxEnd :: String -> Options -> Options
+addMaxEnd ns opt = opt { optMaxEnd = read ns }
+
 addNFens :: String -> Options -> Options
 addNFens ns opt = opt { optNFens = Just $ read ns }
 
@@ -95,7 +99,9 @@ options = [
         Option "i" ["input"]   (ReqArg addIFile "STRING")     "Input (fen) file",
         Option "o" ["output"]  (ReqArg addOFile "STRING")    "Output file",
         Option "t" ["threads"] (ReqArg addNThrds "STRING")  "Number of threads",
-        Option "f" ["fens"]    (ReqArg addNFens "STRING")      "Number of fens"
+        Option "f" ["fens"]    (ReqArg addNFens "STRING")      "Number of fens",
+        Option "m" ["mid"] (ReqArg addMinMid "STRING")  "Threshold for mid",
+        Option "e" ["end"] (ReqArg addMaxEnd "STRING")  "Threshold for end"
     ]
 
 theOptions :: IO (Options, [String])
@@ -118,10 +124,7 @@ initContext opts = do
     ha <- newCache 1	-- it will take the minimum number of entries
     hi <- newHist
     let paramList = stringToParams $ concat $ intersperse "," $ optParams opts
-    -- putStrLn "Before eval state"
     (parc, evs) <- makeEvalState (optConfFile opts) paramList "progver" "progsuf"
-    -- putStrLn "eval state:"
-    -- putStrLn $ show evs
     let chg = Chg {
             working = False,
             compThread = Nothing,
@@ -150,10 +153,12 @@ main :: IO ()
 main = do
     (opts, _) <- theOptions
     ctx <- initContext opts
-    runReaderT (filterFile (optAFenFile opts) (optFOutFile opts) (optNFens opts)) ctx
+    runReaderT
+        (filterFile (optAFenFile opts) (optFOutFile opts) (optNFens opts)
+        (optMinMid opts) (optMaxEnd opts)) ctx
 
-filterFile :: FilePath -> FilePath -> Maybe Int -> CtxIO ()
-filterFile fi fo mn = do
+filterFile :: FilePath -> FilePath -> Maybe Int -> Int -> Int -> CtxIO ()
+filterFile fi fo mn mimi maen = do
     chg <- readChanging
     let crts = crtStatus chg
         fom = fo ++ ".mid"
@@ -166,27 +171,52 @@ filterFile fi fo mn = do
         putStrLn $ "Marker: " ++ show mfi
     hm <- liftIO $ openFile fom WriteMode
     he <- liftIO $ openFile foe WriteMode
-    inp <- liftIO $ readFile fi
-    case mn of
-        Nothing -> mapM_ (makeMovePos crts hm he) $ lines inp
-        Just n  -> mapM_ (makeMovePos crts hm he) $ take n $ lines inp
-    liftIO $ hClose hm
-    liftIO $ hClose he
+    hi <- liftIO $ openFile fi ReadMode
+    loopCount $ makeMovePos crts hi hm he mn mimi maen
+    liftIO $ do
+        hClose hm
+        hClose he
+        hClose hi
 
-makeMovePos :: MyState -> Handle -> Handle -> String -> CtxIO ()
-makeMovePos crts hm he fen = do
-    let pos  = posFromFen fen
-        mystate = posToState pos (hash crts) (hist crts) (evalst crts)
-    mfs <- runCState (searchTestPos (evalst crts)) mystate
-    case fst mfs of
-        Nothing       -> return ()
-        Just (f0, fi) -> liftIO $ do
-            -- hPutStrLn h fen
-            hPutStrLn hm $ serialize $ midPhase f0
-            mapM_ (hPutStrLn hm . (("  - " ++) . serialize . midPhase)) fi
-            hPutStrLn he $ serialize $ endPhase f0
-            mapM_ (hPutStrLn he . (("  - " ++) . serialize . endPhase)) fi
+loopCount :: Monad m => (Int -> m Bool) -> m ()
+loopCount act = go 0
+    where go k = do
+              r <- act k
+              when r $ go (k+1)
 
+makeMovePos :: MyState -> Handle -> Handle -> Handle -> Maybe Int -> Int -> Int -> Int -> CtxIO Bool
+makeMovePos crts hi hm he mn mimi maen k = do
+    end <- case mn of
+               Nothing -> lift $ hIsEOF hi
+               Just n  -> if k < n then lift $ hIsEOF hi else return True
+    if end
+       then return False
+       else do
+           fen <- lift $ hGetLine hi
+           let pos = posFromFen fen
+               mystate = posToState pos (hash crts) (hist crts) (evalst crts)
+           mfs <- runCState (searchTestPos (evalst crts)) mystate
+           case fst mfs of
+               Nothing       -> return ()
+               Just (f0, fi) -> liftIO $ do
+                   when (phase f0 >= mimi) $ do
+                       hPutStrLn hm $ serialize $ midPhase f0
+                       mapM_ (hPutStrLn hm . (("- " ++) . serialize . midPhase)) fi
+                   when (phase f0 <= maen) $ do
+                       hPutStrLn he $ serialize $ endPhase f0
+                       mapM_ (hPutStrLn he . (("- " ++) . serialize . endPhase)) fi
+           return True
+
+serialize :: Feats -> String
+serialize (Feats ph fts) = "Feats " ++ show ph ++ " " ++ show fts
+
+midPhase :: Feats -> Feats
+midPhase = id
+
+endPhase :: Feats -> Feats
+endPhase (Feats ph fts) = Feats (256-ph) fts
+
+{--
 serialize :: [Int] -> String
 serialize is = "Feats " ++ show is
 
@@ -195,6 +225,10 @@ midPhase (Feats ph fts) = map (* ph) fts
 
 endPhase :: Feats -> [Int]
 endPhase (Feats ph fts) = map (* (256-ph)) fts
+--}
+
+phase :: Feats -> Int
+phase (Feats ph _) = ph
 
 -- Some utilities:
 debugMes, logmes :: String -> Game ()
