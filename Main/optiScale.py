@@ -2,143 +2,75 @@ import sys
 import numpy as np
 import re
 import math
-import random
-from scipy.optimize import fmin_l_bfgs_b
-from numpy.linalg import norm
+
+from operator import itemgetter
+from sklearn.linear_model import SGDRegressor
 from sklearn.preprocessing import MinMaxScaler
-#from scipy.optimize import fmin_cg
+from sklearn import cross_validation
+from sklearn.grid_search import GridSearchCV
 
-def readMats(fname, maxl=None):
+class DataReader:
+	def readData(self, fname, maxl=None):
 
-	# We get such lines to parse:
-	# Feats 232 [200,0,0,0,0,0,0,0,-1,0,0,-7,0,0,0,0,-1,0,-1,146,6,0,0,0,0,0,0,0,0,0,1,-1,0,0,0,0,356]
-	# or
-	# - Feats 232 [-200,0,0,0,0,0,0,0,1,0,0,2,0,0,0,0,1,0,2,-233,-7,0,0,0,1,3,0,0,0,0,-1,1,0,0,0,-1,-369]
-	#
-	rs0 = re.compile(',|^Feats | \[|\]$')
-	rs1 = re.compile(',|^- Feats | \[|\]$')
-	r0  = re.compile('^F')
-
-	p0 = p1 = fs = 0
-	with open(fname, 'r') as f:
-		for l in f:
-			if r0.match(l):
-				if maxl <> None and p0 >= maxl:
+		# The lines to parse are like this (no space before):
+		# 84 71 [-74,0,0,1,0,-312,17,0,-1,-16,8,7,0,-5,-2,0,2,0,-1,-165,-5,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,199]:
+		# i.e.: score in cp, phase in 256 scale and feats in 8/cp scale
+		rs = re.compile(',| \[| |\]$')
+		ps = fs = 0
+		with open(fname, 'r') as f:
+			for l in f:
+				if maxl <> None and ps >= maxl:
 					break
-				p0 = p0 + 1
+				ps = ps + 1
 				if fs == 0:
-					ns0 = rs0.split(l)
-					fs = ns0.__len__() - 3
-			else:
-				p1 = p1 + 1
-	print "Pos: {0}, Subpos: {1}, Feats: {2}\n".format(p0, p1, fs)
-	sys.stdout.flush()
+					ns = rs.split(l)
+					fs = ns.__len__() - 3
+		self.samples = ps
+		self.features = fs
 
-	# Create the 3 arrays with positions, subpositions and indexes
-	x0 = np.ndarray(shape=(p0, fs), dtype=np.float);
-	y0 = np.ndarray(shape=(p0,), dtype=np.float);
-	x1 = np.ndarray(shape=(p1, fs), dtype=np.float);
-	y1 = np.ndarray(shape=(p1,), dtype=np.float);
-	ix = np.ndarray(shape=(p0,), dtype=np.int32);
+		# Create the 3 arrays with positions, subpositions and indexes
+		X  = np.ndarray(shape=(ps, fs), dtype=np.float);
+		y  = np.ndarray(shape=(ps,), dtype=np.float);
+		ph = np.ndarray(shape=(ps,1), dtype=np.float);
 
-	p0 = p1 = 0
-	with open(fname, 'r') as f:
-		for l in f:
-			if r0.match(l):
-				if maxl <> None and p0 >= maxl:
+		ps = 0
+		with open(fname, 'r') as f:
+			for l in f:
+				if maxl <> None and ps >= maxl:
 					break
-				ns0 = rs0.split(l)
-				y0[p0] = ns0[1]
-				for i, v in enumerate(ns0[2:-1]):
-					x0[p0, i] = v
-				ix[p0] = p1
-				p0 = p0 + 1
-			else:
-				ns1 = rs1.split(l)
-				y1[p1] = ns1[1]
-				for i, v in enumerate(ns1[2:-1]):
-					x1[p1, i] = v
-				p1 = p1 + 1
-	return x0, x1, y0, y1, ix
+				ns = rs.split(l)
+				y[ps]  = ns[0]
+				ph[ps] = ns[1]
+				for i, v in enumerate(ns[2:-1]):
+					X[ps, i] = v
+				ps = ps + 1
+		Xm  = ph * X / 256
+		print "Shape Xm = ", Xm.shape
+		print "Shape ph = ", ph.shape
+		Xe = (256-ph) * X / 256
+		print "Shape Xe = ", Xe.shape
+		X = np.hstack((Xm, Xe))
+		print "Shape X  = ", X.shape
+		scl = MinMaxScaler(feature_range=(-1,1))
+		self.X = scl.fit_transform(X)
+		self.X = X
+		self.y = y * 8
+		self.scl = scl
 
-def normalize(x0, x1):
-	scaler = MinMaxScaler()
-	xx = np.vstack((x0, x1))
-	scaler.fit(xx)
-	x2 = scaler.transform(x0)
-	x3 = scaler.transform(x1)
-	return x2, x3
-
-def calcErr(f, x0, x1, y0, y1, ix):
-	global printed
-	ps = x0.shape[0]
-	f[0]  = materWeight	# we keep this always fix
-	no = norm(f)
-	s0 = np.inner(x0, f)
-	s1 = np.inner(x1, f)
-	errtot = 0
-	c = 0
-	for i in range(ps):
-		if i == ps - 1:
-			j = x1.shape[0]
-		else:
-			j = ix[i+1]
-		if ix[i] < j-1:
-			xxs = s1[ix[i]:j-1]
-			ima = np.argmax(xxs)
-			#imi = np.argmin(xxs)
-			#errtot = errtot + abs(s0[i] - ma) / (1 + ma - mi)
-			dif = s0[i] + xxs[ima]
-			# L2 error:
-			#errtot = errtot + dif * dif + zeroPenalty / (1 + ma - mi)
-			# L1 error:
-			#errtot = errtot + abs(dif) + zeroPenalty / (1 + ma - mi)
-			# Tanh error:
-			#errtot = errtot + (ma - mi) * 100 * math.tanh(abs(dif)/100) + zeroPenalty / (1 + no)
-			# The error is between s0 and xxs, but we give it the average weight
-			# from the phases of the two:
-			errloc  = diffScale * math.tanh(abs(dif)/diffScale)
-			w = (y0[i]+y1[ix[i]+ima])/2
-			errtot += errloc * w
-			c += 1
-			if no > 8 and printed < 4:
-				printed += 1
-				print "========== ", printed, " ==========="
-				print "x0[i]: ", x0[i]
-				print "c = ", c, " ps = ", ps, " f: ", f
-				print "xxs: ", xxs
-				print "ima = ", ima, ", ma = ", xxs[ima]
-				print "dif = ", dif
-				print "no = ", no
-				print "errloc = ", errloc, ", w = ", w, ", errtot = ", errtot
-				print "=========================="
-				sys.stdout.flush()
-	return errtot / c + zeroPenalty / no + bigPenalty * no
-
-def print_xk(x):
-	print "Called with: ", x
-	sys.stdout.flush()
+#def score(X, ph, wm, we):
+#	y = X * ph * wm + X * (256-ph) * we
+#
+#def scale(x, ph):
+#	return np.hstack(x * ph, x * (256 - ph))
 
 #
 # Here we begin:
 #
 
-printed = 0
+noSamples = 200000
 
-materWeight = 8
-noSamples = 40000
-noFuncs   = 5000
-noIter    = 100
-
-diffScale = 800
-zeroPenalty = 8 * 200000
-bigPenalty = 200000 / 800
-
-x0, x1, y0, y1, ix = readMats('alle.end', maxl=noSamples)
 #x0, x1 = normalize(x0, x1)
 #x0, x1, ix = readMats('alle.end')
-y0 = y0 / 256
-y1 = y1 / 256
 
 #
 # This is the order of the features:
@@ -223,32 +155,90 @@ iniend = {
     'ewPassPawnLev'     : 9
     }
 
-# First value should be always 1: it is material, which we do not optimize and fix it to materWeight
 marker = [1,30,29,31,2,3,5,4,28,12,11,10,9,18,17,16,15,14,13,19,20,8,7,6,27,26,25,36,35,34,22,21,24,23,33,32,37]
 
 fo = ["" for i in marker]
 for f, i in featsOrder.iteritems():
 	fo[i-1] = f
 
-inil = [iniend[fo[i-1]] for i in marker]
+dr = DataReader()
+dr.readData('alle.txt', maxl=noSamples)
+
+#X_tr, X_te, y_tr, y_te = cross_validation.train_test_split(dr.X, dr.y, test_size=0.4)
+
+### This is for grid searching the parameters:
+#clf = SGDRegressor(learning_rate='optimal')
+
+#pars = {
+#		'loss': ['squared_loss', 'huber', 'epsilon_insensitive', 'squared_epsilon_insensitive'],
+#		'penalty': ['none','l1','l2'],
+#		'alpha': [0.001, 0.01, 0.1, 1.],
+#		'epsilon': [1., 0.1, 0.01, 0.001 ],
+#		'eta0': [0.1, 0.01],
+#	}
+#pars = {
+#		'loss': ['squared_loss'],
+#		'alpha': [0.01, 0.1, 1., 10.],
+#		'epsilon': [1., 0.1]
+#	}
+
+#grid_search = GridSearchCV(clf, param_grid=pars)
+#
+#grid_search.fit(dr.X, dr.y)
+#
+#top_scores = sorted(grid_search.grid_scores_, key=itemgetter(1), reverse=True)[:3]
+#for i, score in enumerate(top_scores):
+#	print("Model rank {0}:".format(i+1))
+#	print("Mean validation score: {0:.3f} (std: {1:.3f})".format(
+#		score.mean_validation_score,
+#		np.std(score.cv_validation_scores)))
+#	print("Parameters: {0}".format(score.parameters))
+#	print
+
+### This is for cross validating with the best model:
+clf = SGDRegressor(loss='epsilon_insensitive', penalty='l1', alpha=0.001, eta0=0.1, learning_rate='optimal', epsilon=0.1)
+scores = cross_validation.cross_val_score(clf, dr.X, dr.y, cv=5)
+print ("Accuracy: %0.2f (+/- %0.2f)" % (scores.mean(), scores.std() * 2))
+
+#clf.fit(X_tr, y_tr)
+#valid_sc = clf.score(X_te, y_te)
+
+#print "Coeff:"
+#print clf.coef_
+
+#inil = [iniend[fo[i-1]] for i in marker]
 #inil = [random.randint(-2, 2) for i in marker]
-xini = np.array(inil, dtype=np.float)
+#xini = np.array(inil, dtype=np.float)
 #xini = np.zeros(shape=marker.__len__(), dtype=np.float)
 
 # Minimize:
 #xbest, vbest, dic = fmin_l_bfgs_b(calcErr, xini, args=(x0, x1, ix), maxls=5,
 #		approx_grad=1, epsilon=1, factr=1e8, pgtol=0.001, iprint=100, maxfun=noFuncs)
-xbest, vbest, dic = fmin_l_bfgs_b(calcErr, xini, args=(x0, x1, y0, y1, ix),
-		approx_grad=1, iprint=100, maxfun=noFuncs)
-print "Dict: ", dic
+#xbest, vbest, dic = fmin_l_bfgs_b(calcErr, xini, args=(x0, x1, y0, y1, ix),
+#		approx_grad=1, iprint=100, maxfun=noFuncs)
+#print "Dict: ", dic
 
 #xbest, vbest, fc, gc, warn = fmin_cg(calcErr, xini, args=(x0, x1, ix),
 #				epsilon=1, maxiter=noIter, full_output=1, disp=1, callback=print_xk)
 #print "Warn: ", warn
 
-xbest[0] = materWeight
+#print "Best error: ", vbest
 
-print "Best error: ", vbest
-print "Best weights:"
-for i, v in zip(marker, xbest):
-	print fo[i-1], "\t=", round(v), " (", iniend[fo[i-1]], ")"
+### This is to print the found best params:
+#n = marker.__len__()
+#print
+#print '============================='
+#print "Intercept:", clf.intercept_
+#print '================='
+#print "Best weights mid:"
+#print '================='
+#for i, v in zip(marker, clf.coef_[:n-1]):
+#	print fo[i-1], "\t=", round(v), " (", iniend[fo[i-1]], ")"
+#print '================='
+#print "Best weights end:"
+#print '================='
+#for i, v in zip(marker, clf.coef_[n:]):
+#	print fo[i-1], "\t=", round(v), " (", iniend[fo[i-1]], ")"
+#print '============================='
+#
+#print "Validation score: ", valid_sc

@@ -8,10 +8,9 @@ module Main where
 import Control.Monad.Reader
 import Control.Concurrent
 import Data.List (intersperse)
-import Data.Maybe
+-- import Data.Maybe
 -- import Data.Monoid
 -- import Network
-import Numeric (showHex)
 import System.Console.GetOpt
 import System.Environment (getArgs)
 import System.IO
@@ -22,14 +21,15 @@ import Struct.Status
 import Struct.Context
 import Struct.Config
 import Hash.TransTab
-import Moves.BaseTypes
-import Search.AlbetaTypes
+-- import Moves.BaseTypes
+-- import Search.AlbetaTypes
 import Moves.Base
 import Moves.Board (posFromFen, initPos)
 import Moves.History
-import Search.CStateMonad (runCState)
+-- import Search.CStateMonad (runCState)
 import Eval.FileParams (makeEvalState)
 import Eval.Eval
+import Uci.UciGlue
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -51,7 +51,7 @@ defaultOptions = Options {
         optNThreads = 1,
         optNFens    = Nothing,
         optAFenFile = "alle.epd",
-        optFOutFile = "vect",
+        optFOutFile = "vect.txt",
         optMinMid   = 156,
         optMaxEnd   = 100
     }
@@ -158,127 +158,52 @@ main = do
         (optMinMid opts) (optMaxEnd opts)) ctx
 
 filterFile :: FilePath -> FilePath -> Maybe Int -> Int -> Int -> CtxIO ()
-filterFile fi fo mn mimi maen = do
+filterFile fi fo mn _ _ = do
     chg <- readChanging
     let crts = crtStatus chg
-        fom = fo ++ ".mid"
-        foe = fo ++ ".end"
         mfi = markerEval (evalst crts) initPos
     lift $ do
         putStrLn $ "Vectorizing " ++ fi
-        putStrLn $ "Mid results to  " ++ fom
-        putStrLn $ "End results to  " ++ foe
+        putStrLn $ "Results to  " ++ fo
         putStrLn $ "Marker: " ++ show mfi
-    hm <- liftIO $ openFile fom WriteMode
-    he <- liftIO $ openFile foe WriteMode
     hi <- liftIO $ openFile fi ReadMode
-    loopCount $ makeMovePos crts hi hm he mn mimi maen
+    ho <- liftIO $ openFile fo WriteMode
+    loopCount $ oracleAndFeats crts hi ho mn
     liftIO $ do
-        hClose hm
-        hClose he
+        hClose ho
         hClose hi
 
 loopCount :: Monad m => (Int -> m Bool) -> m ()
-loopCount act = go 0
+loopCount act = go 1
     where go k = do
               r <- act k
               when r $ go (k+1)
 
-makeMovePos :: MyState -> Handle -> Handle -> Handle -> Maybe Int -> Int -> Int -> Int -> CtxIO Bool
-makeMovePos crts hi hm he mn mimi maen k = do
+oracleAndFeats :: MyState -> Handle -> Handle -> Maybe Int -> Int -> CtxIO Bool
+oracleAndFeats crts hi ho mn k = do
     end <- case mn of
                Nothing -> lift $ hIsEOF hi
-               Just n  -> if k < n then lift $ hIsEOF hi else return True
+               Just n  -> if k <= n then lift $ hIsEOF hi else return True
     if end
        then return False
        else do
            fen <- lift $ hGetLine hi
+           when (k `mod` 1000 == 0) $ lift $ putStrLn $ "Positions completed: " ++ show k
            let pos = posFromFen fen
                mystate = posToState pos (hash crts) (hist crts) (evalst crts)
-           mfs <- runCState (searchTestPos (evalst crts)) mystate
-           case fst mfs of
-               Nothing       -> return ()
-               Just (f0, fi) -> liftIO $ do
-                   when (phase f0 >= mimi) $ do
-                       hPutStrLn hm $ serialize $ midPhase f0
-                       mapM_ (hPutStrLn hm . (("- " ++) . serialize . midPhase)) fi
-                   when (phase f0 <= maen) $ do
-                       hPutStrLn he $ serialize $ endPhase f0
-                       mapM_ (hPutStrLn he . (("- " ++) . serialize . endPhase)) fi
+           -- Search to depth 2:
+           (path, sc, _, _, _) <- bestMoveCont 2 0 mystate Nothing [] []
+           when (not $ null path) $ do
+               let (Feats ph fts) = featsEval (evalst crts) pos
+               lift $ hPutStrLn ho $ show sc ++ " " ++ show ph ++ " " ++ show fts
            return True
 
-serialize :: Feats -> String
-serialize (Feats ph fts) = "Feats " ++ show ph ++ " " ++ show fts
-
-midPhase :: Feats -> Feats
-midPhase = id
-
-endPhase :: Feats -> Feats
-endPhase (Feats ph fts) = Feats (256-ph) fts
-
 {--
-serialize :: [Int] -> String
-serialize is = "Feats " ++ show is
-
-midPhase :: Feats -> [Int]
-midPhase (Feats ph fts) = map (* ph) fts
-
-endPhase :: Feats -> [Int]
-endPhase (Feats ph fts) = map (* (256-ph)) fts
---}
-
-phase :: Feats -> Int
-phase (Feats ph _) = ph
-
 -- Some utilities:
 debugMes, logmes :: String -> Game ()
 logmes = lift . lift . putStrLn
 debugMes _ = return ()
 
-dumpMove :: Move -> String
-dumpMove m@(Move w) = show m ++ " (0x" ++ showHex w ")"
-
--- We analyse the current position and the positions after every legal move
--- Analyse in this context means:
--- extract the features from the position and the descendants
--- We write the features of the basic position, followed by number of nodes,
--- followed by features of every node, in binary format, to the output file
--- The optimisation procedure (done in a different programm) will minimise the function
---
--- e(x) = sum (abs (x * f0 + min (x * fi)))
---
--- minimum is done for all children of position f0, sum is done over all positions
--- x is the parameter vector, * is scalar product
--- Because we have mid & end weights, we also need to write the game phase!
--- And also take care of it when calculating the scores
-searchTestPos :: EvalState -> Game (Maybe (Feats, [Feats]))
-searchTestPos est = do
-    mvs <- uncurry (++) <$> genMoves 1
-    -- We ignore positions with more than 63 descendents, cause we want to write a fix
-    -- file format in the output with max 64 vectors (f0, f1, ..., f63)
-    -- Ok, sometimes there are pseudo-legal move there, for simplity we ignore this
-    if length mvs > 63
-       then return Nothing
-       else do
-           f0 <- featsEval est <$> getPos
-           fi <- map (featsEval est) . catMaybes <$> mapM movPos mvs
-           return $ Just (f0, fi)
-
-movPos :: Move -> Game (Maybe MyPos)
-movPos m = do
-    debugMes $ "  --> movPos move: " ++ show m
-    r <- doMove m False
-    case r of
-        Illegal -> return Nothing
-        Final _ -> do	-- this would be a remis
-            undoMove	-- we don't want to mess with it
-            return Nothing
-        _       -> do
-            p <- getPos
-            undoMove
-            return $ Just p
-
-{--
 -- With QS this is a mess, coz we don't know where the QS stops and miss the signs!
 searchQ :: Move -> Game (Maybe Score)
 searchQ m = do
