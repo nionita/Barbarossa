@@ -67,10 +67,7 @@ class DataReader:
 # Here we begin:
 #
 
-noSamples = 200000
-
-#x0, x1 = normalize(x0, x1)
-#x0, x1, ix = readMats('alle.end')
+noSamples = None
 
 #
 # This is the order of the features:
@@ -161,50 +158,57 @@ fo = ["" for i in marker]
 for f, i in featsOrder.iteritems():
 	fo[i-1] = f
 
+# Data reader:
 dr = DataReader()
-dr.readData('alle.txt', maxl=noSamples)
+dr.readData('alle1.txt', maxl=noSamples)
+
+opt_phase = 3
 
 #X_tr, X_te, y_tr, y_te = cross_validation.train_test_split(dr.X, dr.y, test_size=0.4)
 
-### This is for grid searching the parameters:
-#clf = SGDRegressor(learning_rate='optimal')
+if opt_phase == 1:
+	### This is for grid searching the parameters:
+	print "Searching for the best model:"
+	sys.stdout.flush()
+	clf = SGDRegressor(learning_rate='optimal')
 
-#pars = {
-#		'loss': ['squared_loss', 'huber', 'epsilon_insensitive', 'squared_epsilon_insensitive'],
-#		'penalty': ['none','l1','l2'],
-#		'alpha': [0.001, 0.01, 0.1, 1.],
-#		'epsilon': [1., 0.1, 0.01, 0.001 ],
-#		'eta0': [0.1, 0.01],
-#	}
-#pars = {
-#		'loss': ['squared_loss'],
-#		'alpha': [0.01, 0.1, 1., 10.],
-#		'epsilon': [1., 0.1]
-#	}
+	pars = {
+			'loss': ['squared_loss', 'huber', 'epsilon_insensitive', 'squared_epsilon_insensitive'],
+			'penalty': ['none','l1','l2'],
+			'alpha': [0.001, 0.01, 0.1, 1.],
+			'epsilon': [1., 0.1, 0.01, 0.001 ],
+			'eta0': [0.1, 0.01],
+		}
+	#pars = {
+	#		'loss': ['squared_loss'],
+	#		'alpha': [0.01, 0.1, 1., 10.],
+	#		'epsilon': [1., 0.1]
+	#	}
 
-#grid_search = GridSearchCV(clf, param_grid=pars)
-#
-#grid_search.fit(dr.X, dr.y)
-#
-#top_scores = sorted(grid_search.grid_scores_, key=itemgetter(1), reverse=True)[:3]
-#for i, score in enumerate(top_scores):
-#	print("Model rank {0}:".format(i+1))
-#	print("Mean validation score: {0:.3f} (std: {1:.3f})".format(
-#		score.mean_validation_score,
-#		np.std(score.cv_validation_scores)))
-#	print("Parameters: {0}".format(score.parameters))
-#	print
+	grid_search = GridSearchCV(clf, param_grid=pars)
 
-### This is for cross validating with the best model:
-clf = SGDRegressor(loss='epsilon_insensitive', penalty='l1', alpha=0.001, eta0=0.1, learning_rate='optimal', epsilon=0.1)
-scores = cross_validation.cross_val_score(clf, dr.X, dr.y, cv=5)
-print ("Accuracy: %0.2f (+/- %0.2f)" % (scores.mean(), scores.std() * 2))
+	grid_search.fit(dr.X, dr.y)
 
-#clf.fit(X_tr, y_tr)
-#valid_sc = clf.score(X_te, y_te)
+	top_scores = sorted(grid_search.grid_scores_, key=itemgetter(1), reverse=True)[:3]
+	for i, score in enumerate(top_scores):
+		print("Model rank {0}:".format(i+1))
+		print("Mean validation score: {0:.3f} (std: {1:.3f})".format(
+			score.mean_validation_score,
+			np.std(score.cv_validation_scores)))
+		print("Parameters: {0}".format(score.parameters))
+		print
 
-#print "Coeff:"
-#print clf.coef_
+### This is for after finding the best model:
+# But don't forget to change the optimal hyperparameters!
+if opt_phase >= 2:
+	clf = SGDRegressor(loss='epsilon_insensitive', penalty='none', alpha=0.001, eta0=0.01, learning_rate='optimal', epsilon=0.1)
+
+if opt_phase == 2:
+	### This is for cross validating with the best model:
+	print "Cross validating the best model:"
+	sys.stdout.flush()
+	scores = cross_validation.cross_val_score(clf, dr.X, dr.y, cv=5)
+	print ("Accuracy: %0.2f (+/- %0.2f)" % (scores.mean(), scores.std() * 2))
 
 #inil = [iniend[fo[i-1]] for i in marker]
 #inil = [random.randint(-2, 2) for i in marker]
@@ -224,21 +228,24 @@ print ("Accuracy: %0.2f (+/- %0.2f)" % (scores.mean(), scores.std() * 2))
 
 #print "Best error: ", vbest
 
-### This is to print the found best params:
-#n = marker.__len__()
-#print
-#print '============================='
-#print "Intercept:", clf.intercept_
-#print '================='
-#print "Best weights mid:"
-#print '================='
-#for i, v in zip(marker, clf.coef_[:n-1]):
-#	print fo[i-1], "\t=", round(v), " (", iniend[fo[i-1]], ")"
-#print '================='
-#print "Best weights end:"
-#print '================='
-#for i, v in zip(marker, clf.coef_[n:]):
-#	print fo[i-1], "\t=", round(v), " (", iniend[fo[i-1]], ")"
-#print '============================='
-#
-#print "Validation score: ", valid_sc
+if opt_phase == 3:
+	### This is to print the found best params:
+	print "Find best params with the best model:"
+	sys.stdout.flush()
+	clf.fit(dr.X, dr.y)
+
+	n = marker.__len__()
+	print
+	print '============================='
+	print "Intercept:", clf.intercept_
+	print '================='
+	print "Best weights mid:"
+	print '================='
+	for i, v in zip(marker, clf.coef_[:n-1]):
+		print fo[i-1], "\t=", round(v), " (", iniend[fo[i-1]], ")"
+	print '================='
+	print "Best weights end:"
+	print '================='
+	for i, v in zip(marker, clf.coef_[n:]):
+		print fo[i-1], "\t=", round(v), " (", iniend[fo[i-1]], ")"
+	print '============================='

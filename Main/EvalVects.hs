@@ -192,7 +192,7 @@ oracleAndFeats crts hi ho mn k = do
            let pos = posFromFen fen
                mystate = posToState pos (hash crts) (hist crts) (evalst crts)
            -- Search to depth 2:
-           (path, sc, _, _, _) <- bestMoveCont 2 0 mystate Nothing [] []
+           (path, sc, _, _, _) <- bestMoveCont 1 0 mystate Nothing [] []
            when (not $ null path) $ do
                let (Feats ph fts) = featsEval (evalst crts) pos
                lift $ hPutStrLn ho $ show sc ++ " " ++ show ph ++ " " ++ show fts
