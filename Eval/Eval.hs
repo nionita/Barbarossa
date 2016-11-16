@@ -710,32 +710,25 @@ instance EvalItem EnPrise where
 enPrise :: Accum a => MyPos -> EvalWeights -> a -> a
 enPrise p ew mide = acc (acc (acc mide (ewEnpHanging ew) ha) (ewEnpEnPrise ew) ep) (ewEnpAttacked ew) at
     where !meP = me p .&. pawns   p	-- my pieces
-          !meN = me p .&. knights p
-          !meB = me p .&. bishops p
+          !meM = me p .&. (knights p .|. bishops p)
           !meR = me p .&. rooks   p
           !meQ = me p .&. queens  p
           !atP = meP  .&. yoAttacs p	-- my attacked pieces
-          !atN = meN  .&. yoAttacs p
-          !atB = meB  .&. yoAttacs p
+          !atM = meM  .&. yoAttacs p
           !atR = meR  .&. yoAttacs p
           !atQ = meQ  .&. yoAttacs p
-          !haP = atP `less` myAttacs p	-- attacked and not defended
-          !haN = atN `less` myAttacs p
-          !haB = atB `less` myAttacs p
+          !haP = atP `less` myAttacs p	-- attacked and not defended (hanging)
+          !haM = atM `less` myAttacs p
           !haR = atR `less` myAttacs p
           !haQ = atQ `less` myAttacs p
-          !epN = (atP `less` haP) .&. yoPAttacs p	-- defended, but attacked by less
-          !epB = (atB `less` haN) .&. yoPAttacs p	-- valuable opponent pieces
-          !epR = (atR `less` haR) .&. yoA1
-          !epQ = (atQ `less` haQ) .&. yoA2
+          !epM = meM .&. yoPAttacs p	-- attacked by less valuable opponent pieces (en prise)
+          !epR = meR .&. yoA1
+          !epQ = meQ .&. yoA2
           !yoA1 = yoPAttacs p .|. yoNAttacs p .|. yoBAttacs p
           !yoA2 = yoA1 .|. yoRAttacs p
-          !ha = popCount haP + 3 * (popCount haN + popCount haB)
-              + 5 * popCount haR + 9 * popCount haQ
-          !ep =                 3 * (popCount epN + popCount epB)
-              + 5 * popCount epR + 9 * popCount epQ
-          !at = popCount atP + 3 * (popCount atN + popCount atB)
-              + 5 * popCount atR + 9 * popCount atQ
+          !ha = popCount haP + 3 * popCount haM + 5 * popCount haR + 9 * popCount haQ
+          !ep =                3 * popCount epM + 5 * popCount epR + 9 * popCount epQ
+          !at = popCount atP + 3 * popCount atM + 5 * popCount atR + 9 * popCount atQ
 
 ------ Last Line ------
 data LastLine = LastLine
