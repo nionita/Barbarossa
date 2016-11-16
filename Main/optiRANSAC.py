@@ -160,7 +160,7 @@ for f, i in featsOrder.iteritems():
 
 # Data reader:
 dr = DataReader()
-dr.readData('alle1.txt', maxl=noSamples)
+dr.readData('alle5M.txt', maxl=noSamples)
 
 opt_phase = 3
 
@@ -234,21 +234,26 @@ if opt_phase == 3:
 	### This is to print the found best params:
 	print "Find best params with the best model:"
 	sys.stdout.flush()
-	clf.fit(dr.X, dr.y)
+	try:
+		clf.fit(dr.X, dr.y)
+	except ValueError:
+		print "Did not catch!"
+		print "Trials: ", clf.n_trials
 
-	est = clf.estimator_
-	n = marker.__len__()
-	print
-	print '============================='
-	print "Intercept:", est.intercept_
-	print '================='
-	print "Best weights mid:"
-	print '================='
-	for i, v in zip(marker, est.coef_[:n]):
-		print fo[i-1], "\t=", round(v), " (", iniend[fo[i-1]], ")"
-	print '================='
-	print "Best weights end:"
-	print '================='
-	for i, v in zip(marker, est.coef_[n:]):
-		print fo[i-1], "\t=", round(v), " (", iniend[fo[i-1]], ")"
-	print '============================='
+	else:
+		est = clf.estimator_
+		n = marker.__len__()
+		print
+		print '============================='
+		print "Intercept:", est.intercept_
+		print '================='
+		print "Best weights mid:"
+		print '================='
+		for i, v in zip(marker, est.coef_[:n]):
+			print fo[i-1], "\t=", round(v), " (", iniend[fo[i-1]], ")"
+		print '================='
+		print "Best weights end:"
+		print '================='
+		for i, v in zip(marker, est.coef_[n:]):
+			print fo[i-1], "\t=", round(v), " (", iniend[fo[i-1]], ")"
+		print '============================='
