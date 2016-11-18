@@ -67,7 +67,7 @@ class DataReader:
 # Here we begin:
 #
 
-noSamples = None	# 80000
+noSamples = 7000000
 
 #
 # This is the order of the features:
@@ -160,7 +160,7 @@ for f, i in featsOrder.iteritems():
 
 # Data reader:
 dr = DataReader()
-dr.readData('alle16.txt', maxl=noSamples)
+dr.readData('c:\\Engines\\Barbarossa\\alle11mb.txt', maxl=noSamples)
 
 opt_phase = 3
 
@@ -203,7 +203,7 @@ if opt_phase == 1:
 if opt_phase >= 2:
 	est = SGDRegressor(loss='epsilon_insensitive', penalty='none', alpha=0.001,
 			eta0=0.01, learning_rate='optimal', epsilon=0.1)
-	clf = RANSACRegressor(base_estimator=est, min_samples=0.7)
+	clf = RANSACRegressor(base_estimator=est, min_samples=0.75)
 
 if opt_phase == 2:
 	### This is for cross validating with the best model:
