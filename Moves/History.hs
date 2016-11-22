@@ -19,10 +19,11 @@ import Struct.Struct
 -- Int32 should be enough for now with max depth 20
 type History = V.IOVector Int32
 
-rows, cols, vsize :: Int
-rows = 12
-cols = 64
-vsize = rows * cols
+pieces, squares, vsize, bloff :: Int
+pieces  = 16
+squares = 64
+vsize = pieces * squares
+bloff = vsize `div` 2
 
 -- Did we play with this layout? Could be some other layout better for cache?
 {-# INLINE adr #-}
@@ -30,24 +31,21 @@ adr :: Move -> Int
 adr m = ofs' m + adr' m
 
 -- These functions are used to calculate faster the addresses of a list of moves
--- as they have all the same color, so the offset needs to be calsulated only once
+-- as they have all the same color, so the offset needs to be calculated only once
 {-# INLINE adrs #-}
 adrs :: [Move] -> [Int]
-adrs []       = []
-adrs ms@(m:_) = map (f . adr') ms
-    where off = ofs' m
-          f x = off + x
+adrs []     = []
+adrs (m:ms) = off + adr' m : map f ms
+    where !off = ofs' m
+          f x = off + adr' x
 
 {-# INLINE adr' #-}
 adr' :: Move -> Int
-adr' m = cols * p + t
-    where p = fromEnum $ movePiece m
-          t = toSquare m
+adr' m = squares * moveHisAdr m + toSquare m
 
 {-# INLINE ofs' #-}
 ofs' :: Move -> Int
-ofs' m | moveColor m == White = 0
-       | otherwise            = 6 * cols
+ofs' m = bloff * moveHisOfs m
 
 newHist :: IO History
 newHist = V.replicate vsize 0
@@ -90,10 +88,25 @@ subHist h !ad !p = do
 -- best move (by history values), because we want to use by every selected move
 -- the latest history values - we do this except for depth 1, where no history changes
 -- are expected to change the order between moves anymore
--- The structure has the history, a zipped vector of move (as Word16 part) and
--- history address and the index of the last valid move in that vector
-type MoveVect = U.Vector (Word16, Word16)	-- move, history index (short form)
+-- The structure has the history, a quasi zipped vector of move & history address
+-- packed in a Word32 and the index of the last valid move in that vector
+-- Packing 2x Word16 in a Word32 should be better because GHC implements Word16 as Word,
+-- which is simply too big for what we want
+type MoveVect = U.Vector Word32		-- move (higher 16 bits), history index (short form)
 data MovesToSort = MTS History MoveVect !Int
+
+-- Small helpers to pack and unpack the move & its address:
+{-# INLINE moveAddr #-}
+moveAddr :: Move -> Int -> Word32
+moveAddr (Move w) a = (fromIntegral w `unsafeShiftL` 16) .|. fromIntegral a
+
+{-# INLINE takeAddr #-}
+takeAddr :: Word32 -> Int
+takeAddr = fromIntegral . ((.&.) 0xFFFF)
+
+{-# INLINE takeMove #-}
+takeMove :: Word32 -> Word16
+takeMove = fromIntegral . (`unsafeShiftR` 16)
 
 -- We want to alloc a fix amount of memory, and although there are
 -- positions which have more (quiet) moves, they are very rare
@@ -113,12 +126,11 @@ histSortMoves d h ms
     | d > 2     = mtsList $ makeMTS h ms
     | otherwise = dirSort h ms
 
-{-# INLINE makeMTS #-}
+-- {-# INLINE makeMTS #-}
 makeMTS :: History -> [Move] -> MovesToSort
-makeMTS h ms = MTS h (U.zip uw ua) k
-    where uw = U.fromListN maxMoves $ map (\(Move w) -> w) ms
-          ua = U.fromListN maxMoves $ map fromIntegral $ adrs ms
-          k  = U.length uw - 1
+makeMTS h ms = MTS h uc k
+    where uc = U.fromListN maxMoves $ zipWith moveAddr ms $ adrs ms
+          k  = U.length uc - 1
 
 -- Transform the structure lazyli to a move list
 mtsList :: MovesToSort -> [Move]
@@ -128,9 +140,8 @@ mtsList (MTS h uwa k)
     | otherwise = m : mtsList mts
     where (m, mts) = runST $ do
           uh <- unsafeIOToST $ U.unsafeFreeze h
-          let (uw, ua) = U.unzip uwa
-              -- Indirect history value:
-              hival = U.unsafeIndex uh . fromIntegral . U.unsafeIndex ua
+          let -- Indirect history value:
+              hival = U.unsafeIndex uh . takeAddr . U.unsafeIndex uwa
               -- To find index of min history values
               go !i !i0 !v0
                   | i > k     = i0
@@ -141,35 +152,34 @@ mtsList (MTS h uwa k)
                              else go (i+1) i0 v0
           let !v0 = hival 0
               !i = go 1 0 v0
-              !w = U.unsafeIndex uw i		-- this is the (first) best move
+              !w = takeMove $ U.unsafeIndex uwa i		-- this is the (first) best move
           -- Now swap the minimum with the last active element for both vectors
           -- to eliminate the used move (if necessary)
           if i == k	-- when last was best
              then return (Move w, MTS h uwa (k-1))
              else do
-                 vw <- U.unsafeThaw uw			-- thaw the move vector
-                 va <- U.unsafeThaw ua			-- thaw the history address vector
-                 V.unsafeSwap vw k i
-                 V.unsafeSwap va k i
-                 uw' <- U.unsafeFreeze vw
-                 ua' <- U.unsafeFreeze va
-                 return (Move w, MTS h (U.zip uw' ua') (k-1))
+                 vwa <- U.unsafeThaw uwa		-- thaw the move/address vector
+                 V.unsafeSwap vwa k i			-- swap
+                 uwa'<- U.unsafeFreeze vwa		-- freeze again
+                 return (Move w, MTS h uwa' (k-1))
 
 {-# INLINE oneMove #-}
 oneMove :: MoveVect -> [Move]
-oneMove uwa = [ Move $ U.unsafeIndex uw 0 ]
-    where (uw, _) = U.unzip uwa
+oneMove uwa = [ Move $ takeMove $ U.unsafeIndex uwa 0 ]
 
 -- Direct sort, i.e. read the current history values for every move
 -- and sort the moves accordigly (take care of the trick!)
+-- Here we also combine the history value, which is Int32, with the move itself
+-- on 16 bits, in an Int64, in the hope that the sort is quicker
 dirSort :: History -> [Move] -> [Move]
 dirSort h ms = runST $ do
     uh <- unsafeIOToST $ U.unsafeFreeze h
-    let uw = U.fromListN maxMoves $ map (\(Move w) -> w) ms
-        uv = U.fromListN maxMoves $ map (U.unsafeIndex uh) $ adrs ms
-        uz = U.zip uw uv
+    let uz = U.fromListN maxMoves $ zipWith hivalMove ms $ map (U.unsafeIndex uh) $ adrs ms
     vz <- U.unsafeThaw uz
-    H.sortBy (comparing snd) vz
+    H.sortBy (comparing ((.&.) mask)) vz
     uz' <- U.unsafeFreeze vz
-    let (uw', _) = U.unzip uz'
-    return $ map Move $ U.toList uw'
+    return $ map (Move . fromIntegral . ((.&.) 0xFFFF)) $ U.toList uz'
+    where mask = complement 0xFFFF
+
+hivalMove :: Move -> Int32 -> Int64
+hivalMove (Move w) i = (fromIntegral i `unsafeShiftL` 16) .|. fromIntegral w

@@ -8,6 +8,7 @@ module Struct.Struct (
          fromSquare, toSquare, isSlide, isDiag, isKkrq,
          moveIsNormal, moveIsCastle, moveIsPromo, moveIsEnPas, moveColor, movePiece,
          movePromoPiece, moveEnPasDel, makeEnPas, moveAddColor, moveAddPiece,
+         moveHisAdr, moveHisOfs,
          makeCastleFor, makePromo, moveFromTo, showWord64,
          activatePromo, fromColRow, checkCastle, checkEnPas, toString,
          myAttacs, yoAttacs, check,
@@ -405,6 +406,16 @@ movePiece m@(Move w)
     | moveIsCastle m = King
     | otherwise      = error $ "Wrong move type: " ++ showHex w ""
     where r = fromIntegral $ (w `unsafeShiftR` 12) .&. 0x7
+
+-- For history purposes: quick 'n' dirty "piece"
+{-# INLINE moveHisAdr #-}
+moveHisAdr :: Move -> Int
+moveHisAdr (Move w) = fromIntegral $ (w `unsafeShiftR` 12) .&. 0x7
+
+-- For history purposes: quick 'n' dirty "color"
+{-# INLINE moveHisOfs #-}
+moveHisOfs :: Move -> Int
+moveHisOfs (Move w) = fromIntegral $ w `unsafeShiftR` 15
 
 -- {-# INLINE fromSquare #-}
 fromSquare :: Move -> Square
