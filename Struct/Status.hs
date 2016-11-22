@@ -199,17 +199,17 @@ instance CollectParams EvalWeights where
           ewBackPOpen       = tme (-35)    0,
           ewEnpHanging      = tme (-23) (-33),
           ewEnpEnPrise      = tme (-25) (-21),
-          ewEnpAttacked     = tme (-9) (-13),
+          ewEnpAttacked     = tme  (-9) (-13),
           ewLastLinePenalty = tme 115 0,
           ewBishopPair      = tme 363  388,
           ewRedundanceRook  = tme   0 (-105),
           ewRookPawn        = tme (-50) (-40),
           ewAdvPawn5        = tme   10  130,
           ewAdvPawn6        = tme  440  500,
-          ewPawnBlockP      = tme (-124)(-110),
-          ewPawnBlockO      = tme (-23) (-27),
-          ewPawnBlockA      = tme (-14) (-73),
-          ewPassPawnLev     = tme 0 9
+          ewPawnBlockP      = tme (-124) (-110),
+          ewPawnBlockO      = tme  (-23) (-27),
+          ewPawnBlockA      = tme  (-14) (-73),
+          ewPassPawnLev     = tme  0 9
         }
     npColParm = collectEvalWeights
     npSetParm = id
