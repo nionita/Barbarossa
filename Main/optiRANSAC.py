@@ -51,11 +51,11 @@ class DataReader:
 		print "Shape Xe = ", Xe.shape
 		X = np.hstack((Xm, Xe))
 		print "Shape X  = ", X.shape
-		scl = MinMaxScaler(feature_range=(-1,1))
-		self.X = scl.fit_transform(X)
+		#scl = MinMaxScaler(feature_range=(-1,1))
+		#X = scl.fit_transform(X)
 		self.X = X
 		self.y = y * 8
-		self.scl = scl
+		#self.scl = scl
 
 #def score(X, ph, wm, we):
 #	y = X * ph * wm + X * (256-ph) * we
@@ -160,7 +160,8 @@ for f, i in featsOrder.iteritems():
 
 # Data reader:
 dr = DataReader()
-dr.readData('c:\\Engines\\Barbarossa\\alle11mb.txt', maxl=noSamples)
+#dr.readData('c:\\Engines\\Barbarossa\\alle11mb.txt', maxl=noSamples)
+dr.readData('alle900k.txt', maxl=noSamples)
 
 opt_phase = 3
 

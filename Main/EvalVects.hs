@@ -36,6 +36,7 @@ data Options = Options {
         optParams   :: [String],	-- list of eval parameter assignements
         optLogging  :: LogLevel,	-- logging level
         optNThreads :: Int,		-- number of threads
+        optDepth    :: Int,		-- oracle search depth
         optNFens    :: Maybe Int,	-- number of fens (Nothing = all)
         optAFenFile :: FilePath,	-- fen file with usual positions
         optFOutFile :: FilePath,	-- output file for filter option
@@ -49,6 +50,7 @@ defaultOptions = Options {
         optParams   = [],
         optLogging  = DebugUci,
         optNThreads = 1,
+        optDepth    = 1,
         optNFens    = Nothing,
         optAFenFile = "alle.epd",
         optFOutFile = "vect.txt",
@@ -76,6 +78,9 @@ setLogging lev opt = opt { optLogging = llev }
 addNThrds :: String -> Options -> Options
 addNThrds ns opt = opt { optNThreads = read ns }
 
+addDepth :: String -> Options -> Options
+addDepth ns opt = opt { optDepth = read ns }
+
 addMinMid :: String -> Options -> Options
 addMinMid ns opt = opt { optMinMid = read ns }
 
@@ -98,6 +103,7 @@ options = [
         Option "p" ["param"]   (ReqArg addParam "STRING")    "Eval/search/time params: name=value,...",
         Option "i" ["input"]   (ReqArg addIFile "STRING")     "Input (fen) file",
         Option "o" ["output"]  (ReqArg addOFile "STRING")    "Output file",
+        Option "d" ["depth"]   (ReqArg addNThrds "STRING")  "Oracle search depth",
         Option "t" ["threads"] (ReqArg addNThrds "STRING")  "Number of threads",
         Option "f" ["fens"]    (ReqArg addNFens "STRING")      "Number of fens",
         Option "m" ["mid"] (ReqArg addMinMid "STRING")  "Threshold for mid",
@@ -111,7 +117,7 @@ theOptions = do
         (o, n, []) -> return (foldr ($) defaultOptions o, n)
         (_, _, es) -> ioError (userError (concat es ++ usageInfo header options))
     where header = "Usage: " ++ idName
-              ++ " [-c CONF] [-l LEV] [-p name=val[,...]] [-a AFILE] [-f OFILE] [-t THREADS]"
+              ++ " [-c CONF] [-l LEV] [-p name=val[,...]] [-a AFILE] [-o OFILE] [-t THREADS]"
           idName = "EvalVects"
 
 initContext :: Options -> IO Context
@@ -154,11 +160,11 @@ main = do
     (opts, _) <- theOptions
     ctx <- initContext opts
     runReaderT
-        (filterFile (optAFenFile opts) (optFOutFile opts) (optNFens opts)
+        (filterFile (optAFenFile opts) (optFOutFile opts) (optDepth opts) (optNFens opts)
         (optMinMid opts) (optMaxEnd opts)) ctx
 
-filterFile :: FilePath -> FilePath -> Maybe Int -> Int -> Int -> CtxIO ()
-filterFile fi fo mn _ _ = do
+filterFile :: FilePath -> FilePath -> Int -> Maybe Int -> Int -> Int -> CtxIO ()
+filterFile fi fo depth mn _ _ = do
     chg <- readChanging
     let crts = crtStatus chg
         mfi = markerEval (evalst crts) initPos
@@ -168,7 +174,7 @@ filterFile fi fo mn _ _ = do
         putStrLn $ "Marker: " ++ show mfi
     hi <- liftIO $ openFile fi ReadMode
     ho <- liftIO $ openFile fo WriteMode
-    loopCount $ oracleAndFeats crts hi ho mn
+    loopCount $ oracleAndFeats depth crts hi ho mn
     liftIO $ do
         hClose ho
         hClose hi
@@ -179,8 +185,8 @@ loopCount act = go 1
               r <- act k
               when r $ go (k+1)
 
-oracleAndFeats :: MyState -> Handle -> Handle -> Maybe Int -> Int -> CtxIO Bool
-oracleAndFeats crts hi ho mn k = do
+oracleAndFeats :: Int -> MyState -> Handle -> Handle -> Maybe Int -> Int -> CtxIO Bool
+oracleAndFeats depth crts hi ho mn k = do
     end <- case mn of
                Nothing -> lift $ hIsEOF hi
                Just n  -> if k <= n then lift $ hIsEOF hi else return True
@@ -188,11 +194,13 @@ oracleAndFeats crts hi ho mn k = do
        then return False
        else do
            fen <- lift $ hGetLine hi
-           when (k `mod` 1000 == 0) $ lift $ putStrLn $ "Positions completed: " ++ show k
+           when (k `mod` 1000 == 0) $ lift $ do
+               putStrLn $ "Positions completed: " ++ show k
+               hFlush stdout
            let pos = posFromFen fen
                mystate = posToState pos (hash crts) (hist crts) (evalst crts)
            -- Search to depth 2:
-           (path, sc, _, _, _) <- bestMoveCont 1 0 mystate Nothing [] []
+           (path, sc, _, _, _) <- bestMoveCont depth 0 mystate Nothing [] []
            when (not $ null path) $ do
                let (Feats ph fts) = featsEval (evalst crts) pos
                lift $ hPutStrLn ho $ show sc ++ " " ++ show ph ++ " " ++ show fts
