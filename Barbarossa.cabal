@@ -59,7 +59,8 @@ Executable EvalVects
                  Moves.Base, Moves.BaseTypes, Moves.BitBoard, Moves.Board, Moves.Fen,
                  Moves.GenMagics, Moves.History, Moves.Magics, Moves.Moves, Moves.Notation,
                  Moves.Pattern, Moves.ShowMe, Search.AlbetaTypes, Search.CStateMonad,
-                 Struct.Config, Struct.Context, Struct.Status, Struct.Struct
+                 Struct.Config, Struct.Context, Struct.Status, Struct.Struct, Search.Albeta,
+                 Uci.UciGlue
   GHC-Options: -O2 -Wall
                -funbox-strict-fields -threaded -rtsopts
                -fspec-constr-count=24

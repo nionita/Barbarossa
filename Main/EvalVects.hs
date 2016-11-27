@@ -6,9 +6,9 @@
 
 module Main where
 import Control.Monad.Reader
+import Control.Monad.State
 import Control.Concurrent
 import Data.List (intersperse)
--- import Data.Maybe
 -- import Data.Monoid
 -- import Network
 import System.Console.GetOpt
@@ -37,11 +37,10 @@ data Options = Options {
         optLogging  :: LogLevel,	-- logging level
         optNThreads :: Int,		-- number of threads
         optDepth    :: Int,		-- oracle search depth
+        optNSkip    :: Maybe Int,	-- number of fens to skip (Nothing = none)
         optNFens    :: Maybe Int,	-- number of fens (Nothing = all)
         optAFenFile :: FilePath,	-- fen file with usual positions
-        optFOutFile :: FilePath,	-- output file for filter option
-        optMinMid   :: Int,		-- minimum phase for mid parameters
-        optMaxEnd   :: Int		-- maximum phase for end parameters
+        optFOutFile :: FilePath		-- output file for filter option
     }
 
 defaultOptions :: Options
@@ -51,11 +50,10 @@ defaultOptions = Options {
         optLogging  = DebugUci,
         optNThreads = 1,
         optDepth    = 1,
+        optNSkip    = Nothing,
         optNFens    = Nothing,
         optAFenFile = "alle.epd",
-        optFOutFile = "vect.txt",
-        optMinMid   = 156,
-        optMaxEnd   = 100
+        optFOutFile = "vect.txt"
     }
 
 setConfFile :: String -> Options -> Options
@@ -81,11 +79,8 @@ addNThrds ns opt = opt { optNThreads = read ns }
 addDepth :: String -> Options -> Options
 addDepth ns opt = opt { optDepth = read ns }
 
-addMinMid :: String -> Options -> Options
-addMinMid ns opt = opt { optMinMid = read ns }
-
-addMaxEnd :: String -> Options -> Options
-addMaxEnd ns opt = opt { optMaxEnd = read ns }
+addNSkip :: String -> Options -> Options
+addNSkip ns opt = opt { optNSkip = Just $ read ns }
 
 addNFens :: String -> Options -> Options
 addNFens ns opt = opt { optNFens = Just $ read ns }
@@ -106,8 +101,7 @@ options = [
         Option "d" ["depth"]   (ReqArg addNThrds "STRING")  "Oracle search depth",
         Option "t" ["threads"] (ReqArg addNThrds "STRING")  "Number of threads",
         Option "f" ["fens"]    (ReqArg addNFens "STRING")      "Number of fens",
-        Option "m" ["mid"] (ReqArg addMinMid "STRING")  "Threshold for mid",
-        Option "e" ["end"] (ReqArg addMaxEnd "STRING")  "Threshold for end"
+        Option "s" ["skip"]    (ReqArg addNSkip "STRING")      "Number of fens to skip"
     ]
 
 theOptions :: IO (Options, [String])
@@ -160,11 +154,11 @@ main = do
     (opts, _) <- theOptions
     ctx <- initContext opts
     runReaderT
-        (filterFile (optAFenFile opts) (optFOutFile opts) (optDepth opts) (optNFens opts)
-        (optMinMid opts) (optMaxEnd opts)) ctx
+        (filterFile (optAFenFile opts) (optFOutFile opts) (optDepth opts) (optNSkip opts) (optNFens opts))
+        ctx
 
-filterFile :: FilePath -> FilePath -> Int -> Maybe Int -> Int -> Int -> CtxIO ()
-filterFile fi fo depth mn _ _ = do
+filterFile :: FilePath -> FilePath -> Int -> Maybe Int -> Maybe Int -> CtxIO ()
+filterFile fi fo depth ms mn = do
     chg <- readChanging
     let crts = crtStatus chg
         mfi = markerEval (evalst crts) initPos
@@ -174,6 +168,9 @@ filterFile fi fo depth mn _ _ = do
         putStrLn $ "Marker: " ++ show mfi
     hi <- liftIO $ openFile fi ReadMode
     ho <- liftIO $ openFile fo WriteMode
+    case ms of
+        Just m  -> loopCount $ skipLines hi m
+        Nothing -> return ()
     loopCount $ oracleAndFeats depth crts hi ho mn
     liftIO $ do
         hClose ho
@@ -181,9 +178,21 @@ filterFile fi fo depth mn _ _ = do
 
 loopCount :: Monad m => (Int -> m Bool) -> m ()
 loopCount act = go 1
-    where go k = do
+    where go !k = do
               r <- act k
               when r $ go (k+1)
+
+skipLines :: Handle -> Int -> Int -> CtxIO Bool
+skipLines hi m k = do
+    end <- if k <= m then lift $ hIsEOF hi else return True
+    if end
+       then return False
+       else do
+           _ <- lift $ hGetLine hi
+           when (k `mod` 10000 == 0) $ lift $ do
+               putStrLn $ "Positions skipped: " ++ show k
+               hFlush stdout
+           return True
 
 oracleAndFeats :: Int -> MyState -> Handle -> Handle -> Maybe Int -> Int -> CtxIO Bool
 oracleAndFeats depth crts hi ho mn k = do
@@ -194,16 +203,19 @@ oracleAndFeats depth crts hi ho mn k = do
        then return False
        else do
            fen <- lift $ hGetLine hi
-           when (k `mod` 1000 == 0) $ lift $ do
+           when (k `mod` 10000 == 0) $ lift $ do
                putStrLn $ "Positions completed: " ++ show k
                hFlush stdout
            let pos = posFromFen fen
                mystate = posToState pos (hash crts) (hist crts) (evalst crts)
-           -- Search to depth 2:
-           (path, sc, _, _, _) <- bestMoveCont depth 0 mystate Nothing [] []
+           -- Search to depth:
+           (path, sc, _, _, fstate) <- bestMoveCont depth 0 mystate Nothing [] []
            when (not $ null path) $ do
                let (Feats ph fts) = featsEval (evalst crts) pos
-               lift $ hPutStrLn ho $ show sc ++ " " ++ show ph ++ " " ++ show fts
+                   sts = evalState (posEval pos) (evalst crts)
+                   n   = nodes $ stats fstate
+               lift $ hPutStrLn ho $ show sts ++ " " ++ show ph ++ " "
+                   ++ show n ++ " " ++ show sc ++ " " ++ show fts
            return True
 
 {--

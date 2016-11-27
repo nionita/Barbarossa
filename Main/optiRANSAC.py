@@ -10,11 +10,12 @@ from sklearn import cross_validation
 from sklearn.grid_search import GridSearchCV
 
 class DataReader:
-	def readData(self, fname, maxl=None):
+	def readData(self, fname, maxl=None, shift=0.1):
 
-		# The lines to parse are like this (no space before):
-		# 84 71 [-74,0,0,1,0,-312,17,0,-1,-16,8,7,0,-5,-2,0,2,0,-1,-165,-5,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,199]:
-		# i.e.: score in cp, phase in 256 scale and feats in 8/cp scale
+		# The lines to parse are now (no space before):
+		# 68 71 16251 84 [-74,0,0,1,0,-312,17,0,-1,-16,8,7,0,-5,-2,0,2,0,-1,-165,-5,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,199]
+		# i.e.: static score in cp, phase in 256 scale, nodes searched,
+		# score in cp and feats in 8/cp scale
 		rs = re.compile(',| \[| |\]$')
 		ps = fs = 0
 		with open(fname, 'r') as f:
@@ -24,14 +25,21 @@ class DataReader:
 				ps = ps + 1
 				if fs == 0:
 					ns = rs.split(l)
-					fs = ns.__len__() - 3
+					fs = ns.__len__() - 5
 		self.samples = ps
 		self.features = fs
 
-		# Create the 3 arrays with positions, subpositions and indexes
-		X  = np.ndarray(shape=(ps, fs), dtype=np.float);
-		y  = np.ndarray(shape=(ps,), dtype=np.float);
-		ph = np.ndarray(shape=(ps,1), dtype=np.float);
+		# Create the arrays with features, scores and phase
+		X  = np.ndarray(shape=(ps, fs), dtype=np.float)	# features
+		st = np.ndarray(shape=(ps,), dtype=np.float)	# static scores
+		sn = np.ndarray(shape=(ps,), dtype=np.float)	# search scores
+		al = np.ndarray(shape=(ps,), dtype=np.float)	# searched nodes alpha
+		ph = np.ndarray(shape=(ps,1), dtype=np.float)	# phases
+
+		# The target is the static score modified towards the search score
+		# by a quantity which depends on the number of searched nodes:
+		# shift = math.exp(-scale * 100)	- shift towards dynamic score for 100 nodes
+		scale = -math.log(shift) / 100
 
 		ps = 0
 		with open(fname, 'r') as f:
@@ -39,26 +47,26 @@ class DataReader:
 				if maxl <> None and ps >= maxl:
 					break
 				ns = rs.split(l)
-				y[ps]  = ns[0]
+				st[ps] = ns[0]
 				ph[ps] = ns[1]
-				for i, v in enumerate(ns[2:-1]):
+				al[ps] = -math.exp(-scale*int(ns[2]))
+				sn[ps] = ns[3]
+				for i, v in enumerate(ns[4:-1]):
 					X[ps, i] = v
 				ps = ps + 1
-		Xm  = ph * X / 256
-		print "Shape Xm = ", Xm.shape
-		print "Shape ph = ", ph.shape
-		Xe = (256-ph) * X / 256
-		print "Shape Xe = ", Xe.shape
-		X = np.hstack((Xm, Xe))
+		Xm = ph * X / (256 * 8)
+		Xe = (256-ph) * X / (256 * 8)
+		X  = np.hstack((Xm, Xe))
 		print "Shape X  = ", X.shape
 		#scl = MinMaxScaler(feature_range=(-1,1))
-		#X = scl.fit_transform(X)
+		#self.X = scl.fit_transform(X, y)
+		y = st + al * (sn - st)
+		self.y = y
 		self.X = X
-		self.y = y * 8
 		#self.scl = scl
 
 #def score(X, ph, wm, we):
-#	y = X * ph * wm + X * (256-ph) * we
+#	y = (X * ph * wm + X * (256-ph) * we) / (256 * 8)	# because of the 8/cp scale
 #
 #def scale(x, ph):
 #	return np.hstack(x * ph, x * (256 - ph))
@@ -67,7 +75,7 @@ class DataReader:
 # Here we begin:
 #
 
-noSamples = 7000000
+noSamples = None	# 50000
 
 #
 # This is the order of the features:
@@ -161,7 +169,7 @@ for f, i in featsOrder.iteritems():
 # Data reader:
 dr = DataReader()
 #dr.readData('c:\\Engines\\Barbarossa\\alle11mb.txt', maxl=noSamples)
-dr.readData('alle900k.txt', maxl=noSamples)
+dr.readData('optim/nobe-ac.txt', maxl=noSamples, shift=0.05)
 
 opt_phase = 3
 
@@ -171,14 +179,11 @@ if opt_phase == 1:
 	### This is for grid searching the parameters:
 	print "Searching for the best model:"
 	sys.stdout.flush()
-	clf = SGDRegressor(learning_rate='optimal')
+	clf = SGDRegressor(loss='huber', penalty='none', fit_intercept=True, alpha=0.001,
+			n_iter=50, learning_rate='optimal')
 
 	pars = {
-			'loss': ['squared_loss', 'huber', 'epsilon_insensitive', 'squared_epsilon_insensitive'],
-			'penalty': ['none','l1','l2'],
-			'alpha': [0.001, 0.01, 0.1, 1.],
-			'epsilon': [1., 0.1, 0.01, 0.001 ],
-			'eta0': [0.1, 0.01],
+			'epsilon': [5, 10., 20., 40.]
 		}
 	#pars = {
 	#		'loss': ['squared_loss'],
@@ -190,10 +195,10 @@ if opt_phase == 1:
 
 	grid_search.fit(dr.X, dr.y)
 
-	top_scores = sorted(grid_search.grid_scores_, key=itemgetter(1), reverse=True)[:3]
+	top_scores = sorted(grid_search.grid_scores_, key=itemgetter(1), reverse=True)[:5]
 	for i, score in enumerate(top_scores):
 		print("Model rank {0}:".format(i+1))
-		print("Mean validation score: {0:.3f} (std: {1:.3f})".format(
+		print("Mean validation score: {0:.6f} (std: {1:.6f})".format(
 			score.mean_validation_score,
 			np.std(score.cv_validation_scores)))
 		print("Parameters: {0}".format(score.parameters))
@@ -202,9 +207,10 @@ if opt_phase == 1:
 ### This is for after finding the best model:
 # But don't forget to change the optimal hyperparameters!
 if opt_phase >= 2:
-	est = SGDRegressor(loss='epsilon_insensitive', penalty='none', alpha=0.001,
-			eta0=0.01, learning_rate='optimal', epsilon=0.1)
-	clf = RANSACRegressor(base_estimator=est, min_samples=0.75)
+	#est = SGDRegressor(loss='epsilon_insensitive', penalty='none', alpha=0.001,
+	clf = SGDRegressor(loss='huber', penalty='none', fit_intercept=True,
+			alpha=0.001, epsilon=5, n_iter=100, learning_rate='optimal')
+	#clf = RANSACRegressor(base_estimator=est, min_samples=0.75)
 
 if opt_phase == 2:
 	### This is for cross validating with the best model:
@@ -242,19 +248,30 @@ if opt_phase == 3:
 		print "Trials: ", clf.n_trials
 
 	else:
-		est = clf.estimator_
+		#est = clf.estimator_
+		est = clf
 		n = marker.__len__()
+		#coef = dr.scl.transform(est.coef_)
+		coef = est.coef_
+		mid = coef[:n]
+		end = coef[n:]
 		print
 		print '============================='
 		print "Intercept:", est.intercept_
 		print '================='
-		print "Best weights mid:"
+		print "Best weights mid / end:"
 		print '================='
-		for i, v in zip(marker, est.coef_[:n]):
-			print fo[i-1], "\t=", round(v), " (", iniend[fo[i-1]], ")"
+		#for i, v in zip(marker, coef[:n]):
+		#	print fo[i-1], "\t=", round(v)
+		#for i, k in enumerate(marker):
+		#	print("{0:20s} = {1:5d} / {2:5d}"
+		#			.format(fo[i], int(round(mid[k-1])), int(round(end[k-1]))))
+		for i, vm, ve in zip(marker, mid, end):
+			print("{0:20s} = {1:5d} / {2:5d}"
+					.format(fo[i-1], int(round(vm)), int(round(ve))))
 		print '================='
-		print "Best weights end:"
-		print '================='
-		for i, v in zip(marker, est.coef_[n:]):
-			print fo[i-1], "\t=", round(v), " (", iniend[fo[i-1]], ")"
-		print '============================='
+		#print "Best weights end:"
+		#print '================='
+		#for i, v in zip(marker, coef[n:]):
+		#	print fo[i-1], "\t=", round(v)
+		#print '============================='
