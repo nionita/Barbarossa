@@ -120,6 +120,7 @@ initContext opts = do
             change = ctxVar,
             loglev = llev,
             evpid  = parc,
+            batch  = False,
             tipars = npSetParm (colParams paramList :: CollectFor TimeParams)
          }
     return context

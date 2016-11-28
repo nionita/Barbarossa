@@ -34,7 +34,6 @@ import Uci.UciGlue
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
         optParams   :: [String],	-- list of eval parameter assignements
-        optLogging  :: LogLevel,	-- logging level
         optNThreads :: Int,		-- number of threads
         optDepth    :: Int,		-- oracle search depth
         optNSkip    :: Maybe Int,	-- number of fens to skip (Nothing = none)
@@ -47,7 +46,6 @@ defaultOptions :: Options
 defaultOptions = Options {
         optConfFile = Nothing,
         optParams   = [],
-        optLogging  = DebugUci,
         optNThreads = 1,
         optDepth    = 1,
         optNSkip    = Nothing,
@@ -61,17 +59,6 @@ setConfFile cf opt = opt { optConfFile = Just cf }
 
 addParam :: String -> Options -> Options
 addParam pa opt = opt { optParams = pa : optParams opt }
-
-setLogging :: String -> Options -> Options
-setLogging lev opt = opt { optLogging = llev }
-    where llev = case levi of
-                   0 -> DebugSearch
-                   1 -> DebugUci
-                   2 -> LogInfo
-                   3 -> LogWarning
-                   4 -> LogError
-                   _ -> if levi < 0 then DebugSearch else LogNever
-          levi = read lev :: Int
 
 addNThrds :: String -> Options -> Options
 addNThrds ns opt = opt { optNThreads = read ns }
@@ -94,7 +81,6 @@ addOFile fi opt = opt { optFOutFile = fi }
 options :: [OptDescr (Options -> Options)]
 options = [
         Option "c" ["config"]  (ReqArg setConfFile "STRING") "Configuration file",
-        Option "l" ["loglev"]  (ReqArg setLogging "STRING")  "Logging level from 0 (debug) to 5 (never)",
         Option "p" ["param"]   (ReqArg addParam "STRING")    "Eval/search/time params: name=value,...",
         Option "i" ["input"]   (ReqArg addIFile "STRING")     "Input (fen) file",
         Option "o" ["output"]  (ReqArg addOFile "STRING")    "Output file",
@@ -117,9 +103,8 @@ theOptions = do
 initContext :: Options -> IO Context
 initContext opts = do
     clktm <- getClockTime
-    let llev = optLogging opts
     lchan <- newChan
-    wchan  <- newChan
+    wchan <- newChan
     ichan <- newChan
     ha <- newCache 1	-- it will take the minimum number of entries
     hi <- newHist
@@ -142,8 +127,9 @@ initContext opts = do
             inform = ichan,
             strttm = clktm,
             change = ctxVar,
-            loglev = llev,
+            loglev = LogNever,
             evpid  = parc,
+            batch  = True,
             tipars = npSetParm (colParams paramList :: CollectFor TimeParams)
          }
     return context

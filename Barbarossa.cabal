@@ -68,6 +68,7 @@ Executable EvalVects
                -fno-warn-tabs
                -- -msse4.2
                -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques
+               -- -rtsopts -auto-all -caf-all
 
 --Executable MMTO
 --  Main-is:	Main/MMTO.hs

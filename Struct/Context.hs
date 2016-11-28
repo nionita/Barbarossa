@@ -52,7 +52,8 @@ data Context = Ctx {
         loglev :: LogLevel,             -- loglevel, only higher messages will be logged
         evpid  :: String,		-- identifier for the eval parameter config
         tipars :: TimeParams,		-- time management parameters
-        change :: MVar Changing         -- the changing context
+        change :: MVar Changing,        -- the changing context
+        batch  :: Bool			-- if true: we do not have logger, writer & informer
     }
 
 -- Information about previuos best move and changes
@@ -126,7 +127,8 @@ modifyChanging f = do
 ctxLog :: LogLevel -> String -> CtxIO ()
 ctxLog lev mes = do
     ctx <- ask
-    when (lev >= loglev ctx) $ liftIO $ logging (logger ctx) (startSecond ctx) (levToPrf lev) mes
+    when (not (batch ctx) && lev >= loglev ctx) $
+        liftIO $ logging (logger ctx) (startSecond ctx) (levToPrf lev) mes
 
 startSecond :: Context -> Integer
 startSecond ctx = s
@@ -147,33 +149,37 @@ currMilli ref = do
 informGui :: Int -> Int -> Int -> [Move] -> CtxIO ()
 informGui sc tief nds path = do
     ctx <- ask
-    chg <- readChanging
-    currt <- lift $ currMilli $ startSecond ctx
-    let gi = Info {
-                infoDepth = tief,
-                infoTime = currt - srchStrtMs chg,
-                infoNodes = nds,
-                infoPv = path,
-                infoScore = sc
-             }
-    liftIO $ writeChan (inform ctx) gi
+    when (not (batch ctx)) $ do
+        chg <- readChanging
+        currt <- lift $ currMilli $ startSecond ctx
+        let gi = Info {
+                    infoDepth = tief,
+                    infoTime = currt - srchStrtMs chg,
+                    infoNodes = nds,
+                    infoPv = path,
+                    infoScore = sc
+                 }
+        liftIO $ writeChan (inform ctx) gi
 
 -- Communicate the current move
 informGuiCM :: Move -> Int -> CtxIO ()
 informGuiCM m cm = do
     ctx <- ask
-    let gi = InfoCM { infoMove = m, infoCurMove = cm }
-    liftIO $ writeChan (inform ctx) gi
+    when (not (batch ctx)) $ do
+        let gi = InfoCM { infoMove = m, infoCurMove = cm }
+        liftIO $ writeChan (inform ctx) gi
 
 -- Communicate the current depth
 informGuiDepth :: Int -> CtxIO ()
 informGuiDepth tief = do
     ctx <- ask
-    let gi = InfoD { infoDepth = tief }
-    liftIO $ writeChan (inform ctx) gi
+    when (not (batch ctx)) $ do
+        let gi = InfoD { infoDepth = tief }
+        liftIO $ writeChan (inform ctx) gi
 
 informGuiString :: String -> CtxIO ()
 informGuiString s = do
     ctx <- ask
-    let gi = InfoS { infoString = s }
-    liftIO $ writeChan (inform ctx) gi
+    when (not (batch ctx)) $ do
+        let gi = InfoS { infoString = s }
+        liftIO $ writeChan (inform ctx) gi
