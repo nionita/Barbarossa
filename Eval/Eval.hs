@@ -668,12 +668,12 @@ instance EvalItem EnPrise where
 -- 1. we have no further capture and evaluate in a leaf
 -- 2. we are evaluating for delta cut
 -- In 1 we should take the opponent attacks and analyse them:
--- - if he has more than 2 attacks, than our sencond best attacked piece will be lost
--- (but not always, for example when we can check or can defent one with the other)
+-- - if he has more than 2 attacks, than our second best attacked piece will be lost
+-- (but not always, for example when we can check or can defend one with the other)
 -- - if he has only one attack, we are somehow restricted to defend or move that piece
 -- In 2 we have a more complicated analysis, which maybe is not worth to do
 enPrise :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-enPrise p ew mide = mad (mad (mad mide (ewEnpHanging ew) ha) (ewEnpEnPrise ew) ep) (ewEnpAttacked ew) at
+enPrise p ew mide = mad (mad mide (ewEnpHanging ew) ha) (ewEnpEnPrise ew) ep
     where !meP = me p .&. pawns   p	-- my pieces
           !meM = me p .&. (knights p .|. bishops p)
           !meR = me p .&. rooks   p
@@ -686,14 +686,15 @@ enPrise p ew mide = mad (mad (mad mide (ewEnpHanging ew) ha) (ewEnpEnPrise ew) e
           !haM = atM `less` myAttacs p
           !haR = atR `less` myAttacs p
           !haQ = atQ `less` myAttacs p
-          !epM = meM .&. yoPAttacs p	-- defended, but attacked by less valuable opponent pieces
+          !epM = meM .&. yoPAttacs p	-- attacked by less valuable opponent pieces
           !epR = meR .&. yoA1
           !epQ = meQ .&. yoA2
           !yoA1 = yoPAttacs p .|. yoNAttacs p .|. yoBAttacs p
           !yoA2 = yoA1 .|. yoRAttacs p
-          !ha = popCount haP + 3 * popCount haM + 5 * popCount haR + 9 * popCount haQ
-          !ep =                3 * popCount epM + 5 * popCount epR + 9 * popCount epQ
-          !at = popCount atP + 3 * popCount atM + 5 * popCount atR + 9 * popCount atQ
+          !ha | haP .|. haM .|. haR .|. haQ == 0 = 0
+              | otherwise = popCount haP + 3 * popCount haM + 5 * popCount haR + 10 * popCount haQ
+          !ep |         epM .|. epR .|. epQ == 0 = 0
+              | otherwise =                3 * popCount epM + 5 * popCount epR + 10 * popCount epQ
 
 ------ Last Line ------
 data LastLine = LastLine
