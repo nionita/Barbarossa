@@ -168,7 +168,7 @@ dirSort h ms = runST $ do
     uh <- unsafeIOToST $ U.unsafeFreeze h
     let uw = U.fromListN maxMoves $ map (\(Move w) -> w) ms
         uV = U.fromListN maxMoves $ map (U.unsafeIndex uh) $ adrs ms
-        us = U.map mvsco uw
+        us = U.map moveScore uw
         uv = U.zipWith subtract us uV
         uz = U.zip uw uv
     vz <- U.unsafeThaw uz
