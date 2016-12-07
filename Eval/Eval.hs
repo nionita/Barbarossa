@@ -227,50 +227,110 @@ promoW, promoB :: Square -> Square
 promoW s = 56 + (s .&. 7)
 promoB s =       s .&. 7
 
-----------------------------------------------------------------------------
--- Here we have the implementation of the evaluation items
--- They do not return a score, but a vector of fulfillments of some criteria
--- With version 0.55 we compute everything from white point of view
--- and only at the end we negate the score if black side is asked
-----------------------------------------------------------------------------
------- Material ------
-data Material = Material
+perRook :: BBoard -> BBoard -> Square -> (Int, Int) -> (Int, Int)
+perRook allp myp rsq (ho, op)
+    | rco .&. allp == 0 = (ho,  op')
+    | rco .&. myp  == 0 = (ho', op)
+    | otherwise         = (ho,  op)
+    where !rco = rcolls `unsafeAt` (rsq .&. 0x7)
+          ho'  = ho + 1
+          op'  = op + 1
+          rcolls :: UArray Int BBoard
+          rcolls = listArray (0, 7) [ fileA, fileB, fileC, fileD, fileE, fileF, fileG, fileH ]
 
-instance EvalItem Material where
-    evalItem _ _ ew p _ mide = materDiff p ew mide
+backPawns :: Color -> BBoard -> BBoard -> BBoard -> (BBoard, BBoard)
+backPawns White !mp !op !opa = (bp, bpo)
+    where fa = frontAttacksWhite mp
+          stops = mp `unsafeShiftL` 8
+          !bp  = stops .&. opa .&. complement fa;
+          !bpo = bp `less` shadowDown op
+backPawns Black !mp !op !opa = (bp, bpo)
+    where fa = frontAttacksBlack mp
+          stops = mp `unsafeShiftR` 8
+          !bp = stops .&. opa .&. complement fa;
+          !bpo = bp `less` shadowUp op
 
-materDiff :: Accum a => MyPos -> EvalWeights -> a -> a
-materDiff p ew mide = acc mide (ewMaterialDiff ew) md
-    where !md | moving p == White =   mater p
-              | otherwise         = - mater p
+frontAttacksWhite :: BBoard -> BBoard
+frontAttacksWhite !b = fa
+    where fal = bbLeft b
+          far = bbRight b
+          !fa = shadowUp (fal .|. far)	-- shadowUp is exclusive the original!
 
------- Redundance: bishop pair and rook redundance ------
-data Redundance = Redundance
+frontAttacksBlack :: BBoard -> BBoard
+frontAttacksBlack !b = fa
+    where fal = bbLeft b
+          far = bbRight b
+          !fa = shadowDown (fal .|. far)	-- shadowUp is exclusive the original!
 
-instance EvalItem Redundance where
-    evalItem _ _ ew p _ mide = evalRedundance p ew mide
+-- The big evaluation function
+--
 
--- This function is optimised
-evalRedundance :: Accum a => MyPos -> EvalWeights -> a -> a
-evalRedundance p ew mide = acc (acc mide (ewBishopPair ew) bp) (ewRedundanceRook ew) rr
-    where !wbl = bishops p .&. me p .&. lightSquares
-          !wbd = bishops p .&. me p .&. darkSquares
-          !bbl = bishops p .&. yo p .&. lightSquares
-          !bbd = bishops p .&. yo p .&. darkSquares
-          !bpw = popCount wbl .&. popCount wbd	-- tricky here: exact 1 and 1 is ok
-          !bpb = popCount bbl .&. popCount bbd	-- and here
-          !bp  = bpw - bpb
-          !wro = rooks p .&. me p
-          !bro = rooks p .&. yo p
-          !wrr = popCount wro `unsafeShiftR` 1	-- tricky here: 2, 3 are the same...
-          !brr = popCount bro `unsafeShiftR` 1	-- and here
-          !rr  = wrr - brr
+sideEvalWhite :: MyPos -> BBoard -> BBoard -> SideEval
+sideEvalWhite !p !us !them
+    = SideEval matPawns matKnights matBishops matRooks matQueens
+               kopBAtts kopRAtts
+               kipRank kipFilc
+               ropHOpen ropOpen ropConn
+               isoPawnRow isoPPDefdd isoSupPwns
+               bapClosed bapOpen
+               advAtts
+               marKnights marBishops
+    where -- we keep the features very basic and return fulfillment values
+          -- which will be combined (mostly by weights multiplications) later
+          ------ Material ------
+          !myPawns    = pawns p .&. us
+          !myKnights  = knights p .&. us
+          !myBishops  = bishops p .&. us
+          !myRooks    = rooks p .&. us
+          !myQueens   = queens p .&. us
+          !matPawns   = popCount myPawns
+          !matKnights = popCount myKnights
+          !matBishops = popCount myBishops
+          !matRooks   = popCount myRooks
+          !matQueens  = popCount myQueens
+          ------ (Your) King openness ------
+          !yksq     = kingSquare (kings p) them
+          !notPawns = complement $ pawns p
+          !kopBAtts = popCount $ bAttacs (pawns p) yksq .&. notPawns
+          !kopRAtts = popCount $ rAttacs (pawns p) yksq .&. notPawns
+          ------ (Your) King placement ------
+          !kir = yksq `unsafeShiftR` 3	-- rank of the king
+          !kif = yksq .&. 7		-- file of the king
+          !kipRank  = 7 - kir		-- we want to be far from center
+          !kipFilc  = kif * (7 - kif)
+          ------ Rook placement ------
+          (ropHOpen, ropOpen)
+              = foldr (perRook (pawns p) myPawns) (0, 0) $ bbToSquares $ rooks p .&. us
+          !ropConn | myRAttacs p .&. us .&. rooks p == 0 = 0
+                   | otherwise                           = 1
+          ------ Pawn connectivity --------
+          !is0  = bbLeft myPawns .|. bbRight myPawns
+          !isoPawnRow = popCount $ is0 .&. myPawns
+          !isoPPDefdd = popCount $ myPAttacs p .&. myPawns
+          !is1  = (myPawns `unsafeShiftL` 8) .&. notPawns
+          !is1d = bbLeft is1 .|. bbRight is1
+          !is2  = (is1     `unsafeShiftL` 8) .&. notPawns
+          !is2d = bbLeft is2 .|. bbRight is2
+          !is3  = (is2     `unsafeShiftL` 8) .&. notPawns
+          !is3d = bbLeft is3 .|. bbRight is3
+          !isFuPAtts  = is1d .|. is2d .|. is3d	-- future pawns attacks (only first 3)
+          !isoSupPwns = myPawns .&. isFuPAtts
+          ------ Backward pawns --------
+          (bpw, bpow) = backPawns White myPawns (pawns p .&. them) (yoPAttacs p)
+          !bapClosed  = popCount bpw
+          !bapOpen    = popCount bpow
+          ------ (My) Attacks to adverse squares - we consider only last 2 ranks --------
+          !advAtts = popCount $ myAttacs p .&. yoH
+          yoH = row7 .|. row8
+          ------ Margin penalty for minors ------
+          !marKnights = popCount $ myKnights .&. margin
+          !marBishops = popCount $ myBishops .&. margin
+          !cb = (knights p .|. bishops p) .&. lali
+          margin = row1 .|. row8 .|. fileA .|. fileH
 
------- King Safety ------
-data KingSafe = KingSafe
 
-instance EvalItem KingSafe where
-    evalItem _ _ ew p _ mide = kingSafe p ew mide
+
+          ------ King Safety ------
 
 -- Rewrite of king safety taking into account number and quality
 -- of pieces attacking king neighbour squares
@@ -324,176 +384,6 @@ attCoef :: UArray Int Int
 attCoef = listArray (0, 248) $ take 8 (repeat 0) ++ [ f x | x <- [0..63] ] ++ repeat (f 63)
     where f :: Int -> Int
           f x = let y = fromIntegral x :: Double in round $ (2.92968750 - 0.03051758*y)*y*y
-
------- King openness ------
-data KingOpen = KingOpen
-
-instance EvalItem KingOpen where
-    evalItem _ _ ew p _ mide = kingOpen p ew mide
-
--- Openness can be tought only with pawns (like we take) or all pieces
-kingOpen :: Accum a => MyPos -> EvalWeights -> a -> a
-kingOpen p ew mide = acc mide (ewKingOpen ew) ko
-    where !ko = adv - own
-          moprooks   = popCount $ rooks p .&. yo p
-          mopqueens  = popCount $ queens p .&. yo p
-          mwb = popCount $ bAttacs paw msq `less` paw
-          -- mwr = popCount $ rAttacs paw msq `less` (paw .|. lastrs)
-          mwr = popCount $ rAttacs paw msq `less` paw
-          yoprooks   = popCount $ rooks p .&. me p
-          yopqueens  = popCount $ queens p .&. me p
-          ywb = popCount $ bAttacs paw ysq `less` paw
-          -- ywr = popCount $ rAttacs paw ysq `less` (paw .|. lastrs)
-          ywr = popCount $ rAttacs paw ysq `less` paw
-          paw = pawns p
-          msq = kingSquare (kings p) $ me p
-          ysq = kingSquare (kings p) $ yo p
-          comb !oR !oQ !wb !wr = let r = oR * wr
-                                     q = oQ * (wb + wr)
-                                 in r + q*q
-          own = comb moprooks mopqueens mwb mwr
-          adv = comb yoprooks yopqueens ywb ywr
-          -- lastrs = 0xFF000000000000FF	-- approx: take out last row which cant be covered by pawns
-
------- King placement ------
-data KingPlace = KingPlace
-
-instance EvalItem KingPlace where
-    evalItem _ ep ew p _ mide = kingPlace ep p ew mide
-
--- Depending on which pieces are on the board we have some preferences
--- where the king should be placed. For example, in the opening and middle game it should
--- be in some corner, in endgame it should be near some (passed) pawn(s)
-kingPlace :: Accum a => EvalParams -> MyPos -> EvalWeights -> a -> a
-kingPlace ep p ew mide = acc (acc mide (ewKingPlaceCent ew) kcd) (ewKingPlacePwns ew) kpd
-    where !kcd = (mpl - ypl) `unsafeShiftR` epMaterBonusScale ep
-          !kpd = (mpi - ypi) `unsafeShiftR` epPawnBonusScale  ep
-          !mks = kingSquare (kings p) $ me p
-          !yks = kingSquare (kings p) $ yo p
-          !mkm = materFun yminor yrooks yqueens
-          !ykm = materFun mminor mrooks mqueens
-          (!mpl, !ypl, !mpi, !ypi)
-              | moving p == White = ( kingMaterBonus White mpawns mkm mks
-                                    , kingMaterBonus Black ypawns ykm yks
-                                    , kingPawnsBonus mks (passed p) mpassed ypassed
-                                    , kingPawnsBonus yks (passed p) mpassed ypassed
-                                    )
-              | otherwise         = ( kingMaterBonus Black mpawns mkm mks
-                                    , kingMaterBonus White ypawns ykm yks
-                                    , kingPawnsBonus mks (passed p) ypassed mpassed
-                                    , kingPawnsBonus yks (passed p) ypassed mpassed
-                                    )
-          !mro     = rooks p .&. me p
-          !mrooks  = popCount mro
-          !mqueens = popCount $ queens p .&. me p
-          !mminor  = popCount $ (bishops p .|. knights p) .&. me p
-          !yro     = rooks p .&. yo p
-          !yrooks  = popCount yro
-          !yqueens = popCount $ queens p .&. yo p
-          !yminor  = popCount $ (bishops p .|. knights p) .&. yo p
-          !mpawns  = pawns p .&. me p
-          !ypawns  = pawns p .&. yo p
-          !mpassed = passed p .&. me p
-          !ypassed = passed p .&. yo p
-          materFun m r q = (m * epMaterMinor ep + r * epMaterRook ep + q * epMaterQueen ep)
-                               `unsafeShiftR` epMaterScale ep
-
--- We give bonus also for pawn promotion squares, if the pawn is near enough to promote
--- Give as parameter bitboards for all pawns, white pawns and black pawns for performance
-kingPawnsBonus :: Square -> BBoard -> BBoard -> BBoard -> Int
-kingPawnsBonus !ksq !alp !wpass !bpass = bonus
-    where !bpsqs = sum $ map (pawnBonus . squareDistance ksq) $ bbToSquares alp
-          !bqsqs = sum $ map (pawnBonus . squareDistance ksq)
-                       $ map promoW (bbToSquares wpass) ++ map promoB (bbToSquares bpass)
-          !bonus = bpsqs + bqsqs
-
--- This is a bonus for the king beeing near one corner
--- It's bigger when the enemy has more material (only pieces)
--- and when that corner has a pawn shelter
-kingMaterBonus :: Color -> BBoard -> Int -> Square -> Int
-kingMaterBonus c !myp !mat !ksq
-    | c == White = matFactor mat * prxw
-    | otherwise  = matFactor mat * prxb
-    where !prxw = prxWA + prxWH
-          !prxb = prxBA + prxBH
-          !prxWA = (unsafeShiftL (opawns shWA2) 1 + opawns shWA3) * (prxBoQ wa + prxBo wb)
-          !prxWH = (unsafeShiftL (opawns shWH2) 1 + opawns shWH3) * (prxBoQ wh + prxBo wg)
-          !prxBA = (unsafeShiftL (opawns shBA7) 1 + opawns shBA6) * (prxBoQ ba + prxBo bb)
-          !prxBH = (unsafeShiftL (opawns shBH7) 1 + opawns shBH6) * (prxBoQ bh + prxBo bg)
-          opawns = popCount . (.&. myp)
-          prxBo  = proxyBonus . squareDistance ksq
-          prxBoQ = flip unsafeShiftR 2 . prxBo
-          matFactor = unsafeAt matKCArr
-          -- The interesting squares and bitboards about king placement
-          wa = 0
-          wb = 1
-          wg = 6
-          wh = 7
-          ba = 56
-          bb = 57
-          bg = 62
-          bh = 63
-          -- roWA = row1 .&. (fileA .|. fileB .|. fileC)
-          -- roWH = row1 .&. (fileG .|. fileH)
-          -- roBA = row8 .&. (fileA .|. fileB .|. fileC)
-          -- roBH = row8 .&. (fileG .|. fileH)
-          shWA2 = row2 .&. (fileA .|. fileB .|. fileC)
-          shWA3 = row3 .&. (fileA .|. fileB .|. fileC)
-          shWH2 = row2 .&. (fileF .|. fileG .|. fileH)
-          shWH3 = row3 .&. (fileF .|. fileG .|. fileH)
-          shBA6 = row6 .&. (fileA .|. fileB .|. fileC)
-          shBA7 = row7 .&. (fileA .|. fileB .|. fileC)
-          shBH6 = row6 .&. (fileF .|. fileG .|. fileH)
-          shBH7 = row7 .&. (fileF .|. fileG .|. fileH)
-
--- Make it longer, for artificially increased distances
-proxyBonusArr :: UArray Int Int    -- 0   1  2  3  4  5  6  7
-proxyBonusArr = listArray (0, 15) $ [55, 20, 8, 4, 3, 2, 1] ++ repeat 0
-
-pawnBonusArr :: UArray Int Int     -- 0    1   2   3   4   5  6  7
-pawnBonusArr = listArray (0, 15) $ [220, 120, 70, 35, 23, 14, 7] ++ repeat 0
-
-proxyBonus :: Int -> Int
-proxyBonus = unsafeAt proxyBonusArr
-
-pawnBonus :: Int -> Int
-pawnBonus = unsafeAt pawnBonusArr
-
-matKCArr :: UArray Int Int   -- 0              5             10
-matKCArr = listArray (0, 63) $ [0, 0, 0, 1, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12] ++ repeat 12
-
------- Rookm placement points ------
-data RookPlc = RookPlc
-
-instance EvalItem RookPlc where
-    evalItem _ _ ew p _ mide = evalRookPlc p ew mide
-
-evalRookPlc :: Accum a => MyPos -> EvalWeights -> a -> a
-evalRookPlc p ew mide = acc (acc (acc mide (ewRookHOpen ew) ho) (ewRookOpen ew) op) (ewRookConn ew) rc
-    where !mRs = rooks p .&. me p
-          !mPs = pawns p .&. me p
-          (mho, mop) = foldr (perRook (pawns p) mPs) (0, 0) $ bbToSquares mRs
-          !yRs = rooks p .&. yo p
-          !yPs = pawns p .&. yo p
-          (yho, yop) = foldr (perRook (pawns p) yPs) (0, 0) $ bbToSquares yRs
-          !ho = mho - yho
-          !op = mop - yop
-          !mrc | myRAttacs p .&. me p .&. rooks p == 0 = 0
-               | otherwise                             = 1
-          !yrc | yoRAttacs p .&. yo p .&. rooks p == 0 = 0
-               | otherwise                             = 1
-          !rc = mrc - yrc
-
-perRook :: BBoard -> BBoard -> Square -> (Int, Int) -> (Int, Int)
-perRook allp myp rsq (ho, op)
-    | rco .&. allp == 0 = (ho,  op')
-    | rco .&. myp  == 0 = (ho', op)
-    | otherwise         = (ho,  op)
-    where !rco = rcolls `unsafeAt` (rsq .&. 0x7)
-          ho'  = ho + 1
-          op'  = op + 1
-          rcolls :: UArray Int BBoard
-          rcolls = listArray (0, 7) [ fileA, fileB, fileC, fileD, fileE, fileF, fileG, fileH ]
 
 ------ Mobility ------
 data Mobility = Mobility	-- "safe" moves
@@ -597,95 +487,6 @@ spaceVals = listArray (0, 24) $ map f [1..25]
     where f x = round $ spf * (sqrt x - 1)
           spf = 300 :: Double
 
--------- Attacks to adverse squares ----------
-data Advers = Advers
-
-instance EvalItem Advers where
-    evalItem _ _ ew p _ mide = adversDiff p ew mide
-
-adversDiff :: Accum a => MyPos -> EvalWeights -> a -> a
-adversDiff p ew mide = acc mide (ewAdvAtts ew) ad
-    where !ad = md - yd
-          !md = popCount $ myAttacs p .&. yoH
-          !yd = popCount $ yoAttacs p .&. myH
-          (myH, yoH) | moving p == White = (ah14, ah58)
-                     | otherwise         = (ah58, ah14)
-          ah14 = 0xFFFFFFFF
-          ah58 = 0xFFFFFFFF00000000
-
--------- Isolated pawns --------
-data Izolan = Izolan
-
-instance EvalItem Izolan where
-    evalItem _ _ ew p _ mide = isolDiff p ew mide
-
-isolDiff :: Accum a => MyPos -> EvalWeights -> a -> a
-isolDiff p ew mide = acc (acc mide (ewIsolPawns ew) nd) (ewIsolPassed ew) pd
-    where (!myr, !myp) = isol (pawns p .&. me p) (passed p)
-          (!yor, !yop) = isol (pawns p .&. yo p) (passed p)
-          !nd = myr - yor
-          !pd = myp - yop
-
-isol :: BBoard -> BBoard -> (Int, Int)
-isol ps pp = (ris, pis)
-    where !myp = ps .&. pp
-          !myr = ps `less` myp
-          !myf = bbLeft ps .|. bbRight ps
-          !myu = myf `unsafeShiftL` 8
-          !myd = myf `unsafeShiftR` 8
-          !myc = myf .|. myu .|. myd
-          !ris = popCount $ myr `less` myc
-          !pis = popCount $ myp `less` myc
-
--------- Backward pawns --------
-data Backward = Backward
-
-instance EvalItem Backward where
-    evalItem _ _ ew p _ mide = backDiff p ew mide
-
-backDiff :: Accum a => MyPos -> EvalWeights -> a -> a
-backDiff p ew mide
-    | moving p == White
-    = let wp = pawns p .&. me p
-          bp = pawns p .&. yo p
-          (bpw, bpow) = backPawns White wp bp (yoPAttacs p)
-          (bpb, bpob) = backPawns Black bp wp (myPAttacs p)
-          !bpd  = popCount bpw  - popCount bpb
-          !bpod = popCount bpow - popCount bpob
-      in acc (acc mide (ewBackPawns ew) bpd) (ewBackPOpen ew) bpod
-    | otherwise
-    = let bp = pawns p .&. me p
-          wp = pawns p .&. yo p
-          (bpw, bpow) = backPawns White wp bp (myPAttacs p)
-          (bpb, bpob) = backPawns Black bp wp (yoPAttacs p)
-          !bpd  = popCount bpb  - popCount bpw
-          !bpod = popCount bpob - popCount bpow
-      in acc (acc mide (ewBackPawns ew) bpd) (ewBackPOpen ew) bpod
-
-backPawns :: Color -> BBoard -> BBoard -> BBoard -> (BBoard, BBoard)
-backPawns White !mp !op !opa = (bp, bpo)
-    where fa = frontAttacksWhite mp
-          stops = mp `unsafeShiftL` 8
-          !bp  = stops .&. opa .&. complement fa;
-          !bpo = bp `less` shadowDown op
-backPawns Black !mp !op !opa = (bp, bpo)
-    where fa = frontAttacksBlack mp
-          stops = mp `unsafeShiftR` 8
-          !bp = stops .&. opa .&. complement fa;
-          !bpo = bp `less` shadowUp op
-
-frontAttacksWhite :: BBoard -> BBoard
-frontAttacksWhite !b = fa
-    where fal = bbLeft b
-          far = bbRight b
-          !fa = shadowUp (fal .|. far)	-- shadowUp is exclusive the original!
-
-frontAttacksBlack :: BBoard -> BBoard
-frontAttacksBlack !b = fa
-    where fal = bbLeft b
-          far = bbRight b
-          !fa = shadowDown (fal .|. far)	-- shadowUp is exclusive the original!
-
 ------ En prise ------
 -- enpHanging and enpEnPrise optimised (only mean) with Clop by running 4222
 -- games at 15+0.25 sec against pass3v, resulting in a Clop forecast of 62 +- 39 ELO
@@ -730,41 +531,6 @@ enPrise p ew mide = acc (acc (acc mide (ewEnpHanging ew) ha) (ewEnpEnPrise ew) e
           !ep =                3 * popCount epM + 5 * popCount epR + 9 * popCount epQ
           !at = popCount atP + 3 * popCount atM + 5 * popCount atR + 9 * popCount atQ
 
------- Last Line ------
-data LastLine = LastLine
-
-instance EvalItem LastLine where
-    evalItem _ _ ew p _ mide = lastline p ew mide
-
--- Only for minor figures (queen is free to stay where it wants)
--- Negative at the end: so that it falls stronger
-lastline :: Accum a => MyPos -> EvalWeights -> a -> a
-lastline p ew mide = acc mide (ewLastLinePenalty ew) cdiff
-    where !whl = popCount $ me p .&. cb
-          !bll = popCount $ yo p .&. cb
-          !cb = (knights p .|. bishops p) .&. lali
-          lali = 0xFF000000000000FF	-- approximation!
-          !cdiff = bll - whl
-
-{--
------- Knight & Rook correction according to own pawns ------
-data NRCorrection = NRCorrection
-
-instance EvalItem NRCorrection where
-    evalItem _ _ p _ = evalNRCorrection p
-    evalItemNDL _  = [("nrCorrection", ((0, 0), (0, 8)))]
-
--- This function seems to be already optimised
-evalNRCorrection :: MyPos -> [Int]
-evalNRCorrection p = [md]
-    where !wpc = popCount (pawns p .&. me p) - 5
-          !bpc = popCount (pawns p .&. yo p) - 5
-          !wnp = popCount (knights p .&. me p) * wpc * 6	-- 1/16 for each pawn over 5
-          !bnp = popCount (knights p .&. yo p) * bpc * 6	-- 1/16 for each pawn over 5
-          !wrp = - popCount (rooks p .&. me p) * wpc * 12	-- 1/8 for each pawn under 5
-          !brp = - popCount (rooks p .&. yo p) * bpc * 12	-- 1/8 for each pawn under 5
-          !md = wnp + wrp - bnp - brp
---}
 
 ------ Rook pawn weakness ------
 data RookPawn = RookPawn
