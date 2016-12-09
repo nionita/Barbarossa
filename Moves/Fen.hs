@@ -16,7 +16,7 @@ import Eval.BasicEval
 import Hash.Zobrist
 
 startFen :: String
-startFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR/ w KQkq - 0 1"
+startFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
 fenToTable :: String -> MyPos
 fenToTable fen = foldr setp emptyPos $ fenToAssocs fen
@@ -115,19 +115,29 @@ posLazy :: Color -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> 
 posLazy !co !ocp !tblack !tpawns !tknights !tbishops !trooks !tqueens !tkings
     | co == White = LazyBits {
                       _check = tcheck,
-                      _myPAttacs = twhPAtt, _myNAttacs = twhNAtt, _myBAttacs = twhBAtt,
-                      _myRAttacs = twhRAtt, _myQAttacs = twhQAtt, _myKAttacs = twhKAtt,
-                      _yoPAttacs = tblPAtt, _yoNAttacs = tblNAtt, _yoBAttacs = tblBAtt,
-                      _yoRAttacs = tblRAtt, _yoQAttacs = tblQAtt, _yoKAttacs = tblKAtt,
-                      _myAttacs  = twhAttacs, _yoAttacs = tblAttacs
+                      _myAttsBBs = AttBBs {
+                        _allAttacs = twhAttacs,
+                        _pAttacs = twhPAtt, _nAttacs = twhNAtt, _bAttacs = twhBAtt,
+                        _rAttacs = twhRAtt, _qAttacs = twhQAtt, _kAttacs = twhKAtt
+                      },
+                      _yoAttsBBs = AttBBs {
+                        _allAttacs = tblAttacs,
+                        _pAttacs = tblPAtt, _nAttacs = tblNAtt, _bAttacs = tblBAtt,
+                        _rAttacs = tblRAtt, _qAttacs = tblQAtt, _kAttacs = tblKAtt
+                      }
                   }
     | otherwise   = LazyBits {
                       _check = tcheck,
-                      _myPAttacs = tblPAtt, _myNAttacs = tblNAtt, _myBAttacs = tblBAtt,
-                      _myRAttacs = tblRAtt, _myQAttacs = tblQAtt, _myKAttacs = tblKAtt,
-                      _yoPAttacs = twhPAtt, _yoNAttacs = twhNAtt, _yoBAttacs = twhBAtt,
-                      _yoRAttacs = twhRAtt, _yoQAttacs = twhQAtt, _yoKAttacs = twhKAtt,
-                      _myAttacs  = tblAttacs, _yoAttacs = twhAttacs
+                      _myAttsBBs = AttBBs {
+                        _allAttacs  = tblAttacs,
+                        _pAttacs = tblPAtt, _nAttacs = tblNAtt, _bAttacs = tblBAtt,
+                        _rAttacs = tblRAtt, _qAttacs = tblQAtt, _kAttacs = tblKAtt
+                      },
+                      _yoAttsBBs = AttBBs {
+                        _allAttacs = twhAttacs,
+                        _pAttacs = twhPAtt, _nAttacs = twhNAtt, _bAttacs = twhBAtt,
+                        _rAttacs = twhRAtt, _qAttacs = twhQAtt, _kAttacs = twhKAtt
+                      }
                   }
     where !twhPAtt = bbToSquaresBB (pAttacs White) $ tpawns .&. white
           !twhNAtt = bbToSquaresBB nAttacs $ tknights .&. white

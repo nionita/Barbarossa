@@ -1,7 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 module Struct.Struct (
          BBoard, Square, ZKey, ShArray, MaArray, DbArray, Move(..),
-         Piece(..), Color(..), TabCont(..), MyPos(..), LazyBits(..),
+         Piece(..), Color(..), TabCont(..), MyPos(..), LazyBits(..), AttBBs(..),
          other, moving, epMask, fyMask, fyIncr, fyZero, mvMask, caRiMa,
          caRKiw, caRQuw, caRMKw, caRMQw, caRAKw, caRAQw, caRKib, caRQub, caRMKb, caRMQb, caRAKb, caRAQb,
          tabla, emptyPos, isReversible, remis50Moves, set50Moves, reset50Moves, addHalfMove,
@@ -10,7 +10,7 @@ module Struct.Struct (
          movePromoPiece, moveEnPasDel, makeEnPas, moveAddColor, moveAddPiece,
          makeCastleFor, makePromo, moveFromTo, showWord64,
          activatePromo, fromColRow, checkCastle, checkEnPas, toString,
-         myAttacs, yoAttacs, check,
+         myAttBBs, yoAttBBs, myAttacs, yoAttacs, check,
          myPAttacs, myNAttacs, myBAttacs, myRAttacs, myQAttacs, myKAttacs,
          yoPAttacs, yoNAttacs, yoBAttacs, yoRAttacs, yoQAttacs, yoKAttacs
     ) where
@@ -50,10 +50,14 @@ data MyPos = MyPos {
     lazyBits :: LazyBits	-- lazy of course
     }
 
-data LazyBits = LazyBits {
-    _myAttacs, _yoAttacs, _check :: !BBoard,		-- my & yours attacs, check
-    _myPAttacs, _myNAttacs, _myBAttacs, _myRAttacs, _myQAttacs, _myKAttacs :: !BBoard,
-    _yoPAttacs, _yoNAttacs, _yoBAttacs, _yoRAttacs, _yoQAttacs, _yoKAttacs :: !BBoard
+data AttBBs = AttBBs {
+    _allAttacs, _pAttacs, _nAttacs, _bAttacs, _rAttacs, _qAttacs, _kAttacs :: !BBoard
+    }
+    deriving Eq
+
+data LazyBits = LazyBits {		-- my & yours attacs, check
+    _check :: !BBoard,
+    _myAttsBBs, _yoAttsBBs :: !AttBBs
     }
     deriving Eq
 
@@ -62,20 +66,20 @@ myPAttacs, myNAttacs, myBAttacs, myRAttacs, myQAttacs, myKAttacs :: MyPos -> BBo
 yoPAttacs, yoNAttacs, yoBAttacs, yoRAttacs, yoQAttacs, yoKAttacs :: MyPos -> BBoard
 
 check     = _check     . lazyBits
-myAttacs  = _myAttacs  . lazyBits
-myPAttacs = _myPAttacs . lazyBits
-myNAttacs = _myNAttacs . lazyBits
-myBAttacs = _myBAttacs . lazyBits
-myRAttacs = _myRAttacs . lazyBits
-myQAttacs = _myQAttacs . lazyBits
-myKAttacs = _myKAttacs . lazyBits
-yoAttacs  = _yoAttacs  . lazyBits
-yoPAttacs = _yoPAttacs . lazyBits
-yoNAttacs = _yoNAttacs . lazyBits
-yoBAttacs = _yoBAttacs . lazyBits
-yoRAttacs = _yoRAttacs . lazyBits
-yoQAttacs = _yoQAttacs . lazyBits
-yoKAttacs = _yoKAttacs . lazyBits
+myAttacs  = _allAttacs  . _myAttsBBs . lazyBits
+myPAttacs = _pAttacs . _myAttsBBs . lazyBits
+myNAttacs = _nAttacs . _myAttsBBs . lazyBits
+myBAttacs = _bAttacs . _myAttsBBs . lazyBits
+myRAttacs = _rAttacs . _myAttsBBs . lazyBits
+myQAttacs = _qAttacs . _myAttsBBs . lazyBits
+myKAttacs = _kAttacs . _myAttsBBs . lazyBits
+yoAttacs  = _allAttacs  . _yoAttsBBs . lazyBits
+yoPAttacs = _pAttacs . _yoAttsBBs . lazyBits
+yoNAttacs = _nAttacs . _yoAttsBBs . lazyBits
+yoBAttacs = _bAttacs . _yoAttsBBs . lazyBits
+yoRAttacs = _rAttacs . _yoAttsBBs . lazyBits
+yoQAttacs = _qAttacs . _yoAttsBBs . lazyBits
+yoKAttacs = _kAttacs . _yoAttsBBs . lazyBits
 
 {-# INLINE myAttacs #-}
 {-# INLINE yoAttacs #-}
@@ -92,6 +96,12 @@ yoKAttacs = _yoKAttacs . lazyBits
 {-# INLINE yoRAttacs #-}
 {-# INLINE yoQAttacs #-}
 {-# INLINE yoKAttacs #-}
+
+myAttBBs, yoAttBBs :: MyPos -> AttBBs
+myAttBBs = _myAttsBBs . lazyBits
+yoAttBBs = _yoAttsBBs . lazyBits
+{-# INLINE myAttBBs #-}
+{-# INLINE yoAttBBs #-}
 
 instance Show MyPos where
    show p = "MyPos {" ++ concatMap showField [
@@ -203,12 +213,14 @@ emptyPos = MyPos {
         staticScore = 0, passed = 0, lazyBits = leb
     }
     where leb = LazyBits {
-        _myAttacs = 0, _yoAttacs = 0, _check = 0,
-        _myPAttacs = 0, _myNAttacs = 0, _myBAttacs = 0, _myRAttacs = 0,
-        _myQAttacs = 0, _myKAttacs = 0,
-        _yoPAttacs = 0, _yoNAttacs = 0, _yoBAttacs = 0, _yoRAttacs = 0,
-        _yoQAttacs = 0, _yoKAttacs = 0
-        }
+            _check = 0, _myAttsBBs = myleb, _yoAttsBBs = yoleb
+          }
+          myleb = AttBBs {
+            _allAttacs = 0,
+            _pAttacs = 0, _nAttacs = 0, _bAttacs = 0,
+            _rAttacs = 0, _qAttacs = 0, _kAttacs = 0
+          }
+          yoleb = myleb
 
 -- Stuff related to 50 moves rule
 {-# INLINE isReversible #-}

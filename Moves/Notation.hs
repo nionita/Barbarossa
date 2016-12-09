@@ -403,7 +403,7 @@ colRowToSquare :: Int -> Int -> Int
 colRowToSquare x y = y*8 + x
 
 posToFen :: MyPos -> String
-posToFen pos = unwords [lns, tmv, correct cast, ep, halb, rest]
+posToFen pos = unwords [init lns, tmv, correct cast, ep, halb, rest]
     where lns :: String
           lns = concat $ map (extline . foldl tra ("", 0))
                        $ map (\s -> map (tabla pos) [s..s+7]) $ reverse [0, 8 .. 56]

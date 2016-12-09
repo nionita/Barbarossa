@@ -613,10 +613,10 @@ beforeReadLoop = do
     ctxLog LogInfo "Time parameters:"
     tp <- asks tipars
     ctxLog LogInfo $ show tp
-    chg <- readChanging
-    let evst = evalst $ crtStatus chg
-    ctxLog LogInfo "Eval parameters and weights:"
-    ctxLog LogInfo $ show (esEParams evst)
+    -- chg <- readChanging
+    -- let evst = evalst $ crtStatus chg
+    -- ctxLog LogInfo "Eval parameters and weights:"
+    -- ctxLog LogInfo $ show (esEParams evst)
     -- forM_ (zip3 weightNames (esDWeightsM evst) (esDWeightsE evst))
     --    $ \(n, vm, ve) -> ctxLog LogInfo $! n ++ "\t" ++ show vm ++ "\t" ++ show ve
     bm <- liftIO $ hGetBuffering stdin

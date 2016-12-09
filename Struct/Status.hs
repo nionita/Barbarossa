@@ -10,9 +10,11 @@ module Struct.Status (
     EvalWeights(..),
     Accum(..),
     MidEnd(..),
-    Feats(..),
-    weightsMarker
+    Feats(..)
 ) where
+
+import Data.List (unzip4)
+import qualified Data.Vector.Unboxed as U
 
 import Struct.Struct
 import Struct.Config
@@ -33,7 +35,6 @@ data MyState = MyState {
     }
 
 data EvalState = EvalState {
-        esEParams   :: EvalParams,
         esEWeights  :: EvalWeights
     } deriving Show
 
@@ -72,47 +73,6 @@ tme a b = MidEnd a b
 instance Accum [Int] where
     acc is (MidEnd i _) _ = i:is
 
-weightsMarker :: EvalWeights
-weightsMarker = EvalWeights {
-          ewMaterialDiff    = tme  1 8,
-          ewKingSafe        = tme  2 0,
-          ewKingOpen        = tme  3 0,
-          ewKingPlaceCent   = tme  4 0,
-          ewKingPlacePwns   = tme  5 6,		-- max after ~12k Clop games (ELO +23 +- 12)
-          ewRookHOpen       = tme  6 202,
-          ewRookOpen        = tme  7 221,
-          ewRookConn        = tme  8  78,
-          ewMobilityKnight  = tme  9 71,	-- Evalo 200 steps:
-          ewMobilityBishop  = tme 10 33,	-- length 10, depth 6, batch 128
-          ewMobilityRook    = tme 11 26,
-          ewMobilityQueen   = tme 12  6,
-          ewCenterPAtts     = tme 13 68,
-          ewCenterNAtts     = tme 14 45,
-          ewCenterBAtts     = tme 15 39,
-          ewCenterRAtts     = tme 16 34,
-          ewCenterQAtts     = tme 17 59,
-          ewCenterKAtts     = tme 18 53,
-          ewSpace           = tme 19  0,
-          ewAdvAtts         = tme 20 16,
-          ewIsolPawns       = tme 21 (-122),
-          ewIsolPassed      = tme 22 (-160),
-          ewBackPawns       = tme 23 (-180),
-          ewBackPOpen       = tme 24    0,
-          ewEnpHanging      = tme 25 (-33),
-          ewEnpEnPrise      = tme 26 (-21),
-          ewEnpAttacked     = tme 27 (-13),
-          ewLastLinePenalty = tme 28 0,
-          ewBishopPair      = tme 29  388,
-          ewRedundanceRook  = tme 30 (-105),
-          ewRookPawn        = tme 31 (-40),
-          ewAdvPawn5        = tme 32  130,
-          ewAdvPawn6        = tme 33  500,
-          ewPawnBlockP      = tme 34 (-110),
-          ewPawnBlockO      = tme 35 (-27),
-          ewPawnBlockA      = tme 36 (-73),
-          ewPassPawnLev     = tme 37 9
-        }
-
 -- This is the parameter record for characteristics evaluation
 data EvalParams
     = EvalParams {
@@ -132,8 +92,12 @@ data EvalParams
           epPassYoCtrl :: !Int
       } deriving Show
 
-data EvalWeights
-    = EvalWeights {
+-- EvalWeights consist now of 4 vectors with weights for:
+-- moving/mid, moving/end, other/mid, other/end
+data EvalWeights = EvalWeights (U.Vector Int) (U.Vector Int) (U.Vector Int) (U.Vector Int)
+    deriving Show
+
+{-
           ewMaterialDiff    :: !MidEnd,
           ewKingSafe        :: !MidEnd,
           ewKingOpen        :: !MidEnd,
@@ -172,6 +136,7 @@ data EvalWeights
           ewPawnBlockA      :: !MidEnd,
           ewPassPawnLev     :: !MidEnd
       } deriving Show
+-}
 
 instance CollectParams EvalParams where
     type CollectFor EvalParams = EvalParams
@@ -228,7 +193,87 @@ collectEvalParams (s, v) ep = lookApply s v ep [
 
 instance CollectParams EvalWeights where
     type CollectFor EvalWeights = EvalWeights
-    npColInit = EvalWeights {
+    npColInit = initEvalWeights
+    npColParm = collectEvalWeights
+    npSetParm = id
+
+initEvalWeights :: EvalWeights
+initEvalWeights = EvalWeights (U.fromList mm) (U.fromList me) (U.fromList om) (U.fromList oe)
+    where (mm, me, om, oe)
+              = unzip4 [
+                    {- MatPawns -}   (800, 800, -800, -800),
+                    {- MatKnights -} (2880, 2000, -2880, -2000),
+                    {- MatBishops -} (2880, 2880, -2880, -2880),
+                    {- MatRooks -}   (4400, 4400, -4400, -4400),
+                    {- MatQueens -}  (8000, 8000, -8000, -8000),
+                    {- KopBAtts -}   (40, 0, -40, 0),
+                    {- KopRAtts -}   (80, 0, -80, 0),
+                    {- KipRank -}    (800, 0, -800, 0),
+                    {- KipFilc -}    (100, 0, -100, 0),
+                    {- KipMissSh -}  (500, 0, -500, 0),
+                    {- KipMissPs -}  (100, 0, -100, 0),
+                    {- RopHOpen -}   (240, 240, -240, -240),
+                    {- RopOpen -}    (320, 320, -320, -320),
+                    {- RopConn -}    (400, 400, -400, -400),
+                    {- IsoPawnRow -} (40, 40, -40, -40),
+                    {- IsoPPDefdd -} (20, 20, -20, -20),
+                    {- IsoSupPwns -} (10, 10, -10, -10),
+                    {- PamAttacks -} (15, 15, -15, -15),
+                    {- PamMoves -}   (20, 20, -20, -20),
+                    {- AdvPawns5 -}  (200, 200, -200, -200),
+                    {- AdvPawns6 -}  (400, 400, -400, -400),
+                    {- BapClosed -}  (-280, -280, 280, 280),
+                    {- BapOpen -}    (-320, -400, 320, 400),
+                    {- AdvAtts -}    (40, 40, -40, -40),
+                    {- MarKnights -} (-300, -300, 300, 300),
+                    {- MarBishops -} (-200, -200, 200, 200),
+                    {- MobKnights -} (80, 80, -80, -80),
+                    {- MobBishops -} (120, 60, -120, -60),
+                    {- MobRooks -}   (10, 40, -10, -40),
+                    {- MobQueens -}  (3, 11, -3, -11),
+                    {- SpaSafe -}    (80, 0, -80, 0),
+                    {- SpaBehind -}  (80, 0, -80, 0),
+                    {- CenPawns -}   (90, 10, -90, -10),
+                    {- CenKnights -} (120, 50, -120, -50),
+                    {- CenBishops -} (140, 60, -140, -60),
+                    {- CenRooks -}   (50, 30, -50, -30),
+                    {- CenQueens -}  (10, 120, -10, -120),
+                    {- CenKing -}    (0, 120, 0, -120),
+                    {- EnpQP -}      (-400, -400, 800, 800),
+                    {- EnpRP -}      (-200, -200, 400, 400),
+                    {- EnpMP -}      (-100, -100, 200, 200),
+                    {- EnpQM -}      (-300, -300, 600, 600),
+                    {- EnpRM -}      (-100, -100, 200, 200),
+                    {- KisZPAtts -}  (80, 0, -90, 0),
+                    {- KisZNAtts -}  (160, 0, -180, 0),
+                    {- KisZBAtts -}  (180, 0, -200, 0),
+                    {- KisZRAtts -}  (200, 0, -220, 0),
+                    {- KisZQAtts -}  (300, 0, -300, 0),
+                    {- KisFree -}    (-100, 0, 100, 0),
+                    {- KisPPAtts -}  (20, 0, -20, 0),
+                    {- KisPNAtts -}  (40, 0, -40, 0),
+                    {- KisPBAtts -}  (50, 0, -50, 0),
+                    {- KisPRAtts -}  (90, 0, -90, 0),
+                    {- KisPQAtts -}  (150, 0, -150, 0),
+                    {- KisPStorm -}  (50, 0, -50, 0),
+                    {- PapBehind1 -} (50, 250, -50, -250),
+                    {- PapBlocked1 -}(-40, -80, 40, 80),
+                    {- PapCtrl1 -}   (50, 250, -50, -250),
+                    {- PapRBehind1 -}(50, 250, -50, -250),
+                    {- PapAKDist1 -} (0, 50, 0, -50),
+                    {- PapBehind2 -} (30, 150, -30, -150),
+                    {- PapBlocked2 -}(-25, -50, 25, 50),
+                    {- PapCtrl2 -}   (30, 150, -30, -150),
+                    {- PapRBehind2 -}(30, 150, -30, -150),
+                    {- PapAKDist2 -} (0, 30, 0, -30),
+                    {- PapBehind3 -} (20, 100, -20, -100),
+                    {- PapBlocked3 -}(-15, -30, 15, 30),
+                    {- PapCtrl3 -}   (20, 100, -20, -100),
+                    {- PapRBehind3 -}(20, 100, -20, -100),
+                    {- PapAKDist3 -} (0, 20, 0, -20)
+                    ]
+
+{-
           ewMaterialDiff    = tme 8 8,
           ewKingSafe        = tme 1 0,
           ewKingOpen        = tme 5 0,
@@ -267,11 +312,11 @@ instance CollectParams EvalWeights where
           ewPawnBlockA      = tme (-14) (-73),
           ewPassPawnLev     = tme 0 9
         }
-    npColParm = collectEvalWeights
-    npSetParm = id
+-}
 
 collectEvalWeights :: (String, Double) -> EvalWeights -> EvalWeights
-collectEvalWeights (s, v) ew = lookApply s v ew [
+collectEvalWeights (s, v) ew = ew
+{- lookApply s v ew [
         ("mid.kingSafe",       setMidKingSafe),
         ("end.kingSafe",       setEndKingSafe),
         ("mid.kingOpen",       setMidKingOpen),
@@ -417,3 +462,4 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
           setEndPawnBlockA      v' ew' = ew' { ewPawnBlockA      = (ewPawnBlockA      ew') { end = round v' }}
           setMidPassPawnLev     v' ew' = ew' { ewPassPawnLev     = (ewPassPawnLev     ew') { mid = round v' }}
           setEndPassPawnLev     v' ew' = ew' { ewPassPawnLev     = (ewPassPawnLev     ew') { end = round v' }}
+-}

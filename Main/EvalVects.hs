@@ -147,11 +147,10 @@ filterFile :: FilePath -> FilePath -> Int -> Maybe Int -> Maybe Int -> CtxIO ()
 filterFile fi fo depth ms mn = do
     chg <- readChanging
     let crts = crtStatus chg
-        mfi = markerEval (evalst crts) initPos
     lift $ do
         putStrLn $ "Vectorizing " ++ fi
         putStrLn $ "Results to  " ++ fo
-        putStrLn $ "Marker: " ++ show mfi
+        putStrLn $ "Marker: " ++ show markerEval
     hi <- liftIO $ openFile fi ReadMode
     ho <- liftIO $ openFile fo WriteMode
     case ms of
@@ -197,7 +196,7 @@ oracleAndFeats depth crts hi ho mn k = do
            -- Search to depth:
            (path, sc, _, _, fstate) <- bestMoveCont depth 0 mystate Nothing [] []
            when (not $ null path) $ do
-               let (Feats ph fts) = featsEval (evalst crts) pos
+               let (ph, fts) = featsEval pos
                    sts = evalState (posEval pos) (evalst crts)
                    n   = nodes $ stats fstate
                lift $ hPutStrLn ho $ show sts ++ " " ++ show ph ++ " "
