@@ -34,13 +34,13 @@ useAspirWin = False
 
 -- Some fix search parameter
 scoreGrain, depthForCM, maxDepthExt, minPvDepth :: Int
-useTTinPv, useTTinQS :: Bool
+useTTinPv, readTTinQS :: Bool
 scoreGrain  = 4	-- score granularity
 depthForCM  = 7 -- from this depth inform current move
 maxDepthExt = 3 -- maximum depth extension
 useTTinPv   = False	-- retrieve from TT in PV?
 minPvDepth  = 2		-- from this depth we use alpha beta search
-useTTinQS   = False
+readTTinQS  = True
 
 -- Parameters for late move reduction:
 lmrActive :: Bool
@@ -473,17 +473,6 @@ insertToPvs d p ps@(q:qs)
           pmate   = pnearmate $ pvPath p
           qmate   = pnearmate $ pvPath q
 
-{--
-{-# INLINE mustQSearch #-}
-mustQSearch :: Int -> Int -> Search (Int, Int)
-mustQSearch !a !b = do
-    nodes0 <- gets (sNodes . stats)
-    v <- pvQSearch a b 0
-    nodes1 <- gets (sNodes . stats)
-    let deltan = nodes1 - nodes0
-    return (v, deltan)
---}
-
 checkFailHard :: String -> Int -> Int -> Int -> Search ()
 checkFailHard s a b c =
     when (c < a || c > b) $ lift
@@ -492,10 +481,8 @@ checkFailHard s a b c =
 -- PV Search
 pvSearch :: NodeState -> Int -> Int -> Int -> Search Path
 pvSearch _ !a !b !d | d <= 0 = do
-    -- (v, ns) <- mustQSearch a b
     v <- pvQSearch a b 0
     checkFailHard "QS" a b v
-    -- when (minToStore == 0) $ lift $ ttStore 0 2 v (Move 0) ns
     return $ pathFromScore ("pvQSearch 1:" ++ show v) v	-- ok: fail hard in QS
 pvSearch nst !a !b !d = do
     let !inPv = crtnt nst == PVNode
@@ -563,10 +550,8 @@ pvSearch nst !a !b !d = do
 -- PV Zero Window
 pvZeroW :: NodeState -> Int -> Int -> Int -> Bool -> Search Path
 pvZeroW !_ !b !d !_ _ | d <= 0 = do
-    -- (v, ns) <- mustQSearch bGrain b
     v <- pvQSearch bGrain b 0
     checkFailHard "QS" bGrain b v
-    -- when (minToStore == 0) $ lift $ ttStore 0 2 v (Move 0) ns
     return $ pathFromScore ("pvQSearch 21:" ++ show v) v
     where !bGrain = b - scoreGrain
 pvZeroW !nst !b !d !lastnull redu = do
@@ -1022,24 +1007,24 @@ trimax a b x
 -- PV Quiescent Search
 pvQSearch :: Int -> Int -> Int -> Search Int
 pvQSearch !a !b !c = do
-    -- qindent $ "=> " ++ show a ++ ", " ++ show b
     -- TODO: use e as first move if legal
     -- (hdeep, tp, hsc, e, _) <- reTrieve >> lift ttRead
     (hdeep, tp, hsc, _, _)
-        <- if useTTinQS
+        <- if readTTinQS
               then reTrieve >> lift ttRead
               else return (-1, undefined, undefined, undefined, undefined)
-    when (useTTinQS && hdeep < 0) reFail
+    when (readTTinQS && hdeep < 0) reFail
     -- tp == 1 => score >= hsc, so if hsc > a then we improved
     -- tp == 0 => score <= hsc, so if hsc <= asco then we fail low and
     --    can terminate the search
-    if useTTinQS && hdeep >= 0 && (
+    if readTTinQS && hdeep >= 0 && (
             tp == 2		-- exact score: always good
          || tp == 1 && hsc >= b	-- we will fail high
          || tp == 0 && hsc <= a	-- we will fail low
        )
        then reSucc 1 >> return (trimax a b hsc)
        else do
+           -- TODO: use hsc here too, when possible
            pos <- lift $ getPos
            if tacticalPos pos
               then do
@@ -1047,17 +1032,15 @@ pvQSearch !a !b !c = do
                   let edges = Alt $ es1 ++ es2
                   if noMove edges
                      then do
-                         n <- gets $ sNodes . stats
-                         lift $ do
-                             when collectFens $ finNode "MATE" n
-                             when useTTinQS $ do
-                                 let typ = 2
-                                 ttStore 0 typ (-mateScore) (Move 0) 1
+                         when collectFens $ do
+                             n <- gets $ sNodes . stats
+                             lift $ finNode "MATE" n
                          return $! trimax a b (-mateScore)
                      else if c >= qsMaxChess
                              then do
-                                 n <- gets $ sNodes . stats
-                                 when collectFens $ lift $ finNode "ENDL" n
+                                 when collectFens $ do
+                                     n <- gets $ sNodes . stats
+                                     lift $ finNode "ENDL" n
                                  return $! trimax a b inEndlessCheck
                              else do
                                  -- for check extensions in case of very few moves (1 or 2):
@@ -1065,52 +1048,34 @@ pvQSearch !a !b !c = do
                                  -- if 2 moves: no extension
                                  let !esc = lenmax2 $ unalt edges
                                      !nc = c + esc - 1
-                                 sc <- pvQLoop b nc a edges
-                                 when (useTTinQS && sc <= a) $ lift $ do
-                                     let typ = 0
-                                     ttStore 0 typ sc (Move 0) 1
-                                 return sc
+                                 pvQLoop b nc a edges
               else do
                   let !stp = staticScore pos
                   if stp >= b
                      then do
-                         n <- gets $ sNodes . stats
-                         lift $ do
-                             when collectFens $ finNode "BETA" n
-                             when useTTinQS $ do
-                                 let typ = 1
-                                 ttStore 0 typ b (Move 0) 1
+                         when collectFens $ do
+                             n <- gets $ sNodes . stats
+                             lift $ finNode "BETA" n
                          return b
                      else do
                          !qsdelta <- lift qsDelta
                          if stp + qsdelta + qsDeltaMargin < a
                              then do
-                                 n <- gets $ sNodes . stats
-                                 lift $ do
-                                     when collectFens $ finNode "DELT" n
-                                     when useTTinQS $ do
-                                         let typ = 0
-                                         ttStore 0 typ a (Move 0) 1
+                                 when collectFens $ do
+                                     n <- gets $ sNodes . stats
+                                     lift $ finNode "DELT" n
                                  return a
                              else do
                                  edges <- liftM Alt $ lift genTactMoves
                                  if noMove edges
                                     then do	-- no more captures
-                                        n <- gets $ sNodes . stats
-                                        lift $ do
-                                            when collectFens $ finNode "NOCA" n
-                                            when useTTinQS $ do
-                                                let typ = 2
-                                                ttStore 0 typ stp (Move 0) 1
+                                        when collectFens $ do
+                                            n <- gets $ sNodes . stats
+                                            lift $ finNode "NOCA" n
                                         return $! trimax a b stp
-                                    else do
-                                        sc <- if stp > a
-                                                 then pvQLoop b c stp edges
-                                                 else pvQLoop b c a   edges
-                                        when (useTTinQS && sc <= a) $ lift $ do
-                                            let typ = 0
-                                            ttStore 0 typ sc (Move 0) 1
-                                        return sc
+                                    else if stp > a
+                                            then pvQLoop b c stp edges
+                                            else pvQLoop b c a   edges
     where lenmax2 (_:_:_) = 2
           lenmax2 _       = 1	-- we know here it is not empty
 
@@ -1137,17 +1102,9 @@ pvQInnerLoop !b c !a e = timeToAbort (True, b) $ do
                              return (-sc)
                 lift undoMove
                 if sc >= b
-                   then do
-                       when useTTinQS $ do
-                           let typ = 1
-                           lift $ ttStore 0 typ b (Move 0) 1
-                       return (True, b)
+                   then return (True, b)
                    else if sc > a
-                           then do
-                               when useTTinQS $ do
-                                   let typ = 2
-                                   lift $ ttStore 0 typ sc (Move 0) 1
-                               return (False, sc)
+                           then return (False, sc)
                            else return (False, a)
             else return (False, a)
 
