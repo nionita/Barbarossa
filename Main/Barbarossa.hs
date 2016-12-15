@@ -30,6 +30,7 @@ import Moves.Moves (movesInit)
 import Moves.Board (posFromFen, initPos)
 import Moves.History
 import Search.CStateMonad (execCState)
+import Search.AlbetaTypes
 import Eval.FileParams (makeEvalState)
 
 -- Name, authos, version and suffix:
@@ -37,7 +38,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.4.0"
-progVerSuff = "c4a"
+progVerSuff = "c4b"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -606,6 +607,10 @@ giveBestMove mvs = do
     if null mvs
         then answer $ infos "empty pv"
         else answer $ bestMove (head mvs) Nothing
+    cng <- readChanging
+    let mst = mstats $ crtStatus cng
+    ctxLog LogInfo $ "Search statistics:"
+    mapM_ (ctxLog LogInfo) $ formatStats mst
 
 beforeReadLoop :: CtxIO ()
 beforeReadLoop = do
@@ -679,7 +684,7 @@ formInfo itg = "info"
     ++ " pv" ++ concatMap (\m -> ' ' : toString m) (infoPv itg)
     where nps' = case infoTime itg of
                      0 -> ""
-                     x -> " nps " ++ show (infoNodes itg `div` x * 1000)
+                     x -> " nps " ++ show (infoNodes itg `div` fromIntegral x * 1000)
           isc = infoScore itg
 
 -- formInfoB :: InfoToGui -> String

@@ -336,13 +336,13 @@ kingPlace ep p ew mide = made (madm mide (ewKingPlaceCent ew) kcd) (ewKingPlaceP
           (!mpl, !ypl, !mpi, !ypi)
               | moving p == White = ( kingMaterBonus White mpawns mkm mks
                                     , kingMaterBonus Black ypawns ykm yks
-                                    , kingPawnsBonus mks (passed p) mpassed ypassed
-                                    , kingPawnsBonus yks (passed p) mpassed ypassed
+                                    , kingPawnsBonus mks mpassed ypassed
+                                    , kingPawnsBonus yks mpassed ypassed
                                     )
               | otherwise         = ( kingMaterBonus Black mpawns mkm mks
                                     , kingMaterBonus White ypawns ykm yks
-                                    , kingPawnsBonus mks (passed p) ypassed mpassed
-                                    , kingPawnsBonus yks (passed p) ypassed mpassed
+                                    , kingPawnsBonus mks ypassed mpassed
+                                    , kingPawnsBonus yks ypassed mpassed
                                     )
           !mro     = rooks p .&. me p
           !mrooks  = popCount mro
@@ -365,9 +365,11 @@ promoB s =       s .&. 7
 
 -- We give bonus also for pawn promotion squares, if the pawn is near enough to promote
 -- Give as parameter bitboards for all pawns, white pawns and black pawns for performance
-kingPawnsBonus :: Square -> BBoard -> BBoard -> BBoard -> Int
-kingPawnsBonus !ksq !alp !wpass !bpass = bonus
-    where !bpsqs = sum $ map (pawnBonus . squareDistance ksq) $ bbToSquares alp
+kingPawnsBonus :: Square -> BBoard -> BBoard -> Int
+kingPawnsBonus !ksq !wpass !bpass = bonus
+    where wns = bbToSquares (wpass `unsafeShiftL` 8)
+          bns = bbToSquares (bpass `unsafeShiftR` 8)
+          !bpsqs = sum $ map (pawnBonus . squareDistance ksq) $ wns ++ bns
           !bqsqs = sum $ map (pawnBonus . squareDistance ksq)
                        $ map promoW (bbToSquares wpass) ++ map promoB (bbToSquares bpass)
           !bonus = bpsqs + bqsqs
@@ -840,8 +842,9 @@ perPassedPawn gph ep p c sq
 
 perPassedPawnOk :: Int -> EvalParams -> MyPos -> Color -> Square -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
 perPassedPawnOk gph ep p c sq sqbb moi toi moia toia = val
-    where (!way, !behind) | c == White = (shadowUp sqbb, shadowDown sqbb)
-                          | otherwise  = (shadowDown sqbb, shadowUp sqbb)
+    where (!way, !behind, !asq)
+              | c == White = (shadowUp sqbb, shadowDown sqbb, sq+8)
+              | otherwise  = (shadowDown sqbb, shadowUp sqbb, sq-8)
           !mblo = popCount $ moi .&. way
           !yblo = popCount $ toi .&. way
           !rookBehind = behind .&. (rooks p .|. queens p)
@@ -864,13 +867,20 @@ perPassedPawnOk gph ep p c sq sqbb moi toi moia toia = val
           !pmax = (a0 * x + b0) * x + c0
           !myking = kingSquare (kings p) moi
           !yoking = kingSquare (kings p) toi
-          !mdis = squareDistance sq myking
-          !ydis = squareDistance sq yoking
-          !kingprx = ((mdis - ydis) * epPassKingProx ep * (256 - gph)) `unsafeShiftR` 8
+          !mdis = squareDistance myking asq
+          !ydis = squareDistance yoking asq
+          !kingprx = (kdDist (mdis - ydis) * epPassKingProx ep * (256 - gph)) `unsafeShiftR` 8
           !val1 = (pmax * (128 - kingprx) * (128 - epPassBlockO ep * mblo)) `unsafeShiftR` 14
           !val2 = (val1 * (128 - epPassBlockA ep * yblo)) `unsafeShiftR` 7
           !val  = (val2 * (128 + epPassMyCtrl ep * myctrl) * (128 - epPassYoCtrl ep * yoctrl))
                     `unsafeShiftR` 14
+
+kdDistArr :: UArray Int Int  --  -7 -6 -5 -4 -3 -2 -1  0  1  2  3  4  5  6  7
+kdDistArr = listArray (0, 14) $ [-4,-3,-3,-3,-2,-2,-1, 0, 1, 2, 2, 3, 3, 3, 4]
+
+kdDist :: Int -> Int
+kdDist = (kdDistArr `unsafeAt`) . (7+)
+
 
 ------ Advanced pawns, on 6th & 7th rows (not passed) ------
 data AdvPawns = AdvPawns

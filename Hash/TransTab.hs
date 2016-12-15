@@ -165,7 +165,7 @@ isSameKey !mmask !mzkey !ptr =
 -- Search a position in table based on ZKey
 -- The position ZKey determines the cell where the TT entry should be, and there we do a linear search
 -- (i.e. 4 comparisons in case of a miss)
-readCache :: Addr# -> IO (Maybe (Int, Int, Int, Move, Int))
+readCache :: Addr# -> IO (Maybe (Int, Int, Int, Move, Int64))
 #if __GLASGOW_HASKELL__ >= 708
 readCache addr = if isTrue# (eqAddr# addr nullAddr#)
 #else
@@ -197,7 +197,7 @@ retrieveEntry tt zkey =
 -- That's why we choose the order in second word like it is (easy comparison)
 -- Actually we always search in the whole cell in the hope to find the zkey and replace it
 -- but also keep track of the weakest entry in the cell, which will be replaced otherwise
-writeCache :: Cache -> ZKey -> Int -> Int -> Int -> Move -> Int -> IO ()
+writeCache :: Cache -> ZKey -> Int -> Int -> Int -> Move -> Int64 -> IO ()
 writeCache !tt !zkey !depth !tp !score !move !nodes = do
     let bas   = zKeyToCell tt zkey
         gen   = gener tt
@@ -237,7 +237,7 @@ scoreReplaceLow gen lowc crt rep sco term cont
     where generation = lowc .&. generMsk
           lowm = lowc .&. 0xFFFF	-- mask the move
 
-quintToCacheEn :: Cache -> ZKey -> Int -> Int -> Int -> Move -> Int -> PCacheEn
+quintToCacheEn :: Cache -> ZKey -> Int -> Int -> Int -> Move -> Int64 -> PCacheEn
 quintToCacheEn !tt !zkey !depth !tp !score !(Move move) !nodes = pCE
     where w1 =   (zkey .&. zemask tt)
              .|. fromIntegral ((score .&. 0xFFFF) `unsafeShiftL` 2)
@@ -248,7 +248,7 @@ quintToCacheEn !tt !zkey !depth !tp !score !(Move move) !nodes = pCE
              .|. (fromIntegral move)
           !pCE = PCacheEn { hi = w1, lo = w2 }
 
-cacheEnToQuint :: PCacheEn -> (Int, Int, Int, Move, Int)
+cacheEnToQuint :: PCacheEn -> (Int, Int, Int, Move, Int64)
 cacheEnToQuint (PCacheEn { hi = w1, lo = w2 }) = (de, ty, sc, Move mv, no)
     where u32  = fromIntegral (w1 `unsafeShiftR` 2) :: Word32
           s16  = fromIntegral (u32 .&. 0xFFFF) :: Int16
