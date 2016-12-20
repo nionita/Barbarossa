@@ -11,13 +11,25 @@ Build-type:          Simple
 Cabal-version:       >=1.8
 
 Flag sse42
-  Description:	Enables profile support
+  Description:	Enable SSE4.2 support
   Default:	False
 
 Executable Barbarossa
   Main-is:	Main/Barbarossa.hs
-  Build-depends: base >= 4.5, array, old-time, containers, mtl, parsec, vector,
-                 vector-algorithms, random, directory, transformers, QuickCheck, text
+  Build-depends:
+      base >= 4.5,
+      array,
+      old-time,
+      containers,
+      mtl,
+      parsec,
+      vector,
+      vector-algorithms,
+      random,
+      directory,
+      transformers,
+      QuickCheck,
+      text
   Other-modules:
       Eval.BasicEval,
       Eval.Eval,
@@ -46,7 +58,9 @@ Executable Barbarossa
       Uci.UCI,
       Uci.UciGlue
   GHC-Options: -O2 -Wall
-               -funbox-strict-fields -threaded -rtsopts
+               -funbox-strict-fields
+               -threaded
+               -rtsopts -with-rtsopts=-N3
                -fspec-constr-count=24
                -funfolding-use-threshold=32
                -fno-warn-tabs
@@ -55,8 +69,6 @@ Executable Barbarossa
   CPP-Options: -DSMSTRICT
   if flag(sse42)
     GHC-Options: -msse4.2
-  else
-    GHC-Options: -with-rtsopts=-N3
 
 -- Executable Evolve
 --   Main-is:	Main/Evolve.hs
