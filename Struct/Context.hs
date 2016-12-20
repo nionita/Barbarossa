@@ -5,6 +5,7 @@ import Control.Concurrent.Chan
 import Control.Concurrent
 import Control.Monad.State.Strict
 import Control.Monad.Reader
+import Data.Int
 import System.Time
 
 import Struct.Struct
@@ -15,7 +16,7 @@ data InfoToGui = Info {
                     infoDepth :: Int,
                     -- infoSelDepth :: Int,
                     infoTime :: Int,
-                    infoNodes :: Int,
+                    infoNodes :: Int64,
                     infoPv :: [Move],
                     infoScore :: Int
                 }
@@ -144,7 +145,7 @@ currMilli ref = do
     return $ fromIntegral $ (s-ref)*1000 + ps `div` 1000000000
 
 -- Communicate the best path so far
-informGui :: Int -> Int -> Int -> [Move] -> CtxIO ()
+informGui :: Int -> Int -> Int64 -> [Move] -> CtxIO ()
 informGui sc tief nds path = do
     ctx <- ask
     chg <- readChanging

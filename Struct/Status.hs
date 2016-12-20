@@ -2,7 +2,6 @@
 {-# LANGUAGE TypeFamilies #-}
 
 module Struct.Status (
-    Stats(..),
     MyState(..),
     EvalState(..),
     EvalParams(..),
@@ -15,17 +14,14 @@ import Struct.Struct
 import Struct.Config
 import Moves.History
 import Hash.TransTab
-
-data Stats = Stats {
-        nodes :: !Int,
-        maxmvs :: !Int
-    } deriving Show
+import Search.AlbetaTypes
 
 data MyState = MyState {
-        stack :: [MyPos],	-- stack of played positions
-        hash  :: Cache,		-- transposition table
-        hist  :: History,	-- history table
-        stats :: !Stats,	-- statistics
+        stack  :: [MyPos],	-- stack of played positions
+        hash   :: Cache,	-- transposition table
+        hist   :: History,	-- history table
+        mstats :: SStats,	-- per move search search statistics
+        gstats :: SStats,	-- global search statistics
         evalst :: EvalState	-- eval status (parameter & statistics)
     }
 
@@ -96,6 +92,7 @@ data EvalWeights
           ewCenterRAtts     :: !MidEnd,
           ewCenterQAtts     :: !MidEnd,
           ewCenterKAtts     :: !MidEnd,
+          ewSpace           :: !MidEnd,
           ewAdvAtts         :: !MidEnd,
           ewIsolPawns       :: !MidEnd,
           ewIsolPassed      :: !MidEnd,
@@ -126,8 +123,8 @@ instance CollectParams EvalParams where
                     epMaterQueen = 13,
                     epMaterScale = 1,
                     epMaterBonusScale = 5,
-                    epPawnBonusScale  = 4,
-                    epPassKingProx    = 10,
+                    epPawnBonusScale  = 1,
+                    epPassKingProx    = 12,	-- max after ~12k Clop games (ELO +23 +- 12)
                     epPassBlockO = 11,
                     epPassBlockA = 17,
                     epPassMin    = 30,
@@ -174,40 +171,41 @@ instance CollectParams EvalWeights where
     npColInit = EvalWeights {
           ewMaterialDiff    = tme 8 8,
           ewKingSafe        = tme 1 0,
-          ewKingOpen        = tme 12 0,
+          ewKingOpen        = tme 5 0,
           ewKingPlaceCent   = tme 6 0,
-          ewKingPlacePwns   = tme 0 30,
+          ewKingPlacePwns   = tme 0 6,		-- max after ~12k Clop games (ELO +23 +- 12)
           ewRookHOpen       = tme 171 202,
           ewRookOpen        = tme 219 221,
           ewRookConn        = tme  96  78,
-          ewMobilityKnight  = tme 60 59,
-          ewMobilityBishop  = tme 59 60,
+          ewMobilityKnight  = tme 50 71,	-- Evalo 200 steps:
+          ewMobilityBishop  = tme 57 33,	-- length 10, depth 6, batch 128
           ewMobilityRook    = tme 28 26,
           ewMobilityQueen   = tme  4  6,
-          ewCenterPAtts     = tme 68 65,
-          ewCenterNAtts     = tme 52 48,
-          ewCenterBAtts     = tme 60 41,
-          ewCenterRAtts     = tme 11 36,
-          ewCenterQAtts     = tme  4 62,
-          ewCenterKAtts     = tme  0 56,
+          ewCenterPAtts     = tme 84 68,
+          ewCenterNAtts     = tme 49 45,
+          ewCenterBAtts     = tme 57 39,
+          ewCenterRAtts     = tme 10 34,
+          ewCenterQAtts     = tme  4 59,
+          ewCenterKAtts     = tme  0 53,
+          ewSpace           = tme  1  0,
           ewAdvAtts         = tme  3 16,
-          ewIsolPawns       = tme (-38) (-119),
-          ewIsolPassed      = tme (-60) (-153),
-          ewBackPawns       = tme (-102) (-182),
+          ewIsolPawns       = tme (-42) (-122),
+          ewIsolPassed      = tme (-60) (-160),
+          ewBackPawns       = tme (-120) (-180),
           ewBackPOpen       = tme (-35)    0,
           ewEnpHanging      = tme (-23) (-33),
           ewEnpEnPrise      = tme (-25) (-21),
-          ewEnpAttacked     = tme (-9) (-13),
+          ewEnpAttacked     = tme  (-9) (-13),
           ewLastLinePenalty = tme 115 0,
           ewBishopPair      = tme 363  388,
           ewRedundanceRook  = tme   0 (-105),
-          ewRookPawn        = tme (-51) (-42),
+          ewRookPawn        = tme (-50) (-40),
           ewAdvPawn5        = tme   10  130,
           ewAdvPawn6        = tme  440  500,
-          ewPawnBlockP      = tme (-116)(-105),
-          ewPawnBlockO      = tme (-23) (-27),
-          ewPawnBlockA      = tme (-14) (-73),
-          ewPassPawnLev     = tme 0 9
+          ewPawnBlockP      = tme (-124) (-110),
+          ewPawnBlockO      = tme  (-23) (-27),
+          ewPawnBlockA      = tme  (-14) (-73),
+          ewPassPawnLev     = tme  0 9
         }
     npColParm = collectEvalWeights
     npSetParm = id
@@ -248,6 +246,8 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
         ("end.centerQAtts",    setEndCenterQAtts),
         ("mid.centerKAtts",    setMidCenterKAtts),
         ("end.centerKAtts",    setEndCenterKAtts),
+        ("mid.space",          setMidSpace),
+        ("end.space",          setEndSpace),
         ("mid.adversAtts",     setMidAdvAtts),
         ("end.adversAtts",     setEndAdvAtts),
         ("mid.isolPawns",      setMidIsolPawns),
@@ -319,6 +319,8 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
           setEndCenterQAtts     v' ew' = ew' { ewCenterQAtts     = (ewCenterQAtts     ew') { end = round v' }}
           setMidCenterKAtts     v' ew' = ew' { ewCenterKAtts     = (ewCenterKAtts     ew') { mid = round v' }}
           setEndCenterKAtts     v' ew' = ew' { ewCenterKAtts     = (ewCenterKAtts     ew') { end = round v' }}
+          setMidSpace           v' ew' = ew' { ewSpace           = (ewSpace           ew') { mid = round v' }}
+          setEndSpace           v' ew' = ew' { ewSpace           = (ewSpace           ew') { end = round v' }}
           setMidAdvAtts         v' ew' = ew' { ewAdvAtts         = (ewAdvAtts         ew') { mid = round v' }}
           setEndAdvAtts         v' ew' = ew' { ewAdvAtts         = (ewAdvAtts         ew') { end = round v' }}
           setMidIsolPawns       v' ew' = ew' { ewIsolPawns       = (ewIsolPawns       ew') { mid = round v' }}

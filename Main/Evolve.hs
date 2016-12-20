@@ -4,7 +4,6 @@
 module Main (main) where
 
 import Prelude
--- import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Exception
 import Control.Monad (forM, forM_, when)
@@ -16,7 +15,6 @@ import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Maybe
 import Data.Ord (comparing)
--- import Data.Ratio
 import Data.Typeable
 import System.Directory
 import System.Environment (getArgs)
@@ -367,7 +365,8 @@ statePlay goon = do
 -- Give names to the candidates
 nameCandidates :: String -> Int -> [Vec] -> [(String, Vec)]
 nameCandidates evn cyc = zip (map label [1..])
-    where label i = evn ++ "-" ++ show cyc ++ "-" ++ show i ++ ".txt"
+    where label :: Int -> String
+          label i = evn ++ "-" ++ show cyc ++ "-" ++ show i ++ ".txt"
 
 writeCandidates :: [String] -> [(String, Vec)] -> IO ()
 writeCandidates pnames cs = do
@@ -476,11 +475,13 @@ getScore :: String -> (Int, Int, Int)
 getScore
     = listToTrio
     . map (read . snd)
-    . filter (even . fst)
+    . filter f
     . zip [0..]
     . take 5
     . drop 5
     . words
+    where f :: (Int, String) -> Bool
+          f = even . fst
 
 listToTrio :: [Int] -> (Int, Int, Int)
 listToTrio (x:y:z:_) = (x, y, z)

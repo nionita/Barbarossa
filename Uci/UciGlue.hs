@@ -6,7 +6,7 @@ module Uci.UciGlue (
     bestMoveCont
 ) where
 
-import Control.Monad.State.Lazy
+-- import Control.Monad.State.Lazy
 
 import qualified Search.CStateMonad as SM
 import Search.AlbetaTypes
@@ -34,8 +34,8 @@ bestMoveCont tiefe sttime stati lastsc lpv rmvs = do
                 stoptime  = sttime
                 }
     ((sc, path, rmvsf, timint), statf) <- SM.runCState (alphaBeta abc) stati
-    when (sc == 0) $ return ()
-    let n = nodes . stats $ statf
+    -- when (sc == 0) $ return ()
+    let n = sNodes $ mstats statf
     informGui sc tiefe n path
     ctxLog LogInfo $ "score " ++ show sc ++ " path " ++ show path
     return (path, sc, rmvsf, timint, statf)

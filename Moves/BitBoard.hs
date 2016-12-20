@@ -1,12 +1,15 @@
 {-# LANGUAGE BangPatterns #-}
 module Moves.BitBoard (
-    lsb, bbToSquares, less, firstOne, exactOne, bbToSquaresBB,
-    bbFoldr, shadowDown, shadowUp, uTestBit, uBit
+    lsb, bbToSquares, less, firstOne,
+    bbToSquaresBB,
+    shadowDown, shadowUp, uTestBit, uBit
+    -- exactOne,
+    -- bbFoldr
 ) where
 
 import Data.Array.Base
 import Data.Bits
-import Data.List.Stream (unfoldr)
+import Data.List (unfoldr)
 
 import Struct.Struct
 
@@ -15,10 +18,6 @@ import Struct.Struct
 {-# INLINE lsb #-}
 lsb :: BBoard -> BBoard
 lsb b = b .&. (-b)
-
-{-# INLINE exactOne #-}
-exactOne :: BBoard -> Bool
-exactOne = (==1) . popCount
 
 {-# INLINE less #-}
 less :: BBoard -> BBoard -> BBoard
@@ -67,13 +66,6 @@ extractSquare b = let lsbb = lsb b
                       b' = b .&. nlsbb
                   in (sq, b')
 
-{-# INLINE bbFoldr #-}
-bbFoldr :: (BBoard -> a -> a) -> a -> BBoard -> a
-bbFoldr f = go
-    where go !r 0 = r
-          go !r b = let lsbb = lsb b
-                    in go (f lsbb r) (b .&. complement lsbb)
-
 -- Because the normal Bits operations are all safe
 -- we define here the unsafe versions specialized for BBoard
 {-# INLINE uTestBit #-}
@@ -100,3 +92,16 @@ shadowUp !wp = wp3
           !wp1 = wp0 .|. (wp0 `unsafeShiftL`  8)
           !wp2 = wp1 .|. (wp1 `unsafeShiftL` 16)
           !wp3 = wp2 .|. (wp2 `unsafeShiftL` 32)
+
+{--
+{-# INLINE exactOne #-}
+exactOne :: BBoard -> Bool
+exactOne = (==1) . popCount
+
+{-# INLINE bbFoldr #-}
+bbFoldr :: (BBoard -> a -> a) -> a -> BBoard -> a
+bbFoldr f = go
+    where go !r 0 = r
+          go !r b = let lsbb = lsb b
+                    in go (f lsbb r) (b .&. complement lsbb)
+--}

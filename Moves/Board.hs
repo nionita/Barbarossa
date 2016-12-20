@@ -2,19 +2,17 @@
 module Moves.Board (
     posFromFen, initPos,
     isCheck, inCheck,
-    goPromo, hasMoves, moveIsCapture,
+    goPromo, moveIsCapture,
     castKingRookOk, castQueenRookOk,
-    genMoveCast, genMoveNCapt, genMoveTransf, genMoveFCheck, genMoveCaptWL,
+    genMoveCast, genMoveNCapt, genMovePromo, genMoveFCheck, genMoveCaptWL,
     genMoveNCaptToCheck,
     updatePos, checkOk, moveChecks,
     legalMove, alternateMoves,
     doFromToMove, reverseMoving
     ) where
 
-import Prelude hiding ((++), foldl, filter, map, concatMap, concat, head, tail, repeat, zip,
-                       zipWith, null, words, foldr, elem, lookup, any, takeWhile, iterate)
 import Data.Bits
-import Data.List.Stream
+import Data.List (sort, foldl')
 import Data.Word
 
 import Struct.Struct
@@ -47,32 +45,6 @@ goPromo p m
 movePassed :: MyPos -> Move -> Bool
 movePassed p m = passed p .&. (uBit $ fromSquare m) /= 0
 
--- Here it seems we have a problem when we are not in check but could move
--- only a pinned piece: then we are stale mate but don't know (yet)
--- In the next ply, when we try to find a move, we see that all moves are illegal
--- In this case we should take care in search that the score is 0!
-hasMoves :: MyPos -> Color -> Bool
-hasMoves !p c
-    | chk       = not . null $ genMoveFCheck p
-    | otherwise = anyMove
-    where hasPc = any (/= 0) $ map (pcapt . pAttacs c)
-                     $ bbToSquares $ pawns p .&. me p
-          hasPm = not . null $ pAll1Moves c (pawns p .&. me p) (occup p)
-          hasN = any (/= 0) $ map (legmv . nAttacs) $ bbToSquares $ knights p .&. me p
-          hasB = any (/= 0) $ map (legmv . bAttacs (occup p))
-                     $ bbToSquares $ bishops p .&. me p
-          hasR = any (/= 0) $ map (legmv . rAttacs (occup p))
-                     $ bbToSquares $ rooks p .&. me p
-          hasQ = any (/= 0) $ map (legmv . qAttacs (occup p))
-                     $ bbToSquares $ queens p .&. me p
-          !hasK = 0 /= (legal . kAttacs $ firstOne $ kings p .&. me p)
-          !anyMove = hasK || hasN || hasPm || hasPc || hasQ || hasR || hasB
-          chk = inCheck p
-          !yopiep = yo p .|. (epcas p .&. epMask)
-          legmv = (`less` me p)
-          pcapt = (.&. yopiep)
-          legal = (`less` yoAttacs p)
-
 genMoveNCapt :: MyPos -> [Move]
 genMoveNCapt !p = map (moveAddColor c)
                       $ concat [ nGenNC, bGenNC, rGenNC, qGenNC, pGenNC1, pGenNC2, kGenNC ]
@@ -102,9 +74,8 @@ genMoveNCapt !p = map (moveAddColor c)
 
 -- Generate only promotions (now only to queen) non captures
 -- The promotion captures are generated together with the other captures
-genMoveTransf :: MyPos -> [Move]
--- genMoveTransf !p = map (uncurry (makePromo Queen)) $ pGenC ++ pGenNC
-genMoveTransf !p = map (uncurry (makePromo Queen)) pGenNC
+genMovePromo :: MyPos -> [Move]
+genMovePromo !p = map (uncurry (makePromo Queen)) pGenNC
     where -- pGenC = concatMap (srcDests (pcapt . pAttacs c))
           --            $ bbToSquares $ pawns p .&. myfpc
           pGenNC = pAll1Moves c (pawns p .&. myfpc) (occup p)
@@ -196,8 +167,8 @@ genMoveFCheck !p
           chkAtt (QueenCheck f s)  = fAttacs s f ocp1
           -- This head is safe becase chklist is first checked in the pattern of the function
           (r1, r2) = case head chklist of	-- this is needed only when simple check
-                 NormalCheck Pawn sq   -> (beatAtP p (bit sq), [])  -- cannot block pawn
-                 NormalCheck Knight sq -> (beatAt  p (bit sq), [])  -- or knight check
+                 NormalCheck Pawn sq   -> (beatAtP p (uBit sq), [])  -- cannot block pawn
+                 NormalCheck Knight sq -> (beatAt  p (uBit sq), [])  -- or knight check
                  NormalCheck Bishop sq -> beatOrBlock Bishop p sq
                  NormalCheck Rook sq   -> beatOrBlock Rook p sq
                  QueenCheck pt sq      -> beatOrBlock pt p sq
@@ -272,7 +243,7 @@ blockAt p !bb = pawnBlockAt p bb ++ defendAt p bb
 -- Defend a check from a sliding piece: beat it or block it
 beatOrBlock :: Piece -> MyPos -> Square -> ([Move], [Move])
 beatOrBlock f !p sq = (beat, block)
-    where !beat = beatAt p $ bit sq
+    where !beat = beatAt p $ uBit sq
           !aksq = firstOne $ me p .&. kings p
           !line = findLKA f aksq sq
           !block = blockAt p line
@@ -280,7 +251,7 @@ beatOrBlock f !p sq = (beat, block)
 genMoveNCaptToCheck :: MyPos -> [(Square, Square)]
 genMoveNCaptToCheck p = genMoveNCaptDirCheck p ++ genMoveNCaptIndirCheck p
 
--- Todo: check with pawns (should be also without transformations)
+-- Todo: check with pawns (should be also without promotions)
 genMoveNCaptDirCheck :: MyPos -> [(Square, Square)]
 genMoveNCaptDirCheck p = concat [ qGenC, rGenC, bGenC, nGenC ]
     where nGenC = concatMap (srcDests (target nTar . nAttacs))
@@ -470,23 +441,15 @@ canMove Pawn p src dst
          map snd $ pAll1Moves col pw (occup p) ++ pAll2Moves col pw (occup p)
     | otherwise = pAttacs col src `uTestBit` dst
     where col = moving p
-          pw = bit src
+          pw = uBit src
 canMove fig p src dst = fAttacs src fig (occup p) `uTestBit` dst
 
+-- See http://stackoverflow.com/questions/47981/how-do-you-set-clear-and-toggle-a-single-bit-in-c-c
+-- I combined "Checking a bit" with "Changing the nth bit to x"
+-- We have also to clear dst bit
 mvBit :: Square -> Square -> BBoard -> BBoard
-mvBit !src !dst !w	-- = w `xor` ((w `xor` (shifted .&. nbsrc)) .&. mask)
-    | wsrc == 0 = case wdst of
-                      0 -> w
-                      _ -> w .&. nbdst
-    | otherwise = case wdst of
-                      0 -> w .&. nbsrc .|. bdst
-                      _ -> w .&. nbsrc
-    where bsrc = uBit src
-          !bdst = uBit dst
-          wsrc = w .&. bsrc
-          wdst = w .&. bdst
-          nbsrc = complement bsrc
-          nbdst = complement bdst
+mvBit !src !dst !w = (w `xor` mx) .&. (complement $ uBit src)
+    where !mx = ((complement ((w `unsafeShiftR` src) .&. 1) + 1) `xor` w) .&. (uBit dst)
 
 {-# INLINE moveAndClearEp #-}
 moveAndClearEp :: BBoard -> BBoard
@@ -559,7 +522,6 @@ doFromToMove m !p | moveIsEnPas m
           tdiag  = mvBit src dst (diag p) .&. nbdel
           tepcas = reset50Moves $ moveAndClearEp $ epcas p
           Busy col fig  = tabla p src	-- identify the moving piece
-          -- Busy _   Pawn = tabla p del	-- identify the captured piece (pawn)
           !epcl = epClrZob $ epcas p
           !zk = zobkey p `xor` epcl
           CA tzobkey tmater = chainAccum (CA zk (mater p)) [
@@ -613,7 +575,6 @@ doFromToMove m !p | moveIsPromo m
           sfile = fromSquare m .&. 0x7	-- see new coding!
           src = srank `unsafeShiftL` 3 .|. sfile
           dst = toSquare m
-          -- Busy col Pawn = tabla p src	-- identify the moving color (piece must be pawn)
           !pie = movePromoPiece m
           p0 = setPiece src col pie p
           tblack = mvBit src dst $ black p0
@@ -649,7 +610,7 @@ findLKA :: Piece -> Square -> Int -> BBoard
 findLKA Queen !ksq !psq
     | rAttacs bpsq ksq .&. bpsq == 0 = findLKA0 Bishop ksq psq
     | otherwise                      = findLKA0 Rook   ksq psq
-    where !bpsq = bit psq
+    where !bpsq = uBit psq
 findLKA pt !ksq !psq = findLKA0 pt ksq psq
 
 findLKA0 :: Piece -> Square -> Int -> BBoard
@@ -658,8 +619,8 @@ findLKA0 pt ksq psq
     | pt == Rook   = go rAttacs
     | otherwise    = 0	-- it will not be called with other pieces
     where go f = bb
-              where !kp = f (bit psq) ksq
-                    !pk = f (bit ksq) psq
+              where !kp = f (uBit psq) ksq
+                    !pk = f (uBit ksq) psq
                     !bb = kp .&. pk
 
 -- The new SEE functions (swap-based)

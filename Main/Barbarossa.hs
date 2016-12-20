@@ -30,14 +30,14 @@ import Moves.Moves (movesInit)
 import Moves.Board (posFromFen, initPos)
 import Moves.History
 import Search.CStateMonad (execCState)
--- import Eval.Eval (weightNames)
+import Search.AlbetaTypes
 import Eval.FileParams (makeEvalState)
 
 -- Name, authos, version and suffix:
 progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
-progVersion = "0.3.0"
+progVersion = "0.4.0"
 progVerSuff = ""
 
 data Options = Options {
@@ -255,7 +255,7 @@ interpret uci =
         UciNewGame -> goOn doUciNewGame
         Position p mvs -> goOn (doPosition p mvs)
         Go cmds    -> goOn (doGo cmds)
-        Stop       -> goOn $ doStop True
+        Stop       -> goOn doStop
         Ponderhit  -> goOn doPonderhit
         SetOption o -> goOn (doSetOption o)
         _          -> goOn ignore
@@ -450,10 +450,6 @@ estimateMovesToGo :: Int -> Int
 estimateMovesToGo sc = estMvsToGo ! mvidx
     where mvidx = min 8 $ abs sc `div` 100
 
--- Some parameters (until we have a good solution)
--- clearHash :: Bool
--- clearHash = False
-
 newThread :: CtxIO () -> CtxIO ThreadId
 newThread a = do
     ctx <- ask
@@ -499,17 +495,6 @@ ctxCatch a f = do
     ctx <- ask
     liftIO $ catch (runReaderT a ctx)
             (\e -> runReaderT (f e) ctx)
-
--- internalStop :: Int -> CtxIO ()
--- internalStop ms = do
---     let sleep = ms * 1000
---     ctxLog DebugUci $ "Internal stop clock started for " ++ show ms ++ " ms"
---     liftIO $ threadDelay sleep
---     ctxLog DebugUci "Internal stop clock ended"
---     doStop False
-
--- betterSc :: Int
--- betterSc = 25
 
 -- Search with the given depth
 searchTheTree :: Int -> Int -> Int -> Int -> Int -> Int -> Maybe Int -> [Move] -> [Move] -> CtxIO Int
@@ -622,6 +607,10 @@ giveBestMove mvs = do
     if null mvs
         then answer $ infos "empty pv"
         else answer $ bestMove (head mvs) Nothing
+    cng <- readChanging
+    let mst = mstats $ crtStatus cng
+    ctxLog LogInfo $ "Search statistics:"
+    mapM_ (ctxLog LogInfo) $ formatStats mst
 
 beforeReadLoop :: CtxIO ()
 beforeReadLoop = do
@@ -640,14 +629,13 @@ beforeReadLoop = do
 beforeProgExit :: CtxIO ()
 beforeProgExit = return ()
 
-doStop :: Bool -> CtxIO ()
-doStop extern = do
+doStop :: CtxIO ()
+doStop = do
     chg <- readChanging
     modifyChanging (\c -> c { working = False, compThread = Nothing })
     case compThread chg of
         Just tid -> do
-            -- when extern $ liftIO $ threadDelay 500000  -- warte 0.5 Sec.
-            when extern $ liftIO $ threadDelay 100000  -- warte 0.1 Sec.
+            -- when extern $ liftIO $ threadDelay 100000  -- warte 0.1 Sec.
             liftIO $ killThread tid
             case forGui chg of
                 Just ifg -> giveBestMove $ infoPv ifg
@@ -696,7 +684,7 @@ formInfo itg = "info"
     ++ " pv" ++ concatMap (\m -> ' ' : toString m) (infoPv itg)
     where nps' = case infoTime itg of
                      0 -> ""
-                     x -> " nps " ++ show (infoNodes itg `div` x * 1000)
+                     x -> " nps " ++ show (infoNodes itg `div` fromIntegral x * 1000)
           isc = infoScore itg
 
 -- formInfoB :: InfoToGui -> String

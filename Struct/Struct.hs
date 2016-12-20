@@ -1,15 +1,19 @@
 {-# LANGUAGE BangPatterns #-}
 module Struct.Struct (
          BBoard, Square, ZKey, ShArray, MaArray, DbArray, Move(..),
-         Piece(..), Color(..), TabCont(..), MyPos(..),
+         Piece(..), Color(..), TabCont(..), MyPos(..), LazyBits(..),
          other, moving, epMask, fyMask, fyIncr, fyZero, mvMask, caRiMa,
          caRKiw, caRQuw, caRMKw, caRMQw, caRAKw, caRAQw, caRKib, caRQub, caRMKb, caRMQb, caRAKb, caRAQb,
          tabla, emptyPos, isReversible, remis50Moves, set50Moves, reset50Moves, addHalfMove,
          fromSquare, toSquare, isSlide, isDiag, isKkrq,
          moveIsNormal, moveIsCastle, moveIsPromo, moveIsEnPas, moveColor, movePiece,
          movePromoPiece, moveEnPasDel, makeEnPas, moveAddColor, moveAddPiece,
+         moveHisAdr, moveHisOfs,
          makeCastleFor, makePromo, moveFromTo, showWord64,
-         activatePromo, fromColRow, checkCastle, checkEnPas, toString
+         activatePromo, fromColRow, checkCastle, checkEnPas, toString,
+         myAttacs, yoAttacs, check,
+         myPAttacs, myNAttacs, myBAttacs, myRAttacs, myQAttacs, myKAttacs,
+         yoPAttacs, yoNAttacs, yoBAttacs, yoRAttacs, yoQAttacs, yoKAttacs
     ) where
 
 import Data.Array.Unboxed
@@ -31,7 +35,6 @@ type DbArray = UArray Int BBoard
 data Piece = Pawn | Knight | Bishop | Rook | Queen | King
     deriving (Eq, Ord, Enum, Ix, Show)
 
--- data Color = White | Black deriving (Eq, Show, Ord, Enum, Ix)
 data Color = White | Black deriving (Eq, Show)
 
 data TabCont = Empty
@@ -41,15 +44,55 @@ data TabCont = Empty
 data MyPos = MyPos {
     black, slide, kkrq, diag, epcas :: !BBoard, -- These fields completely represents of a position
     zobkey :: !ZKey,	-- hash key
-    mater :: !Int,	-- material balance
     me, yo, occup, kings, pawns :: !BBoard,	-- further heavy used bitboards computed for efficiency
     queens, rooks, bishops, knights, passed :: !BBoard,
-    myAttacs, yoAttacs, check :: BBoard,		-- my & yours attacs, check
-    myPAttacs, myNAttacs, myBAttacs, myRAttacs, myQAttacs, myKAttacs :: BBoard,
-    yoPAttacs, yoNAttacs, yoBAttacs, yoRAttacs, yoQAttacs, yoKAttacs :: BBoard,
-    staticScore :: Int
+    mater :: !Int,	-- material balance
+    staticScore :: Int,	-- lazy, not always needed
+    lazyBits :: LazyBits	-- lazy of course
+    }
+
+data LazyBits = LazyBits {
+    _myAttacs, _yoAttacs, _check :: !BBoard,		-- my & yours attacs, check
+    _myPAttacs, _myNAttacs, _myBAttacs, _myRAttacs, _myQAttacs, _myKAttacs :: !BBoard,
+    _yoPAttacs, _yoNAttacs, _yoBAttacs, _yoRAttacs, _yoQAttacs, _yoKAttacs :: !BBoard
     }
     deriving Eq
+
+myAttacs, yoAttacs, check :: MyPos -> BBoard
+myPAttacs, myNAttacs, myBAttacs, myRAttacs, myQAttacs, myKAttacs :: MyPos -> BBoard
+yoPAttacs, yoNAttacs, yoBAttacs, yoRAttacs, yoQAttacs, yoKAttacs :: MyPos -> BBoard
+
+check     = _check     . lazyBits
+myAttacs  = _myAttacs  . lazyBits
+myPAttacs = _myPAttacs . lazyBits
+myNAttacs = _myNAttacs . lazyBits
+myBAttacs = _myBAttacs . lazyBits
+myRAttacs = _myRAttacs . lazyBits
+myQAttacs = _myQAttacs . lazyBits
+myKAttacs = _myKAttacs . lazyBits
+yoAttacs  = _yoAttacs  . lazyBits
+yoPAttacs = _yoPAttacs . lazyBits
+yoNAttacs = _yoNAttacs . lazyBits
+yoBAttacs = _yoBAttacs . lazyBits
+yoRAttacs = _yoRAttacs . lazyBits
+yoQAttacs = _yoQAttacs . lazyBits
+yoKAttacs = _yoKAttacs . lazyBits
+
+{-# INLINE myAttacs #-}
+{-# INLINE yoAttacs #-}
+{-# INLINE check #-}
+{-# INLINE myPAttacs #-}
+{-# INLINE myNAttacs #-}
+{-# INLINE myBAttacs #-}
+{-# INLINE myRAttacs #-}
+{-# INLINE myQAttacs #-}
+{-# INLINE myKAttacs #-}
+{-# INLINE yoPAttacs #-}
+{-# INLINE yoNAttacs #-}
+{-# INLINE yoBAttacs #-}
+{-# INLINE yoRAttacs #-}
+{-# INLINE yoQAttacs #-}
+{-# INLINE yoKAttacs #-}
 
 instance Show MyPos where
    show p = "MyPos {" ++ concatMap showField [
@@ -86,7 +129,7 @@ instance Show MyPos where
             (yoKAttacs, "yoKAttacs")
             ]
           ++ "}"
-       where showField (f, sf) = " " ++ sf ++ " = " ++ showWord64 (f p)
+       where showField  (f, sf) = " " ++ sf ++ " = " ++ showWord64 (f p)
 
 {-
 Piece coding in MyPos (vertical over slide, kkrq and diag):
@@ -158,11 +201,15 @@ emptyPos = MyPos {
         zobkey = 0, mater = 0,
         me = 0, yo = 0, occup = 0, kings = 0, pawns = 0,
         queens = 0, rooks = 0, bishops = 0, knights = 0,
-        myAttacs = 0, yoAttacs = 0, check = 0,
-        myPAttacs = 0, myNAttacs = 0, myBAttacs = 0, myRAttacs = 0, myQAttacs = 0, myKAttacs = 0,
-        yoPAttacs = 0, yoNAttacs = 0, yoBAttacs = 0, yoRAttacs = 0, yoQAttacs = 0, yoKAttacs = 0,
-        staticScore = 0, passed = 0
+        staticScore = 0, passed = 0, lazyBits = leb
     }
+    where leb = LazyBits {
+        _myAttacs = 0, _yoAttacs = 0, _check = 0,
+        _myPAttacs = 0, _myNAttacs = 0, _myBAttacs = 0, _myRAttacs = 0,
+        _myQAttacs = 0, _myKAttacs = 0,
+        _yoPAttacs = 0, _yoNAttacs = 0, _yoBAttacs = 0, _yoRAttacs = 0,
+        _yoQAttacs = 0, _yoKAttacs = 0
+        }
 
 -- Stuff related to 50 moves rule
 {-# INLINE isReversible #-}
@@ -360,10 +407,15 @@ movePiece m@(Move w)
     | otherwise      = error $ "Wrong move type: " ++ showHex w ""
     where r = fromIntegral $ (w `unsafeShiftR` 12) .&. 0x7
 
-{--
-moveHasFromSquare :: Move -> Bool
-moveHasFromSquare (Move w) = w .&. 0x7000 == 0x7000
---}
+-- For history purposes: quick 'n' dirty "piece"
+{-# INLINE moveHisAdr #-}
+moveHisAdr :: Move -> Int
+moveHisAdr (Move w) = fromIntegral $ (w `unsafeShiftR` 12) .&. 0x7
+
+-- For history purposes: quick 'n' dirty "color"
+{-# INLINE moveHisOfs #-}
+moveHisOfs :: Move -> Int
+moveHisOfs (Move w) = fromIntegral $ w `unsafeShiftR` 15
 
 -- {-# INLINE fromSquare #-}
 fromSquare :: Move -> Square
@@ -387,9 +439,6 @@ moveAddColor Black (Move w) = Move $ w .|. 0x8000
 moveAddPiece :: Piece -> Move -> Move
 moveAddPiece piece (Move w)
     = Move $ (fromIntegral (fromEnum piece) `unsafeShiftL` 12) .|. (w .&. 0x8FFF)
--- moveAddPiece piece m@(Move w) = Move $ (fromIntegral (fromEnum piece) `unsafeShiftL` 12) .|. w
-    -- | moveIsNormal m = Move $ (fromIntegral (fromEnum piece) `unsafeShiftL` 12) .|. w
-    -- | otherwise      = m
 
 checkCastle :: Move -> MyPos -> Move
 checkCastle m p
@@ -424,8 +473,7 @@ activatePromo b m = makePromo p f t
           chToPc _   = King	-- to eliminate warnings
 
 toString :: Move -> String
--- toString m = mvpiece : col sc : row sr : col dc : row dr : transf
-toString m = col sc : row sr : col dc : row dr : transf
+toString m = col sc : row sr : col dc : row dr : promo
     where s = fromSquare m
           d = toSquare m
           (sr, sc) = s `divMod` 8
@@ -434,13 +482,10 @@ toString m = col sc : row sr : col dc : row dr : transf
           ord1 = ord '1'
           col x = chr (orda + x)
           row x = chr (ord1 + x)
-          transf = [pcToCh (movePromoPiece m) | moveIsPromo m ]
+          promo = [pcToCh (movePromoPiece m) | moveIsPromo m ]
           pcToCh Queen  = 'q'
           pcToCh Rook   = 'r'
           pcToCh Bishop = 'b'
           pcToCh Knight = 'n'
           pcToCh Pawn   = 'p'	-- is used not only for promotion!
           pcToCh King   = 'k'
-          -- mvpc = pcToCh (movePiece m)
-          -- mvpiece | moveColor m == White = toUpper mvpc
-          --         | otherwise            = mvpc

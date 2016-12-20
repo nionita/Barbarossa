@@ -1,42 +1,81 @@
 Name:                Barbarossa
-Version:             0.3.0
+Version:             0.4.0
 Synopsis:            UCI chess engine written in Haskell
 License:             BSD3
 License-file:        LICENSE
 Author:              Nicu Ionita
 Maintainer:          nicu.ionita@acons.at
-Copyright:           Nicu Ionita 2013 - 2015
+Copyright:           Nicu Ionita 2013 - 2016
 Category:            Game
 Build-type:          Simple
 Cabal-version:       >=1.8
 
-Flag Profile
-  Description:	Enables profile support
+Flag sse42
+  Description:	Enable SSE4.2 support
   Default:	False
 
 Executable Barbarossa
   Main-is:	Main/Barbarossa.hs
-  Build-depends: base >= 4.5, array, old-time, containers, mtl, parsec, vector,
-                 random, stream-fusion, directory, transformers, QuickCheck, text
+  Build-depends:
+      base >= 4.5,
+      array,
+      old-time,
+      containers,
+      mtl,
+      parsec,
+      vector,
+      vector-algorithms,
+      random,
+      directory,
+      transformers,
+      QuickCheck,
+      text
+  Other-modules:
+      Eval.BasicEval,
+      Eval.Eval,
+      Eval.FileParams,
+      Hash.TransTab,
+      Hash.Zobrist,
+      Moves.Base,
+      Moves.BaseTypes,
+      Moves.BitBoard,
+      Moves.Board,
+      Moves.Fen,
+      Moves.GenMagics,
+      Moves.History,
+      Moves.Magics,
+      Moves.Moves,
+      Moves.Notation,
+      Moves.Pattern,
+      Moves.ShowMe,
+      Search.Albeta,
+      Search.AlbetaTypes,
+      Search.CStateMonad,
+      Struct.Config,
+      Struct.Context,
+      Struct.Status,
+      Struct.Struct,
+      Uci.UCI,
+      Uci.UciGlue
   GHC-Options: -O2 -Wall
-               -funbox-strict-fields -threaded -rtsopts
+               -funbox-strict-fields
+               -threaded
+               -rtsopts -with-rtsopts=-N3
                -fspec-constr-count=24
                -funfolding-use-threshold=32
-               -- -msse4.2
+               -fno-warn-tabs
                -- -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques
                -- -ddump-opt-cmm -ddump-asm
   CPP-Options: -DSMSTRICT
-  if flag(profile)
-    GHC-Options: -auto-all -with-rtsopts="-p"
-  else
-    -- GHC-Options: -with-rtsopts=-N2 -M256m -H128m
-    GHC-Options: -with-rtsopts=-N3
+  if flag(sse42)
+    GHC-Options: -msse4.2
 
-Executable Evolve
-  Main-is:	Main/Evolve.hs
-  Build-depends: base >= 4.5, async, transformers, directory, filepath, process,
-                 old-time, old-locale, containers, random
-  GHC-Options: -O2 -Wall -threaded
+-- Executable Evolve
+--   Main-is:	Main/Evolve.hs
+--   Build-depends: base >= 4.5, async, transformers, directory, filepath, process,
+--                  old-time, old-locale, containers, random
+--   GHC-Options: -O2 -Wall -threaded
+--                -fno-warn-tabs
 
 --Executable MMTO
 --  Main-is:	Main/MMTO.hs

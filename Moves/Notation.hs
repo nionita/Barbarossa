@@ -7,7 +7,7 @@ import Data.Char (ord, chr, toLower)
 
 import Struct.Struct
 import Moves.BitBoard
-import Moves.Muster
+import Moves.Pattern
 import Moves.Moves
 import Moves.Board
 
