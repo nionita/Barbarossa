@@ -1,4 +1,5 @@
 Barbarossa - a chess engine written completely in Haskell
+=========================================================
 
 Barbarossa is a UCI chess engine written completely in Haskell. UCI is one of 2 protocols used in the computer
 chess scene to communicate between a chess GUI and a chess engine. This way it is possible to write just the
@@ -22,6 +23,6 @@ futility pruning, late move reduction, internal iterative deepening.
 I still have a lot of ideas which could improve the strength of the engine, some of which address a higher speed
 of the calculations, and some, new chess related features, which may reduce the search tree.
 
-The last released version is Barbarossa v0.3.0 from begin of October.
+The last released version is Barbarossa v0.4.0 from December 2016.
 
 *) http://www.computerchess.org.uk/ccrl/404/
