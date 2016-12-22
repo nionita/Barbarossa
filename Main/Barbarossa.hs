@@ -37,8 +37,8 @@ import Eval.FileParams (makeEvalState)
 progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
-progVersion = "0.4.0"
-progVerSuff = ""
+progVersion = "0.5.0"
+progVerSuff = "to5"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -51,7 +51,7 @@ defaultOptions :: Options
 defaultOptions = Options {
         optConfFile = Nothing,
         optParams   = [],
-        optLogging  = LogNever,
+        optLogging  = LogInfo,
         optAFenFile = Nothing
     }
 
