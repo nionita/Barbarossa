@@ -169,7 +169,7 @@ collectEvalParams (s, v) ep = lookApply s v ep [
 instance CollectParams EvalWeights where
     type CollectFor EvalWeights = EvalWeights
     npColInit = EvalWeights {
-          ewMaterialDiff    = tme 8 8,
+          ewMaterialDiff    = tme 9 9,
           ewKingSafe        = tme 1 0,
           ewKingOpen        = tme 5 0,
           ewKingPlaceCent   = tme 6 0,
@@ -205,7 +205,7 @@ instance CollectParams EvalWeights where
           ewPawnBlockP      = tme (-124) (-110),
           ewPawnBlockO      = tme  (-23) (-27),
           ewPawnBlockA      = tme  (-14) (-73),
-          ewPassPawnLev     = tme  0 9
+          ewPassPawnLev     = tme  1 9
         }
     npColParm = collectEvalWeights
     npSetParm = id
