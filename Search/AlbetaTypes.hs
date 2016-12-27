@@ -19,6 +19,7 @@ data ABControl = ABC {
         rootmvs   :: [Move],
         window    :: Int,
         best      :: Bool,
+        normtime  :: Int,
         stoptime  :: Int
     } deriving Show
 

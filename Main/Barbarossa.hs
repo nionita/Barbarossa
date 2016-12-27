@@ -38,7 +38,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.5.0"
-progVerSuff = "to5"
+progVerSuff = "3am"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -201,7 +201,7 @@ startWriter inter = do
 theWriter :: Bool -> Chan String -> Chan String -> Bool -> Integer -> IO ()
 theWriter inter wchan lchan mustlog refs = forever $ do
     s <- readChan wchan
-    when inter $ do	-- we write only in intercative mode
+    when inter $ do	-- we write only in interactive mode
         putStrLn s
         hFlush stdout
     when mustlog $ logging lchan refs "Output" s
@@ -361,7 +361,7 @@ doGo cmds = do
             then ctxLog DebugUci "Just ponder: ignored"
             else do
                 let (tim, tpm, mtg) = getTimeParams cmds lastsc $ myColor chg
-                    md = 20	-- max search depth
+                    md  = 20	-- max search depth
                     dpt = fromMaybe md (findDepth cmds)
                     lastsc = case forGui chg of
                                  Just InfoB { infoScore = sc } -> sc
@@ -395,7 +395,7 @@ perFenLine dpt fenLine agr = do
     ctxLog LogInfo $ "Ref.Score " ++ refsc ++ " fen " ++ fen
     doPosition (Pos fen) []
     modifyChanging $ \c -> c { working = True }
-    sc <- searchTheTree 1 dpt 0 0 0 0 Nothing [] []
+    sc <- searchTheTree 1 dpt 0 0 0 0 0 Nothing [] []
     return $ aggregateError agr rsc sc
 
 aggregateError :: Agreg -> Int -> Int -> Agreg
@@ -423,7 +423,7 @@ timeReserved :: Int
 timeReserved   = 70	-- milliseconds reserved for move communication
 
 -- This function calculates the normal time for the next search loop,
--- the maximum of that (whch cannot be exceeded)
+-- the maximum of that (which cannot be exceeded)
 -- and if we are in time troubles or not
 compTime :: Int -> Int -> Int -> Int -> (Int, Int, Bool)
 compTime tim tpm fixmtg lastsc
@@ -475,7 +475,7 @@ startWorking tim tpm mtg dpt = do
 -- find another scheme, for example with STM
 startSearchThread :: Int -> Int -> Int -> Int -> CtxIO ()
 startSearchThread tim tpm mtg dpt =
-    ctxCatch (void $ searchTheTree 1 dpt 0 tim tpm mtg Nothing [] [])
+    ctxCatch (void $ searchTheTree 1 dpt 0 0 tim tpm mtg Nothing [] [])
         $ \e -> do
             chg <- readChanging
             let mes = "searchTheTree terminated by exception: " ++ show e
@@ -496,26 +496,29 @@ ctxCatch a f = do
     liftIO $ catch (runReaderT a ctx)
             (\e -> runReaderT (f e) ctx)
 
--- Search with the given depth
-searchTheTree :: Int -> Int -> Int -> Int -> Int -> Int -> Maybe Int -> [Move] -> [Move] -> CtxIO Int
-searchTheTree tief mtief timx tim tpm mtg lsc lpv rmvs = do
+-- Search a new draft
+searchTheTree :: Int -> Int -> Int -> Int -> Int -> Int -> Int -> Maybe Int -> [Move] -> [Move]
+              -> CtxIO Int
+searchTheTree draft mdraft tix tixx tim tpm mtg lsc lpv rmvs = do
     ctx <- ask
     chg <- readChanging
-    ctxLog LogInfo $ "Time = " ++ show tim ++ " Timx = " ++ show timx
-    (path, sc, rmvsf, timint, stfin) <- bestMoveCont tief timx (crtStatus chg) lsc lpv rmvs
+    ctxLog LogInfo $ "Time = " ++ show tim ++ " Tix = " ++ show tix ++ " Tixx = " ++ show tixx
+    (path, sc, rmvsf, timint, stfin) <- bestMoveCont draft tix tixx (crtStatus chg) lsc lpv rmvs
     case length path of _ -> return () -- because of lazyness!
     storeBestMove path sc	-- write back in status
     modifyChanging (\c -> c { crtStatus = stfin })
     currms <- lift $ currMilli (startSecond ctx)
     let (ms', mx, urg) = compTime tim tpm mtg sc
-    ms <- if urg || null path then return ms' else correctTime tief (reduceBegin (realPly chg) ms') sc path
+    ms <- if urg || null path
+             then return ms'
+             else correctTime draft (reduceBegin (realPly chg) ms') sc path
     let strtms = srchStrtMs chg
         delta = strtms + ms - currms
         ms2 = ms `div` 2
-        onlyone = ms > 0 && length rmvsf == 1 && tief >= 4	-- only in normal play
+        onlyone = ms > 0 && length rmvsf == 1 && draft >= 4	-- only in normal play
         halfover = ms > 0 && delta <= ms2  -- time is half over
-        depthmax = tief >= mtief	--  or maximal depth
-        mes = "Depth " ++ show tief ++ " Score " ++ show sc ++ " in ms "
+        depthmax = draft >= mdraft	--  or maximal depth
+        mes = "Depth " ++ show draft ++ " Score " ++ show sc ++ " in ms "
                 ++ show currms ++ " remaining " ++ show delta
                 ++ " path " ++ show path
     ctxLog LogInfo mes
@@ -529,8 +532,11 @@ searchTheTree tief mtief timx tim tpm mtg lsc lpv rmvs = do
             chg' <- readChanging
             if working chg'
                 then if mx == 0	-- no time constraint
-                        then searchTheTree (tief + 1) mtief 0             tim tpm mtg (Just sc) path rmvsf
-                        else searchTheTree (tief + 1) mtief (strtms + mx) tim tpm mtg (Just sc) path rmvsf
+                        then searchTheTree (draft+1) mdraft 0 0 tim tpm mtg (Just sc) path rmvsf
+                        else do
+                            let nixx = strtms + mx
+                                nix  = min nixx $ strtms + ms
+                            searchTheTree (draft+1) mdraft nix nixx tim tpm mtg (Just sc) path rmvsf
                 else do
                     ctxLog DebugUci "in searchTheTree: not working"
                     giveBestMove path -- was stopped

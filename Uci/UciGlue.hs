@@ -20,8 +20,8 @@ aspirWindow :: Int
 aspirWindow   = 24	-- initial aspiration window
 
 -- One iteration in the search for the best move
-bestMoveCont :: Int -> Int -> MyState -> Maybe Int -> [Move] -> [Move] -> CtxIO IterResult
-bestMoveCont tiefe sttime stati lastsc lpv rmvs = do
+bestMoveCont :: Int -> Int -> Int -> MyState -> Maybe Int -> [Move] -> [Move] -> CtxIO IterResult
+bestMoveCont tiefe ntime sttime stati lastsc lpv rmvs = do
     informGuiDepth tiefe
     ctxLog LogInfo $ "start search for depth " ++ show tiefe
     let abc = ABC {
@@ -31,6 +31,7 @@ bestMoveCont tiefe sttime stati lastsc lpv rmvs = do
                 rootmvs   = rmvs,
                 window    = aspirWindow,
                 best      = False,
+                normtime  = ntime,
                 stoptime  = sttime
                 }
     ((sc, path, rmvsf, timint), statf) <- SM.runCState (alphaBeta abc) stati
