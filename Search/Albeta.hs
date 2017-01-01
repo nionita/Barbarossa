@@ -1047,7 +1047,7 @@ pvQSearch !a !b !c = do
               else do
                   let !stp = staticScore pos
                   -- what if hsc < b?
-                  if stp >= b && (hdeep < 0 || tp == 1 || hsc >= b)
+                  if stp >= b
                      then do
                          when collectFens $ do
                              n <- gets $ sNodes . stats
@@ -1057,7 +1057,7 @@ pvQSearch !a !b !c = do
                          !qsdelta <- lift qsDelta
                          let !a1 = a - qsdelta - qsDeltaMargin
                          -- what if hsc + ... > a?
-                         if stp < a1 && (hdeep < 0 || tp == 0 || hsc <= a1)
+                         if stp < a1
                              then do
                                  when collectFens $ do
                                      n <- gets $ sNodes . stats

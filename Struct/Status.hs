@@ -169,7 +169,7 @@ collectEvalParams (s, v) ep = lookApply s v ep [
 instance CollectParams EvalWeights where
     type CollectFor EvalWeights = EvalWeights
     npColInit = EvalWeights {
-          ewMaterialDiff    = tme 8 8,
+          ewMaterialDiff    = tme 9 8,
           ewKingSafe        = tme 1 0,
           ewKingOpen        = tme 5 0,
           ewKingPlaceCent   = tme 6 0,
