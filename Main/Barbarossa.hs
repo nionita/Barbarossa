@@ -38,7 +38,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.5.0"
-progVerSuff = "3am"
+progVerSuff = "3an"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -414,10 +414,11 @@ getTimeParams cs _ c	-- unused: lastsc
 
 
 -- These parameters should be optimised (i.e.: first made options)
-remTimeFracIni, remTimeFracFin, remTimeFracDev :: Double
-remTimeFracIni = 0.15	-- fraction of remaining time which we can consume at once - initial value
+remTimeFracIni, remTimeFracFin, remTimeFracDev, remTimeNextDraft :: Double
+remTimeFracIni = 0.15	-- fraction of remaining time which we can consumed at once - initial value
 remTimeFracFin = 0.5	-- same at final (when remaining time is near zero)
 remTimeFracDev = remTimeFracFin - remTimeFracIni
+remTimeNextDraft = 0.70	-- consumed time percent after which do not start new draft
 
 timeReserved :: Int
 timeReserved   = 70	-- milliseconds reserved for move communication
@@ -444,11 +445,11 @@ compTime tim tpm fixmtg lastsc
           ttroub = short || over
 
 estMvsToGo :: Array Int Int
-estMvsToGo = listArray (0, 8) [30, 28, 24, 18, 12, 10, 8, 6, 3]
+estMvsToGo = listArray (0, 15) [60, 45, 32, 25, 20, 17, 14, 12, 10, 8, 6, 5, 4, 3, 2, 1]
 
 estimateMovesToGo :: Int -> Int
 estimateMovesToGo sc = estMvsToGo ! mvidx
-    where mvidx = min 8 $ abs sc `div` 100
+    where mvidx = min 15 $ abs sc `div` 50
 
 newThread :: CtxIO () -> CtxIO ThreadId
 newThread a = do
@@ -475,14 +476,22 @@ startWorking tim tpm mtg dpt = do
 -- find another scheme, for example with STM
 startSearchThread :: Int -> Int -> Int -> Int -> CtxIO ()
 startSearchThread tim tpm mtg dpt =
-    ctxCatch (void $ searchTheTree 1 dpt 0 0 tim tpm mtg Nothing [] [])
-        $ \e -> do
-            chg <- readChanging
+    ctxCatch (void $ searchTheTree 1 dpt 0 0 tim tpm mtg Nothing [] []) searchThreadCatcher
+
+-- Ignore thread killed exceptions, all the rest will be logged
+searchThreadCatcher :: SomeException -> CtxIO ()
+searchThreadCatcher e = do
+    chg <- readChanging
+    case forGui chg of
+        Just ifg -> giveBestMove $ infoPv ifg
+        Nothing  -> return ()
+    case fromException e of
+        Just ThreadKilled -> do
+            ctxLog LogInfo "Search thread killed"
+            return ()
+        _ -> do
             let mes = "searchTheTree terminated by exception: " ++ show e
             answer $ infos mes
-            case forGui chg of
-                Just ifg -> giveBestMove $ infoPv ifg
-                Nothing  -> return ()
             ctxLog LogError mes
             lift $ collectError $ SomeException (SearchException mes)
 
@@ -509,20 +518,20 @@ searchTheTree draft mdraft tix tixx tim tpm mtg lsc lpv rmvs = do
     modifyChanging (\c -> c { crtStatus = stfin })
     currms <- lift $ currMilli (startSecond ctx)
     let (ms', mx, urg) = compTime tim tpm mtg sc
+    ctxLog LogInfo $ "compTime: " ++ show ms' ++ " / " ++ show mx
     ms <- if urg || null path
              then return ms'
              else correctTime draft (reduceBegin (realPly chg) ms') sc path
     let strtms = srchStrtMs chg
-        delta = strtms + ms - currms
-        ms2 = ms `div` 2
+        ms2 = round $ fromIntegral ms * remTimeNextDraft
+        lastdr = strtms + ms2
         onlyone = ms > 0 && length rmvsf == 1 && draft >= 4	-- only in normal play
-        halfover = ms > 0 && delta <= ms2  -- time is half over
+        halfover = ms > 0 && lastdr <= currms  -- time is half over
         depthmax = draft >= mdraft	--  or maximal depth
         mes = "Depth " ++ show draft ++ " Score " ++ show sc ++ " in ms "
-                ++ show currms ++ " remaining " ++ show delta
+                ++ show currms ++ " last draft " ++ show lastdr
                 ++ " path " ++ show path
     ctxLog LogInfo mes
-    ctxLog LogInfo $ "compTime: " ++ show ms' ++ " / " ++ show mx
     if depthmax || timint || halfover || onlyone
         then do
             when depthmax $ ctxLog LogInfo "in searchTheTree: max depth reached"

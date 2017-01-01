@@ -74,10 +74,10 @@ instance CollectParams TimeParams where
     type CollectFor TimeParams = TimeParams
     npColInit = TimeParams {
                     tpIniFact = 0.50,	-- initial factor (if all other is 1)
-                    tpMaxFact = 12,	-- to limit the time factor
-                    tpDrScale = 0.1,	-- to scale the draft factor
-                    tpScScale = 0.0003,	-- to scale score differences factor
-                    tpChScale = 0.01	-- to scale best move changes factor
+                    tpMaxFact = 10,	-- to limit the time factor
+                    tpDrScale = 0.09,	-- to scale the draft factor
+                    tpScScale = 0.00025,	-- to scale score differences factor
+                    tpChScale = 0.009	-- to scale best move changes factor
                 }
     npColParm = collectTimeParams
     npSetParm = id
