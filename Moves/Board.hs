@@ -8,7 +8,8 @@ module Moves.Board (
     genMoveNCaptToCheck,
     updatePos, checkOk, moveChecks,
     legalMove, alternateMoves,
-    doFromToMove, reverseMoving
+    doFromToMove, reverseMoving,
+    goodSeeMove, doubleCheck
     ) where
 
 import Data.Bits
@@ -131,6 +132,7 @@ data CheckInfo = NormalCheck Piece !Square
                | QueenCheck Piece !Square
 
 -- Finds pieces which check
+-- This function could possibly be simplified (returning bitboards)
 findChecking :: MyPos -> [CheckInfo]
 findChecking !pos = concat [ pChk, nChk, bChk, rChk, qbChk, qrChk ]
     where pChk  = map (NormalCheck Pawn)   $ bbToSquares $ pAttacs (moving pos) ksq .&. p
@@ -838,3 +840,21 @@ addHanging pos vict to from (wsqs, lsqs)
 
 addHangingP :: Piece -> Square -> Square -> ([LMove], [LMove]) -> ([LMove], [LMove])
 addHangingP vict to from (wsqs, lsqs) = ((moveToLMove Pawn vict $ makePromo Queen from to) : wsqs, lsqs)
+
+-- Has this move a positive or 0 SEE?
+goodSeeMove :: MyPos -> Move -> Bool
+goodSeeMove pos mv = adv <= gain0
+    where !myAttRec = theAttacs pos tsq
+          !fsq = fromSquare mv
+          !tsq = toSquare mv
+          adv = seeMoveValue pos myAttRec fsq tsq $ value attc
+          Busy _ attc = tabla pos fsq
+          gain0 | Busy _ vict <- tabla pos tsq = value vict
+                | otherwise                    = 0
+
+-- Is position a double check? (Assumed it is a check!)
+{-# INLINE doubleCheck #-}
+doubleCheck :: MyPos -> Bool
+doubleCheck pos | _:_:_ <- chklist = True
+                | otherwise        = False
+    where chklist = findChecking pos
