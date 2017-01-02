@@ -1,6 +1,7 @@
 {-# LANGUAGE TypeSynonymInstances,
              MultiParamTypeClasses,
              BangPatterns,
+             PatternGuards,
              RankNTypes, UndecidableInstances,
              FlexibleInstances
              #-}
@@ -211,7 +212,10 @@ doMove m qs = do
                    if remis
                       then return $ Final 0
                       else do
-                          let dext = if inCheck p then 1 else 0
+                          -- Extend only double checks or checks with >= 0 SEE:
+                          let dext | inCheck p,
+                                     doubleCheck p || goodSeeMove pc m = 1
+                                   | otherwise                         = 0
                           return $! Exten dext $ moveIsCaptPromo pc m
 
 doNullMove :: Game ()
