@@ -120,11 +120,11 @@ maxMoves = 128
 -- So for d==1 or d==2 we make direct sort, which must be very fast, as this is the most effort
 -- The question is, if no direct sort is much better than the MTS method - to be tested...
 {-# INLINE histSortMoves #-}
-histSortMoves :: Int -> History -> [Move] -> [Move]
-histSortMoves d h ms
-    | null ms   = []
-    | d > 2     = mtsList $ makeMTS h ms
-    | otherwise = dirSort h ms
+histSortMoves :: Int -> Bool -> History -> [Move] -> [Move]
+histSortMoves d an h ms
+    | null ms     = []
+    | d < 3 && an = dirSort h ms
+    | otherwise   = mtsList $ makeMTS h ms
 
 -- {-# INLINE makeMTS #-}
 makeMTS :: History -> [Move] -> MovesToSort

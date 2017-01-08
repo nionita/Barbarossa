@@ -89,8 +89,8 @@ draftStats dst = do
 loosingLast :: Bool
 loosingLast = True
 
-genMoves :: Int -> Game ([Move], [Move])
-genMoves d = do
+genMoves :: Int -> Bool -> Game ([Move], [Move])
+genMoves d an = do
     p <- getPos
     if isCheck p $ moving p
        then return (genMoveFCheck p, [])
@@ -100,7 +100,7 @@ genMoves d = do
                 l1 = genMovePromo p
                 (l2w, l2l) = genMoveCaptWL p
                 l3' = genMoveNCapt p
-                l3 = histSortMoves d h l3'
+                l3 = histSortMoves d an h l3'
             return $! if loosingLast
                          then (l1 ++ l2w, l0 ++ l3 ++ l2l)
                          else (l1 ++ l2w ++ l2l, l0 ++ l3)

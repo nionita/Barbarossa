@@ -919,7 +919,7 @@ genAndSort nst mttmv a b d = do
                               else return []		-- if not null
     lift $ do
         let kl = filter (isMoveLegal (cpos nst)) $ killerToList (killer nst)
-        esp <- genMoves d
+        esp <- genMoves d (crtnt nst == AllNode)
         let es = bestFirst path kl esp
         return $ Alt es
 
@@ -1028,7 +1028,7 @@ pvQSearch !a !b !c = do
            pos <- lift $ getPos
            if tacticalPos pos
               then do
-                  (es1, es2) <- lift $ genMoves 0
+                  (es1, es2) <- lift $ genMoves 0 False
                   let edges = Alt $ es1 ++ es2
                   if noMove edges
                      then do
