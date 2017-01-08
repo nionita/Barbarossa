@@ -37,7 +37,7 @@ scoreGrain, depthForCM, maxDepthExt, minPvDepth :: Int
 useTTinPv, readTTinQS :: Bool
 scoreGrain  = 4	-- score granularity
 depthForCM  = 7 -- from this depth inform current move
-maxDepthExt = 3 -- maximum depth extension
+maxDepthExt = 5 -- maximum depth extension
 useTTinPv   = False	-- retrieve from TT in PV?
 minPvDepth  = 2		-- from this depth we use alpha beta search
 readTTinQS  = True
@@ -762,7 +762,7 @@ resetSpc nst = nst { spcno = movno nst }
 
 reserveExtension :: Int -> Int -> Search Int
 reserveExtension !uex !exd
-    | uex >= maxDepthExt || exd == 0 = return 0
+    | exd == 0 || uex >= maxDepthExt = return 0
     | otherwise = do
         modify $ \s -> s { usedext = usedext s + exd }
         return exd
