@@ -615,7 +615,7 @@ data NullMoveResult = NoNullMove | NullMoveHigh | NullMoveLow | NullMoveThreat P
 
 nullMoveFailsHigh :: MyPos -> NodeState -> Int -> Int -> Int -> Search NullMoveResult
 nullMoveFailsHigh pos nst b d lastnull
-    | lastnull < 1 || tacticalPos pos			-- go smooth into QS
+    | lastnull < 1 || tacticalPos pos || zugZwang pos	-- go smooth into QS
       || crtnt nst == AllNode = return NoNullMove	-- no null move in all nodes
     | otherwise = do
         let v = staticScore pos

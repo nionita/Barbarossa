@@ -8,7 +8,7 @@
 module Moves.Base (
     posToState, getPos, posNewSearch,
     doRealMove, doMove, undoMove, genMoves, genTactMoves, canPruneMove,
-    tacticalPos, isMoveLegal, isKillCand, isTKillCand,
+    tacticalPos, zugZwang, isMoveLegal, isKillCand, isTKillCand,
     betaCut, doNullMove, ttRead, ttStore, curNodes, chooseMove, isTimeout, informCtx,
     mateScore, scoreDiff, qsDelta,
     draftStats,
@@ -31,6 +31,7 @@ import Struct.Context
 import Struct.Status
 import Hash.TransTab
 import Moves.Board
+import Moves.BitBoard (less)
 import Eval.BasicEval
 import Eval.Eval
 import Moves.ShowMe
@@ -243,6 +244,10 @@ undoMove = modify $ \s -> s { stack = tail $ stack s }
 {-# INLINE tacticalPos #-}
 tacticalPos :: MyPos -> Bool
 tacticalPos = (/= 0) . check
+
+{-# INLINE zugZwang #-}
+zugZwang :: MyPos -> Bool
+zugZwang p = me p `less` (kings p .|. pawns p) == 0
 
 {-# INLINE isMoveLegal #-}
 isMoveLegal :: MyPos -> Move -> Bool
