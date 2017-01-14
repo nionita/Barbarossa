@@ -101,6 +101,7 @@ data EvalWeights
           ewEnpHanging      :: !MidEnd,
           ewEnpEnPrise      :: !MidEnd,
           ewEnpAttacked     :: !MidEnd,
+          ewWepAttacked     :: !MidEnd,
           ewLastLinePenalty :: !MidEnd,
           ewBishopPair      :: !MidEnd,
           ewRedundanceRook  :: !MidEnd,
@@ -196,6 +197,7 @@ instance CollectParams EvalWeights where
           ewEnpHanging      = tme (-23) (-33),
           ewEnpEnPrise      = tme (-25) (-21),
           ewEnpAttacked     = tme  (-9) (-13),
+          ewWepAttacked     = tme    48    64,
           ewLastLinePenalty = tme 115 0,
           ewBishopPair      = tme 363  388,
           ewRedundanceRook  = tme   0 (-105),
@@ -264,6 +266,8 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
         ("end.enpEnPrise",     setEndEnpEnPrise),
         ("mid.enpAttacked",    setMidEnpAttacked),
         ("end.enpAttacked",    setEndEnpAttacked),
+        ("mid.wepAttacked",    setMidWepAttacked),
+        ("end.wepAttacked",    setEndWepAttacked),
         ("mid.lastLinePenalty", setMidLastLinePenalty),
         ("end.lastLinePenalty", setEndLastLinePenalty),
         ("mid.bishopPair",      setMidBishopPair),
@@ -337,6 +341,8 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
           setEndEnpEnPrise      v' ew' = ew' { ewEnpEnPrise      = (ewEnpEnPrise      ew') { end = round v' }}
           setMidEnpAttacked     v' ew' = ew' { ewEnpAttacked     = (ewEnpAttacked     ew') { mid = round v' }}
           setEndEnpAttacked     v' ew' = ew' { ewEnpAttacked     = (ewEnpAttacked     ew') { end = round v' }}
+          setMidWepAttacked     v' ew' = ew' { ewWepAttacked     = (ewWepAttacked     ew') { mid = round v' }}
+          setEndWepAttacked     v' ew' = ew' { ewWepAttacked     = (ewWepAttacked     ew') { end = round v' }}
           setMidLastLinePenalty v' ew' = ew' { ewLastLinePenalty = (ewLastLinePenalty ew') { mid = round v' }}
           setEndLastLinePenalty v' ew' = ew' { ewLastLinePenalty = (ewLastLinePenalty ew') { end = round v' }}
           setMidBishopPair      v' ew' = ew' { ewBishopPair      = (ewBishopPair      ew') { mid = round v' }}
