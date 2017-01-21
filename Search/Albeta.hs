@@ -11,8 +11,7 @@ import Data.Array.Base (unsafeAt)
 import Data.Array.Unboxed
 import Data.Bits
 import Data.Int
-import Data.List (delete, sortBy)
-import Data.Ord (comparing)
+import Data.List (delete)
 import Data.Maybe (fromMaybe)
 
 import Search.CStateMonad
@@ -121,8 +120,7 @@ beta0  = maxBound - 2000
 
 data Pvsl = Pvsl {
         pvPath :: Path,		-- pv path
-        pvNodes :: !Int64,	-- number of nodes in the current search
-        pvGood  :: !Bool	-- beta cut or alpha improvement
+        pvNodes :: !Int64	-- number of nodes in the current search
     } deriving Show
 
 data Killer = NoKiller | OneKiller !Move | TwoKillers !Move !Move deriving (Eq, Show)
@@ -158,6 +156,7 @@ data NodeState
           movno  :: !Int,	-- current move number
           spcno  :: !Int,	-- last move number of a special move
           albe   :: !Bool,	-- in alpha/beta search (for small depths)
+          rbmch  :: !Int,	-- number of changes in root best move
           cursc  :: Path,	-- current alpha value (now plus path & depth)
           killer :: Killer,	-- the current killer moves
           cpos   :: MyPos,	-- current position for this node
@@ -223,7 +222,7 @@ pvsInit = PVState { ronly = pvro00, stats = ssts0, absdp = 0, usedext = 0, abort
                     futme = futIniVal, futyo = futIniVal,
                     lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
 nst0 :: NodeState
-nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore "Zero" 0,
+nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore "Zero" 0, rbmch = 0,
              movno = 1, spcno = 1, killer = NoKiller, albe = False, cpos = initPos, pvsl = [] }
              -- we start with spcno = 1 as we consider the first move as special
              -- to avoid in any way reducing the tt move
@@ -234,7 +233,7 @@ resetNSt !sc !kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill }
 pvro00 :: PVReadOnly
 pvro00 = PVReadOnly { draft = 0, albest = False, timeli = False, abmili = 0 }
 
-alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool)
+alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int)
 alphaBeta abc = do
     let !d = maxdepth abc
         rmvs = Alt $ rootmvs abc
@@ -254,7 +253,7 @@ alphaBeta abc = do
                 --                ++ " alpha = " ++ show alpha1
                 --                ++ " beta = " ++ show beta1
                 -- aspirWin alpha1 beta1 d lpv rmvs aspTries
-                r1@((s1, es1, _), pvsf)
+                r1@((s1, es1, _, _), pvsf)
                     <- runCState (searchReduced alpha1 beta1) pvs0
                 if abort pvsf || (s1 > alpha1 && s1 < beta1 && not (nullSeq es1))
                     then return r1
@@ -267,9 +266,9 @@ alphaBeta abc = do
     -- when aborted, return the last found good move
     -- we have to trust that abort is never done in draft 1!
     case fst r of
-        (s, Seq path, Alt rmvs') -> if null path
-           then return (fromMaybe 0 $ lastscore abc, lastpv abc, [], timint)
-           else return (s, path, rmvs', timint)
+        (s, Seq path, Alt rmvs', ch) -> if null path
+           then return (fromMaybe 0 $ lastscore abc, lastpv abc, [], timint, 0)
+           else return (s, path, rmvs', timint, ch)
 
 {--
 aspirWin :: Int -> Int -> Int -> Seq Move -> Alt Move -> Int -> m (Int, Seq Move, Alt Move)
@@ -288,7 +287,7 @@ aspirWin a b d lpv rmvs t = do
 
 -- Root PV Search
 pvRootSearch :: Int -> Int -> Int -> Seq Move -> Alt Move -> Bool
-             -> Search (Int, Seq Move, Alt Move)
+             -> Search (Int, Seq Move, Alt Move, Int)
 pvRootSearch a b d lastpath rmvs aspir = do
     pos <- lift getPos
     edges <- if null (unalt rmvs)	-- only when d==1, but we could have lastpath from the previous real move
@@ -300,35 +299,30 @@ pvRootSearch a b d lastpath rmvs aspir = do
     nstf <- pvLoop (pvInnerRoot b d) nsti edges
     abrt <- gets abort
     reportStats
-    let sc | d > 1            = pathScore (cursc nstf)
-           | p:_ <- pvsl nstf = pathScore $ pvPath p
-           | otherwise        = a
+    let (sc, pm) | d > 1             = (pathScore (cursc nstf), pathMoves (cursc nstf))
+                 | ms:_ <- pvsl nstf = (pathScore $ pvPath ms,  pathMoves (pvPath ms))
+                 | otherwise         = (a, emptySeq)
+        p = unseq pm
     -- Root is pv node, cannot fail low, except when aspiration fails!
     if sc <= a	-- failed low or timeout when searching PV
          then do
            unless (abrt || aspir) $ lift $ informStr "Failed low at root??"
-           return (a, emptySeq, edges)	-- just to permit aspiration to retry
+           return (a, emptySeq, edges, rbmch nstf)	-- just to permit aspiration to retry
          else do
             -- lift $ mapM_ (\m -> informStr $ "Root move: " ++ show m) (pvsl nstf)
-            albest' <- gets (albest . ronly)
-            (s, p) <- if sc >= b || abrt
-                         then return (sc, unseq $ pathMoves (cursc nstf))
-                         else lift $ chooseMove albest'
-                                   $ sortBy (comparing fstdesc)
-                                   $ map pvslToPair
-                                   $ filter pvGood $ pvsl nstf
-            when (d < depthForCM) $ informBest s d p
+            when (d < depthForCM) $ informBest sc d p
             let (best':_) = p
                 allrmvs = if sc >= b then unalt edges else map pvslToMove (pvsl nstf)
                 xrmvs = Alt $ best' : delete best' allrmvs	-- best on top
-            return (s, Seq p, xrmvs)
-    where fstdesc (a', _) = -a'
+            return (sc, Seq p, xrmvs, rbmch nstf)
 
+{--
 pvslToPair :: Pvsl -> (Int, [Move])
 pvslToPair (Pvsl { pvPath = p }) = (score, pv)
     where pv = unseq $ pathMoves p
           sc = pathScore p
           score = scoreToExtern sc $ length pv
+--}
 
 pvslToMove :: Pvsl -> Move
 pvslToMove (Pvsl { pvPath = Path { pathMoves = Seq (m:_)}}) = m
@@ -417,20 +411,21 @@ checkFailOrPVRoot xstats b d e s nst = timeToAbort (True, nst) $ do
              !nodes0 = sNodes xstats + sRSuc xstats
              !nodes1 = sNodes (stats sst) + sRSuc (stats sst)
              !nodes' = nodes1 - nodes0
-             pvg     = Pvsl s nodes' True	-- the good
-             pvb     = Pvsl s nodes' False	-- the bad
+             pvg     = Pvsl s nodes'	-- the good
              de = max d $ pathDepth s
          if d == 1
             then do
                  let typ = 2
                  lift $ ttStore de typ (pathScore s) e nodes'
-                 let xpvslg = if pathScore s > a
-                                 then insertToPvs d pvg (pvsl nst)	-- the good
-                                 else insertToPvs d pvb (pvsl nst)	-- the bad (when aspiration)
-                 return (False, nst {movno = mn + 1, pvsl = xpvslg })
+                 -- lift $ logmes $ "checkFail: d = 1, mv = " ++ show e
+                 let xpvslg = insertToPvs d pvg (pvsl nst)	-- the good
+                     rch | pathScore s > a = rbmch nst + 1
+                         | otherwise       = rbmch nst
+                 return (False, nst {movno = mn + 1, pvsl = xpvslg, rbmch = rch })
             else if pathScore s <= a
                     then do	-- failed low
-                        let xpvslb = insertToPvs d pvb (pvsl nst)	-- the bad
+                        -- lift $ logmes $ "checkFail: d = " ++ show d ++ ", mv = " ++ show e ++ ", s <= a"
+                        let xpvslb = insertToPvs d pvg (pvsl nst)	-- the bad
                             nst1   = nst { movno = mn + 1, pvsl = xpvslb, killer = newKiller d s nst }
                         return (False, nst1)
                     else if pathScore s >= b
@@ -440,9 +435,10 @@ checkFailOrPVRoot xstats b d e s nst = timeToAbort (True, nst) $ do
                             let typ = 1	-- beta cut (score is lower limit) with move e
                             ttStore de typ b e nodes'
                             betaCut True (absdp sst) e
+                        -- lift $ logmes $ "checkFail: d = " ++ show d ++ ", mv = " ++ show e ++ ", s >= b"
                         let xpvslg = insertToPvs d pvg (pvsl nst)	-- the good
                             csc = s { pathScore = b }
-                            nst1 = nst { cursc = csc, pvsl = xpvslg }
+                            nst1 = nst { cursc = csc, pvsl = xpvslg, rbmch = rbmch nst + 1 }
                         return (True, nst1)
                       else do	-- means: > a && < b
                         let sc = pathScore s
@@ -452,9 +448,10 @@ checkFailOrPVRoot xstats b d e s nst = timeToAbort (True, nst) $ do
                             let typ = 2	-- best move so far (score is exact)
                             ttStore de typ sc e nodes'
                             betaCut True (absdp sst) e	-- not really cut, but good move
+                        -- lift $ logmes $ "checkFail: d = " ++ show d ++ ", mv = " ++ show e ++ ", s >  a"
                         let xpvslg = insertToPvs d pvg (pvsl nst)	-- the good
                             nst1 = nst { cursc = s, nxtnt = nextNodeType (nxtnt nst),
-                                         movno = mn + 1, pvsl = xpvslg }
+                                         movno = mn + 1, pvsl = xpvslg, rbmch = rbmch nst + 1 }
                         return (False, nst1)
 
 insertToPvs :: Int -> Pvsl -> [Pvsl] -> [Pvsl]

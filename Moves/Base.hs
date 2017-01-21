@@ -9,7 +9,7 @@ module Moves.Base (
     posToState, getPos, posNewSearch,
     doRealMove, doMove, undoMove, genMoves, genTactMoves, canPruneMove,
     tacticalPos, zugZwang, isMoveLegal, isKillCand, isTKillCand,
-    betaCut, doNullMove, ttRead, ttStore, curNodes, chooseMove, isTimeout, informCtx,
+    betaCut, doNullMove, ttRead, ttStore, curNodes, isTimeout, informCtx,
     mateScore, scoreDiff, qsDelta,
     draftStats,
     finNode,
@@ -22,7 +22,6 @@ import Data.Int
 import Control.Monad.State
 import Control.Monad.Reader (ask)
 -- import Numeric
-import System.Random
 
 import Moves.BaseTypes
 import Search.AlbetaTypes
@@ -369,26 +368,6 @@ scoreDiff = do
     case stack s of
         (p1:p2:_) -> return $! negate (staticScore p1 + staticScore p2)
         _         -> return 0
-
--- Choose between almost equal (root) moves
-chooseMove :: Bool -> [(Int, [Move])] -> Game (Int, [Move])
-chooseMove True pvs = return $ if null pvs then error "Empty choose!" else head pvs
-chooseMove _    pvs = case pvs of
-    p1 : [] -> return p1
-    p1 : ps -> do
-         let equal = p1 : takeWhile inrange ps
-             minscore = fst p1 - scoreDiffEqual
-             inrange x = fst x >= minscore
-             len = length equal
-         logMes $ "Choose from: " ++ show pvs
-         logMes $ "Choose length: " ++ show len
-         logMes $ "Choose equals: " ++ show equal
-         if len == 1
-            then return p1
-            else do
-               r <- liftIO $ getStdRandom (randomR (0, len - 1))
-               return $! equal !! r
-    []      -> return (0, [])	-- just for Wall
 
 logMes :: String -> Game ()
 logMes s = lift $ talkToContext . LogMes $ s
