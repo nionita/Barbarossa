@@ -99,7 +99,8 @@ data Changing = Chg {
         srchStrtMs :: Int,              -- search start time (milliseconds)
         myColor    :: Color,            -- our play color
         totBmCh    :: Int,		-- all BM changes in this search
-        lastChDr   :: Int		-- last draft which changed root BM
+        lastChDr   :: Int,		-- last draft which changed root BM
+        lmvScore   :: Maybe Int		-- last move score
     }
 
 type CtxIO = ReaderT Context IO

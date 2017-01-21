@@ -111,7 +111,7 @@ initContext opts = do
             forGui = Nothing,
             srchStrtMs = 0,
             myColor = White,
-            totBmCh = 0, lastChDr = 0
+            totBmCh = 0, lastChDr = 0, lmvScore = Nothing
          }
     ctxVar <- newMVar chg
     let context = Ctx {
@@ -418,6 +418,9 @@ remTimeFracDev = remTimeFracFin - remTimeFracIni
 timeReserved :: Int
 timeReserved   = 70	-- milliseconds reserved for move communication
 
+extendScoreMargin :: Int
+extendScoreMargin = 40
+
 -- This function calculates the normal time for the next search loop,
 -- the maximum of that (which cannot be exceeded)
 -- and if we are in time troubles or not
@@ -507,7 +510,12 @@ searchTheTree draft mdraft timx tim tpm mtg lsc lpv rmvs = do
                                forGui = Just $ InfoB { infoPv = path, infoScore = sc }}
     currms <- lift $ currMilli (startSecond ctx)
     let (ms, mx, _) = compTime tim tpm mtg sc	-- urg not used
-        reds = case lsc of
+        exte = maybe False id $ do
+                  los <- lsc
+                  gls <- lmvScore chg
+                  return $ sc < los - extendScoreMargin
+                        || sc < gls - extendScoreMargin
+        reds = case lmvScore chg of
                    Just osc -> timeProlongation osc sc
                    _        -> 1
         redp  = reduceBegin $ realPly chg
@@ -520,7 +528,7 @@ searchTheTree draft mdraft timx tim tpm mtg lsc lpv rmvs = do
                   ++ " ms " ++ show ms ++ " used " ++ show used
     ctxLog LogInfo mes
     ctxLog LogInfo $ "Time factors (reds/redp): " ++ show reds ++ " / " ++ show redp
-    (justStop, mxr) <- stopByChance (reds * redp) ms used mx draft ch totch ldCh
+    (justStop, mxr) <- stopByChance (reds * redp) exte ms used mx draft ch totch ldCh
     ctxLog LogInfo $ "compTime (ms/mx/mxr): " ++ show ms ++ " / " ++ show mx ++ " / " ++ show mxr
     if draftmax || timint || over || onlyone || justStop
         then do
@@ -530,6 +538,8 @@ searchTheTree draft mdraft timx tim tpm mtg lsc lpv rmvs = do
                 ++ show over ++ "/"
                 ++ show onlyone ++ "/"
                 ++ show justStop
+            -- Store last score for this move
+            modifyChanging $ \c -> c { lmvScore = Just sc }
             giveBestMove path
             return sc
         else do
@@ -544,31 +554,36 @@ searchTheTree draft mdraft timx tim tpm mtg lsc lpv rmvs = do
                     giveBestMove path -- was stopped
                     return sc
 
--- The time management changes a bit like this:
+-- The time management changes like this:
 -- We calculate ther normal and maximum time to use for this move, as before
--- But now, instead of giving some time correction based on number of changes in best move,
--- we calculate a probability that next draft will change the best move based on:
+-- we correct the time per move with some factor (ply in game, score drop)
+-- we calculate what would be the max draft we could reach at this rate
+-- if we reached the max draft - stop the search
+-- else we calculate a probability that next draft will change the best move based on:
 -- - last draft
 -- - number of changes in last draft
 -- - total number of changes in this search
 -- - last draft with changes
--- Than based on this probability and on wanted time versus already spent time
--- we decide if we start the next draft or not
-stopByChance :: Double -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> CtxIO (Bool, Int)
-stopByChance red ms used mx draft ch totch ldCh
+-- Than based on this probability we limit the interrup time for next search (in case it starts)
+-- if max draft is greater than next draft we start next search
+-- if max draft = next draft we decide probabilistically if we start the next draft or not
+stopByChance :: Double -> Bool -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> CtxIO (Bool, Int)
+stopByChance red extend ms used mx draft ch totch ldCh
+    | extend      = return (False, mx)
     | used >= msr = return (True, mx)
     | otherwise   = do
     let dmax = maxDepthAtThisRate draft used msr
-    ctxLog LogInfo $ "stopByChance: dmax = " ++ show dmax ++ ", draft = " ++ show draft
-    if dmax <= draft
+    ctxLog LogInfo $ "stopByChance: draft = " ++ show draft ++ " dmax = " ++ show dmax
+    if dmax < draft
        then return (True, mx)
        else do
+          -- We need the probability to limit the interrupt time at least:
           let p = probChange (fromIntegral draft) (fromIntegral ch) (fromIntegral totch) (fromIntegral ldCh)
               mxf = fromIntegral mx
-              mxr = round $ (mxf + mxf * p) / 2
+              mxr = min mx $ round $ red * (mxf + mxf * p) / 2
           if dmax > draft + 1
              then return (False, mxr)	-- we have more than 1 draft to go
-             else do	-- this would be the last draft so far
+             else do
                  ctxLog LogInfo $ "stopByChance: p = " ++ show p
                  r <- liftIO $ getStdRandom (randomR (0::Double, 1))
                  if r < p then return (False, mxr) else return (True, mxr)

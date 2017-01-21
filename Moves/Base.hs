@@ -44,8 +44,6 @@ nearmate i = i >= mateScore - 255 || i <= -mateScore + 255
 -- Some options and parameters:
 -- debug :: Bool
 -- debug = False
-scoreDiffEqual :: Int
-scoreDiffEqual = 4 -- under this score difference moves are considered to be equal (choose random)
 
 printEvalInt :: Int64
 printEvalInt   = 2 `shiftL` 12 - 1	-- if /= 0: print eval info every so many nodes
