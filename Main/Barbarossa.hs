@@ -414,7 +414,7 @@ getTimeParams cs c
 
 -- These parameters should be optimised (i.e.: first made options)
 remTimeFracIni, remTimeFracFin, remTimeFracDev :: Double
-remTimeFracIni = 0.15	-- fraction of remaining time which we can consume at once - initial value
+remTimeFracIni = 0.03	-- fraction of remaining time which we can consume at once - initial value
 remTimeFracFin = 0.5	-- same at final (when remaining time is near zero)
 remTimeFracDev = remTimeFracFin - remTimeFracIni
 
@@ -422,7 +422,7 @@ timeReserved :: Int
 timeReserved   = 70	-- milliseconds reserved for move communication
 
 extendScoreMargin :: Int
-extendScoreMargin = 24
+extendScoreMargin = 48
 
 -- This function calculates the normal time for the next search loop,
 -- the maximum of that (which cannot be exceeded)
@@ -445,7 +445,7 @@ compTime tim tpm fixmtg cursc rept
           tmx  = min tmxt $ max 0 $ tim - timeReserved
 
 estMvsToGo :: Array Int Int
-estMvsToGo = listArray (0, 8) [50, 36, 24, 15, 10, 7, 5, 3, 2]
+estMvsToGo = listArray (0, 8) [60, 36, 24, 16, 8, 7, 5, 3, 2]
 
 estimateMovesToGo :: Int -> Int
 estimateMovesToGo sc = estMvsToGo ! mvidx
@@ -523,7 +523,6 @@ searchTheTree draft mdraft timx tim tpm mtg rept lsc lpv rmvs = do
         redp  = reduceBegin $ realPly chg
         start = srchStrtMs chg
         used  = currms - start
-        over  = used >= mx
         onlyone = ms > 0 && length rmvsf == 1 && draft >= 4	-- only in normal play
         draftmax = draft >= mdraft	--  or maximal draft
         mes = "Draft " ++ show draft ++ " Score " ++ show sc ++ " path " ++ show path
@@ -531,6 +530,7 @@ searchTheTree draft mdraft timx tim tpm mtg rept lsc lpv rmvs = do
     ctxLog LogInfo mes
     ctxLog LogInfo $ "Time factors (reds/redp): " ++ show reds ++ " / " ++ show redp
     (justStop, mxr) <- stopByChance (reds * redp) exte ms used mx draft ch totch ldCh
+    let over = used >= mx
     ctxLog LogInfo $ "compTime (ms/mx/mxr): " ++ show ms ++ " / " ++ show mx ++ " / " ++ show mxr
     if draftmax || timint || over || onlyone || justStop
        then do
@@ -571,17 +571,17 @@ searchTheTree draft mdraft timx tim tpm mtg rept lsc lpv rmvs = do
 -- if max draft = next draft we decide probabilistically if we start the next draft or not
 stopByChance :: Double -> Bool -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> CtxIO (Bool, Int)
 stopByChance red extend ms used mx draft ch totch ldCh
-    | extend      = return (False, mx)
-    | used >= msr = return (True, mx)
+    | extend      = return (False, mxe)
+    | used >= msr = return (True, 0)
     | otherwise   = do
     let dmax = maxDepthAtThisRate draft used msr
     ctxLog LogInfo $ "stopByChance: draft = " ++ show draft ++ " dmax = " ++ show dmax
     if dmax < draft
-       then return (True, mx)
+       then return (True, 0)
        else do
           -- We need the probability to limit the interrupt time at least:
           let p = probChange (fromIntegral draft) (fromIntegral ch) (fromIntegral totch) (fromIntegral ldCh)
-              mxf = fromIntegral mx
+              mxf = fromIntegral ms * mxrFactor
               mxr = min mx $ round $ red * (mxf + mxf * p) / 2
           if dmax > draft + 1
              then return (False, mxr)	-- we have more than 1 draft to go
@@ -590,12 +590,15 @@ stopByChance red extend ms used mx draft ch totch ldCh
                  r <- liftIO $ getStdRandom (randomR (0::Double, 1))
                  if r < p then return (False, mxr) else return (True, mxr)
     where msr = round $ red * fromIntegral ms
+          mxe = min mx $ ms * mxeFactor
+          mxeFactor = 5
+          mxrFactor = 2
 
 maxDepthAtThisRate :: Int -> Int -> Int -> Int
 maxDepthAtThisRate d used ms
     | d == 1    = floor dmax1
     | otherwise = floor dmax
-    where branchingFactor = 1.5 :: Double
+    where branchingFactor = 1.6 :: Double
           logs  = 1 / log branchingFactor
           bfd   = branchingFactor ** fromIntegral d
           msf   = fromIntegral ms
@@ -607,22 +610,13 @@ maxDepthAtThisRate d used ms
 -- The parameters were found outside and have reached 77% prediction rate
 probChange :: Double -> Double -> Double -> Double -> Double
 probChange d c ct dc = 1 / (1 + exp (-z))
-    -- where w0 = -0.47326189	-- these got 77%
-    --       w1 = -0.24871493
-    --       w2 = 0.18633039
-    --       w3 = 0.07070459
-    --       w4 = 0.1175941
-    -- where w0 = -0.46828955	-- these got 80%
-    --       w1 = -0.24585093
-    --       w2 = 0.19289682
-    --       w3 = 0.09635968
-    --       w4 = 0.10235857
-    where w0 = -1.80799248	-- these got 91% with scales
-          w1 = -0.59439615 / 20
-          w2 = 0.3024311 / 10
-          w3 = 0.4347557 / 20
-          w4 = -0.34551297 / 20
-          z  = w0 + w1 * d + w2 * c + w3 * ct + w4 * dc
+    where -- these got 68% with scales, balanced
+          ws = [0.94622456, -4.07449251, -1.61671195,
+                1.90216198, 0.81715641, 1.12771244,
+                0.48982956, 1.78170528, 1.54134665]
+          sl = [1, 1/19, 1/361, 1/7, 1/49, 1/18, 1/324, 1/17, 1/289]
+          fs = [1, d, d*d, c, c*c, ct, ct*ct, dc, dc*dc]
+          z  = sum $ zipWith (*) ws $ zipWith (*) fs sl
 
 reduceBegin :: Maybe Int -> Double
 reduceBegin mi | Just i <- mi,
@@ -635,7 +629,7 @@ timeProlongation osc sc
     | otherwise            = 1 + log ((oscf - scf) / fm)
     where oscf = fromIntegral osc
           scf  = fromIntegral sc
-          tpMargin = 8
+          tpMargin = 12
           fm = fromIntegral tpMargin
 
 giveBestMove :: [Move] -> CtxIO ()
