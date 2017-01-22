@@ -297,24 +297,26 @@ pvRootSearch a b d lastpath rmvs aspir = do
                          Seq (e:_) -> return $ Alt $ e : delete e (unalt rmvs)
     let !nsti = nst0 { cursc = pathFromScore "Alpha" a, cpos = pos }
     nstf <- pvLoop (pvInnerRoot b d) nsti edges
-    abrt <- gets abort
     reportStats
-    let (sc, pm) | d > 1             = (pathScore (cursc nstf), pathMoves (cursc nstf))
+    abrt <- gets abort
+    let (sc, pm) | d > 1 && (movno nstf > 1 || not abrt)
+                     = (pathScore (cursc nstf), pathMoves (cursc nstf))
+                 | d > 1             = (a, emptySeq)	-- aborted at move 1
                  | ms:_ <- pvsl nstf = (pathScore $ pvPath ms,  pathMoves (pvPath ms))
                  | otherwise         = (a, emptySeq)
         p = unseq pm
     -- Root is pv node, cannot fail low, except when aspiration fails!
     if sc <= a	-- failed low or timeout when searching PV
          then do
-           unless (abrt || aspir) $ lift $ informStr "Failed low at root??"
-           return (a, emptySeq, edges, rbmch nstf)	-- just to permit aspiration to retry
+             unless (abrt || aspir) $ lift $ informStr "Failed low at root??"
+             return (a, emptySeq, edges, rbmch nstf)	-- just to permit aspiration to retry
          else do
-            -- lift $ mapM_ (\m -> informStr $ "Root move: " ++ show m) (pvsl nstf)
-            when (d < depthForCM) $ informPV sc d p
-            let (best':_) = p
-                allrmvs = if sc >= b then unalt edges else map pvslToMove (pvsl nstf)
-                xrmvs = Alt $ best' : delete best' allrmvs	-- best on top
-            return (sc, Seq p, xrmvs, rbmch nstf)
+             -- lift $ mapM_ (\m -> informStr $ "Root move: " ++ show m) (pvsl nstf)
+             when (d < depthForCM) $ informPV sc d p
+             let (best':_) = p
+                 allrmvs = if sc >= b then unalt edges else map pvslToMove (pvsl nstf)
+                 xrmvs = Alt $ best' : delete best' allrmvs	-- best on top
+             return (sc, Seq p, xrmvs, rbmch nstf)
 
 pvslToMove :: Pvsl -> Move
 pvslToMove (Pvsl { pvPath = Path { pathMoves = Seq (m:_)}}) = m
@@ -401,7 +403,7 @@ checkFailOrPVRoot xstats b d e s nst = do
             then do
                  let typ = 2
                  lift $ ttStore de typ (pathScore s) e nodes'
-                 let xpvslg = insertToPvs d pvg (pvsl nst)	-- the good
+                 let xpvslg = insertToPvs d pvg (pvsl nst)
                      rch | pathScore s > a = rbmch nst + 1
                          | otherwise       = rbmch nst
                  return (False, nst {movno = mn + 1, pvsl = xpvslg, rbmch = rch })
@@ -409,8 +411,9 @@ checkFailOrPVRoot xstats b d e s nst = do
                     then return (True, nst)
                     else if pathScore s <= a
                             then do	-- failed low
-                                let xpvslb = insertToPvs d pvg (pvsl nst)	-- the bad
-                                    nst1   = nst { movno = mn + 1, pvsl = xpvslb, killer = newKiller d s nst }
+                                let xpvslb = insertToPvs d pvg (pvsl nst)
+                                    nst1   = nst { movno = mn + 1, pvsl = xpvslb,
+                                                   killer = newKiller d s nst }
                                 return (False, nst1)
                             else if pathScore s >= b
                               then do
@@ -419,9 +422,10 @@ checkFailOrPVRoot xstats b d e s nst = do
                                     let typ = 1	-- beta cut (score is lower limit) with move e
                                     ttStore de typ b e nodes'
                                     betaCut True (absdp sst) e
-                                let xpvslg = insertToPvs d pvg (pvsl nst)	-- the good
+                                let xpvslg = insertToPvs d pvg (pvsl nst)
                                     csc = s { pathScore = b }
-                                    nst1 = nst { cursc = csc, pvsl = xpvslg, rbmch = rbmch nst + 1 }
+                                    nst1 = nst { cursc = csc, pvsl = xpvslg, movno = mn + 1,
+                                                 rbmch = rbmch nst + 1 }
                                 return (True, nst1)
                               else do	-- means: > a && < b
                                 let sc = pathScore s
@@ -431,7 +435,7 @@ checkFailOrPVRoot xstats b d e s nst = do
                                     let typ = 2	-- best move so far (score is exact)
                                     ttStore de typ sc e nodes'
                                     betaCut True (absdp sst) e	-- not really cut, but good move
-                                let xpvslg = insertToPvs d pvg (pvsl nst)	-- the good
+                                let xpvslg = insertToPvs d pvg (pvsl nst)
                                     nst1 = nst { cursc = s, nxtnt = nextNodeType (nxtnt nst),
                                                  movno = mn + 1, pvsl = xpvslg, rbmch = rbmch nst + 1 }
                                 return (False, nst1)
@@ -801,7 +805,8 @@ pvInnerLoopExtenZ b d spec !exd nst redu = do
                when (pathScore sr < b && pathScore s1 >= b) $ do
                    incReMi	-- LMR missed the point
                    when collectFens $ lift $ finNode "LMRM" 0
-           if pathScore sr < b
+           abrt <- gets abort
+           if abrt || pathScore sr < b
               then do
                   moreLMR True 1	-- more LMR
                   return sr		-- failed low (as expected)

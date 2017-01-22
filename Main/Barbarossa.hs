@@ -39,7 +39,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.5.0"
-progVerSuff = "sig"
+progVerSuff = "sii"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -427,26 +427,22 @@ extendScoreMargin = 24
 -- This function calculates the normal time for the next search loop,
 -- the maximum of that (which cannot be exceeded)
 -- and if we are in time troubles or not
-compTime :: Int -> Int -> Int -> Int -> Int -> (Int, Int, Bool)
+compTime :: Int -> Int -> Int -> Int -> Int -> (Int, Int)
 compTime tim tpm fixmtg cursc rept
-    | tim == 0 && tpm == 0 = (  0,   0,  False)
-    | otherwise            = (ctm, tmx, ttroub)
+    | tim == 0 && tpm == 0 = (  0,   0)
+    | otherwise            = (ctm, tmx)
     where mtg = if fixmtg > 0 then fixmtg else estimateMovesToGo cursc
           mtr | rept >= 2 = 3	-- consider repetitions
               | mtg == 0  = 1
               | otherwise = mtg
           ctn = tpm + tim `div` mtr
-          (ctm, short) = if tim > 0 && tim < 2000 || tim == 0 && tpm < 700
-                            then (300, True)
-                            else (ctn, False)
+          ctm = if tim > 0 && tim < 2000 || tim == 0 && tpm < 700 then 300 else ctn
           frtim = fromIntegral $ max 0 $ tim - ctm	-- rest time after this move
           fctm  = fromIntegral ctm :: Double
           rtimprc = fctm / max frtim fctm
           rtimfrc = remTimeFracIni + remTimeFracDev * rtimprc
           tmxt = round $ fctm + rtimfrc * frtim
-          maxx = max 0 $ tim - timeReserved
-          (tmx, over) = if maxx < tmxt then (maxx, True) else (tmxt, False)
-          ttroub = short || over
+          tmx  = min tmxt $ max 0 $ tim - timeReserved
 
 estMvsToGo :: Array Int Int
 estMvsToGo = listArray (0, 8) [50, 36, 24, 15, 10, 7, 5, 3, 2]
@@ -515,7 +511,7 @@ searchTheTree draft mdraft timx tim tpm mtg rept lsc lpv rmvs = do
     modifyChanging $ \c -> c { crtStatus = stfin, totBmCh = totch, lastChDr = ldCh,
                                forGui = Just $ InfoB { infoPv = path, infoScore = sc }}
     currms <- lift $ currMilli (startSecond ctx)
-    let (ms, mx, _) = compTime tim tpm mtg sc rept	-- urg not used
+    let (ms, mx) = compTime tim tpm mtg sc rept
         exte = maybe False id $ do
                   los <- lsc
                   gls <- lmvScore chg
