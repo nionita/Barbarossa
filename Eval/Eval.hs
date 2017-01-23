@@ -845,42 +845,44 @@ perPassedPawnOk gph ep p c sq sqbb moi toi moia toia = val
     where (!way, !behind, !asq)
               | c == White = (shadowUp sqbb, shadowDown sqbb, sq+8)
               | otherwise  = (shadowDown sqbb, shadowUp sqbb, sq-8)
-          !mblo = popCount $ moi .&. way
-          !yblo = popCount $ toi .&. way
+          !asqbb = uBit asq
+          !blocked | me p .&. asqbb /= 0 = 128 - epPassBlockO ep
+                   | yo p .&. asqbb /= 0 = 128 - epPassBlockA ep
+                   | otherwise           = 128
           !rookBehind = behind .&. (rooks p .|. queens p)
-          !mebehind = rookBehind .&. moi /= 0
-                   && rookBehind .&. toi == 0
-          !yobehind = rookBehind .&. moi == 0
-                   && rookBehind .&. toi /= 0
-          !bbmyctrl | mebehind  = way
-                    | otherwise = moia .&. way
-          !bbyoctrl | yobehind  = way `less` bbmyctrl
-                    | otherwise = toia .&. (way `less` bbmyctrl)
-          !bbfree   = way `less` (bbmyctrl .|. bbyoctrl)
-          !myctrl = popCount bbmyctrl
-          !yoctrl = popCount bbyoctrl
-          !free   = popCount bbfree
-          !x = myctrl + yoctrl + free
-          a0 = 10
-          b0 = -120
-          c0 = 410
-          !pmax = (a0 * x + b0) * x + c0
+          !mebehind = rookBehind .&. moi /= 0 && rookBehind .&. toi == 0
+          !yobehind = rookBehind .&. moi == 0 && rookBehind .&. toi /= 0
+          !myctrl | moia .&. asqbb /= 0 || mebehind = 128 + epPassMyCtrl ep
+                  | otherwise                       = 128
+          !yoctrl | toia .&. asqbb /= 0 || yobehind = 128 - epPassYoCtrl ep
+                  | otherwise                       = 128
+          !x = 6 - popCount way	-- 0 is the initial pawn position, 5 maximum
+          a0 = 4
+          b0 = 1
+          c0 = 50
+          !val0 = (a0 * x + b0) * x + c0
           !myking = kingSquare (kings p) moi
           !yoking = kingSquare (kings p) toi
           !mdis = squareDistance myking asq
           !ydis = squareDistance yoking asq
-          !kingprx = (kdDist (mdis - ydis) * epPassKingProx ep * (256 - gph)) `unsafeShiftR` 8
-          !val1 = (pmax * (128 - kingprx) * (128 - epPassBlockO ep * mblo)) `unsafeShiftR` 14
-          !val2 = (val1 * (128 - epPassBlockA ep * yblo)) `unsafeShiftR` 7
-          !val  = (val2 * (128 + epPassMyCtrl ep * myctrl) * (128 - epPassYoCtrl ep * yoctrl))
-                    `unsafeShiftR` 14
+          !kingfct = kdDist (mdis - ydis) + kingPawnWay (yoKAttacs p) way - kingPawnWay (myKAttacs p) way
+          !kingprx = (kingfct * epPassKingProx ep * (256 - gph)) `unsafeShiftR` 8
+          !val1 = (val0 * (128 - kingprx) * blocked) `unsafeShiftR` 14
+          !val  = (val1 * myctrl * yoctrl) `unsafeShiftR` 14
 
-kdDistArr :: UArray Int Int  --  -7 -6 -5 -4 -3 -2 -1  0  1  2  3  4  5  6  7
-kdDistArr = listArray (0, 14) $ [-4,-3,-3,-3,-2,-2,-1, 0, 1, 2, 2, 3, 3, 3, 4]
+kdDistArr :: UArray Int Int  --   -7  -6  -5  -4  -3 -2 -1  0  1  2   3   4   5   6   7
+kdDistArr = listArray (0, 14) $ [-15,-15,-15,-14,-12,-9,-5, 0, 5, 9, 12, 14, 15, 15, 15]
 
 kdDist :: Int -> Int
 kdDist = (kdDistArr `unsafeAt`) . (7+)
 
+kingPawnWay :: BBoard -> BBoard -> Int
+kingPawnWay ka way
+    | k == 0    =  0
+    | k == 1    =  5
+    | k == 2    =  9
+    | otherwise = 10
+    where k = popCount $ ka .&. way
 
 ------ Advanced pawns, on 6th & 7th rows (not passed) ------
 data AdvPawns = AdvPawns

@@ -124,12 +124,12 @@ instance CollectParams EvalParams where
                     epMaterScale = 1,
                     epMaterBonusScale = 5,
                     epPawnBonusScale  = 1,
-                    epPassKingProx    = 12,	-- max after ~12k Clop games (ELO +23 +- 12)
-                    epPassBlockO = 11,
-                    epPassBlockA = 17,
+                    epPassKingProx    = 2,	-- max after ~12k Clop games (ELO +23 +- 12)
+                    epPassBlockO = 10,
+                    epPassBlockA = 20,
                     epPassMin    = 30,
-                    epPassMyCtrl = 6,
-                    epPassYoCtrl = 7
+                    epPassMyCtrl = 12,
+                    epPassYoCtrl = 12
                 }
     npColParm = collectEvalParams
     npSetParm = id
@@ -186,7 +186,7 @@ instance CollectParams EvalWeights where
           ewCenterBAtts     = tme 57 39,
           ewCenterRAtts     = tme 10 34,
           ewCenterQAtts     = tme  4 59,
-          ewCenterKAtts     = tme  0 53,
+          ewCenterKAtts     = tme  0 58,
           ewSpace           = tme  1  0,
           ewAdvAtts         = tme  3 16,
           ewIsolPawns       = tme (-42) (-122),
@@ -196,7 +196,7 @@ instance CollectParams EvalWeights where
           ewEnpHanging      = tme (-23) (-33),
           ewEnpEnPrise      = tme (-25) (-21),
           ewEnpAttacked     = tme  (-9) (-13),
-          ewLastLinePenalty = tme 115 0,
+          ewLastLinePenalty = tme 135 0,
           ewBishopPair      = tme 363  388,
           ewRedundanceRook  = tme   0 (-105),
           ewRookPawn        = tme (-50) (-40),
@@ -205,7 +205,7 @@ instance CollectParams EvalWeights where
           ewPawnBlockP      = tme (-124) (-110),
           ewPawnBlockO      = tme  (-23) (-27),
           ewPawnBlockA      = tme  (-14) (-73),
-          ewPassPawnLev     = tme  0 9
+          ewPassPawnLev     = tme  3 9
         }
     npColParm = collectEvalWeights
     npSetParm = id
