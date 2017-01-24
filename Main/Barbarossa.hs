@@ -301,7 +301,9 @@ setOptionHash sval =
         [(val, "")] -> do
             chg <- readChanging
             let st = crtStatus chg
-            ha <- liftIO $ newCache val
+            ha <- liftIO $ do
+                freeCache $ hash $ crtStatus chg
+                newCache val
             modifyChanging $ \c -> c { crtStatus = st { hash = ha }}
             ctxLog LogInfo $ "Cache was set on " ++ sval ++ " MB"
         _           -> ctxLog LogError $ "GUI: wrong number of MB for option Hash: " ++ sval

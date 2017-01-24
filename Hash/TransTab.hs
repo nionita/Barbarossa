@@ -3,7 +3,7 @@
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE CPP #-}
 module Hash.TransTab (
-    Cache, newCache, retrieveEntry, readCache, writeCache, newGener,
+    Cache, newCache, freeCache, retrieveEntry, readCache, writeCache, newGener,
     -- checkProp
     ) where
 
@@ -12,6 +12,7 @@ import Data.Bits
 import Data.Int
 import Data.Word
 import Foreign.Marshal.Array
+import Foreign.Marshal.Alloc (free)
 import Foreign.Storable
 import Foreign.Ptr
 import Data.Text.Unsafe (inlinePerformIO)
@@ -109,6 +110,9 @@ newCache mb = do
     memc <- mallocArray ncells
     return Cache { mem = memc, lomask = lom, mimask = mim, zemask = complement mim, gener = 0 }
     where cellMask = complement part3Mask	-- for speed we keep both masks
+
+freeCache :: Cache -> IO ()
+freeCache = free . mem
 
 generInc, generMsk :: Word64
 generInc = 0x0100000000000000	-- 1 in first byte
