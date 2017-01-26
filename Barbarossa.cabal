@@ -126,6 +126,22 @@ Executable SelfPlay
   if flag(sse42)
     GHC-Options: -msse4.2
 
+Executable EvolveSelf
+  Main-is:	Main/EvolveSelf.hs
+  Build-depends:
+      base >= 4.5,
+      async,
+      transformers,
+      directory,
+      filepath,
+      process,
+      old-time,
+      old-locale,
+      containers,
+      random
+  GHC-Options: -O2 -Wall -threaded
+               -fno-warn-tabs
+
 -- Executable Evolve
 --   Main-is:	Main/Evolve.hs
 --   Build-depends: base >= 4.5, async, transformers, directory, filepath, process,

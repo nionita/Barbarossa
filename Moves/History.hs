@@ -13,6 +13,7 @@ import qualified Data.Vector.Unboxed.Mutable as V
 import qualified Data.Vector.Unboxed         as U
 import Data.Int
 import Data.Word
+import System.Random
 
 import Struct.Struct
 
@@ -47,8 +48,9 @@ adr' m = squares * moveHisAdr m + toSquare m
 ofs' :: Move -> Int
 ofs' m = bloff * moveHisOfs m
 
+-- Initialize new history with small numbers to get some entropy in the search ;-)
 newHist :: IO History
-newHist = V.replicate vsize 0
+newHist = V.replicateM vsize $ getStdRandom (randomR (0, 15))
 
 {-# INLINE histw #-}
 histw :: Int -> Int32
