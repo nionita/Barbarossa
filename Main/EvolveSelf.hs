@@ -102,15 +102,22 @@ data Tournament
 
 data Phase = Initialize | Prepare | Play deriving (Show, Read)
 
+data Perf
+    = Perf {
+        pfGames  :: Int,	-- no of games so far
+        pfPerf   :: Rational	-- total performance so far
+      } deriving (Show, Read, Eq, Ord)
+
 data EvolvePersistentState
     = Pers {
         evName     :: String,		-- evolve name
         evPopCount :: Int,		-- population count (without witness)
+        evAvgPerf  :: Bool,		-- use average performance?
         evPhase    :: Phase,		-- current phase
         evDistrib  :: Distrib,		-- current distribution
         evCycle    :: Int,		-- current cycle (number of tournaments begun)
         evPParams  :: [(Player, Vec)],	-- current player parameters
-        evActSucc  :: [(Player, Rational)],	-- points of active players
+        evActSucc  :: [(Player, Perf)],	-- performance of active players
         evCurTour  :: Maybe Tournament,	-- current (or last) tournament
         evWitness  :: Maybe Player,	-- witness player
         evWitSucc  :: [Rational]	-- points of the witness over time (reverse)
@@ -172,8 +179,9 @@ initNewState cf evname = do
     createDirectory gamesDir
     createDirectory currentDir
     let initDist = makeInitDist cf	-- has to be done from the optim params
+        avg = getConfigStr cf "useAvgPerf" (Just "Y")
         evs = Pers { evName = evname, evPopCount = getConfigVal cf "popCount" (Just popCount),
-                     evCycle = 0, evPhase = Initialize,
+                     evAvgPerf = avg == "Y", evCycle = 0, evPhase = Initialize,
                      evDistrib = initDist, evPParams = [], evCurTour = Nothing,
                      evWitness = Nothing, evWitSucc = [], evActSucc = []
                    }
@@ -277,12 +285,24 @@ stateInitial = do
     let cyc    = evCycle est + 1
         candps = nameCandidates (evName est) cyc newVecs
         cands  = map fst candps
-        scc    = zip cands $ repeat 0
+        scc    = map initPerf cands
         tour   = makeTournament (evName est ++ "-" ++ show cyc) cands
     lift $ writeCandidates (distPNs $ evDistrib est) candps
     putPersState est {
            evPhase = Play, evCycle = cyc, evPParams = candps, evCurTour = Just tour, evActSucc = scc
         }
+
+perf0 :: Perf
+perf0 = Perf { pfGames = 0, pfPerf = 0 }
+
+initPerf :: Player -> (Player, Perf)
+initPerf p = (p, perf0)
+
+addPerf :: Int -> Perf -> Rational -> Perf
+addPerf gpm (Perf { pfGames = g, pfPerf = pf }) s = Perf { pfGames = g + gpm, pfPerf = pf + s }
+
+avgPerf :: Int -> Perf -> Rational -> Rational
+avgPerf gpm (Perf { pfGames = g, pfPerf = pf }) s = (pf + s) / fromIntegral (gpm + g)
 
 statePrepare :: StateT EvolveState IO ()
 statePrepare = do
@@ -291,12 +311,12 @@ statePrepare = do
     lift $ putStrLn $ "Preparing new run for evolve " ++ evName est
     let cyc = evCycle est + 1
         ltour  = fromJust $ evCurTour est
-        evalt  = evalTournament ltour
-        selecs = reverse . sortBy (comparing snd)
-                     $ makeSelectionBase (evWitness est) evalt (evActSucc est)
-        scc    = map (\(p, (s1, s2)) -> (p, s1 + s2)) selecs
         qquota = getQuota (getConfigVal cf "qualiFrc" (Just qualiFrc)) (evPopCount est)
         equota = getQuota (getConfigVal cf "eliteFrc" (Just eliteFrc)) qquota
+        evalt  = evalTournament ltour
+        selecs = reverse . sortBy (comparing snd)
+                     $ makeSelectionBase (evAvgPerf est) gpm (evWitness est) evalt (evActSucc est)
+        scc    = map (\(p, (_, _, pf)) -> (p, pf)) selecs
         (good, weak) = splitAt qquota $ map fst scc
         elite  = take equota good
         pars   = filter (not . flip elem weak . fst) (evPParams est)
@@ -312,7 +332,7 @@ statePrepare = do
     newVecs <- lift $ genCandidates dist miss
     let ncandps = nameCandidates (evName est) cyc newVecs
         ncands  = map fst ncandps
-        nscc    = zip ncands $ repeat 0
+        nscc    = map initPerf ncands
         tour    = makeTournament (evName est ++ "-" ++ show cyc) $ ncands ++ good
     -- move all weak players to the player directory
     lift $ do
@@ -357,10 +377,22 @@ writeCandidate pnames ctime (name, vec) = writeFile (currentDir </> name) (showC
     where comm = "-- Candidate " ++ name ++ " created on " ++ ctime
 
 -- Consider the older successes of the players and eventually remove the witness
-makeSelectionBase :: Maybe Player -> [(Player, Rational)] -> [(Player, Rational)]
-                  -> [(Player, (Rational, Rational))]
-makeSelectionBase mwit ordl olds = remWitn $ map addOlds ordl
-    where addOlds (p, s) = case lookup p olds of Just os -> (p, (s, os)); Nothing -> (p, (s, 0))
+-- We now have two variants of selecting the best candidates:
+-- - the old one: use the current tournament results in first place (old results only qhen even)
+-- - the new one: use the total average performance
+makeSelectionBase :: Bool -> Int -> Maybe Player -> [(Player, Rational)] -> [(Player, Perf)]
+                  -> [(Player, (Rational, Rational, Perf))]
+makeSelectionBase avg gpm mwit ordl perfs
+    | avg       = remWitn $ map avgOlds ordl
+    | otherwise = remWitn $ map addOlds ordl
+    where addOlds (p, s)
+              = case lookup p perfs of
+                    Just pf -> (p, (s, pfPerf pf, addPerf gpm pf    s))
+                    Nothing -> (p, (s,         0, addPerf gpm perf0 s))
+          avgOlds (p, s)
+              = case lookup p perfs of
+                    Just pf -> (p, (avgPerf gpm pf    s, pfPerf pf, addPerf gpm pf    s))
+                    Nothing -> (p, (avgPerf gpm perf0 s,         0, addPerf gpm perf0 s))
           remWitn sbs = case mwit of Just p -> filter ((/= p) . fst) sbs; Nothing -> sbs
 
 -- Saving the status file to disk in order to recover, if necessary
@@ -370,16 +402,15 @@ saveState st = do
     writeFile statusFileN $ show st
     renameFile statusFileN statusFile
 
-writeTourTop :: String -> [(String, (Rational, Rational))] -> Int -> IO ()
+writeTourTop :: String -> [(String, (Rational, Rational, Perf))] -> Int -> IO ()
 writeTourTop fil selecs gpm = do
     let info = unlines
-             $ map (\(i, (pl, (pt, pg)))
+             $ map (\(i, (pl, (pt, pg, _)))
                       -> printf "%2d. %-30s %5.1g %7.1g %5.1g" i pl (f pt) (f pg) (p pt))
              $ zip places selecs
     writeFile (gamesDir </> fil) info
     where places = [1..] :: [Int]
           f :: Rational -> Double
-          -- f r = fromIntegral (numerator r) / fromIntegral (denominator r)
           f r = fromRational r
           p :: Rational -> Double
           p r = fromRational r * 100 / maxp
@@ -565,6 +596,8 @@ startNewGames cf ev n ps pls = do
     where retNothing :: SomeException -> IO (Maybe a)
           retNothing = \_ -> return Nothing
 
+-- Evaluates the results of the current tournament
+-- returning the playes in top order of the current results
 evalTournament :: Tournament -> [(Player, Rational)]
 evalTournament trn
     = map inReal

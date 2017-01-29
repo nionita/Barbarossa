@@ -50,7 +50,7 @@ ofs' m = bloff * moveHisOfs m
 
 -- Initialize new history with small numbers to get some entropy in the search ;-)
 newHist :: IO History
-newHist = V.replicateM vsize $ getStdRandom (randomR (0, 15))
+newHist = V.replicateM vsize $ getStdRandom (randomR (0, 7))
 
 {-# INLINE histw #-}
 histw :: Int -> Int32

@@ -10,13 +10,15 @@ import Control.Monad.Reader
 -- import Control.Monad.State
 import Control.Concurrent
 import Control.Exception
-import Data.Bits (popCount, (.|.))
+-- import Data.Bits (popCount, (.|.))
 import Data.List (intersperse)
 -- import Data.Monoid
 -- import Network
+import Foreign hiding (void)
 import System.Console.GetOpt
 import System.Directory
 import System.Environment (getArgs)
+import System.FilePath
 import System.IO
 import System.Time
 
@@ -214,7 +216,9 @@ matchFile opts dir = do
                 ho <- openFile (optFOutFile opts) WriteMode
                 return (hi, ho)
             case optNSkip opts of
-                Just m  -> loopCount (skipLines hi m) ()
+                Just m  -> do
+                    ispos <- skipWithIndex (optAFenFile opts) hi m
+                    when (not ispos) $ loopCount (skipLines hi m) ()
                 Nothing -> return ()
             (eval1, eval2) <- liftIO $ do
                 setCurrentDirectory dir
@@ -227,6 +231,27 @@ matchFile opts dir = do
                 hClose ho
                 hClose hi
             return wdl
+
+-- If the fen file has an index, use it to skip to the wanted line
+skipWithIndex :: MonadIO m => String -> Handle -> Int -> m Bool
+skipWithIndex fn h k = liftIO $ do
+    let fni = replaceExtension fn "idx"
+    fniex <- doesFileExist fni
+    if fniex
+       then do
+           withBinaryFile fni ReadMode $ \ih ->
+               allocaBytes 4 $ \ptr -> do
+                   when debug $ putStrLn $ "Skip to index entry " ++ show k
+                   hSeek ih AbsoluteSeek (fromIntegral k * 4)
+                   rb <- hGetBuf ih ptr 4
+                   if rb < 4
+                      then error "Unexpected EOF in index file"
+                      else do
+                          wo <- peek ptr :: IO Word32
+                          when debug $ putStrLn $ "Skip to file byte " ++ show wo
+                          hSeek h AbsoluteSeek (fromIntegral wo)
+                          return True
+       else return False
 
 loopCount :: Monad m => (Int -> a -> m (Bool, a)) -> a -> m a
 loopCount act = go 1

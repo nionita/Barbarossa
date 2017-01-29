@@ -77,6 +77,7 @@ Executable SelfPlay
       array,
       old-time,
       containers,
+      filepath,
       mtl,
       parsec,
       vector,
