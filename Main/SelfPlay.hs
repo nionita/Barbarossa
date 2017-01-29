@@ -32,7 +32,7 @@ import Moves.Notation
 import Moves.History
 import Search.CStateMonad (execCState)
 import Eval.FileParams (makeEvalState)
-import Eval.Eval
+-- import Eval.Eval	-- not yet needed
 import Uci.UciGlue
 
 debug :: Bool
@@ -280,7 +280,7 @@ balancedPos hi ho mn k () = do
            return (True, ())
 
 oracleAndFeats :: Int -> Handle -> Handle -> Maybe Int -> Int -> () -> CtxIO (Bool, ())
-oracleAndFeats depth hi ho mn k () = do
+oracleAndFeats depth hi _ho mn k () = do	-- not functional yet
     end <- case mn of
                Nothing -> lift $ hIsEOF hi
                Just n  -> if k <= n then lift $ hIsEOF hi else return True
@@ -321,7 +321,7 @@ playEveryGame :: Int -> Handle -> Handle -> Maybe Int
               -> Int
               -> (Int, Int, Int)
               -> CtxIO (Bool, (Int, Int, Int))
-playEveryGame depth hi ho mn (id1, eval1) (id2, eval2) k wdl = do
+playEveryGame depth hi _ho mn (id1, eval1) (id2, eval2) k wdl = do	-- not functional yet
     end <- case mn of
                Nothing -> lift $ hIsEOF hi
                Just n  -> if k <= n then lift $ hIsEOF hi else return True
@@ -456,8 +456,8 @@ autoPlayToEnd d pos = do
 -- +1: white wins
 -- -1: black wins
 playGame :: Int -> MyPos -> (String, EvalState) -> (String, EvalState) -> CtxIO GameResult
-playGame d pos (id1, eval1) (id2, eval2) = do
-    ctxLog LogInfo $ "Setup new game between " ++ id1 ++ " and " ++ id2
+playGame d pos (ide1, eval1) (ide2, eval2) = do
+    ctxLog LogInfo $ "Setup new game between " ++ ide1 ++ " and " ++ ide2
     chg <- readChanging
     let crts = crtStatus chg
     (hash1, hash2, hist0) <- liftIO $ do
@@ -473,9 +473,9 @@ playGame d pos (id1, eval1) (id2, eval2) = do
                      myColor = color1, totBmCh = 0, lastChDr = 0, lmvScore = Nothing }
         chg2 = chg { crtStatus = state2, forGui = Nothing, srchStrtMs = 0,
                      myColor = color2, totBmCh = 0, lastChDr = 0, lmvScore = Nothing }
-    ctxLog LogInfo $ "Color for " ++ id1 ++ ": " ++ show color1
+    ctxLog LogInfo $ "Color for " ++ ide1 ++ ": " ++ show color1
     ctxLog LogInfo $ "Starting position: " ++ posToFen pos
-    go (0::Int) (id1, chg1) (id2, chg2)
+    go (0::Int) (ide1, chg1) (ide2, chg2)
     where go i (id1, chg1) (id2, chg2) = do
               start  <- asks startSecond
               currms <- lift $ currMilli start
