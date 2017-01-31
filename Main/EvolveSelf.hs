@@ -119,7 +119,7 @@ data EvolvePersistentState
         evPParams  :: [(Player, Vec)],	-- current player parameters
         evActSucc  :: [(Player, Perf)],	-- performance of active players
         evCurTour  :: Maybe Tournament,	-- current (or last) tournament
-        evWitness  :: Maybe Player,	-- witness player
+        evWitness  :: Player,		-- witness player
         evWitSucc  :: [Rational]	-- points of the witness over time (reverse)
       } deriving (Show, Read)
 
@@ -178,12 +178,15 @@ initNewState cf evname = do
     createDirectory playersDir
     createDirectory gamesDir
     createDirectory currentDir
+    -- Witness is mandatory, the params are the ones hardcoded as default in the current version
+    let witness = "witness.txt"	-- witness player name
+    writeFile (currentDir </> witness) "-- Witness"
     let initDist = makeInitDist cf	-- has to be done from the optim params
         avg = getConfigStr cf "useAvgPerf" (Just "Y")
         evs = Pers { evName = evname, evPopCount = getConfigVal cf "popCount" (Just popCount),
                      evAvgPerf = avg == "Y", evCycle = 0, evPhase = Initialize,
                      evDistrib = initDist, evPParams = [], evCurTour = Nothing,
-                     evWitness = Nothing, evWitSucc = [], evActSucc = []
+                     evWitness = witness, evWitSucc = [], evActSucc = []
                    }
     saveState evs
     return evs
@@ -321,7 +324,7 @@ statePrepare = do
         elite  = take equota good
         pars   = filter (not . flip elem weak . fst) (evPParams est)
         dist   = newDist (evDistrib est) $ mapMaybe (getVect pars) elite
-        miss   = evPopCount est - length weak
+        miss   = evPopCount est - length good
         gpm    = getConfigVal cf "gamesPerMatch" (Just noGames)
     lift $ do
         writeTourTop (event ltour ++ "-top.txt") selecs gpm
@@ -333,7 +336,7 @@ statePrepare = do
     let ncandps = nameCandidates (evName est) cyc newVecs
         ncands  = map fst ncandps
         nscc    = map initPerf ncands
-        tour    = makeTournament (evName est ++ "-" ++ show cyc) $ ncands ++ good
+        tour    = makeTournament (evName est ++ "-" ++ show cyc) $ evWitness est : (ncands ++ good)
     -- move all weak players to the player directory
     lift $ do
         forM_ weak $ \p -> renameFile (currentDir </> p) (playersDir </> p)
@@ -380,9 +383,9 @@ writeCandidate pnames ctime (name, vec) = writeFile (currentDir </> name) (showC
 -- We now have two variants of selecting the best candidates:
 -- - the old one: use the current tournament results in first place (old results only qhen even)
 -- - the new one: use the total average performance
-makeSelectionBase :: Bool -> Int -> Maybe Player -> [(Player, Rational)] -> [(Player, Perf)]
+makeSelectionBase :: Bool -> Int -> Player -> [(Player, Rational)] -> [(Player, Perf)]
                   -> [(Player, (Rational, Rational, Perf))]
-makeSelectionBase avg gpm mwit ordl perfs
+makeSelectionBase avg gpm wit ordl perfs
     | avg       = remWitn $ map avgOlds ordl
     | otherwise = remWitn $ map addOlds ordl
     where addOlds (p, s)
@@ -393,7 +396,7 @@ makeSelectionBase avg gpm mwit ordl perfs
               = case lookup p perfs of
                     Just pf -> (p, (avgPerf gpm pf    s, pfPerf pf, addPerf gpm pf    s))
                     Nothing -> (p, (avgPerf gpm perf0 s,         0, addPerf gpm perf0 s))
-          remWitn sbs = case mwit of Just p -> filter ((/= p) . fst) sbs; Nothing -> sbs
+          remWitn sbs = filter ((/= wit) . fst) sbs
 
 -- Saving the status file to disk in order to recover, if necessary
 -- To be more robust, write to a new file and then renaming
