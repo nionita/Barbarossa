@@ -63,13 +63,19 @@ data EvalParams
           epMaterQueen :: !Int,
           epMaterScale :: !Int,
           epMaterBonusScale :: !Int,
-          epPawnBonusScale  :: !Int,
-          epPassKingProx    :: !Int,
-          epPassBlockO :: !Int,
-          epPassBlockA :: !Int,
-          epPassMin    :: !Int,
-          epPassMyCtrl :: !Int,
-          epPassYoCtrl :: !Int
+          epPassCoef0    :: !Int,
+          epPassCoef1    :: !Int,
+          epPassCoef2    :: !Int,
+          epPassKiCoef0  :: !Int,
+          epPassKiCoef1  :: !Int,
+          epPassKiCoef2  :: !Int,
+          epPassKingWay  :: !Int,
+          epPassBehind   :: !Int,
+          epPassBlockO   :: !Int,
+          epPassBlockA   :: !Int,
+          epPassMin      :: !Int,
+          epPassMyCtrl   :: !Int,
+          epPassYoCtrl   :: !Int
       } deriving Show
 
 data EvalWeights
@@ -123,13 +129,19 @@ instance CollectParams EvalParams where
                     epMaterQueen = 13,
                     epMaterScale = 1,
                     epMaterBonusScale = 5,
-                    epPawnBonusScale  = 1,
-                    epPassKingProx    = 4,
-                    epPassBlockO = 14,
-                    epPassBlockA = 26,
-                    epPassMin    = 23,
-                    epPassMyCtrl = 13,
-                    epPassYoCtrl = 14
+                    epPassCoef0    = 50,
+                    epPassCoef1    = 1,
+                    epPassCoef2    = 4,
+                    epPassKiCoef0  = 3,
+                    epPassKiCoef1  = 2,
+                    epPassKiCoef2  = 1,
+                    epPassKingWay  = 100,
+                    epPassBehind   = 100,
+                    epPassBlockO   = 80,
+                    epPassBlockA   = 160,
+                    epPassMin      = 23,
+                    epPassMyCtrl   = 40,
+                    epPassYoCtrl   = 40
                 }
     npColParm = collectEvalParams
     npSetParm = id
@@ -143,8 +155,14 @@ collectEvalParams (s, v) ep = lookApply s v ep [
         ("epMaterQueen",      setEpMaterQueen),
         ("epMaterScale",      setEpMaterScale),
         ("epMaterBonusScale", setEpMaterBonusScale),
-        ("epPawnBonusScale",  setEpPawnBonusScale),
-        ("epPassKingProx",    setEpPassKingProx),
+        ("epPassCoef0",       setEpPassCoef0),
+        ("epPassCoef1",       setEpPassCoef1),
+        ("epPassCoef2",       setEpPassCoef2),
+        ("epPassKiCoef0",     setEpPassKiCoef0),
+        ("epPassKiCoef1",     setEpPassKiCoef1),
+        ("epPassKiCoef2",     setEpPassKiCoef2),
+        ("epPassKingWay",     setEpPassKingWay),
+        ("epPassBehind",      setEpPassBehind),
         ("epPassBlockO",      setEpPassBlockO),
         ("epPassBlockA",      setEpPassBlockA),
         ("epPassMin",         setEpPassMin),
@@ -158,8 +176,14 @@ collectEvalParams (s, v) ep = lookApply s v ep [
           setEpMaterQueen      v' ep' = ep' { epMaterQueen      = round v' }
           setEpMaterScale      v' ep' = ep' { epMaterScale      = round v' }
           setEpMaterBonusScale v' ep' = ep' { epMaterBonusScale = round v' }
-          setEpPawnBonusScale  v' ep' = ep' { epPawnBonusScale  = round v' }
-          setEpPassKingProx    v' ep' = ep' { epPassKingProx    = round v' }
+          setEpPassCoef0       v' ep' = ep' { epPassCoef0       = round v' }
+          setEpPassCoef1       v' ep' = ep' { epPassCoef1       = round v' }
+          setEpPassCoef2       v' ep' = ep' { epPassCoef2       = round v' }
+          setEpPassKiCoef0     v' ep' = ep' { epPassKiCoef0     = round v' }
+          setEpPassKiCoef1     v' ep' = ep' { epPassKiCoef1     = round v' }
+          setEpPassKiCoef2     v' ep' = ep' { epPassKiCoef2     = round v' }
+          setEpPassKingWay     v' ep' = ep' { epPassKingWay     = round v' }
+          setEpPassBehind      v' ep' = ep' { epPassBehind      = round v' }
           setEpPassBlockO      v' ep' = ep' { epPassBlockO      = round v' }
           setEpPassBlockA      v' ep' = ep' { epPassBlockA      = round v' }
           setEpPassMin         v' ep' = ep' { epPassMin         = round v' }
