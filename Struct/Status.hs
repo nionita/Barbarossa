@@ -129,19 +129,19 @@ instance CollectParams EvalParams where
                     epMaterQueen = 13,
                     epMaterScale = 1,
                     epMaterBonusScale = 5,
-                    epPassCoef0    = 50,
-                    epPassCoef1    = 1,
-                    epPassCoef2    = 4,
-                    epPassKiCoef0  = 3,
-                    epPassKiCoef1  = 2,
-                    epPassKiCoef2  = 1,
-                    epPassKingWay  = 100,
-                    epPassBehind   = 100,
-                    epPassBlockO   = 80,
-                    epPassBlockA   = 160,
-                    epPassMin      = 23,
-                    epPassMyCtrl   = 40,
-                    epPassYoCtrl   = 40
+                    epPassCoef0    = 32,
+                    epPassCoef1    = 21,
+                    epPassCoef2    = 8,
+                    epPassKiCoef0  = 20,
+                    epPassKiCoef1  = -11,
+                    epPassKiCoef2  = 2,
+                    epPassKingWay  = 2,
+                    epPassBehind   = 30,
+                    epPassBlockO   = 50,
+                    epPassBlockA   = 60,
+                    epPassMin      = 37,
+                    epPassMyCtrl   = 42,
+                    epPassYoCtrl   = 52
                 }
     npColParm = collectEvalParams
     npSetParm = id
@@ -229,7 +229,7 @@ instance CollectParams EvalWeights where
           ewPawnBlockP      = tme (-124) (-110),
           ewPawnBlockO      = tme  (-23) (-27),
           ewPawnBlockA      = tme  (-14) (-73),
-          ewPassPawnLev     = tme  3 9
+          ewPassPawnLev     = tme  0 9
         }
     npColParm = collectEvalWeights
     npSetParm = id
