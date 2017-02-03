@@ -39,7 +39,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.5.0"
-progVerSuff = "sig"
+progVerSuff = "sic"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -365,8 +365,8 @@ doGo cmds = do
             else do
                 let (tim, tpm, mtg) = getTimeParams cmds $ myColor chg
                     rept = countRepetitions $ crtStatus chg
-                    md = 20	-- max search depth
-                    dpt = fromMaybe md (findDepth cmds)
+                    md   = 20	-- max search depth
+                    dpt  = fromMaybe md (findDepth cmds)
                 startWorking tim tpm mtg dpt rept
 
 data Agreg = Agreg {
@@ -427,26 +427,22 @@ extendScoreMargin = 24
 -- This function calculates the normal time for the next search loop,
 -- the maximum of that (which cannot be exceeded)
 -- and if we are in time troubles or not
-compTime :: Int -> Int -> Int -> Int -> Int -> (Int, Int, Bool)
+compTime :: Int -> Int -> Int -> Int -> Int -> (Int, Int)
 compTime tim tpm fixmtg cursc rept
-    | tim == 0 && tpm == 0 = (  0,   0,  False)
-    | otherwise            = (ctm, tmx, ttroub)
+    | tim == 0 && tpm == 0 = (  0,   0)
+    | otherwise            = (ctm, tmx)
     where mtg = if fixmtg > 0 then fixmtg else estimateMovesToGo cursc
           mtr | rept >= 2 = 3	-- consider repetitions
               | mtg == 0  = 1
               | otherwise = mtg
           ctn = tpm + tim `div` mtr
-          (ctm, short) = if tim > 0 && tim < 2000 || tim == 0 && tpm < 700
-                            then (300, True)
-                            else (ctn, False)
+          ctm = if tim > 0 && tim < 2000 || tim == 0 && tpm < 700 then 300 else ctn
           frtim = fromIntegral $ max 0 $ tim - ctm	-- rest time after this move
           fctm  = fromIntegral ctm :: Double
           rtimprc = fctm / max frtim fctm
           rtimfrc = remTimeFracIni + remTimeFracDev * rtimprc
           tmxt = round $ fctm + rtimfrc * frtim
-          maxx = max 0 $ tim - timeReserved
-          (tmx, over) = if maxx < tmxt then (maxx, True) else (tmxt, False)
-          ttroub = short || over
+          tmx  = min tmxt $ max 0 $ tim - timeReserved
 
 estMvsToGo :: Array Int Int
 estMvsToGo = listArray (0, 8) [50, 36, 24, 15, 10, 7, 5, 3, 2]
@@ -508,14 +504,13 @@ searchTheTree draft mdraft timx tim tpm mtg rept lsc lpv rmvs = do
     chg <- readChanging
     ctxLog LogInfo $ "Time = " ++ show tim ++ " Timx = " ++ show timx
     (path, sc, rmvsf, timint, stfin, ch) <- bestMoveCont draft timx (crtStatus chg) lsc lpv rmvs
-    -- case length path of _ -> return () -- because of lazyness!
     let totch = totBmCh chg + ch
         ldCh | ch > 0    = draft
              | otherwise = lastChDr chg
     modifyChanging $ \c -> c { crtStatus = stfin, totBmCh = totch, lastChDr = ldCh,
                                forGui = Just $ InfoB { infoPv = path, infoScore = sc }}
     currms <- lift $ currMilli (startSecond ctx)
-    let (ms, mx, _) = compTime tim tpm mtg sc rept	-- urg not used
+    let (ms, mx) = compTime tim tpm mtg sc rept
         exte = maybe False id $ do
                   los <- lsc
                   gls <- lmvScore chg
@@ -561,7 +556,7 @@ searchTheTree draft mdraft timx tim tpm mtg rept lsc lpv rmvs = do
                    return sc
 
 -- The time management changes like this:
--- We calculate ther normal and maximum time to use for this move, as before
+-- We calculate the normal and maximum time to use for this move, as before
 -- we correct the time per move with some factor (ply in game, score drop)
 -- we calculate what would be the max draft we could reach at this rate
 -- if we reached the max draft - stop the search
@@ -570,7 +565,7 @@ searchTheTree draft mdraft timx tim tpm mtg rept lsc lpv rmvs = do
 -- - number of changes in last draft
 -- - total number of changes in this search
 -- - last draft with changes
--- Than based on this probability we limit the interrup time for next search (in case it starts)
+-- Than based on this probability we limit the interrupt time for next search (in case it starts)
 -- if max draft is greater than next draft we start next search
 -- if max draft = next draft we decide probabilistically if we start the next draft or not
 stopByChance :: Double -> Bool -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> CtxIO (Bool, Int)
@@ -629,9 +624,11 @@ probChange d c ct dc = 1 / (1 + exp (-z))
           z  = w0 + w1 * d + w2 * c + w3 * ct + w4 * dc
 
 reduceBegin :: Maybe Int -> Double
-reduceBegin mi | Just i <- mi,
-                 i < 10    = fromIntegral i / 10
-               | otherwise = 1
+reduceBegin mi | Just i <- mi = reduce i
+               | otherwise    = 1
+    where reduce i | i < 6     = 0.5
+                   | i < 10    = fromIntegral i / 10
+                   | otherwise = 1
 
 timeProlongation :: Int -> Int -> Double
 timeProlongation osc sc

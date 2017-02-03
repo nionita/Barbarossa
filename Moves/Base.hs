@@ -236,8 +236,9 @@ checkRemisRules p = do
 -- If we have a few repetitions in the last moves, then we will reduce moves to go
 -- so the time management can allocate more time for next moves
 countRepetitions :: MyState -> Int
-countRepetitions s = 6 - uniq
-    where uniq = length $ nub $ map zobkey $ take 6 $ stack s
+countRepetitions s = length f6 - uniq
+    where uniq = length $ nub $ map zobkey f6
+          f6   = take 6 $ stack s
 
 {-# INLINE undoMove #-}
 undoMove :: Game ()
