@@ -95,19 +95,6 @@ nulTrig   = -15	-- static margin to beta, to trigger null move (in scoreGrain un
 nulSubAct :: Bool
 nulSubAct = True
 
--- Parameters for internal iterative deepening
-useIID :: Bool
-useIID      = True
-
-minIIDPV, minIIDCut, minIIDCutNK, maxIIDDepth :: Int
-minIIDPV    = 5
-minIIDCutNK = 6
-minIIDCut   = 8
-maxIIDDepth = 2
-
-iidNewDepth :: Int -> Int
-iidNewDepth = subtract 1
-
 -- Parameter for quiescenst search
 inEndlessCheck, qsDeltaMargin :: Int
 inEndlessCheck = -scoreGrain	-- there is a risk to be left in check
@@ -228,8 +215,8 @@ nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore "Zero" 0,
              -- we start with spcno = 1 as we consider the first move as special
              -- to avoid in any way reducing the tt move
 
-resetNSt :: Path -> Killer -> NodeState -> NodeState
-resetNSt !sc !kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill }
+resetNSt :: Path -> NodeState -> NodeState
+resetNSt !sc nst = nst { cursc = sc, movno = 1, spcno = 1 }
 
 pvro00 :: PVReadOnly
 pvro00 = PVReadOnly { draft = 0, albest = False, timeli = False, abmili = 0 }
@@ -292,9 +279,11 @@ pvRootSearch :: Int -> Int -> Int -> Seq Move -> Alt Move -> Bool
 pvRootSearch a b d lastpath rmvs aspir = do
     pos <- lift getPos
     edges <- if null (unalt rmvs)	-- only when d==1, but we could have lastpath from the previous real move
-                then genAndSort nst0 { cpos = pos } Nothing a b d	-- no IID here as d==1
+                then do
+                    (mvs1, mvs2) <- lift $ genMoves d
+                    return $ Alt $ mvs1 ++ mvs2
                 else case lastpath of
-                         Seq []    -> return rmvs	-- does this happens? - check to simplify!
+                         Seq []    -> return rmvs	-- does this happen? - check to simplify!
                          Seq (e:_) -> return $ Alt $ e : delete e (unalt rmvs)
     let !nsti = nst0 { cursc = pathFromScore "Alpha" a, cpos = pos }
     nstf <- pvLoop (pvInnerRoot b d) nsti edges
@@ -491,7 +480,6 @@ pvSearch nst !a !b !d = do
     when (not $ inPv || ab) $ lift $ absurd $ "pvSearch: not inPv, not ab, nst = " ++ show nst
     -- Check first for a TT entry of the position to search
     (hdeep, tp, hsc, e, nodes') <- reTrieve >> lift ttRead
-    when (hdeep < 0) reFail
     -- tp == 1 => score >= hsc, so if hsc >= asco then we improved,
     --    but can we use hsc in PV? This score is not exact!
     --    Idea: return only if better than beta, else search for exact score
@@ -511,41 +499,62 @@ pvSearch nst !a !b !d = do
                lift $ betaCut True adp e
            reSucc nodes' >> return ttpath
        else do
-           -- Here: when ab we should do null move search
+           when (hdeep < 0) reFail
            pos <- lift getPos
-           -- Use the found TT move as best move
-           let mttmv = if hdeep > 0 then Just e else Nothing
-               nst'  = nst { cpos = pos }
-           edges <- genAndSort nst' mttmv a b d
-           if noMove edges
+           -- Here: when ab we should do null move search
+           (mvs1, mvs2) <- lift $ genMoves d
+           if null mvs1 && null mvs2
               then return $ trimaxPath a b $ if tacticalPos pos then matedPath else staleMate
               else do
-                nodes0 <- gets (sNodes . stats)
-                -- futility pruning:
-                prune <- isPruneFutil d a True (staticScore pos)
-                -- Loop thru the moves
-                let !nsti = resetNSt (pathFromScore "low limit" a) NoKiller nst'
-                nstf <- pvSLoop b d prune nsti edges
-                let s = cursc nstf
-                -- After pvSLoop ... we expect always that s >= a - this must be checked if it is so
-                -- then it makes sense below to take bestPath when failed low (s == a)
-                abrt' <- gets abort
-                if abrt' || pathScore s > a
-                   then checkFailHard "pvSLoop improve" a b (pathScore s) >> return s
-                   else if movno nstf > 1
-                           then do
-                               -- here we failed low
-                               let de = max d $ pathDepth s
-                               nodes1 <- gets (sNodes . stats)
-                               -- store as upper score, and as move, the first one generated
-                               lift $ do
-                                   let typ = 0
-                                       !deltan = nodes1 - nodes0
-                                       mv = head $ unalt edges	-- not null - we are on "else" of noMove
-                                   ttStore de typ a mv deltan
-                               checkFailHard "pvSLoop low" a b (pathScore s)
-                               return s
-                           else return $ trimaxPath a b $ if tacticalPos pos then matedPath else staleMate
+                  -- Prepare iterative deepening
+                  let nst' = nst { cpos = pos, killer = NoKiller }
+                      kl   = filter (isMoveLegal pos) $ killerToList (killer nst)
+                      (d1, mttmv) | hdeep >= d = (        d, Just e)	-- unclear...
+                                  | hdeep >  0 = (hdeep + 1, Just e)
+                                  | otherwise  = (        1, Nothing)
+                  -- futility pruning:
+                  prune <- isPruneFutil d a True (staticScore pos)
+                  -- Can we use further information from TT? (change a or b)
+                  go nst' mttmv kl mvs1 mvs2 d1 prune
+    where go nstp mttmv kl mvs1 mvs2 d1 prune = do
+              let mvs = bestFirst mttmv kl mvs1 mvs2
+              nodes0 <- gets (sNodes . stats)
+              -- Loop thru the moves
+              let !nsti = resetNSt (pathFromScore "low limit" a) nstp
+              nstf <- pvSLoop b d1 prune nsti $ Alt mvs
+              nodes1 <- gets (sNodes . stats)
+              -- reportHighCost	-- a possibility to report nodes with high cost (i.e. nodes beneath)
+              let s = cursc nstf
+              abrt' <- gets abort
+              if abrt'
+                 then return s
+                 else if pathScore s > a
+                         then if d1 >= d
+                                 then checkFailHard "pvSLoop improve" a b (pathScore s) >> return s
+                                 else do
+                                     let mnmv = Just $ head $ unseq $ pathMoves s
+                                     go nstf mnmv kl mvs1 mvs2 (d1+1) prune
+                         else if movno nstf > 1
+                                 then do
+                                     -- here we failed low
+                                     let mv | Just ttmv <- mttmv = ttmv
+                                            | null mvs1          = head mvs2	-- either mvs1
+                                            | otherwise          = head mvs1	-- or mvs2 are ok
+                                     if d1 >= d
+                                        then do
+                                            let de = max d1 $ pathDepth s
+                                            -- store as upper score
+                                            let typ = 0
+                                                !deltan = nodes1 - nodes0
+                                            lift $ ttStore de typ a mv deltan
+                                            checkFailHard "pvSLoop low" a b (pathScore s)
+                                            return s
+                                        else go nstf (Just mv) kl mvs1 mvs2 (d1+1) prune
+                                 else do	-- no move was legal
+                                     pos <- lift getPos
+                                     return $ trimaxPath a b $ if tacticalPos pos
+                                                                  then matedPath
+                                                                  else staleMate
 
 -- PV Zero Window
 pvZeroW :: NodeState -> Int -> Int -> Int -> Bool -> Search Path
@@ -557,7 +566,6 @@ pvZeroW !_ !b !d !_ _ | d <= 0 = do
 pvZeroW !nst !b !d !lastnull redu = do
     -- Check if we have it in TT
     (hdeep, tp, hsc, e, nodes') <- reTrieve >> lift ttRead
-    when (hdeep < 0) reFail
     if hdeep >= d && (tp == 2 || tp == 1 && hsc >= b || tp == 0 && hsc < b)
        then do
            let ttpath = Path { pathScore = trimax bGrain b hsc, pathDepth = hdeep,
@@ -568,6 +576,7 @@ pvZeroW !nst !b !d !lastnull redu = do
                lift $ betaCut True adp e
            reSucc nodes' >> return ttpath
        else do
+           when (hdeep < 0) reFail
            pos <- lift getPos
            nmhigh <- nullMoveFailsHigh pos nst b d lastnull
            abrt <- gets abort
@@ -576,40 +585,67 @@ pvZeroW !nst !b !d !lastnull redu = do
               else case nmhigh of
                 NullMoveHigh -> return $ pathFromScore "NullMoveHigh" b
                 _ -> do
-                    -- Use the TT move as best move
-                    let mttmv = if hdeep > 0 then Just e else Nothing
-                        nst' = nst { cpos = pos }
-                    edges <- genAndSort nst' mttmv bGrain b d
-                    if noMove edges
+                    -- Generate the possible moves
+                    (mvs1, mvs2) <- lift $ genMoves d
+                    if null mvs1 && null mvs2
                        then return $ trimaxPath bGrain b $ if tacticalPos pos then matedPath else staleMate
                        else do
-                         !nodes0 <- gets (sNodes . stats)
-                         -- futility pruning:
-                         prune <- isPruneFutil d bGrain False (staticScore pos)
-                         -- Loop thru the moves
+                         -- Prepare iterative deepening
                          let kill1 = case nmhigh of
                                          NullMoveThreat s -> newTKiller pos d s
                                          _                -> NoKiller
-                             !nsti = resetNSt (pathFromScore "low limit" bGrain) kill1 nst'
-                         nstf <- pvZLoop b d prune redu nsti edges
-                         let s = cursc nstf
-                         checkFailHard "pvZLoop" bGrain b (pathScore s)
-                         -- Here we expect bGrain <= s < b -- this must be checked
-                         if pathScore s >= b
-                            then return s	-- failed high
-                            else if movno nstf > 1 -- we failed low
-                                   then do
-                                       let !de = max d $ pathDepth s
-                                       !nodes1 <- gets (sNodes . stats)
-                                       -- store as upper score, and as move the first one (generated)
-                                       lift $ do
-                                           let typ = 0
-                                               !deltan = nodes1 - nodes0
-                                               mv = head $ unalt edges	-- not null, we are in "else" of noMove
-                                           ttStore de typ bGrain mv deltan
-                                       return s
-                                   else return $ trimaxPath bGrain b $ if tacticalPos pos then matedPath else staleMate
+                             nst' = nst { cpos = pos, killer = kill1 }
+                             kl   = filter (isMoveLegal pos) $ killerToList (killer nst)
+                             mttmv | hdeep > 0 = Just e
+                                   | otherwise = Nothing
+                             d1 | crtnt nst == AllNode = d
+                                | hdeep >= d           = 1
+                                | hdeep >  0           = hdeep + 1
+                                | otherwise            = 1
+                         -- futility pruning:
+                         prune <- isPruneFutil d bGrain False (staticScore pos)
+                         -- Can we use further information from TT? (change b)
+                         go nst' mttmv kl mvs1 mvs2 d1 prune
     where !bGrain = b - scoreGrain
+          go nstp mttmv kl mvs1 mvs2 d1 prune = do
+              let mvs = bestFirst mttmv kl mvs1 mvs2
+              nodes0 <- gets (sNodes . stats)
+              -- Loop thru the moves
+              let !nsti = resetNSt (pathFromScore "low limit" bGrain) nstp
+              nstf <- pvZLoop b d1 prune redu nsti $ Alt mvs
+              let s = cursc nstf
+              abrt' <- gets abort
+              if abrt'
+                 then return s
+                 else if pathScore s >= b
+                         then if d1 >= d
+                                 then checkFailHard "pvZLoop" bGrain b (pathScore s) >> return s
+                                 else do
+                                     let mnmv = Just $ head $ unseq $ pathMoves s
+                                     go nstf mnmv kl mvs1 mvs2 (d1+1) prune
+                         else if movno nstf > 1
+                                 then do
+                                     -- we failed low
+                                     let mv | Just ttmv <- mttmv = ttmv
+                                            | null mvs1          = head mvs2	-- either mvs1
+                                            | otherwise          = head mvs1	-- or mvs2 are ok
+                                     if d1 >= d
+                                        then do
+                                            !nodes1 <- gets (sNodes . stats)
+                                            -- store as upper score
+                                            lift $ do
+                                                let !de = max d $ pathDepth s
+                                                    typ = 0
+                                                    !deltan = nodes1 - nodes0
+                                                ttStore de typ bGrain mv deltan
+                                            checkFailHard "pvZLoop low" bGrain b (pathScore s)
+                                            return s
+                                        else go nstf (Just mv) kl mvs1 mvs2 (d1+1) prune
+                                 else do	-- no legal move found
+                                     pos <- lift getPos
+                                     return $ trimaxPath bGrain b $ if tacticalPos pos
+                                                                       then matedPath
+                                                                       else staleMate
 
 data NullMoveResult = NoNullMove | NullMoveHigh | NullMoveLow | NullMoveThreat Path
 
@@ -908,21 +944,6 @@ newTKiller pos d s
       isTKillCand pos km = OneKiller km
     | otherwise          = NoKiller
 
--- We don't sort the moves here, they have to come sorted from genMoves
--- But we consider the best move first (TT or IID) and the killers
-genAndSort :: NodeState -> Maybe Move -> Int -> Int -> Int -> Search (Alt Move)
-genAndSort nst mttmv a b d = do
-    path <- case mttmv of
-                Just mv -> return [mv]
-                Nothing -> if useIID
-                              then bestMoveFromIID nst a b d	-- it will do nothing for AllNode
-                              else return []		-- if not null
-    lift $ do
-        let kl = filter (isMoveLegal (cpos nst)) $ killerToList (killer nst)
-        esp <- genMoves d
-        let es = bestFirst path kl esp
-        return $ Alt es
-
 -- Late Move Reduction
 -- With a variable lmrlev the reduction should stay in a region
 -- where the number of researches has an acceptable level
@@ -1108,19 +1129,6 @@ pvQInnerLoop !b c !a e = timeToAbort (True, b) $ do
                            else return (False, a)
             else return (False, a)
 
-{-# INLINE bestMoveFromIID #-}
-bestMoveFromIID :: NodeState -> Int -> Int -> Int -> Search [Move]
-bestMoveFromIID nst a b d
-    | nt == PVNode  && d >= minIIDPV
-          = do s <- pvSearch nst a b d'
-               return $! unseq $ pathMoves s
-    | nt == CutNode && (d >= minIIDCut || (d >= minIIDCutNK && killer nst == NoKiller))
-          = do s <- pvZeroW nst b d' nulMoves False
-               return $! unseq $ pathMoves s
-    | otherwise =  return []
-    where d' = min maxIIDDepth (iidNewDepth d)
-          nt = crtnt nst
-
 {-# INLINE timeToAbort #-}
 timeToAbort :: a -> Search a -> Search a
 timeToAbort a act = do
@@ -1219,12 +1227,12 @@ incReBe n = modStat $ \s -> s { sReBe = sReBe s + n }
 incReMi :: Search ()
 incReMi = modStat $ \s -> s { sReMi = sReMi s + 1 }
 
-bestFirst :: Eq e => [e] -> [e] -> ([e], [e]) -> [e]
-bestFirst path kl (es1, es2)
-    | null path = es1 ++ kl ++ delall es2 kl
-    | otherwise = e : delete e es1 ++ kl ++ delall es2 (e : kl)
-    where delall = foldr delete
-          (e:_)  = path
+bestFirst :: Eq e => Maybe e -> [e] -> [e] -> [e] -> [e]
+bestFirst Nothing  kl es1 es2 = es1 ++ kl ++ delall es2 kl
+bestFirst (Just e) kl es1 es2 = e : delete e es1 ++ kl ++ delall es2 (e : kl)
+
+delall :: Eq e => [e] -> [e] -> [e]
+delall = foldr delete
 
 pushKiller :: Move -> Killer -> Killer
 pushKiller !e NoKiller = OneKiller e
