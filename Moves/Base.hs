@@ -12,14 +12,13 @@ module Moves.Base (
     betaCut, doNullMove, ttRead, ttStore, curNodes, isTimeout, informCtx,
     mateScore, scoreDiff, qsDelta,
     draftStats,
-    finNode, countRepetitions,
+    finNode,
     showMyPos, logMes,
     nearmate
 ) where
 
 import Data.Bits
 import Data.Int
-import Data.List (nub)
 import Control.Monad.State
 import Control.Monad.Reader (ask)
 -- import Numeric
@@ -232,13 +231,6 @@ checkRemisRules p = do
          case equal of
             (_:_:_)    -> return True
             _          -> return False
-
--- If we have a few repetitions in the last moves, then we will reduce moves to go
--- so the time management can allocate more time for next moves
-countRepetitions :: MyState -> Int
-countRepetitions s = length f6 - uniq
-    where uniq = length $ nub $ map zobkey f6
-          f6   = take 6 $ stack s
 
 {-# INLINE undoMove #-}
 undoMove :: Game ()

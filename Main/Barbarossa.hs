@@ -39,7 +39,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.5.0"
-progVerSuff = "sic"
+progVerSuff = "sir"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -364,10 +364,9 @@ doGo cmds = do
             then ctxLog DebugUci "Just ponder: ignored"
             else do
                 let (tim, tpm, mtg) = getTimeParams cmds $ myColor chg
-                    rept = countRepetitions $ crtStatus chg
                     md   = 20	-- max search depth
                     dpt  = fromMaybe md (findDepth cmds)
-                startWorking tim tpm mtg dpt rept
+                startWorking tim tpm mtg dpt
 
 data Agreg = Agreg {
          agrCumErr :: !Integer,	-- accumulated error
@@ -396,7 +395,7 @@ perFenLine dpt fenLine agr = do
     ctxLog LogInfo $ "Ref.Score " ++ refsc ++ " fen " ++ fen
     doPosition (Pos fen) []
     modifyChanging $ \c -> c { working = True }
-    sc <- searchTheTree 1 dpt 0 0 0 0 0 Nothing [] []
+    sc <- searchTheTree 1 dpt 0 0 0 0 Nothing [] []
     return $ aggregateError agr rsc sc
 
 aggregateError :: Agreg -> Int -> Int -> Agreg
@@ -419,7 +418,7 @@ remTimeFracFin = 0.5	-- same at final (when remaining time is near zero)
 remTimeFracDev = remTimeFracFin - remTimeFracIni
 
 timeReserved :: Int
-timeReserved   = 70	-- milliseconds reserved for move communication
+timeReserved   = 100	-- milliseconds reserved for move communication
 
 extendScoreMargin :: Int
 extendScoreMargin = 24
@@ -427,12 +426,12 @@ extendScoreMargin = 24
 -- This function calculates the normal time for the next search loop,
 -- the maximum of that (which cannot be exceeded)
 -- and if we are in time troubles or not
-compTime :: Int -> Int -> Int -> Int -> Int -> (Int, Int)
-compTime tim tpm fixmtg cursc rept
+compTime :: Int -> Int -> Int -> Int -> Bool -> (Int, Int)
+compTime tim tpm fixmtg cursc isdraw
     | tim == 0 && tpm == 0 = (  0,   0)
     | otherwise            = (ctm, tmx)
     where mtg = if fixmtg > 0 then fixmtg else estimateMovesToGo cursc
-          mtr | rept >= 2 = 3	-- consider repetitions
+          mtr | isdraw    = 1	-- consider repetition draw
               | mtg == 0  = 1
               | otherwise = mtg
           ctn = tpm + tim `div` mtr
@@ -445,7 +444,7 @@ compTime tim tpm fixmtg cursc rept
           tmx  = min tmxt $ max 0 $ tim - timeReserved
 
 estMvsToGo :: Array Int Int
-estMvsToGo = listArray (0, 8) [50, 36, 24, 15, 10, 7, 5, 3, 2]
+estMvsToGo = listArray (0, 8) [60, 36, 24, 15, 10, 7, 5, 3, 2]
 
 estimateMovesToGo :: Int -> Int
 estimateMovesToGo sc = estMvsToGo ! mvidx
@@ -456,8 +455,8 @@ newThread a = do
     ctx <- ask
     liftIO $ forkIO $ runReaderT a ctx
 
-startWorking :: Int -> Int -> Int -> Int -> Int -> CtxIO ()
-startWorking tim tpm mtg dpt rept = do
+startWorking :: Int -> Int -> Int -> Int -> CtxIO ()
+startWorking tim tpm mtg dpt = do
     ctx <- ask
     currms <- lift $ currMilli (startSecond ctx)
     ctxLog DebugUci $ "Start at " ++ show currms
@@ -465,7 +464,7 @@ startWorking tim tpm mtg dpt rept = do
         ++ " - maximal " ++ show dpt ++ " plys"
     modifyChanging $ \c -> c { working = True, srchStrtMs = currms, totBmCh = 0,
                                lastChDr = 0, crtStatus = posNewSearch (crtStatus c) }
-    tid <- newThread (startSearchThread tim tpm mtg dpt rept)
+    tid <- newThread (startSearchThread tim tpm mtg dpt)
     modifyChanging (\c -> c { compThread = Just tid })
     return ()
 
@@ -473,9 +472,9 @@ startWorking tim tpm mtg dpt rept = do
 -- in the search thread (here in giveBestMove)
 -- This is not good, then it can lead to race conditions. We should
 -- find another scheme, for example with STM
-startSearchThread :: Int -> Int -> Int -> Int -> Int -> CtxIO ()
-startSearchThread tim tpm mtg dpt rept =
-    ctxCatch (void $ searchTheTree 1 dpt 0 tim tpm mtg rept Nothing [] [])
+startSearchThread :: Int -> Int -> Int -> Int -> CtxIO ()
+startSearchThread tim tpm mtg dpt =
+    ctxCatch (void $ searchTheTree 1 dpt 0 tim tpm mtg Nothing [] [])
         $ \e -> do
             chg <- readChanging
             let mes = "searchTheTree terminated by exception: " ++ show e
@@ -497,8 +496,8 @@ ctxCatch a f = do
             (\e -> runReaderT (f e) ctx)
 
 -- Search with the given depth
-searchTheTree :: Int -> Int -> Int -> Int -> Int -> Int -> Int -> Maybe Int -> [Move] -> [Move] -> CtxIO Int
-searchTheTree draft mdraft timx tim tpm mtg rept lsc lpv rmvs = do
+searchTheTree :: Int -> Int -> Int -> Int -> Int -> Int -> Maybe Int -> [Move] -> [Move] -> CtxIO Int
+searchTheTree draft mdraft timx tim tpm mtg lsc lpv rmvs = do
     ctxLog LogInfo $ "searchTheTree starts draft " ++ show draft
     ctx <- ask
     chg <- readChanging
@@ -507,10 +506,14 @@ searchTheTree draft mdraft timx tim tpm mtg rept lsc lpv rmvs = do
     let totch = totBmCh chg + ch
         ldCh | ch > 0    = draft
              | otherwise = lastChDr chg
+        -- it ends in 3 times repetition (draft condition to stabilize the score)
+        isDraw = draft >= 6 && length (take 3 path) < 3 && sc == 0
     modifyChanging $ \c -> c { crtStatus = stfin, totBmCh = totch, lastChDr = ldCh,
                                forGui = Just $ InfoB { infoPv = path, infoScore = sc }}
     currms <- lift $ currMilli (startSecond ctx)
-    let (ms, mx) = compTime tim tpm mtg sc rept
+    let (ms, mx) = compTime tim tpm mtg sc isDraw
+        -- Idea: based on last 3-5 scores (on real moves) modify the time
+        -- Currently we do this based on last real move score & last draft score
         exte = maybe False id $ do
                   los <- lsc
                   gls <- lmvScore chg
@@ -548,8 +551,8 @@ searchTheTree draft mdraft timx tim tpm mtg rept lsc lpv rmvs = do
            chg' <- readChanging
            if working chg'
                then if mx == 0	-- no time constraint (take original maximum)
-                       then searchTheTree (draft + 1) mdraft 0             tim tpm mtg rept (Just sc) path rmvsf
-                       else searchTheTree (draft + 1) mdraft (start + mxr) tim tpm mtg rept (Just sc) path rmvsf
+                       then searchTheTree (draft + 1) mdraft 0             tim tpm mtg (Just sc) path rmvsf
+                       else searchTheTree (draft + 1) mdraft (start + mxr) tim tpm mtg (Just sc) path rmvsf
                else do
                    ctxLog DebugUci "in searchTheTree: not working"
                    giveBestMove path -- was stopped
@@ -557,17 +560,19 @@ searchTheTree draft mdraft timx tim tpm mtg rept lsc lpv rmvs = do
 
 -- The time management changes like this:
 -- We calculate the normal and maximum time to use for this move, as before
+-- if the score drops more than a margin, extend (i.e. do next draft)
 -- we correct the time per move with some factor (ply in game, score drop)
+-- if the allocated time is reached, stop
 -- we calculate what would be the max draft we could reach at this rate
--- if we reached the max draft - stop the search
--- else we calculate a probability that next draft will change the best move based on:
+-- if we reached the max draft, stop
+-- we calculate a probability that next draft will change the best move based on:
 -- - last draft
 -- - number of changes in last draft
 -- - total number of changes in this search
 -- - last draft with changes
 -- Than based on this probability we limit the interrupt time for next search (in case it starts)
--- if max draft is greater than next draft we start next search
--- if max draft = next draft we decide probabilistically if we start the next draft or not
+-- if we have at least 2 drafts to go to max draft, start next draft
+-- otherwise we decide probabilistically if we start the next draft or not
 stopByChance :: Double -> Bool -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> CtxIO (Bool, Int)
 stopByChance red extend ms used mx draft ch totch ldCh
     | extend      = return (False, mx)
@@ -575,15 +580,15 @@ stopByChance red extend ms used mx draft ch totch ldCh
     | otherwise   = do
     let dmax = maxDepthAtThisRate draft used msr
     ctxLog LogInfo $ "stopByChance: draft = " ++ show draft ++ " dmax = " ++ show dmax
-    if dmax < draft
-       then return (True, mx)
+    if dmax <= draft
+       then return (True, mx)	-- we reached the max draft
        else do
           -- We need the probability to limit the interrupt time at least:
           let p = probChange (fromIntegral draft) (fromIntegral ch) (fromIntegral totch) (fromIntegral ldCh)
               mxf = fromIntegral mx
               mxr = min mx $ round $ red * (mxf + mxf * p) / 2
-          if dmax > draft + 1
-             then return (False, mxr)	-- we have more than 1 draft to go
+          if dmax > draft + 2
+             then return (False, mxr)	-- we have at least 2 drafts to go
              else do
                  ctxLog LogInfo $ "stopByChance: p = " ++ show p
                  r <- liftIO $ getStdRandom (randomR (0::Double, 1))
@@ -603,25 +608,16 @@ maxDepthAtThisRate d used ms
           dmax1 = (log (msf + usedf) - log usedf) * logs
 
 -- This is just a prediction using logistic regression on the 4 parameters
--- The parameters were found outside and have reached 77% prediction rate
+-- The parameters were found outside and have reached 91% prediction rate
 probChange :: Double -> Double -> Double -> Double -> Double
 probChange d c ct dc = 1 / (1 + exp (-z))
-    -- where w0 = -0.47326189	-- these got 77%
-    --       w1 = -0.24871493
-    --       w2 = 0.18633039
-    --       w3 = 0.07070459
-    --       w4 = 0.1175941
-    -- where w0 = -0.46828955	-- these got 80%
-    --       w1 = -0.24585093
-    --       w2 = 0.19289682
-    --       w3 = 0.09635968
-    --       w4 = 0.10235857
     where w0 = -1.80799248	-- these got 91% with scales
           w1 = -0.59439615 / 20
           w2 = 0.3024311 / 10
           w3 = 0.4347557 / 20
           w4 = -0.34551297 / 20
           z  = w0 + w1 * d + w2 * c + w3 * ct + w4 * dc
+
 
 reduceBegin :: Maybe Int -> Double
 reduceBegin mi | Just i <- mi = reduce i
