@@ -33,12 +33,12 @@ import Search.CStateMonad (execCState)
 import Search.AlbetaTypes
 import Eval.FileParams (makeEvalState)
 
--- Name, authos, version and suffix:
+-- Name, author, version and suffix:
 progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.5.0"
-progVerSuff = "wpa"
+progVerSuff = "wpai"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -412,7 +412,6 @@ getTimeParams cs _ c	-- unused: lastsc
           tim = fromMaybe 0 $ findTime c cs
           mtg = fromMaybe 0 $ findMovesToGo cs
 
-
 -- These parameters should be optimised (i.e.: first made options)
 remTimeFracIni, remTimeFracFin, remTimeFracDev :: Double
 remTimeFracIni = 0.15	-- fraction of remaining time which we can consume at once - initial value
@@ -420,18 +419,21 @@ remTimeFracFin = 0.5	-- same at final (when remaining time is near zero)
 remTimeFracDev = remTimeFracFin - remTimeFracIni
 
 timeReserved :: Int
-timeReserved   = 70	-- milliseconds reserved for move communication
+timeReserved = 100	-- milliseconds reserved for move communication
 
 -- This function calculates the normal time for the next search loop,
--- the maximum of that (whch cannot be exceeded)
+-- the maximum of that (which cannot be exceeded)
 -- and if we are in time troubles or not
-compTime :: Int -> Int -> Int -> Int -> (Int, Int, Bool)
-compTime tim tpm fixmtg lastsc
+compTime :: Int -> Int -> Int -> Int -> Bool -> (Int, Int, Bool)
+compTime tim tpm fixmtg cursc isdraw
     | tim == 0 && tpm == 0 = (  0,   0,  False)
     | otherwise            = (ctm, tmx, ttroub)
-    where mtg = if fixmtg > 0 then fixmtg else estimateMovesToGo lastsc
-          ctn = tpm + tim `div` mtg
-          (ctm, short) = if tim > 0 && tim < 2000 || tim == 0 && tpm < 700
+    where mtg = if fixmtg > 0 then fixmtg else estimateMovesToGo cursc
+          mtr | isdraw    = 1	-- repetition draw
+              | mtg == 0  = 1
+              | otherwise = mtg
+          ctn = tpm + tim `div` mtr
+          (ctm, short) = if tim > 0 && tim < 1000 || tim == 0 && tpm < 700
                             then (300, True)
                             else (ctn, False)
           frtim = fromIntegral $ max 0 $ tim - ctm	-- rest time after this move
@@ -444,7 +446,7 @@ compTime tim tpm fixmtg lastsc
           ttroub = short || over
 
 estMvsToGo :: Array Int Int
-estMvsToGo = listArray (0, 8) [30, 28, 24, 18, 12, 10, 8, 6, 3]
+estMvsToGo = listArray (0, 8) [35, 28, 24, 18, 12, 8, 4, 3, 2]
 
 estimateMovesToGo :: Int -> Int
 estimateMovesToGo sc = estMvsToGo ! mvidx
@@ -498,24 +500,26 @@ ctxCatch a f = do
 
 -- Search with the given depth
 searchTheTree :: Int -> Int -> Int -> Int -> Int -> Int -> Maybe Int -> [Move] -> [Move] -> CtxIO Int
-searchTheTree tief mtief timx tim tpm mtg lsc lpv rmvs = do
+searchTheTree draft mdraft timx tim tpm mtg lsc lpv rmvs = do
     ctx <- ask
     chg <- readChanging
     ctxLog LogInfo $ "Time = " ++ show tim ++ " Timx = " ++ show timx
-    (path, sc, rmvsf, timint, stfin) <- bestMoveCont tief timx (crtStatus chg) lsc lpv rmvs
-    case length path of _ -> return () -- because of lazyness!
+    (path, sc, rmvsf, timint, stfin) <- bestMoveCont draft timx (crtStatus chg) lsc lpv rmvs
     storeBestMove path sc	-- write back in status
     modifyChanging (\c -> c { crtStatus = stfin })
     currms <- lift $ currMilli (startSecond ctx)
-    let (ms', mx, urg) = compTime tim tpm mtg sc
-    ms <- if urg || null path then return ms' else correctTime tief (reduceBegin (realPly chg) ms') sc path
+    let isDraw = draft >= 6 && length (take 3 path) < 3 && sc == 0
+        (ms', mx, urg) = compTime tim tpm mtg sc isDraw
+    ms <- if urg || null path
+             then return ms'
+             else correctTime draft (reduceBegin (realPly chg) ms') sc path
     let strtms = srchStrtMs chg
         delta = strtms + ms - currms
         ms2 = ms `div` 2
-        onlyone = ms > 0 && length rmvsf == 1 && tief >= 4	-- only in normal play
+        onlyone = ms > 0 && length rmvsf == 1 && draft >= 4	-- only in normal play
         halfover = ms > 0 && delta <= ms2  -- time is half over
-        depthmax = tief >= mtief	--  or maximal depth
-        mes = "Depth " ++ show tief ++ " Score " ++ show sc ++ " in ms "
+        depthmax = draft >= mdraft	--  or maximal depth
+        mes = "Depth " ++ show draft ++ " Score " ++ show sc ++ " in ms "
                 ++ show currms ++ " remaining " ++ show delta
                 ++ " path " ++ show path
     ctxLog LogInfo mes
@@ -528,13 +532,13 @@ searchTheTree tief mtief timx tim tpm mtg lsc lpv rmvs = do
         else do
             chg' <- readChanging
             if working chg'
-                then if mx == 0	-- no time constraint
-                        then searchTheTree (tief + 1) mtief 0             tim tpm mtg (Just sc) path rmvsf
-                        else searchTheTree (tief + 1) mtief (strtms + mx) tim tpm mtg (Just sc) path rmvsf
-                else do
-                    ctxLog DebugUci "in searchTheTree: not working"
-                    giveBestMove path -- was stopped
-                    return sc
+               then if mx == 0	-- no time constraint
+                       then searchTheTree (draft+1) mdraft 0           tim tpm mtg (Just sc) path rmvsf
+                       else searchTheTree (draft+1) mdraft (strtms+mx) tim tpm mtg (Just sc) path rmvsf
+               else do
+                   ctxLog DebugUci "in searchTheTree: not working"
+                   giveBestMove path -- was stopped
+                   return sc
 
 -- We assume here that we always have at least the first move of the PV (our best)
 -- If not (which is a fatal error) we will get an exception (head of empty list)
@@ -674,18 +678,28 @@ bestMove m mp = s
 -- sel.depth nicht implementiert
 formInfo :: InfoToGui -> String
 formInfo itg = "info"
-    -- ++ " score cp " ++ show isc
-    ++ formScore isc
+    ++ formScore esc
     ++ " depth " ++ show (infoDepth itg)
     -- ++ " seldepth " ++ show idp
     ++ " time " ++ show (infoTime itg)
     ++ " nodes " ++ show (infoNodes itg)
     ++ nps'
-    ++ " pv" ++ concatMap (\m -> ' ' : toString m) (infoPv itg)
+    ++ " pv" ++ concatMap (\m -> ' ' : toString m) pv
     where nps' = case infoTime itg of
                      0 -> ""
                      x -> " nps " ++ show (infoNodes itg `div` fromIntegral x * 1000)
-          isc = infoScore itg
+          esc = scoreToExtern (infoScore itg) (length pv)
+          pv  = infoPv itg
+
+data ExternScore = Score Int | Mate Int
+
+-- The external score is weird for found mates (always mate)
+-- Turn it to nice score by considering path length to mate
+scoreToExtern :: Int -> Int -> ExternScore
+scoreToExtern sc le
+    | sc ==  mateScore = Mate $ (le + 1) `div` 2
+    | sc == -mateScore = Mate $ negate $ le `div` 2
+    | otherwise        = Score sc
 
 -- formInfoB :: InfoToGui -> String
 -- formInfoB itg = "info"
@@ -694,11 +708,9 @@ formInfo itg = "info"
 --     ++ " pv" ++ concatMap (\m -> ' ' : toString m) (infoPv itg)
 --     where isc = infoScore itg
 
-formScore :: Int -> String
-formScore i
-    | i >= mateScore - 255    = " score mate " ++ show ((mateScore - i + 1) `div` 2)
-    | i <= (-mateScore) + 255 = " score mate " ++ show ((-mateScore - i) `div` 2)
-    | otherwise               = " score cp " ++ show i
+formScore :: ExternScore -> String
+formScore (Score s) = " score cp " ++ show s
+formScore (Mate n)  = " score mate " ++ show n
 
 -- sel.depth nicht implementiert
 -- formInfo2 :: InfoToGui -> String

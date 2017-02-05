@@ -42,7 +42,7 @@ data GoCmds
     | MovesToGo Int
     | Depth Int
     | Nodes Int
-    | Mate Int
+    | FindMate Int
     | MoveTime Int
     | Infinite
     deriving (Eq, Show)
@@ -250,7 +250,7 @@ parseNodes :: Parser GoCmds
 parseNodes = parseWithInt "nodes" Nodes
 
 parseMate :: Parser GoCmds
-parseMate  = parseWithInt "mate" Mate
+parseMate  = parseWithInt "mate" FindMate
 
 parseMoveTime :: Parser GoCmds
 parseMoveTime = parseWithInt "movetime" MoveTime

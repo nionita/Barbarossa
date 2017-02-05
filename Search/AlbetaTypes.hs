@@ -61,8 +61,8 @@ nulDebug = False
 
 formatStats :: SStats -> [String]
 formatStats sst = [
-       "Nodes: " ++ show (sNodes sst) ++ ", in QS: " ++ show (sNodesQS sst)
-            ++ " (QS%: " ++ show (100 * sNodesQS sst `div` sNodes sst) ++ ")",
+       "Nodes: " ++ show (sNodes sst) ++ ", in QS: " ++ show (sNodesQS sst) ++ " (QS%: "
+            ++ show (if sNodes sst == 0 then 0 else 100 * sNodesQS sst `div` sNodes sst) ++ ")",
        "Retrieve: " ++ show (sRetr sst) ++ ", not found: " ++ show (sRFal sst)
             ++ ", found usable: " ++ show (sRFnd sst)
             ++ ", found not usable: " ++ show (sRetr sst - (sRFal sst + sRFnd sst))

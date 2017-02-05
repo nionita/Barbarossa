@@ -64,8 +64,8 @@ Executable Barbarossa
                -fspec-constr-count=24
                -funfolding-use-threshold=32
                -fno-warn-tabs
-               -- -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques
-               -- -ddump-opt-cmm -ddump-asm
+               -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques
+               -ddump-opt-cmm -ddump-asm
   CPP-Options: -DSMSTRICT
   if flag(sse42)
     GHC-Options: -msse4.2
