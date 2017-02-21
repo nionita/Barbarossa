@@ -699,8 +699,11 @@ enPrise p ew mide = mad (mad (mad (mad mide (ewEnpHanging ew) ha)
           !ha = popCount haP + 3 * popCount haM + 5 * popCount haR + 9 * popCount haQ
           !ep =                3 * popCount epM + 5 * popCount epR + 9 * popCount epQ
           !at = popCount atP + 3 * popCount atM + 5 * popCount atR + 9 * popCount atQ
-          !wp1 = popCount$ (meP `less` myPAttacs p) .&. yoAttacs p	-- my weak attacked pawns
-          !wp2 = popCount$ (yo p .&. pawns p `less` yoPAttacs p) .&. myAttacs p	-- your weak attacked pawns
+          -- we consider pawns defended by own king not weak
+          -- my weak attacked pawns
+          !wp1 = popCount $ (meP `less` (myPAttacs p .|. myKAttacs p)) .&. yoAttacs p
+          -- your weak attacked pawns
+          !wp2 = popCount $ (yo p .&. pawns p `less` (yoPAttacs p .|. yoKAttacs p)) .&. myAttacs p
           !wp = wp2 - wp1
 
 ------ Last Line ------
