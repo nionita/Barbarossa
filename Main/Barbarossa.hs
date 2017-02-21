@@ -39,7 +39,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.5.0"
-progVerSuff = "sic"
+progVerSuff = "sicv"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -507,6 +507,8 @@ searchTheTree draft mdraft timx tim tpm mtg rept lsc lpv rmvs = do
     let totch = totBmCh chg + ch
         ldCh | ch > 0    = draft
              | otherwise = lastChDr chg
+    when (ch > 0) $
+        ctxLog LogInfo $ "Changes in draft " ++ show draft ++ ": " ++ show ch ++ " / " ++ show totch
     modifyChanging $ \c -> c { crtStatus = stfin, totBmCh = totch, lastChDr = ldCh,
                                forGui = Just $ InfoB { infoPv = path, infoScore = sc }}
     currms <- lift $ currMilli (startSecond ctx)
@@ -579,12 +581,16 @@ stopByChance red extend ms used mx draft ch totch ldCh
        then return (True, mx)
        else do
           -- We need the probability to limit the interrupt time at least:
-          let p = probChange (fromIntegral draft) (fromIntegral ch) (fromIntegral totch) (fromIntegral ldCh)
+          let imbalance = 1
+              p = imbalance * probChange (fromIntegral draft) (fromIntegral ch)
+                                         (fromIntegral totch) (fromIntegral ldCh)
               mxf = fromIntegral mx
               mxr = min mx $ round $ red * (mxf + mxf * p) / 2
           if dmax > draft + 1
              then return (False, mxr)	-- we have more than 1 draft to go
              else do
+                 ctxLog LogInfo $ "stopByChance: d/ch/tch/ldch = "
+                     ++ show draft ++ " / " ++ show ch ++ " / " ++ show totch ++ " / " ++ show ldCh
                  ctxLog LogInfo $ "stopByChance: p = " ++ show p
                  r <- liftIO $ getStdRandom (randomR (0::Double, 1))
                  if r < p then return (False, mxr) else return (True, mxr)
@@ -603,24 +609,15 @@ maxDepthAtThisRate d used ms
           dmax1 = (log (msf + usedf) - log usedf) * logs
 
 -- This is just a prediction using logistic regression on the 4 parameters
--- The parameters were found outside and have reached 77% prediction rate
+-- The parameters were found outside and have reached 68,7% prediction rate
+-- 600k samples, class_weight balanced, scaled, L2, C=100
 probChange :: Double -> Double -> Double -> Double -> Double
 probChange d c ct dc = 1 / (1 + exp (-z))
-    -- where w0 = -0.47326189	-- these got 77%
-    --       w1 = -0.24871493
-    --       w2 = 0.18633039
-    --       w3 = 0.07070459
-    --       w4 = 0.1175941
-    -- where w0 = -0.46828955	-- these got 80%
-    --       w1 = -0.24585093
-    --       w2 = 0.19289682
-    --       w3 = 0.09635968
-    --       w4 = 0.10235857
-    where w0 = -1.80799248	-- these got 91% with scales
-          w1 = -0.59439615 / 20
-          w2 = 0.3024311 / 10
-          w3 = 0.4347557 / 20
-          w4 = -0.34551297 / 20
+    where w0 = 1.701
+          w1 = -4.977 / 19
+          w2 = 3.269 / 6
+          w3 =  0.723 / 18
+          w4 = 2.729 / 19
           z  = w0 + w1 * d + w2 * c + w3 * ct + w4 * dc
 
 reduceBegin :: Maybe Int -> Double

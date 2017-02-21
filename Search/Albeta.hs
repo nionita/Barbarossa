@@ -222,7 +222,7 @@ pvsInit = PVState { ronly = pvro00, stats = ssts0, absdp = 0, usedext = 0, abort
                     futme = futIniVal, futyo = futIniVal,
                     lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
 nst0 :: NodeState
-nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore "Zero" 0, rbmch = 0,
+nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore "Zero" 0, rbmch = -1,
              movno = 1, spcno = 1, killer = NoKiller, albe = False, cpos = initPos, pvsl = [] }
              -- we start with spcno = 1 as we consider the first move as special
              -- to avoid in any way reducing the tt move
@@ -402,9 +402,11 @@ checkFailOrPVRoot xstats b d e s nst = do
                  let typ = 2
                  lift $ ttStore de typ (pathScore s) e nodes'
                  let xpvslg = insertToPvs d pvg (pvsl nst)	-- the good
-                     rch | pathScore s > a = rbmch nst + 1
-                         | otherwise       = rbmch nst
-                 return (False, nst {movno = mn + 1, pvsl = xpvslg, rbmch = rch })
+                 -- Do not count the changes in draft 1 (they were wrong anyway,
+                 -- as we do not update cursc here and search all root moves)
+                 --    rch | pathScore s > a = rbmch nst + 1
+                 --        | otherwise       = rbmch nst
+                 return (False, nst {movno = mn + 1, pvsl = xpvslg })
             else if abort sst
                     then return (True, nst)
                     else if pathScore s <= a
