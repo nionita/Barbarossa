@@ -283,10 +283,10 @@ evolveState goon = do
 stateInitial :: StateT EvolveState IO ()
 stateInitial = do
     est <- getPersState
-    lift $ putStrLn $ "Initialising new evolve " ++ evName est
+    let cyc = evCycle est + 1
+    lift $ putStrLn $ "Initialising new evolve " ++ evName est ++ "-" ++ show cyc
     newVecs <- lift $ genCandidates (evDistrib est) (evPopCount est)
-    let cyc    = evCycle est + 1
-        candps = nameCandidates (evName est) cyc newVecs
+    let candps = nameCandidates (evName est) cyc newVecs
         cands  = map fst candps
         scc    = map initPerf cands
         tour   = makeTournament (evName est ++ "-" ++ show cyc) cands
@@ -541,7 +541,7 @@ tourStep trn
         -- lift $ putStrLn $ "Playing list: " ++ show (playing ++ playing')
         -- wait for one of the games to finish
         (a, eir) <- lift $ waitAnyCatch $ M.keys asyncs
-        let mij = M.lookup a asyncs	-- which game finnished?
+        let mij = M.lookup a asyncs	-- which game finished?
         case mij of
             Nothing -> do
                 lift $ putStrLn $ "Async not found in map, ignored"
@@ -566,12 +566,17 @@ tourStep trn
                                lift $ putStrLn $ "async ended with exception: " ++ show e
                                return game { result = ToPlay }
                             Right mrez -> do
-                               lift $ putStrLn $ "Match " ++ pl1 ++ " against " ++ pl2
-                                          ++ " ended: " ++ show mrez
+                               lift $ putStr $ "Match " ++ pl1 ++ " against " ++ pl2
+                                          ++ " ended (W/L/D): "
+                               r <- case mrez of
+                                        Nothing -> do
+                                            lift $ putStrLn " Nothing"
+                                            return game { result = ToPlay }
+                                        Just rz -> do
+                                            lift $ putStrLn $ show rz
+                                            return game { result = Done rz }
                                lift $ hFlush stdout
-                               case mrez of
-                                   Nothing -> return game { result = ToPlay }
-                                   Just rz -> return game { result = Done rz }
+                               return r
                         put evst { stCurThr = stCurThr evst + started - 1,
                                    stAsync = M.delete a asyncs }
                         return (False, Just trn' { games = ngame : rest })

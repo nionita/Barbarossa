@@ -818,37 +818,49 @@ instance EvalItem PassPawns where
  
 -- Every passed pawn will be evaluated separately
 passPawns :: EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
-passPawns ep p ew mide = mad mide (ewPassPawnLev ew) dpp
+passPawns ep p ew mide = mad (mad mide (ewPassPawnMid ew) dppm) (ewPassPawnEnd ew) dppe
     where !mppbb = passed p .&. me p
           !yppbb = passed p .&. yo p
           !myc = moving p
           !yoc = other myc
-          !mypp = sum $ map (perPassedPawn ep p myc) $ bbToSquares mppbb
-          !yopp = sum $ map (perPassedPawn ep p yoc) $ bbToSquares yppbb
-          !dpp  = mypp - yopp
+          (!myppm, !myppe)
+              = foldr f (0, 0)
+                    $ map (perPassedPawn ep p myc (me p) (yo p)
+                               (myAttacs p) (yoAttacs p) (myKAttacs p) (yoKAttacs p))
+                    $ bbToSquares mppbb
+          (!yoppm, !yoppe)
+              = foldr f (0, 0)
+                    $ map (perPassedPawn ep p yoc (yo p) (me p)
+                               (yoAttacs p) (myAttacs p) (yoKAttacs p) (myKAttacs p))
+                    $ bbToSquares yppbb
+          !dppm = myppm - yoppm
+          !dppe = myppe - yoppe
+          f (a, b) (c, d) = (a+c, b+d)
 
 -- The value of the passed pawn depends answers to this questions:
 -- - is it defended/attacked? by which pieces?
 -- - how many squares ahead are blocked by own/opponent pieces?
 -- - how many squares ahead are controlled by own/opponent pieces?
 -- - does it has a rook behind?
-perPassedPawn :: EvalParams -> MyPos -> Color -> Square -> Int
-perPassedPawn ep p c sq
-    | attacked && not defended
-        && c /= moving p = epPassMin ep	-- but if we have more than one like that?
-    | otherwise          = max (epPassMin ep) $ perPassedPawnOk ep p c sq sqbb moi toi moia toia
-    where !sqbb = 1 `unsafeShiftL` sq
-          (!moi, !toi, !moia, !toia)
-               | moving p == c = (me p, yo p, myAttacs p, yoAttacs p)
-               | otherwise     = (yo p, me p, yoAttacs p, myAttacs p)
+perPassedPawn :: EvalParams -> MyPos -> Color -> BBoard -> BBoard -> BBoard
+              -> BBoard -> BBoard -> BBoard -> Square -> (Int, Int)
+perPassedPawn ep p c moi toi moia toia moika toika sq
+    = (max (epPassMin ep) $ min (epPassMaxMid ep) mip, max (epPassMin ep) $ min (epPassMaxEnd ep) enp)
+    where (mip, enp)
+              | attacked && not defended && c /= moving p = (0, 0)
+              | otherwise = perPassedPawnOk ep p c sq sqbb moi toi moia toia moika toika
+          !sqbb = 1 `unsafeShiftL` sq
           !defended = moia .&. sqbb /= 0
           !attacked = toia .&. sqbb /= 0
 
 -- Every passed pawn has a basic value
 -- For further circumstances we add or subtract some corrections
-perPassedPawnOk :: EvalParams -> MyPos -> Color -> Square -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
-perPassedPawnOk ep p c sq sqbb moi toi moia toia = val
-    where !val = val0 + vkdf - vblo + vbeh + myctrl - yoctrl + vkiw
+-- Technical detail: here me is the one who has the passed pawn, you the other
+perPassedPawnOk :: EvalParams -> MyPos -> Color -> Square -> BBoard -> BBoard -> BBoard
+                -> BBoard -> BBoard -> BBoard -> BBoard -> (Int, Int)
+perPassedPawnOk ep p c sq sqbb moi toi moia toia moika toika = (valm, vale)
+    where !valm = val0        - vblo + vbeh + myctrl - yoctrl
+          !vale = val0 + vkdf - vblo + vbeh + myctrl - yoctrl + vkiw
           (!way, !behind, !asq)
               | c == White = (shadowUp sqbb, shadowDown sqbb, sq+8)
               | otherwise  = (shadowDown sqbb, shadowUp sqbb, sq-8)
@@ -856,16 +868,16 @@ perPassedPawnOk ep p c sq sqbb moi toi moia toia = val
           -- Basic value of the passed pawn, depending on how advanced it is:
           !x = 6 - popCount way	-- 0 is the initial pawn position, 5 maximum
           !val0 = (epPassCoef2 ep * x + epPassCoef1 ep) * x + epPassCoef0 ep
-          -- King distance difference: square & signum
+          -- King distance difference: square
           !myking = kingSquare (kings p) moi
           !yoking = kingSquare (kings p) toi
           !mdis = squareDistance myking asq
           !ydis = squareDistance yoking asq
           !kdis = ydis - mdis
-          !vkdf = ((epPassKiCoef2 ep * kdis + epPassKiCoef1 ep) * kdis + epPassKiCoef0 ep) * signum kdis
+          !vkdf = (epPassKiCoef3 ep * kdis * kdis + epPassKiCoef1 ep) * kdis
           -- Blocked (directly)	-- could be dependent on piece value
-          !vblo | me p .&. asqbb /= 0 = epPassBlockO ep
-                | yo p .&. asqbb /= 0 = epPassBlockA ep
+          !vblo | moi .&. asqbb /= 0 = epPassBlockO ep
+                | toi .&. asqbb /= 0 = epPassBlockA ep
                 | otherwise           = 0
           -- Rook behind:
           !rookBehind = behind .&. (rooks p .|. queens p)
@@ -880,7 +892,7 @@ perPassedPawnOk ep p c sq sqbb moi toi moia toia = val
           !yoctrl | toia .&. asqbb /= 0 || yobehind = epPassYoCtrl ep
                   | otherwise                       = 0
           -- King control of the pawn way - a separate correction for pawn endings
-          !kingway = kingPawnWay (myKAttacs p) way - kingPawnWay (yoKAttacs p) way
+          !kingway = kingPawnWay moika way - kingPawnWay toika way
           !vkiw    = kingway * epPassKingWay ep
 
 kingPawnWay :: BBoard -> BBoard -> Int

@@ -63,12 +63,13 @@ data EvalParams
           epMaterQueen :: !Int,
           epMaterScale :: !Int,
           epMaterBonusScale :: !Int,
+          epPassMaxMid   :: !Int,
+          epPassMaxEnd   :: !Int,
           epPassCoef0    :: !Int,
           epPassCoef1    :: !Int,
           epPassCoef2    :: !Int,
-          epPassKiCoef0  :: !Int,
           epPassKiCoef1  :: !Int,
-          epPassKiCoef2  :: !Int,
+          epPassKiCoef3  :: !Int,
           epPassKingWay  :: !Int,
           epPassBehind   :: !Int,
           epPassBlockO   :: !Int,
@@ -116,7 +117,8 @@ data EvalWeights
           ewPawnBlockP      :: !MidEnd,
           ewPawnBlockO      :: !MidEnd,
           ewPawnBlockA      :: !MidEnd,
-          ewPassPawnLev     :: !MidEnd
+          ewPassPawnMid     :: !MidEnd,
+          ewPassPawnEnd     :: !MidEnd
       } deriving Show
 
 instance CollectParams EvalParams where
@@ -129,19 +131,20 @@ instance CollectParams EvalParams where
                     epMaterQueen = 13,
                     epMaterScale = 1,
                     epMaterBonusScale = 5,
-                    epPassCoef0    = 29,
-                    epPassCoef1    = 27,
-                    epPassCoef2    = 10,
-                    epPassKiCoef0  = 21,
-                    epPassKiCoef1  = -10,
-                    epPassKiCoef2  = 2,
-                    epPassKingWay  = 3,
-                    epPassBehind   = 28,
-                    epPassBlockO   = 48,
-                    epPassBlockA   = 56,
-                    epPassMin      = 37,
-                    epPassMyCtrl   = 43,
-                    epPassYoCtrl   = 54
+                    epPassMaxMid   = 1200,
+                    epPassMaxEnd   = 2400,
+                    epPassCoef0    = 40,
+                    epPassCoef1    = 12,
+                    epPassCoef2    =  6,
+                    epPassKiCoef1  = 10,
+                    epPassKiCoef3  =  0,
+                    epPassKingWay  =  9,
+                    epPassBehind   = 50,
+                    epPassBlockO   = 10,
+                    epPassBlockA   = 20,
+                    epPassMin      = 30,
+                    epPassMyCtrl   =  5,
+                    epPassYoCtrl   = 10
                 }
     npColParm = collectEvalParams
     npSetParm = id
@@ -155,12 +158,13 @@ collectEvalParams (s, v) ep = lookApply s v ep [
         ("epMaterQueen",      setEpMaterQueen),
         ("epMaterScale",      setEpMaterScale),
         ("epMaterBonusScale", setEpMaterBonusScale),
+        ("epPassMaxMid",      setEpPassMaxMid),
+        ("epPassMaxEnd",      setEpPassMaxEnd),
         ("epPassCoef0",       setEpPassCoef0),
         ("epPassCoef1",       setEpPassCoef1),
         ("epPassCoef2",       setEpPassCoef2),
-        ("epPassKiCoef0",     setEpPassKiCoef0),
         ("epPassKiCoef1",     setEpPassKiCoef1),
-        ("epPassKiCoef2",     setEpPassKiCoef2),
+        ("epPassKiCoef3",     setEpPassKiCoef3),
         ("epPassKingWay",     setEpPassKingWay),
         ("epPassBehind",      setEpPassBehind),
         ("epPassBlockO",      setEpPassBlockO),
@@ -176,12 +180,13 @@ collectEvalParams (s, v) ep = lookApply s v ep [
           setEpMaterQueen      v' ep' = ep' { epMaterQueen      = round v' }
           setEpMaterScale      v' ep' = ep' { epMaterScale      = round v' }
           setEpMaterBonusScale v' ep' = ep' { epMaterBonusScale = round v' }
+          setEpPassMaxMid      v' ep' = ep' { epPassMaxMid      = round v' }
+          setEpPassMaxEnd      v' ep' = ep' { epPassMaxEnd      = round v' }
           setEpPassCoef0       v' ep' = ep' { epPassCoef0       = round v' }
           setEpPassCoef1       v' ep' = ep' { epPassCoef1       = round v' }
           setEpPassCoef2       v' ep' = ep' { epPassCoef2       = round v' }
-          setEpPassKiCoef0     v' ep' = ep' { epPassKiCoef0     = round v' }
           setEpPassKiCoef1     v' ep' = ep' { epPassKiCoef1     = round v' }
-          setEpPassKiCoef2     v' ep' = ep' { epPassKiCoef2     = round v' }
+          setEpPassKiCoef3     v' ep' = ep' { epPassKiCoef3     = round v' }
           setEpPassKingWay     v' ep' = ep' { epPassKingWay     = round v' }
           setEpPassBehind      v' ep' = ep' { epPassBehind      = round v' }
           setEpPassBlockO      v' ep' = ep' { epPassBlockO      = round v' }
@@ -229,7 +234,8 @@ instance CollectParams EvalWeights where
           ewPawnBlockP      = tme (-124) (-110),
           ewPawnBlockO      = tme  (-23) (-27),
           ewPawnBlockA      = tme  (-14) (-73),
-          ewPassPawnLev     = tme  0 9
+          ewPassPawnMid     = tme  2 0,
+          ewPassPawnEnd     = tme  0 9
         }
     npColParm = collectEvalWeights
     npSetParm = id
@@ -306,8 +312,10 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
         ("end.pawnBlockO",      setEndPawnBlockO),
         ("mid.pawnBlockA",      setMidPawnBlockA),
         ("end.pawnBlockA",      setEndPawnBlockA),
-        ("mid.passPawnLev",     setMidPassPawnLev),
-        ("end.passPawnLev",     setEndPassPawnLev)
+        ("mid.passPawnMid",     setMidPassPawnMid),
+        ("end.passPawnMid",     setEndPassPawnMid),
+        ("mid.passPawnEnd",     setMidPassPawnEnd),
+        ("end.passPawnEnd",     setEndPassPawnEnd)
     ]
     where setMidKingSafe        v' ew' = ew' { ewKingSafe        = (ewKingSafe        ew') { mid = round v' }}
           setEndKingSafe        v' ew' = ew' { ewKingSafe        = (ewKingSafe        ew') { end = round v' }}
@@ -379,5 +387,7 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
           setEndPawnBlockO      v' ew' = ew' { ewPawnBlockO      = (ewPawnBlockO      ew') { end = round v' }}
           setMidPawnBlockA      v' ew' = ew' { ewPawnBlockA      = (ewPawnBlockA      ew') { mid = round v' }}
           setEndPawnBlockA      v' ew' = ew' { ewPawnBlockA      = (ewPawnBlockA      ew') { end = round v' }}
-          setMidPassPawnLev     v' ew' = ew' { ewPassPawnLev     = (ewPassPawnLev     ew') { mid = round v' }}
-          setEndPassPawnLev     v' ew' = ew' { ewPassPawnLev     = (ewPassPawnLev     ew') { end = round v' }}
+          setMidPassPawnMid     v' ew' = ew' { ewPassPawnMid     = (ewPassPawnMid     ew') { mid = round v' }}
+          setEndPassPawnMid     v' ew' = ew' { ewPassPawnMid     = (ewPassPawnMid     ew') { end = round v' }}
+          setMidPassPawnEnd     v' ew' = ew' { ewPassPawnEnd     = (ewPassPawnEnd     ew') { mid = round v' }}
+          setEndPassPawnEnd     v' ew' = ew' { ewPassPawnEnd     = (ewPassPawnEnd     ew') { end = round v' }}
