@@ -76,8 +76,8 @@ futilMargins d s = s `unsafeShiftL` (d-1)
 
 -- Score statistics parameters for variable futility
 futIniVal, futMinVal, futDecayB, futDecayW :: Int
-futIniVal = 100
-futMinVal = 30
+futIniVal = 95
+futMinVal = 35
 futDecayB = 13
 futDecayW = (1 `unsafeShiftL` futDecayB) - 1
 
