@@ -818,24 +818,18 @@ instance EvalItem PassPawns where
  
 -- Every passed pawn will be evaluated separately
 passPawns :: EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
-passPawns ep p ew mide = mad (mad mide (ewPassPawnMid ew) dppm) (ewPassPawnEnd ew) dppe
+passPawns ep p ew mide = mad mide (ewPassPawnEnd ew) dppe
     where !mppbb = passed p .&. me p
           !yppbb = passed p .&. yo p
           !myc = moving p
           !yoc = other myc
-          (!myppm, !myppe)
-              = foldr f (0, 0)
-                    $ map (perPassedPawn ep p myc (me p) (yo p)
+          !myppe = sum $ map (perPassedPawn ep p myc (me p) (yo p)
                                (myAttacs p) (yoAttacs p) (myKAttacs p) (yoKAttacs p))
-                    $ bbToSquares mppbb
-          (!yoppm, !yoppe)
-              = foldr f (0, 0)
-                    $ map (perPassedPawn ep p yoc (yo p) (me p)
+                       $ bbToSquares mppbb
+          !yoppe = sum $ map (perPassedPawn ep p yoc (yo p) (me p)
                                (yoAttacs p) (myAttacs p) (yoKAttacs p) (myKAttacs p))
-                    $ bbToSquares yppbb
-          !dppm = myppm - yoppm
+                       $ bbToSquares yppbb
           !dppe = myppe - yoppe
-          f (a, b) (c, d) = (a+c, b+d)
 
 -- The value of the passed pawn depends answers to this questions:
 -- - is it defended/attacked? by which pieces?
@@ -843,11 +837,10 @@ passPawns ep p ew mide = mad (mad mide (ewPassPawnMid ew) dppm) (ewPassPawnEnd e
 -- - how many squares ahead are controlled by own/opponent pieces?
 -- - does it has a rook behind?
 perPassedPawn :: EvalParams -> MyPos -> Color -> BBoard -> BBoard -> BBoard
-              -> BBoard -> BBoard -> BBoard -> Square -> (Int, Int)
+              -> BBoard -> BBoard -> BBoard -> Square -> Int
 perPassedPawn ep p c moi toi moia toia moika toika sq
-    = (max (epPassMin ep) $ min (epPassMaxMid ep) mip, max (epPassMin ep) $ min (epPassMaxEnd ep) enp)
-    where (mip, enp)
-              | attacked && not defended && c /= moving p = (0, 0)
+    = max (epPassMin ep) $ min (epPassMaxEnd ep) enp
+    where enp | attacked && not defended && c /= moving p = 0
               | otherwise = perPassedPawnOk ep p c sq sqbb moi toi moia toia moika toika
           !sqbb = 1 `unsafeShiftL` sq
           !defended = moia .&. sqbb /= 0
@@ -857,10 +850,9 @@ perPassedPawn ep p c moi toi moia toia moika toika sq
 -- For further circumstances we add or subtract some corrections
 -- Technical detail: here me is the one who has the passed pawn, you the other
 perPassedPawnOk :: EvalParams -> MyPos -> Color -> Square -> BBoard -> BBoard -> BBoard
-                -> BBoard -> BBoard -> BBoard -> BBoard -> (Int, Int)
-perPassedPawnOk ep p c sq sqbb moi toi moia toia moika toika = (valm, vale)
-    where !valm = val0        - vblo + vbeh + myctrl - yoctrl
-          !vale = val0 + vkdf - vblo + vbeh + myctrl - yoctrl + vkiw
+                -> BBoard -> BBoard -> BBoard -> BBoard -> Int
+perPassedPawnOk ep p c sq sqbb moi toi moia toia moika toika = vale
+    where !vale = val0 + vkdf - vblo + vbeh + myctrl - yoctrl + vkiw
           (!way, !behind, !asq)
               | c == White = (shadowUp sqbb, shadowDown sqbb, sq+8)
               | otherwise  = (shadowDown sqbb, shadowUp sqbb, sq-8)

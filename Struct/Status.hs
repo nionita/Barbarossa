@@ -63,7 +63,6 @@ data EvalParams
           epMaterQueen :: !Int,
           epMaterScale :: !Int,
           epMaterBonusScale :: !Int,
-          epPassMaxMid   :: !Int,
           epPassMaxEnd   :: !Int,
           epPassCoef0    :: !Int,
           epPassCoef1    :: !Int,
@@ -117,7 +116,6 @@ data EvalWeights
           ewPawnBlockP      :: !MidEnd,
           ewPawnBlockO      :: !MidEnd,
           ewPawnBlockA      :: !MidEnd,
-          ewPassPawnMid     :: !MidEnd,
           ewPassPawnEnd     :: !MidEnd
       } deriving Show
 
@@ -131,20 +129,19 @@ instance CollectParams EvalParams where
                     epMaterQueen = 13,
                     epMaterScale = 1,
                     epMaterBonusScale = 5,
-                    epPassMaxMid   = 1200,
-                    epPassMaxEnd   = 2400,
-                    epPassCoef0    = 40,
-                    epPassCoef1    = 12,
-                    epPassCoef2    =  6,
+                    epPassMaxEnd   = 1789,
+                    epPassCoef0    = 24,
+                    epPassCoef1    = 17,
+                    epPassCoef2    =  8,
                     epPassKiCoef1  = 10,
                     epPassKiCoef3  =  0,
-                    epPassKingWay  =  9,
-                    epPassBehind   = 50,
-                    epPassBlockO   = 10,
-                    epPassBlockA   = 20,
-                    epPassMin      = 30,
-                    epPassMyCtrl   =  5,
-                    epPassYoCtrl   = 10
+                    epPassKingWay  =  7,
+                    epPassBehind   = 22,
+                    epPassBlockO   = 45,
+                    epPassBlockA   = 46,
+                    epPassMin      = 27,
+                    epPassMyCtrl   = 27,
+                    epPassYoCtrl   = 50
                 }
     npColParm = collectEvalParams
     npSetParm = id
@@ -158,7 +155,6 @@ collectEvalParams (s, v) ep = lookApply s v ep [
         ("epMaterQueen",      setEpMaterQueen),
         ("epMaterScale",      setEpMaterScale),
         ("epMaterBonusScale", setEpMaterBonusScale),
-        ("epPassMaxMid",      setEpPassMaxMid),
         ("epPassMaxEnd",      setEpPassMaxEnd),
         ("epPassCoef0",       setEpPassCoef0),
         ("epPassCoef1",       setEpPassCoef1),
@@ -180,7 +176,6 @@ collectEvalParams (s, v) ep = lookApply s v ep [
           setEpMaterQueen      v' ep' = ep' { epMaterQueen      = round v' }
           setEpMaterScale      v' ep' = ep' { epMaterScale      = round v' }
           setEpMaterBonusScale v' ep' = ep' { epMaterBonusScale = round v' }
-          setEpPassMaxMid      v' ep' = ep' { epPassMaxMid      = round v' }
           setEpPassMaxEnd      v' ep' = ep' { epPassMaxEnd      = round v' }
           setEpPassCoef0       v' ep' = ep' { epPassCoef0       = round v' }
           setEpPassCoef1       v' ep' = ep' { epPassCoef1       = round v' }
@@ -234,7 +229,6 @@ instance CollectParams EvalWeights where
           ewPawnBlockP      = tme (-124) (-110),
           ewPawnBlockO      = tme  (-23) (-27),
           ewPawnBlockA      = tme  (-14) (-73),
-          ewPassPawnMid     = tme  2 0,
           ewPassPawnEnd     = tme  0 9
         }
     npColParm = collectEvalWeights
@@ -312,8 +306,6 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
         ("end.pawnBlockO",      setEndPawnBlockO),
         ("mid.pawnBlockA",      setMidPawnBlockA),
         ("end.pawnBlockA",      setEndPawnBlockA),
-        ("mid.passPawnMid",     setMidPassPawnMid),
-        ("end.passPawnMid",     setEndPassPawnMid),
         ("mid.passPawnEnd",     setMidPassPawnEnd),
         ("end.passPawnEnd",     setEndPassPawnEnd)
     ]
@@ -387,7 +379,5 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
           setEndPawnBlockO      v' ew' = ew' { ewPawnBlockO      = (ewPawnBlockO      ew') { end = round v' }}
           setMidPawnBlockA      v' ew' = ew' { ewPawnBlockA      = (ewPawnBlockA      ew') { mid = round v' }}
           setEndPawnBlockA      v' ew' = ew' { ewPawnBlockA      = (ewPawnBlockA      ew') { end = round v' }}
-          setMidPassPawnMid     v' ew' = ew' { ewPassPawnMid     = (ewPassPawnMid     ew') { mid = round v' }}
-          setEndPassPawnMid     v' ew' = ew' { ewPassPawnMid     = (ewPassPawnMid     ew') { end = round v' }}
           setMidPassPawnEnd     v' ew' = ew' { ewPassPawnEnd     = (ewPassPawnEnd     ew') { mid = round v' }}
           setEndPassPawnEnd     v' ew' = ew' { ewPassPawnEnd     = (ewPassPawnEnd     ew') { end = round v' }}
