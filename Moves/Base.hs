@@ -356,10 +356,13 @@ moveIsCaptPromo p m
 -- This will spare a heavy operation for pruned moved
 {-# INLINE canPruneMove #-}
 canPruneMove :: MyPos -> Move -> Bool
-canPruneMove p m
+canPruneMove p m = not $ moveChecks p m
+{--
     | not (moveIsNormal m) = False
+    | move7th m            = False
     | moveIsCapture p m    = False
     | otherwise            = not $ moveChecks p m
+--}
 
 -- Score difference obtained by last move, from POV of the moving part
 -- It considers the fact that static score is for the part which has to move
