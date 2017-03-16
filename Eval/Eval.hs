@@ -36,8 +36,7 @@ evalItems = [ EvIt Material,	-- material balance (i.e. white - black material
               EvIt Redundance,	-- bishop pair and rook redundance
               EvIt RookPawn,	-- the rook pawns are about 15% less valuable
               EvIt KingSafe,	-- king safety
-              EvIt KingOpen,	-- malus for king openness
-              EvIt KingPlace,	-- bonus when king is near some fields
+              EvIt KingPlace,	-- bonus when king is near some fields, opennes
               EvIt LastLine,	-- malus for pieces on last line (except rooks and king)
               EvIt Mobility,	-- pieces mobility
               EvIt Center,	-- attacs of center squares
@@ -286,37 +285,7 @@ materDiff p ew mide = mad mide (ewMaterialDiff ew) md
     where !md | moving p == White =   mater p
               | otherwise         = - mater p
 
------- King openness ------
-data KingOpen = KingOpen
-
-instance EvalItem KingOpen where
-    evalItem _ _ ew p _ mide = kingOpen p ew mide
-
--- Openness can be tought only with pawns (like we take) or all pieces
-kingOpen :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-kingOpen p ew mide = mad mide (ewKingOpen ew) ko
-    where !ko = adv - own
-          moprooks   = popCount $ rooks p .&. yo p
-          mopqueens  = popCount $ queens p .&. yo p
-          mwb = popCount $ bAttacs paw msq `less` paw
-          -- mwr = popCount $ rAttacs paw msq `less` (paw .|. lastrs)
-          mwr = popCount $ rAttacs paw msq `less` paw
-          yoprooks   = popCount $ rooks p .&. me p
-          yopqueens  = popCount $ queens p .&. me p
-          ywb = popCount $ bAttacs paw ysq `less` paw
-          -- ywr = popCount $ rAttacs paw ysq `less` (paw .|. lastrs)
-          ywr = popCount $ rAttacs paw ysq `less` paw
-          paw = pawns p
-          msq = kingSquare (kings p) $ me p
-          ysq = kingSquare (kings p) $ yo p
-          comb !oR !oQ !wb !wr = let r = oR * wr
-                                     q = oQ * (wb + wr)
-                                 in r + q*q
-          own = comb moprooks mopqueens mwb mwr
-          adv = comb yoprooks yopqueens ywb ywr
-          -- lastrs = 0xFF000000000000FF	-- approx: take out last row which cant be covered by pawns
-
------- King placement ------
+------ King placement and opennes ------
 data KingPlace = KingPlace
 
 instance EvalItem KingPlace where
@@ -325,8 +294,14 @@ instance EvalItem KingPlace where
 -- Depending on which pieces are on the board we have some preferences
 -- where the king should be placed. For example, in the opening and middle game it should
 -- be in some corner, in endgame it should be near some (passed) pawn(s)
+-- We calculate the king opennes here, as we have all we need
+-- We also give a bonus for a king beeing near pawn(s)
 kingPlace :: EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
-kingPlace ep p ew mide = made (madm mide (ewKingPlaceCent ew) kcd) (ewKingPlacePwns ew) kpd
+kingPlace ep p ew mide = made (madm (mad (mad (mad mide (ewKingPawn2 ew) kpa2)
+                                              (ewKingPawn1 ew) kpa1)
+                                         (ewKingOpen ew) ko)
+                                    (ewKingPlaceCent ew) kcd)
+                              (ewKingPlacePwns ew) kpd
     where !kcd = (mpl - ypl) `unsafeShiftR` epMaterBonusScale ep
           !kpd = (mpi - ypi) `unsafeShiftR` epPawnBonusScale  ep
           !mks = kingSquare (kings p) $ me p
@@ -344,12 +319,10 @@ kingPlace ep p ew mide = made (madm mide (ewKingPlaceCent ew) kcd) (ewKingPlaceP
                                     , kingPawnsBonus mks ypassed mpassed
                                     , kingPawnsBonus yks ypassed mpassed
                                     )
-          !mro     = rooks p .&. me p
-          !mrooks  = popCount mro
+          !mrooks  = popCount $ rooks p .&. me p
           !mqueens = popCount $ queens p .&. me p
           !mminor  = popCount $ (bishops p .|. knights p) .&. me p
-          !yro     = rooks p .&. yo p
-          !yrooks  = popCount yro
+          !yrooks  = popCount $ rooks p .&. yo p
           !yqueens = popCount $ queens p .&. yo p
           !yminor  = popCount $ (bishops p .|. knights p) .&. yo p
           !mpawns  = pawns p .&. me p
@@ -358,6 +331,27 @@ kingPlace ep p ew mide = made (madm mide (ewKingPlaceCent ew) kcd) (ewKingPlaceP
           !ypassed = passed p .&. yo p
           materFun m r q = (m * epMaterMinor ep + r * epMaterRook ep + q * epMaterQueen ep)
                                `unsafeShiftR` epMaterScale ep
+          !ko = adv - own
+          mwb = popCount $ bAttacs paw mks `less` paw
+          mwr = popCount $ rAttacs paw mks `less` paw
+          ywb = popCount $ bAttacs paw yks `less` paw
+          ywr = popCount $ rAttacs paw yks `less` paw
+          paw = pawns p
+          comb !oR !oQ !wb !wr = let r = oR * wr
+                                     q = oQ * (wb + wr)
+                                 in r + q*q
+          own = comb yrooks yqueens mwb mwr
+          adv = comb mrooks mqueens ywb ywr
+          pmkpa = popCount (myKAttacs p .&. paw)
+          pykpa = popCount (yoKAttacs p .&. paw)
+          !kpa1 = mkpa1 - ykpa1
+          !kpa2 = mkpa2 - ykpa2
+          (mkpa1, mkpa2) | pmkpa == 0 = (0, 0)
+                         | pmkpa == 1 = (1, 0)
+                         | otherwise  = (0, 1)
+          (ykpa1, ykpa2) | pykpa == 0 = (0, 0)
+                         | pykpa == 1 = (1, 0)
+                         | otherwise  = (0, 1)
 
 promoW, promoB :: Square -> Square
 promoW s = 56 + (s .&. 7)
@@ -400,10 +394,6 @@ kingMaterBonus c !myp !mat !ksq
           bb = 57
           bg = 62
           bh = 63
-          -- roWA = row1 .&. (fileA .|. fileB .|. fileC)
-          -- roWH = row1 .&. (fileG .|. fileH)
-          -- roBA = row8 .&. (fileA .|. fileB .|. fileC)
-          -- roBH = row8 .&. (fileG .|. fileH)
           shWA2 = row2 .&. (fileA .|. fileB .|. fileC)
           shWA3 = row3 .&. (fileA .|. fileB .|. fileC)
           shWH2 = row2 .&. (fileF .|. fileG .|. fileH)
@@ -468,7 +458,7 @@ data Mobility = Mobility	-- "safe" moves
 instance EvalItem Mobility where
     evalItem _ _ ew p _ mide = mobDiff p ew mide
 
--- Here we do not calculate pawn mobility (which, calculated as attacs, is useless)
+-- Here we do not calculate pawn mobility (which, calculated as attacks, is useless)
 mobDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 mobDiff p ew mide = mad (mad (mad (mad mide (ewMobilityKnight ew) n) (ewMobilityBishop ew) b) (ewMobilityRook ew) r) (ewMobilityQueen ew) q
     where !myN = popCount $ myNAttacs p `less` (me p .|. yoPAttacs p)
@@ -556,9 +546,6 @@ spaceBlack !mpawns !matts !ypatts !yatts = sv
           !sv = spaceVals `unsafeAt` spa
 
 -- Non linear space values:
--- span2r: 200
--- span3r: 300
--- span4r: 400
 spaceVals :: UArray Int Int
 spaceVals = listArray (0, 24) $ map f [1..25]
     where f x = round $ spf * (sqrt x - 1)
@@ -940,27 +927,20 @@ pawnEndGame p
           !mescds = map snd $ filter fst mpsqs		-- my escaped passed pawns
           ypsqs  = map escYo $ bbToSquares yfpbb	-- your pp squares & distances to promotion
           !yescds = map snd $ filter fst ypsqs		-- your escaped passed pawns
-          -- mesc = not . null $ mescds
-          -- yesc = not . null $ yescds
-          dpr | mim < miy     =  promoBonus - distMalus mim
-              | mim > miy + 1 = -promoBonus + distMalus miy
-              | otherwise     =  withQueens     -- Here: this is more complex, e.g. if check while promoting
-                                       -- or direct after promotion + queen capture?
-          -- (mim, msq) = minimumBy (comparing snd) mescds      -- who is promoting first?
-          -- (miy, ysq) = minimumBy (comparing snd) yescds
+          dpr | mim < miy     = myrace
+              | mim > miy + 1 = yorace
+              | otherwise     = withQueens     -- Here: this is more complex, e.g. if check while promoting
+                                               -- or direct after promotion + queen capture?
           mim = fst $ minimumBy (comparing snd) mescds      -- who is promoting first?
           miy = fst $ minimumBy (comparing snd) yescds
           myrace =  promoBonus - distMalus mim
           yorace = -promoBonus + distMalus miy
           promoBonus = 1000     -- i.e. almost a queen (here the unit is 1 cp)
           distMalus x = unsafeShiftL x 3        -- to bring at least 8 cp per move until promotion
-          -- We try to estimate static what will be after promotions of both queens
+          -- We try to estimate staticaly what will be after promotions of both queens
           -- This will be another specialized evaluation function...
           -- But now we consider only the material difference (which consists only of pawns)
           withQueens = maDiff
-          -- This one is for prunning: so match we can win at most
-          -- yoPawnCount = popCount $ pawns p .&. yo p
-          -- speg = simplePawnEndGame p	-- just to see how it works...
  
 escMeWhite :: Square -> Square -> (Bool, (Square, Int))
 escMeWhite !ksq !psq = (esc, (psq, dis))

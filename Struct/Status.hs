@@ -79,6 +79,8 @@ data EvalWeights
           ewKingOpen        :: !MidEnd,
           ewKingPlaceCent   :: !MidEnd,
           ewKingPlacePwns   :: !MidEnd,
+          ewKingPawn1       :: !MidEnd,
+          ewKingPawn2       :: !MidEnd,
           ewRookHOpen       :: !MidEnd,
           ewRookOpen        :: !MidEnd,
           ewRookConn        :: !MidEnd,
@@ -175,6 +177,8 @@ instance CollectParams EvalWeights where
           ewKingOpen        = tme 5 0,
           ewKingPlaceCent   = tme 6 0,
           ewKingPlacePwns   = tme 0 6,		-- max after ~12k Clop games (ELO +23 +- 12)
+          ewKingPawn1       = tme 8 48,
+          ewKingPawn2       = tme 12 64,
           ewRookHOpen       = tme 178 200,
           ewRookOpen        = tme 234 207,
           ewRookConn        = tme 104  59,
@@ -222,6 +226,10 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
         ("end.kingPlaceCent",  setEndKingPlaceCent),
         ("mid.kingPlacePwns",  setMidKingPlacePwns),
         ("end.kingPlacePwns",  setEndKingPlacePwns),
+        ("mid.kingPawn1",      setMidKingPawn1),
+        ("end.kingPawn1",      setEndKingPawn1),
+        ("mid.kingPawn2",      setMidKingPawn2),
+        ("end.kingPawn2",      setEndKingPawn2),
         ("mid.rookHOpen",      setMidRookHOpen),
         ("end.rookHOpen",      setEndRookHOpen),
         ("mid.rookOpen",       setMidRookOpen),
@@ -297,6 +305,10 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
           setEndKingPlaceCent   v' ew' = ew' { ewKingPlaceCent   = (ewKingPlaceCent   ew') { end = round v' }}
           setMidKingPlacePwns   v' ew' = ew' { ewKingPlacePwns   = (ewKingPlacePwns   ew') { mid = round v' }}
           setEndKingPlacePwns   v' ew' = ew' { ewKingPlacePwns   = (ewKingPlacePwns   ew') { end = round v' }}
+          setMidKingPawn1       v' ew' = ew' { ewKingPawn1       = (ewKingPawn1       ew') { mid = round v' }}
+          setEndKingPawn1       v' ew' = ew' { ewKingPawn1       = (ewKingPawn1       ew') { end = round v' }}
+          setMidKingPawn2       v' ew' = ew' { ewKingPawn2       = (ewKingPawn2       ew') { mid = round v' }}
+          setEndKingPawn2       v' ew' = ew' { ewKingPawn2       = (ewKingPawn2       ew') { end = round v' }}
           setMidRookHOpen       v' ew' = ew' { ewRookHOpen       = (ewRookHOpen       ew') { mid = round v' }}
           setEndRookHOpen       v' ew' = ew' { ewRookHOpen       = (ewRookHOpen       ew') { end = round v' }}
           setMidRookOpen        v' ew' = ew' { ewRookOpen        = (ewRookOpen        ew') { mid = round v' }}
