@@ -34,13 +34,12 @@ useAspirWin = False
 
 -- Some fix search parameter
 scoreGrain, depthForCM, maxDepthExt, minPvDepth :: Int
-useTTinPv, readTTinQS :: Bool
+useTTinPv :: Bool
 scoreGrain  = 4	-- score granularity
 depthForCM  = 7 -- from this depth inform current move
 maxDepthExt = 5 -- maximum depth extension
 useTTinPv   = False	-- retrieve from TT in PV?
 minPvDepth  = 2		-- from this depth we use alpha beta search
-readTTinQS  = True
 
 -- Parameters for late move reduction:
 lmrActive :: Bool
@@ -996,12 +995,9 @@ trimax a b x
 -- PV Quiescent Search
 pvQSearch :: Int -> Int -> Int -> Search Int
 pvQSearch !a !b !c = do
-    -- TODO: use e as first move if legal
+    -- TODO: use e as first move if legal & capture
     -- (hdeep, tp, hsc, e, _) <- reTrieve >> lift ttRead
-    (hdeep, tp, hsc, _, _)
-        <- if readTTinQS
-              then reTrieve >> lift ttRead
-              else return (-1, undefined, undefined, undefined, undefined)
+    (hdeep, tp, hsc, _, _) <- reTrieve >> lift ttRead
     -- tp == 1 => score >= hsc, so if hsc > a then we improved
     -- tp == 0 => score <= hsc, so if hsc <= asco then we fail low and
     --    can terminate the search
@@ -1012,8 +1008,8 @@ pvQSearch !a !b !c = do
        )
        then reSucc 1 >> return (trimax a b hsc)
        else do
-           when (readTTinQS && hdeep < 0) reFail
            -- TODO: use hsc here too, when possible
+           when (hdeep < 0) reFail
            pos <- lift $ getPos
            if tacticalPos pos
               then do
@@ -1034,13 +1030,16 @@ pvQSearch !a !b !c = do
                                  pvQLoop b nc a edges
               else do
                   let !stp = staticScore pos
+                  -- what if hsc < b?
                   if stp >= b
                      then do
                          when collectFens $ finWithNodes "BETA"
                          return b
                      else do
                          !qsdelta <- lift qsDelta
-                         if stp + qsdelta + qsDeltaMargin < a
+                         let !a1 = a - qsdelta - qsDeltaMargin
+                         -- what if hsc + ... > a?
+                         if stp < a1
                              then do
                                  when collectFens $ finWithNodes "DELT"
                                  return a

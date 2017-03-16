@@ -14,6 +14,10 @@ Flag sse42
   Description:	Enable SSE4.2 support
   Default:	False
 
+Flag ddump
+  Description:  Enable ddumps
+  Default:      True
+
 Executable Barbarossa
   Main-is:	Main/Barbarossa.hs
   Build-depends:
@@ -64,11 +68,14 @@ Executable Barbarossa
                -fspec-constr-count=24
                -funfolding-use-threshold=32
                -fno-warn-tabs
-               -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques
-               -ddump-opt-cmm -ddump-asm
+               -- -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques
+               -- -ddump-opt-cmm -ddump-asm
   CPP-Options: -DSMSTRICT
   if flag(sse42)
     GHC-Options: -msse4.2
+  if flag(ddump)
+    GHC-Options: -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques
+                 -ddump-opt-cmm -ddump-asm
 
 -- Executable Evolve
 --   Main-is:	Main/Evolve.hs
