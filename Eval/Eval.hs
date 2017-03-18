@@ -257,7 +257,7 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
 -- We want to eliminate "if yok .&. a /= 0 ..."
 -- by using an array
 flaCoef :: UArray Int Int
-flaCoef = listArray (0, 8) [ 0, 1, 1, 1, 1, 1, 1, 1, 1 ]
+flaCoef = listArray (0, 8) [ 0, 1, 2, 2, 2, 2, 2, 2, 2 ]
 
 -- We take the maximum of 240 because:
 -- Quali max: 8 * (1 + 2 + 2 + 4 + 8 + 2) < 160
