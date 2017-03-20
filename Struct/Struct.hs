@@ -7,7 +7,8 @@ module Struct.Struct (
          tabla, emptyPos, isReversible, remis50Moves, set50Moves, reset50Moves, addHalfMove,
          fromSquare, toSquare, isSlide, isDiag, isKkrq,
          moveIsNormal, moveIsCastle, moveIsPromo, moveIsEnPas, moveColor, movePiece,
-         movePromoPiece, moveEnPasDel, makeEnPas, moveAddColor, moveAddPiece,
+         movePromoPiece, moveEnPasDel, makeEnPas, moveHasSpecialFlags,
+         moveAddColor, moveAddPiece, moveAddKillerFlag, moveAddCaptsFlag, moveAddTTFlag,
          moveHisAdr, moveHisOfs,
          makeCastleFor, makePromo, moveFromTo, showWord64,
          activatePromo, fromColRow, checkCastle, checkEnPas, toString,
@@ -165,7 +166,10 @@ tabla p sq
           f = pieceAt p bsq
           bsq = 1 `unsafeShiftL` sq
 
-newtype Move = Move Word16 deriving Eq
+newtype Move = Move Word32
+
+instance Eq Move where
+    (Move w1) == (Move w2) = w1 .&. 0xFFFF == w2 .&. 0xFFFF
 
 instance Show Move where
     show = toString
@@ -334,8 +338,8 @@ moveEnPasDel m
 {-# INLINE makeEnPas #-}
 makeEnPas :: Square -> Square -> Move
 makeEnPas f t
-    | f < t     = Move $ 0x6000 .|. encodeFromTo f t	-- white
-    | otherwise = Move $ 0xE000 .|. encodeFromTo f t	-- black
+    | f < t     = Move $ epFlag .|. 0x6000 .|. encodeFromTo f t	-- white
+    | otherwise = Move $ epFlag .|. 0xE000 .|. encodeFromTo f t	-- black
 
 -- Promotions are coded:
 -- c111 <pro><frf><tosq>
@@ -359,8 +363,8 @@ movePromoPiece (Move w)
 
 makePromo :: Piece -> Square -> Square -> Move
 makePromo p f t
-    | f < t     = Move $ 0x7000 .|. w	-- white
-    | otherwise = Move $ 0xF000 .|. w	-- black
+    | f < t     = Move $ promoFlag .|. 0x7000 .|. w	-- white
+    | otherwise = Move $ promoFlag .|. 0xF000 .|. w	-- black
     where !w = tc p .|. (encodeFromTo f t .&. 0x01FF)
           tc Queen  = tcQueen
           tc Rook   = tcRook
@@ -368,7 +372,7 @@ makePromo p f t
           tc Knight = tcKnight
           tc _      = tcQueen	-- to eliminate warning
 
-tcQueen, tcRook, tcBishop, tcKnight :: Word16
+tcQueen, tcRook, tcBishop, tcKnight :: Word32
 tcQueen  = (fromIntegral $ fromEnum Queen ) `shiftL` 9
 tcRook   = (fromIntegral $ fromEnum Rook  ) `shiftL` 9
 tcBishop = (fromIntegral $ fromEnum Bishop) `shiftL` 9
@@ -387,16 +391,16 @@ moveIsCastle (Move w) = s == 0x7E00 || s == 0x7000
 
 {-# INLINE makeCastleFor #-}
 makeCastleFor :: Color -> Bool -> Move
-makeCastleFor White True  = Move 0x7106	-- white, kingside
-makeCastleFor White False = Move 0x7102	-- white, queenside
-makeCastleFor Black True  = Move 0xFF3E	-- black, kingside
-makeCastleFor Black False = Move 0xFF3A	-- black, queenside
+makeCastleFor White True  = Move $ castleFlag .|. 0x7106	-- white, kingside
+makeCastleFor White False = Move $ castleFlag .|. 0x7102	-- white, queenside
+makeCastleFor Black True  = Move $ castleFlag .|. 0xFF3E	-- black, kingside
+makeCastleFor Black False = Move $ castleFlag .|. 0xFF3A	-- black, queenside
 
 -- General functions for move encoding / decoding
-encodeFromTo :: Square -> Square -> Word16
+encodeFromTo :: Square -> Square -> Word32
 encodeFromTo f t = fromIntegral t .|. (fromIntegral f `unsafeShiftL` 6)
 
--- {-# INLINE movePiece #-}
+{-# INLINE movePiece #-}
 movePiece :: Move -> Piece
 movePiece m@(Move w)
     | moveIsNormal m
@@ -415,9 +419,9 @@ moveHisAdr (Move w) = fromIntegral $ (w `unsafeShiftR` 12) .&. 0x7
 -- For history purposes: quick 'n' dirty "color"
 {-# INLINE moveHisOfs #-}
 moveHisOfs :: Move -> Int
-moveHisOfs (Move w) = fromIntegral $ w `unsafeShiftR` 15
+moveHisOfs (Move w) = fromIntegral $ (w `unsafeShiftR` 15) .&. 1
 
--- {-# INLINE fromSquare #-}
+{-# INLINE fromSquare #-}
 fromSquare :: Move -> Square
 fromSquare m@(Move w)
     | moveIsPromo m       = let !ffl = (w `unsafeShiftR` 6) .&. 0x7
@@ -430,15 +434,62 @@ fromSquare m@(Move w)
 toSquare :: Move -> Square
 toSquare (Move m) = fromIntegral (m .&. 0x3F)
 
--- {-# INLINE moveAddColor #-}
+{-# INLINE moveAddColor #-}
 moveAddColor :: Color -> Move -> Move
-moveAddColor White (Move w) = Move $ w .&. 0x7FFF
-moveAddColor Black (Move w) = Move $ w .|. 0x8000
+moveAddColor c (Move w)
+    | c == White = Move $ w .&. delWhite
+    | otherwise  = Move $ w .|. addBlack
+    where addBlack = 0x8000
+          delWhite = complement addBlack
 
--- {-# INLINE moveAddPiece #-}
+{-# INLINE moveAddPiece #-}
 moveAddPiece :: Piece -> Move -> Move
 moveAddPiece piece (Move w)
-    = Move $ (fromIntegral (fromEnum piece) `unsafeShiftL` 12) .|. (w .&. 0x8FFF)
+    = Move $ (fromIntegral (fromEnum piece) `unsafeShiftL` 12) .|. (w .&. maskPiece)
+    where maskPiece = complement 0x7000
+
+-- These flags have meaning only for search decisions, they should not affect
+-- the basic functionality of the moves, which is encoded in LSB 16 bits (0-15)
+-- This is required as long TT has only 16 bit reserved for the TT move
+castleFlag, killerFlag, epFlag, promoFlag, captsFlag, ttFlag :: Word32
+castleFlag = bit 16
+killerFlag = bit 17
+epFlag     = bit 18
+promoFlag  = bit 19
+captsFlag  = bit 20
+ttFlag     = bit 21
+
+-- These here are not (yet?) needed
+{--
+{-# INLINE moveAddCastleFlag #-}
+moveAddCastleFlag :: Move -> Move
+moveAddCastleFlag (Move w) = Move $ w .|. castleFlag
+
+{-# INLINE moveAddEPFlag #-}
+moveAddEPFlag :: Move -> Move
+moveAddEPFlag (Move w) = Move $ w .|. epFlag
+
+{-# INLINE moveAddPromoFlag #-}
+moveAddPromoFlag :: Move -> Move
+moveAddPromoFlag (Move w) = Move $ w .|. promoFlag
+--}
+
+{-# INLINE moveAddKillerFlag #-}
+moveAddKillerFlag :: Move -> Move
+moveAddKillerFlag (Move w) = Move $ w .|. killerFlag
+
+{-# INLINE moveAddCaptsFlag #-}
+moveAddCaptsFlag :: Move -> Move
+moveAddCaptsFlag (Move w) = Move $ w .|. captsFlag
+
+{-# INLINE moveAddTTFlag #-}
+moveAddTTFlag :: Move -> Move
+moveAddTTFlag (Move w) = Move $ w .|. ttFlag
+
+{-# INLINE moveHasSpecialFlags #-}
+moveHasSpecialFlags :: Move -> Bool
+moveHasSpecialFlags (Move w) = w .&. spec /= 0
+    where spec = killerFlag .|. epFlag .|. promoFlag .|. captsFlag .|. ttFlag
 
 checkCastle :: Move -> MyPos -> Move
 checkCastle m p

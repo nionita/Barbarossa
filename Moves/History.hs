@@ -105,7 +105,7 @@ takeAddr :: Word32 -> Int
 takeAddr = fromIntegral . ((.&.) 0xFFFF)
 
 {-# INLINE takeMove #-}
-takeMove :: Word32 -> Word16
+takeMove :: Word32 -> Word32
 takeMove = fromIntegral . (`unsafeShiftR` 16)
 
 -- We want to alloc a fix amount of memory, and although there are

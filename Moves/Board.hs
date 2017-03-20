@@ -250,6 +250,8 @@ beatOrBlock f !p sq = (beat, block)
           !line = findLKA f aksq sq
           !block = blockAt p line
 
+-- Currently these checking move generation functions are not used
+-- They will need to set a "checking" flag too, when in use
 genMoveNCaptToCheck :: MyPos -> [(Square, Square)]
 genMoveNCaptToCheck p = genMoveNCaptDirCheck p ++ genMoveNCaptIndirCheck p
 
@@ -762,7 +764,7 @@ genMoveCaptWL !pos = (map f $ sort ws, map f $ sort ls)
           c     = moving pos
           (ws, ls) = foldr (perCaptFieldWL pos (me pos) (yoAttacs pos)) (lepcs,[]) $ bbToSquares capts
           lepcs = map (moveToLMove Pawn Pawn) epcs
-          f = moveAddColor c . lmoveToMove
+          f = moveAddCaptsFlag . moveAddColor c . lmoveToMove
 
 type LMove = Word32
 

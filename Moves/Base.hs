@@ -8,7 +8,7 @@
 module Moves.Base (
     posToState, getPos, posNewSearch,
     doRealMove, doMove, doQSMove, undoMove, genMoves, genTactMoves, genCaptsAndPromo, canPruneMove,
-    tacticalPos, zugZwang, isMoveLegal, isKillCand, isTKillCand, moveIsFull,
+    tacticalPos, zugZwang, isMoveLegal, isKillCand, isTKillCand,
     betaCut, doNullMove, ttRead, ttStore, curNodes, chooseMove, isTimeout, informCtx,
     mateScore, scoreDiff, qsDelta,
     draftStats,
@@ -378,19 +378,14 @@ moveIsCaptPromo p m
     | moveIsPromo m || moveIsEnPas m = True
     | otherwise                      = moveIsCapture p m
 --}
--- Will not be LMR: normal, non-capture
-{-# INLINE moveIsFull #-}
-moveIsFull :: MyPos -> Move -> Bool
-moveIsFull p m = moveIsNormal m && moveIsCapture p m
 
 -- We will call this function before we do the move
 -- This will spare a heavy operation for pruned moved
 {-# INLINE canPruneMove #-}
 canPruneMove :: MyPos -> Move -> Bool
 canPruneMove p m
-    | not (moveIsNormal m) = False
-    | moveIsCapture p m    = False
-    | otherwise            = not $ normalMoveChecks p m
+    | moveHasSpecialFlags m = False
+    | otherwise             = not $ normalMoveChecks p m
 
 -- Score difference obtained by last move, from POV of the moving part
 -- It considers the fact that static score is for the part which has to move

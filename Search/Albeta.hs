@@ -354,7 +354,7 @@ pvInnerRoot b d nst e = timeToAbort (True, nst) $ do
                 modify $ \s -> s { absdp = absdp s + 1 }
                 s <- case exd of
                          Exten exd' -> do
-                             let !spc = moveIsFull (cpos nst) e
+                             let !spc = moveHasSpecialFlags e
                              when (exd' == 0 && not spc) $ do
                                  sdiff <- lift scoreDiff
                                  updateFutil sdiff	-- e
@@ -685,7 +685,7 @@ pvInnerLoop b d prune nst e = timeToAbort (True, nst) $ do
                            Exten exd' -> do
                                -- if we did not check for special: check it now
                                let !spc | prune && movno nst > 1 = True
-                                        | otherwise              = moveIsFull (cpos nst) e
+                                        | otherwise              = moveHasSpecialFlags e
                                when (exd' == 0 && not spc) $ do	-- not quite ok here
                                    sdiff <- lift scoreDiff	-- cause spc has a slighty
                                    updateFutil sdiff	-- e	-- different meaning...
@@ -727,7 +727,7 @@ pvInnerLoopZ b d prune nst e redu = timeToAbort (True, nst) $ do
                          Exten exd' -> do
                              -- if we did not check for special: check it now
                              let !spc | prune     = True
-                                      | otherwise = moveIsFull (cpos nst) e
+                                      | otherwise = moveHasSpecialFlags e
                              when (exd' == 0 && not spc) $ do
                                  sdiff <- lift scoreDiff
                                  updateFutil sdiff	-- e
@@ -1205,13 +1205,13 @@ incReBe n = modStat $ \s -> s { sReBe = sReBe s + n }
 incReMi :: Search ()
 incReMi = modStat $ \s -> s { sReMi = sReMi s + 1 }
 
-{-# SPECIALIZE bestFirst :: [Move] -> [Move] -> ([Move], [Move]) -> [Move] #-}
-bestFirst :: Eq e => [e] -> [e] -> ([e], [e]) -> [e]
+bestFirst :: [Move] -> [Move] -> ([Move], [Move]) -> [Move]
 bestFirst path kl (es1, es2)
-    | null path = es1 ++ kl ++ delall es2 kl
-    | otherwise = e : delete e es1 ++ kl ++ delall es2 (e : kl)
+    | null path = es1 ++ kl' ++ delall es2 kl
+    | otherwise = moveAddTTFlag e : delete e es1 ++ kl' ++ delall es2 (e : kl)
     where delall = foldr delete
           (e:_)  = path
+          kl' = map moveAddKillerFlag kl
 
 killerToList :: Killer -> [Move]
 killerToList  NoKiller          = []
