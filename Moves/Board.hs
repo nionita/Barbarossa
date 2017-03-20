@@ -6,7 +6,7 @@ module Moves.Board (
     castKingRookOk, castQueenRookOk,
     genMoveCast, genMoveNCapt, genMovePromo, genMoveFCheck, genMoveCaptWL,
     genMoveNCaptToCheck,
-    updatePos, checkOk, moveChecks,
+    updatePos, leftInCheck, normalMoveChecks,
     legalMove, alternateMoves,
     doFromToMove, reverseMoving
     ) where
@@ -89,10 +89,11 @@ srcDests :: (Square -> BBoard) -> Square -> [(Square, Square)]
 srcDests f !s = zip (repeat s) $ bbToSquares $ f s
 
 -- This one should be called only for normal moves
-{-# INLINE moveChecksDirect #-}
-moveChecks :: MyPos -> Move -> Bool
-moveChecks !p !m = moveChecksDirect p m || moveChecksIndirect p m
+{-# INLINE normalMoveChecks #-}
+normalMoveChecks :: MyPos -> Move -> Bool
+normalMoveChecks !p !m = moveChecksDirect p m || moveChecksIndirect p m
 
+{-# INLINE moveChecksDirect #-}
 moveChecksDirect :: MyPos -> Move -> Bool
 moveChecksDirect !p !m
     | fig == Pawn   = pAttacs (moving p) t .&. yok /= 0
@@ -110,6 +111,7 @@ moveChecksDirect !p !m
 
 -- This one can be further optimised by using two bitboard arrays
 -- for the attacks on empty table
+{-# INLINE moveChecksIndirect #-}
 moveChecksIndirect :: MyPos -> Move -> Bool
 moveChecksIndirect !p !m = ba .&. bq /= 0 || ra .&. rq /= 0
     where !ksq = firstOne $ kings p .&. yo p
@@ -299,9 +301,9 @@ castQueenRookOk :: MyPos -> Color -> Bool
 castQueenRookOk !p White = epcas p .&.  b0 /= 0 where b0 = 1 
 castQueenRookOk !p Black = epcas p .&. b56 /= 0 where b56 = uBit 56
 
-{-# INLINE checkOk #-}
-checkOk :: MyPos -> Bool
-checkOk p = yo p .&. kings p .&. myAttacs p == 0
+{-# INLINE leftInCheck #-}
+leftInCheck :: MyPos -> Bool
+leftInCheck p = yo p .&. kings p .&. myAttacs p /= 0
 
 data ChangeAccum = CA !ZKey !Int
 

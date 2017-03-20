@@ -345,7 +345,7 @@ pvInnerRoot :: Int 	-- current beta
             -> Search (Bool, NodeState)
 pvInnerRoot b d nst e = timeToAbort (True, nst) $ do
          -- do the move
-         exd <- lift $ doMove e False
+         exd <- lift $ doMove e
          if legalResult exd
             then do
                 old <- get
@@ -353,7 +353,8 @@ pvInnerRoot b d nst e = timeToAbort (True, nst) $ do
                 newNode d
                 modify $ \s -> s { absdp = absdp s + 1 }
                 s <- case exd of
-                         Exten exd' spc -> do
+                         Exten exd' -> do
+                             let !spc = moveIsFull (cpos nst) e
                              when (exd' == 0 && not spc) $ do
                                  sdiff <- lift scoreDiff
                                  updateFutil sdiff	-- e
@@ -675,13 +676,16 @@ pvInnerLoop b d prune nst e = timeToAbort (True, nst) $ do
                 return (False, nst1)
             else do
                 old <- get
-                exd <- lift $ doMove e False	-- do the move
+                exd <- lift $ doMove e	-- do the move
                 if legalResult exd
                    then do
                        newNode d
                        modify $ \s -> s { absdp = absdp s + 1 }
                        s <- case exd of
-                           Exten exd' spc -> do
+                           Exten exd' -> do
+                               -- if we did not check for special: check it now
+                               let !spc | prune && movno nst > 1 = True
+                                        | otherwise              = moveIsFull (cpos nst) e
                                when (exd' == 0 && not spc) $ do	-- not quite ok here
                                    sdiff <- lift scoreDiff	-- cause spc has a slighty
                                    updateFutil sdiff	-- e	-- different meaning...
@@ -713,28 +717,25 @@ pvInnerLoopZ b d prune nst e redu = timeToAbort (True, nst) $ do
                 return (False, nst1)
             else do
                 old <- get
-                exd <- lift $ doMove e False	-- do the move
+                exd <- lift $ doMove e	-- do the move
                 -- even the legality could be checked before, maybe much cheaper
                 if legalResult exd
                    then do
                        newNode d
                        modify $ \s -> s { absdp = absdp s + 1 }
                        s <- case exd of
-                         Exten exd' spc -> do
-                             if spc
-                                then do
-                                    xchangeFutil
-                                    s <- pvInnerLoopExtenZ b d spc exd' (deepNSt $ resetSpc nst) redu
-                                    xchangeFutil
-                                    return s
-                                else do
-                                    when (exd' == 0) $ do
-                                        sdiff <- lift scoreDiff
-                                        updateFutil sdiff	-- e
-                                    xchangeFutil
-                                    s <- pvInnerLoopExtenZ b d spc exd' (deepNSt nst) redu
-                                    xchangeFutil
-                                    return s
+                         Exten exd' -> do
+                             -- if we did not check for special: check it now
+                             let !spc | prune     = True
+                                      | otherwise = moveIsFull (cpos nst) e
+                             when (exd' == 0 && not spc) $ do
+                                 sdiff <- lift scoreDiff
+                                 updateFutil sdiff	-- e
+                             xchangeFutil
+                             let nst' = if spc then deepNSt $ resetSpc nst else deepNSt nst
+                             s <- pvInnerLoopExtenZ b d spc exd' nst' redu
+                             xchangeFutil
+                             return s
                          Final sco -> return $! pathFromScore "Final" (-sco)
                          Illegal   -> error "Cannot be illegal here"
                        lift undoMove	-- undo the move
@@ -882,19 +883,31 @@ checkFailOrPVLoopZ xstats b d e s nst = whenAbort (True, nst) $ do
 
 newKiller :: Int -> Path -> NodeState -> Killer
 newKiller d s nst
-    | d >= 2, (mm:km:_) <- unseq $ pathMoves s,
-      isKillCand (cpos nst) mm km = pushKiller km (killer nst)
-    | otherwise                   = killer nst
+    | d >= 2, (mm:km:_) <- unseq $ pathMoves s
+        = pushKiller km (isKillCand (cpos nst) mm km) (killer nst)
+    | otherwise = killer nst
 
 -- Same as newKiller, but the path begins with the killer move
 -- as it is coming from null move search
--- It is called before a NSt reset, so no neet to consider
--- previous killer moves
+-- It is called before a NSt reset, so no need to consider previous killer moves
 newTKiller :: MyPos -> Int -> Path -> Killer
 newTKiller pos d s
     | d >= 2, (km:_) <- unseq $ pathMoves s,
       isTKillCand pos km = OneKiller km
     | otherwise          = NoKiller
+
+pushKiller :: Move -> Bool -> Killer -> Killer
+pushKiller !e c NoKiller
+    | c         = OneKiller e
+    | otherwise = NoKiller
+pushKiller !e c ok@(OneKiller e1)
+    | e == e1   = ok
+    | c         = TwoKillers e e1
+    | otherwise = ok
+pushKiller !e c tk@(TwoKillers e1 e2)
+    | e == e1 || e == e2 = tk
+    | c                  = TwoKillers e e1
+    | otherwise          = tk
 
 -- We don't sort the moves here, they have to come sorted from genMoves
 -- But we consider the best move first (TT or IID) and the killers
@@ -1044,7 +1057,7 @@ pvQSearch !a !b !c = do
                                  when collectFens $ finWithNodes "DELT"
                                  return a
                              else do
-                                 edges <- liftM Alt $ lift genTactMoves
+                                 edges <- liftM Alt $ lift genCaptsAndPromo
                                  if noMove edges
                                     then do	-- no more captures
                                         when collectFens $ finWithNodes "NOCA"
@@ -1065,13 +1078,11 @@ pvQLoop b c = go
 
 pvQInnerLoop :: Int -> Int -> Int -> Move -> Search (Bool, Int)
 pvQInnerLoop !b c !a e = timeToAbort (True, b) $ do
-         r <- lift $ doMove e True
+         r <- lift $ doQSMove e
          if legalResult r
             then do
                 newNodeQS
-                !sc <- case r of
-                           Final sc -> return (-sc)
-                           _        -> negate <$> pvQSearch (-b) (-a) c
+                !sc <- negate <$> pvQSearch (-b) (-a) c
                 lift undoMove
                 if sc >= b
                    then return (True, b)
@@ -1201,15 +1212,6 @@ bestFirst path kl (es1, es2)
     | otherwise = e : delete e es1 ++ kl ++ delall es2 (e : kl)
     where delall = foldr delete
           (e:_)  = path
-
-pushKiller :: Move -> Killer -> Killer
-pushKiller !e NoKiller = OneKiller e
-pushKiller !e ok@(OneKiller e1)
-    | e == e1   = ok
-    | otherwise = TwoKillers e e1
-pushKiller !e tk@(TwoKillers e1 e2)
-    | e == e1 || e == e2 = tk
-    | otherwise          = TwoKillers e e1
 
 killerToList :: Killer -> [Move]
 killerToList  NoKiller          = []

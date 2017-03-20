@@ -7,8 +7,8 @@
 
 module Moves.Base (
     posToState, getPos, posNewSearch,
-    doRealMove, doMove, undoMove, genMoves, genTactMoves, canPruneMove,
-    tacticalPos, zugZwang, isMoveLegal, isKillCand, isTKillCand,
+    doRealMove, doMove, doQSMove, undoMove, genMoves, genTactMoves, genCaptsAndPromo, canPruneMove,
+    tacticalPos, zugZwang, isMoveLegal, isKillCand, isTKillCand, moveIsFull,
     betaCut, doNullMove, ttRead, ttStore, curNodes, chooseMove, isTimeout, informCtx,
     mateScore, scoreDiff, qsDelta,
     draftStats,
@@ -93,7 +93,7 @@ loosingLast = True
 genMoves :: Int -> Game ([Move], [Move])
 genMoves d = do
     p <- getPos
-    if isCheck p $ moving p
+    if inCheck p
        then return (genMoveFCheck p, [])
        else do
             h <- gets hist
@@ -110,12 +110,18 @@ genMoves d = do
 genTactMoves :: Game [Move]
 genTactMoves = do
     p <- getPos
-    if isCheck p $ moving p
+    if inCheck p
        then return $ genMoveFCheck p
-       else do
-           let l1  = genMovePromo p
-               l2w = fst $ genMoveCaptWL p
-           return $ l1 ++ l2w
+       else genCaptsAndPromo
+
+-- Generate only tactical moves, i.e. promotions & captures
+-- This one is used in QS when we know we are noct in check
+genCaptsAndPromo :: Game [Move]
+genCaptsAndPromo = do
+    p <- getPos
+    let l1  = genMovePromo p
+        l2w = fst $ genMoveCaptWL p
+    return $ l1 ++ l2w
 
 {--
 checkGenMoves :: MyPos -> [Move] -> [Move]
@@ -168,7 +174,7 @@ doRealMove m = do
         -- Capturing one king?
         kc = kings pc `uBitSet` toSquare m1
         p' = doFromToMove m1 pc
-        cok = checkOk p'
+        lic = leftInCheck p'
     -- If the move is real and one of those conditions occur,
     -- then we are really in trouble...
     if (il || kc)
@@ -179,15 +185,15 @@ doRealMove m = do
            logMes $ "Stack:\n" ++ showStack 3 (stack s)
            -- After an illegal result there must be no undo!
            return Illegal
-       else if not cok
+       else if lic
                then return Illegal
                else do
                    put s { stack = p' : stack s }
-                   return $ Exten 0 False
+                   return $ Exten 0
 
--- Move from a node to a descendent - the search version
-doMove :: Move -> Bool -> Game DoResult
-doMove m qs = do
+-- Move from a node to a descendent - the normal search version
+doMove :: Move -> Game DoResult
+doMove m = do
     s <- get
     let (pc:_) = stack s	-- we never saw an empty stack error until now
         -- Moving a non-existent piece?
@@ -204,17 +210,34 @@ doMove m qs = do
            logMes $ "Stack:\n" ++ showStack 3 (stack s)
            -- After an illegal result there must be no undo!
            return Illegal
-       else if not $ checkOk p
+       else if leftInCheck p
                then return Illegal
                else do
                    put s { stack = p : stack s }
-                   remis <- if qs then return False else checkRemisRules p
+                   remis <- checkRemisRules p
                    if remis
                       then return $ Final 0
                       else do
                           let dext = if inCheck p then 1 else 0
-                          return $! Exten dext $ moveIsCaptPromo pc m
+                          return $! Exten dext
 
+-- Move from a node to a descendent - the QS version
+-- In QS we do not check the "bad" illegality, and we don't check for remis
+-- We also do not care about extension or special moves (all are special)
+{-# INLINE doQSMove #-}
+doQSMove :: Move -> Game DoResult
+doQSMove m = do
+    s <- get
+    let (pc:_) = stack s	-- we never saw an empty stack error until now
+        sts = evalState (posEval p) (evalst s)
+        p   = doFromToMove m pc { staticScore = sts }
+    if leftInCheck p
+       then return Illegal
+       else do
+           put s { stack = p : stack s }
+           return $ Exten 0
+
+{-# INLINE doNullMove #-}
 doNullMove :: Game ()
 doNullMove = do
     s <- get
@@ -243,7 +266,7 @@ undoMove = modify $ \s -> s { stack = tail $ stack s }
 -- Currently only when in in check
 {-# INLINE tacticalPos #-}
 tacticalPos :: MyPos -> Bool
-tacticalPos = (/= 0) . check
+tacticalPos = inCheck
 
 {-# INLINE zugZwang #-}
 zugZwang :: MyPos -> Bool
@@ -253,18 +276,20 @@ zugZwang p = me p `less` (kings p .|. pawns p) == 0
 isMoveLegal :: MyPos -> Move -> Bool
 isMoveLegal = legalMove
 
--- Why not just like isTKillCand?
--- Also: if not normal, it is useless, as now it is not recognized as legal...
 {-# INLINE isKillCand #-}
 isKillCand :: MyPos -> Move -> Move -> Bool
 isKillCand p mm ym
     | toSquare mm == toSquare ym = False
+    | moveIsPromo ym             = False
+    | moveIsEnPas ym             = False
     | otherwise                  = not $ moveIsCapture p ym
 
--- If not normal, it is useless, as now it is not recognized as legal...
 {-# INLINE isTKillCand #-}
 isTKillCand :: MyPos -> Move -> Bool
-isTKillCand p mm = not $ moveIsCapture p mm
+isTKillCand p ym
+    | moveIsPromo ym             = False
+    | moveIsEnPas ym             = False
+    | otherwise                  = not $ moveIsCapture p ym
 
 -- Static evaluation function
 -- This does not detect mate or stale mate, it only returns the calculated
@@ -345,12 +370,18 @@ betaCut good absdp m
             _     -> return ()
     | otherwise = return ()
 
+{--
 -- Will not be pruned nor LMR reduced
 -- Now: only for captures or promotions (but check that with LMR!!!)
 moveIsCaptPromo :: MyPos -> Move -> Bool
 moveIsCaptPromo p m
     | moveIsPromo m || moveIsEnPas m = True
     | otherwise                      = moveIsCapture p m
+--}
+-- Will not be LMR: normal, non-capture
+{-# INLINE moveIsFull #-}
+moveIsFull :: MyPos -> Move -> Bool
+moveIsFull p m = moveIsNormal m && moveIsCapture p m
 
 -- We will call this function before we do the move
 -- This will spare a heavy operation for pruned moved
@@ -359,7 +390,7 @@ canPruneMove :: MyPos -> Move -> Bool
 canPruneMove p m
     | not (moveIsNormal m) = False
     | moveIsCapture p m    = False
-    | otherwise            = not $ moveChecks p m
+    | otherwise            = not $ normalMoveChecks p m
 
 -- Score difference obtained by last move, from POV of the moving part
 -- It considers the fact that static score is for the part which has to move
