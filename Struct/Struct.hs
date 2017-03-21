@@ -7,7 +7,7 @@ module Struct.Struct (
          tabla, emptyPos, isReversible, remis50Moves, set50Moves, reset50Moves, addHalfMove,
          fromSquare, toSquare, isSlide, isDiag, isKkrq,
          moveIsNormal, moveIsCastle, moveIsPromo, moveIsEnPas, moveColor, movePiece,
-         movePromoPiece, moveEnPasDel, makeEnPas, moveHasSpecialFlags,
+         movePromoPiece, moveEnPasDel, makeEnPas, moveHasSpecialFlags, moveHasSpecFlags, moveHasTTFlag,
          moveAddColor, moveAddPiece, moveAddKillerFlag, moveAddCaptsFlag, moveAddTTFlag,
          moveHisAdr, moveHisOfs,
          makeCastleFor, makePromo, moveFromTo, showWord64,
@@ -490,6 +490,16 @@ moveAddTTFlag (Move w) = Move $ w .|. ttFlag
 moveHasSpecialFlags :: Move -> Bool
 moveHasSpecialFlags (Move w) = w .&. spec /= 0
     where spec = killerFlag .|. epFlag .|. promoFlag .|. captsFlag .|. ttFlag
+
+-- Actually when having these flags, the move can't be a killer
+{-# INLINE moveHasSpecFlags #-}
+moveHasSpecFlags :: Move -> Bool
+moveHasSpecFlags (Move w) = w .&. spec /= 0
+    where spec = epFlag .|. promoFlag .|. captsFlag
+
+{-# INLINE moveHasTTFlag #-}
+moveHasTTFlag :: Move -> Bool
+moveHasTTFlag (Move w) = w .&. ttFlag /= 0
 
 checkCastle :: Move -> MyPos -> Move
 checkCastle m p

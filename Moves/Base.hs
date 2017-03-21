@@ -279,17 +279,19 @@ isMoveLegal = legalMove
 {-# INLINE isKillCand #-}
 isKillCand :: MyPos -> Move -> Move -> Bool
 isKillCand p mm ym
-    | toSquare mm == toSquare ym = False
-    | moveIsPromo ym             = False
-    | moveIsEnPas ym             = False
+    | moveHasSpecFlags ym      = False
+    -- The TT move is not set correctly (it lost the flags)
+    | not (moveHasTTFlag ym)     = True
+    | toSquare mm == toSquare ym = False	-- it is a recapture
     | otherwise                  = not $ moveIsCapture p ym
 
 {-# INLINE isTKillCand #-}
 isTKillCand :: MyPos -> Move -> Bool
 isTKillCand p ym
-    | moveIsPromo ym             = False
-    | moveIsEnPas ym             = False
-    | otherwise                  = not $ moveIsCapture p ym
+    | moveHasSpecFlags ym  = False
+    -- The TT move is not set correctly (it lost the flags)
+    | not (moveHasTTFlag ym) = True
+    | otherwise              = not $ moveIsCapture p ym	-- EP/promo should be checked too
 
 -- Static evaluation function
 -- This does not detect mate or stale mate, it only returns the calculated
