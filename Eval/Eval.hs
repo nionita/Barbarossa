@@ -600,33 +600,51 @@ instance EvalItem Backward where
 backDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 backDiff p ew mide
     | moving p == White
-    = let wp = pawns p .&. me p
-          bp = pawns p .&. yo p
-          (bpw, bpow) = backPawns White wp bp (yoPAttacs p)
-          (bpb, bpob) = backPawns Black bp wp (myPAttacs p)
-          !bpd  = popCount bpw  - popCount bpb
-          !bpod = popCount bpow - popCount bpob
-      in mad (mad mide (ewBackPawns ew) bpd) (ewBackPOpen ew) bpod
+    = let mp = pawns p .&. me p
+          yp = pawns p .&. yo p
+          (mbp, mbpo, mbps) = backPawns White mp yp (yoPAttacs p)
+          (ybp, ybpo, ybps) = backPawns Black yp mp (myPAttacs p)
+          !rq = queens p .|. rooks p
+          !myrq = popCount $ rq .&. me p
+          !yorq = popCount $ rq .&. yo p
+          !bpd  = popCount mbp  - popCount ybp
+          !bpod = popCount mbpo * yorq - popCount ybpo * myrq
+          !bpsd = popCount mbps * yorq - popCount ybps * myrq
+      in mad (mad (mad mide (ewBackStr ew) bpsd)
+                  (ewBackPawns ew) bpd)
+             (ewBackPOpen ew) bpod
     | otherwise
-    = let bp = pawns p .&. me p
-          wp = pawns p .&. yo p
-          (bpw, bpow) = backPawns White wp bp (myPAttacs p)
-          (bpb, bpob) = backPawns Black bp wp (yoPAttacs p)
-          !bpd  = popCount bpb  - popCount bpw
-          !bpod = popCount bpob - popCount bpow
-      in mad (mad mide (ewBackPawns ew) bpd) (ewBackPOpen ew) bpod
+    = let yp = pawns p .&. me p
+          mp = pawns p .&. yo p
+          (mbp, mbpo, mbps) = backPawns Black mp yp (yoPAttacs p)
+          (ybp, ybpo, ybps) = backPawns White yp mp (myPAttacs p)
+          !rq = queens p .|. rooks p
+          !myrq = popCount $ rq .&. me p
+          !yorq = popCount $ rq .&. yo p
+          !bpd  = popCount mbp  - popCount ybp
+          !bpod = popCount mbpo * yorq - popCount ybpo * myrq
+          !bpsd = popCount mbps * yorq - popCount ybps * myrq
+      in mad (mad (mad mide (ewBackStr ew) bpsd)
+                  (ewBackPawns ew) bpd)
+             (ewBackPOpen ew) bpod
 
-backPawns :: Color -> BBoard -> BBoard -> BBoard -> (BBoard, BBoard)
-backPawns White !mp !op !opa = (bp, bpo)
+-- The delivered bitboards are not the real pawns, but theyr stops
+-- So stragglers are on 3/4 and not on 2/3 as in the definition
+backPawns :: Color -> BBoard -> BBoard -> BBoard -> (BBoard, BBoard, BBoard)
+backPawns White !mp !op !opa = (bp, bpo, bps)
     where fa = frontAttacksWhite mp
           stops = mp `unsafeShiftL` 8
-          !bp  = stops .&. opa .&. complement fa;
+          !bp  = stops .&. opa .&. complement fa
           !bpo = bp `less` shadowDown op
-backPawns Black !mp !op !opa = (bp, bpo)
+          !bps = bpo .&. my23
+          my23 = 0x00000000FFFF0000
+backPawns Black !mp !op !opa = (bp, bpo, bps)
     where fa = frontAttacksBlack mp
           stops = mp `unsafeShiftR` 8
-          !bp = stops .&. opa .&. complement fa;
+          !bp = stops .&. opa .&. complement fa
           !bpo = bp `less` shadowUp op
+          !bps = bpo .&. my23
+          my23 = 0x0000FFFF00000000
 
 frontAttacksWhite :: BBoard -> BBoard
 frontAttacksWhite !b = fa

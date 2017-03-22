@@ -100,6 +100,7 @@ data EvalWeights
           ewIsolPassed      :: !MidEnd,
           ewBackPawns       :: !MidEnd,
           ewBackPOpen       :: !MidEnd,
+          ewBackStr         :: !MidEnd,
           ewEnpHanging      :: !MidEnd,
           ewEnpEnPrise      :: !MidEnd,
           ewEnpAttacked     :: !MidEnd,
@@ -194,10 +195,11 @@ instance CollectParams EvalWeights where
           ewCenterKAtts     = tme  2 54,
           ewSpace           = tme  1  0,
           ewAdvAtts         = tme  2 16,
-          ewIsolPawns       = tme (-41) (-120),
+          ewIsolPawns       = tme (-40) (-120),
           ewIsolPassed      = tme (-57) (-169),
-          ewBackPawns       = tme (-126) (-168),
-          ewBackPOpen       = tme (-26)  (-22),
+          ewBackPawns       = tme (-128) (-100),
+          ewBackPOpen       = tme (-12)  (-15),
+          ewBackStr         = tme (-8)  (-30),
           ewEnpHanging      = tme (-21) (-34),
           ewEnpEnPrise      = tme (-28) (-26),
           ewEnpAttacked     = tme  (-6) (-7),
@@ -268,6 +270,8 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
         ("end.backPawns",      setEndBackPawns),
         ("mid.backPOpen",      setMidBackPOpen),
         ("end.backPOpen",      setEndBackPOpen),
+        ("mid.backStr",        setMidBackStr),
+        ("end.backStr",        setEndBackStr),
         ("mid.enpHanging",     setMidEnpHanging),
         ("end.enpHanging",     setEndEnpHanging),
         ("mid.enpEnPrise",     setMidEnpEnPrise),
@@ -347,6 +351,8 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
           setEndBackPawns       v' ew' = ew' { ewBackPawns       = (ewBackPawns       ew') { end = round v' }}
           setMidBackPOpen       v' ew' = ew' { ewBackPOpen       = (ewBackPOpen       ew') { mid = round v' }}
           setEndBackPOpen       v' ew' = ew' { ewBackPOpen       = (ewBackPOpen       ew') { end = round v' }}
+          setMidBackStr         v' ew' = ew' { ewBackStr         = (ewBackStr         ew') { mid = round v' }}
+          setEndBackStr         v' ew' = ew' { ewBackStr         = (ewBackStr         ew') { end = round v' }}
           setMidEnpHanging      v' ew' = ew' { ewEnpHanging      = (ewEnpHanging      ew') { mid = round v' }}
           setEndEnpHanging      v' ew' = ew' { ewEnpHanging      = (ewEnpHanging      ew') { end = round v' }}
           setMidEnpEnPrise      v' ew' = ew' { ewEnpEnPrise      = (ewEnpEnPrise      ew') { mid = round v' }}
