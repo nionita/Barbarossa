@@ -33,9 +33,9 @@ bestMoveCont tiefe sttime stati lastsc lpv rmvs = do
                 best      = False,
                 stoptime  = sttime
                 }
-    ((sc, path, rmvsf, timint), statf) <- SM.runCState (alphaBeta abc) stati
+    ((sc, path, rmvsf, timint, ch), statf) <- SM.runCState (alphaBeta abc) stati
     -- when (sc == 0) $ return ()
     let n = sNodes $ mstats statf
     informGui sc tiefe n path
     ctxLog LogInfo $ "score " ++ show sc ++ " path " ++ show path
-    return (path, sc, rmvsf, timint, statf)
+    return (path, sc, rmvsf, timint, statf, ch)

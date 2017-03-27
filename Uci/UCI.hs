@@ -209,7 +209,7 @@ parseGoCmd = P.choice $ map P.try [
         parseMovesToGo,
         parseDepth,
         parseNodes,
-        parseMate,
+        parseFindMate,
         parseMoveTime,
         parseInfinite,
         parseSearchMoves
@@ -249,8 +249,8 @@ parseDepth = parseWithInt "depth" Depth
 parseNodes :: Parser GoCmds
 parseNodes = parseWithInt "nodes" Nodes
 
-parseMate :: Parser GoCmds
-parseMate  = parseWithInt "mate" FindMate
+parseFindMate :: Parser GoCmds
+parseFindMate  = parseWithInt "mate" FindMate
 
 parseMoveTime :: Parser GoCmds
 parseMoveTime = parseWithInt "movetime" MoveTime
