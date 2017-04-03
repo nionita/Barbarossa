@@ -598,37 +598,24 @@ instance EvalItem Backward where
     evalItem _ _ ew p _ mide = backDiff p ew mide
 
 backDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-backDiff p ew mide
-    | moving p == White
-    = let mp = pawns p .&. me p
-          yp = pawns p .&. yo p
-          (mbp, mbpo, mbps) = backPawns White mp yp (yoPAttacs p)
-          (ybp, ybpo, ybps) = backPawns Black yp mp (myPAttacs p)
-          !rq = queens p .|. rooks p
-          !myrq = popCount $ rq .&. me p
-          !yorq = popCount $ rq .&. yo p
+backDiff p ew mide = mad (mad (mad mide (ewBackStr ew) bpsd)
+                              (ewBackPawns ew) bpd)
+                         (ewBackPOpen ew) bpod
+    where c = moving p
+          !mp = pawns p .&. me p
+          !yp = pawns p .&. yo p
+          (mbp, mbpo, mbps) = backPawns c         mp yp (yoPAttacs p)
+          (ybp, ybpo, ybps) = backPawns (other c) yp mp (myPAttacs p)
           !bpd  = popCount mbp  - popCount ybp
-          !bpod = popCount mbpo * yorq - popCount ybpo * myrq
-          !bpsd = popCount mbps * yorq - popCount ybps * myrq
-      in mad (mad (mad mide (ewBackStr ew) bpsd)
-                  (ewBackPawns ew) bpd)
-             (ewBackPOpen ew) bpod
-    | otherwise
-    = let yp = pawns p .&. me p
-          mp = pawns p .&. yo p
-          (mbp, mbpo, mbps) = backPawns Black mp yp (yoPAttacs p)
-          (ybp, ybpo, ybps) = backPawns White yp mp (myPAttacs p)
           !rq = queens p .|. rooks p
-          !myrq = popCount $ rq .&. me p
-          !yorq = popCount $ rq .&. yo p
-          !bpd  = popCount mbp  - popCount ybp
-          !bpod = popCount mbpo * yorq - popCount ybpo * myrq
-          !bpsd = popCount mbps * yorq - popCount ybps * myrq
-      in mad (mad (mad mide (ewBackStr ew) bpsd)
-                  (ewBackPawns ew) bpd)
-             (ewBackPOpen ew) bpod
+          (bpo1, bps1) | rq .&. yo p == 0 = (0, 0)
+                       | otherwise        = (popCount mbpo, popCount mbps)
+          (bpo2, bps2) | rq .&. me p == 0 = (0, 0)
+                       | otherwise        = (popCount ybpo, popCount ybps)
+          !bpod = bpo1 - bpo2
+          !bpsd = bps1 - bps2
 
--- The delivered bitboards are not the real pawns, but theyr stops
+-- The delivered bitboards are not the real pawns, but their stops
 -- So stragglers are on 3/4 and not on 2/3 as in the definition
 backPawns :: Color -> BBoard -> BBoard -> BBoard -> (BBoard, BBoard, BBoard)
 backPawns White !mp !op !opa = (bp, bpo, bps)
