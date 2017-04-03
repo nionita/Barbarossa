@@ -38,7 +38,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.5.0"
-progVerSuff = "kon"
+progVerSuff = "mo0"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -595,7 +595,7 @@ timeFactor tp cha draft tim osc sc chgs mvs = round $ fromIntegral tim * min (tp
 
 reduceBegin :: Maybe Int -> Int -> Int
 reduceBegin mi ms | Just i <- mi,
-                    i < 10    = (ms * i) `div` 10
+                    i < 4     = (ms * i) `div` 4
                   | otherwise = ms
 
 storeBestMove :: [Move] -> Int -> CtxIO ()

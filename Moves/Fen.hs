@@ -81,7 +81,7 @@ fenFromString fen = zipWith ($) fenfuncs fentails
           getFenMv   = headOrDefault "w"
           getFenCast = headOrDefault "-"
           getFenEp   = headOrDefault "-"
-          getFenHalf = headOrDefault "-"
+          getFenHalf = headOrDefault "0"
           getFenMvNo = headOrDefault "-"
 
 updatePos :: MyPos -> MyPos
@@ -107,8 +107,6 @@ updatePos !p = p {
           -- Further ideas:
           -- 1. The old method could be faster for afew pawns! Tests!!
           -- 2. This is necessary only after a pawn move, otherwise passed remains the same
-          -- 3. Unify updatePos: one function with basic fields as parameter and eventually
-          --    the old position, then everything in one go - should avoid copying
           lzb = posLazy (moving p) toccup (black p) tpawns tknights tbishops trooks tqueens tkings
 
 posLazy :: Color -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> LazyBits

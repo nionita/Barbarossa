@@ -88,6 +88,8 @@ data EvalWeights
           ewMobilityBishop  :: !MidEnd,
           ewMobilityRook    :: !MidEnd,
           ewMobilityQueen   :: !MidEnd,
+          ewMobilityKnight0 :: !MidEnd,
+          ewMobilityBishop0 :: !MidEnd,
           ewCenterPAtts     :: !MidEnd,
           ewCenterNAtts     :: !MidEnd,
           ewCenterBAtts     :: !MidEnd,
@@ -186,6 +188,8 @@ instance CollectParams EvalWeights where
           ewMobilityBishop  = tme 57 32,	-- length 10, depth 6, batch 128
           ewMobilityRook    = tme 26 28,
           ewMobilityQueen   = tme  4  3,
+          ewMobilityKnight0 = tme (-120) (-200),	-- Mobility penalty for 0 mobility (not accurate)
+          ewMobilityBishop0 = tme (-120) (-200),
           ewCenterPAtts     = tme 84 66,
           ewCenterNAtts     = tme 49 46,
           ewCenterBAtts     = tme 57 42,
@@ -244,6 +248,10 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
         ("end.mobilityRook",   setEndMobilityRook),
         ("mid.mobilityQueen",  setMidMobilityQueen),
         ("end.mobilityQueen",  setEndMobilityQueen),
+        ("mid.mobilityKnight0", setMidMobilityKnight0),
+        ("end.mobilityKnight0", setEndMobilityKnight0),
+        ("mid.mobilityBishop0", setMidMobilityBishop0),
+        ("end.mobilityBishop0", setEndMobilityBishop0),
         ("mid.centerPAtts",    setMidCenterPAtts),
         ("end.centerPAtts",    setEndCenterPAtts),
         ("mid.centerNAtts",    setMidCenterNAtts),
@@ -323,6 +331,10 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
           setEndMobilityRook    v' ew' = ew' { ewMobilityRook    = (ewMobilityRook    ew') { end = round v' }}
           setMidMobilityQueen   v' ew' = ew' { ewMobilityQueen   = (ewMobilityQueen   ew') { mid = round v' }}
           setEndMobilityQueen   v' ew' = ew' { ewMobilityQueen   = (ewMobilityQueen   ew') { end = round v' }}
+          setMidMobilityKnight0 v' ew' = ew' { ewMobilityKnight0 = (ewMobilityKnight0 ew') { mid = round v' }}
+          setEndMobilityKnight0 v' ew' = ew' { ewMobilityKnight0 = (ewMobilityKnight0 ew') { end = round v' }}
+          setMidMobilityBishop0 v' ew' = ew' { ewMobilityBishop0 = (ewMobilityBishop0 ew') { mid = round v' }}
+          setEndMobilityBishop0 v' ew' = ew' { ewMobilityBishop0 = (ewMobilityBishop0 ew') { end = round v' }}
           setMidCenterPAtts     v' ew' = ew' { ewCenterPAtts     = (ewCenterPAtts     ew') { mid = round v' }}
           setEndCenterPAtts     v' ew' = ew' { ewCenterPAtts     = (ewCenterPAtts     ew') { end = round v' }}
           setMidCenterNAtts     v' ew' = ew' { ewCenterNAtts     = (ewCenterNAtts     ew') { mid = round v' }}

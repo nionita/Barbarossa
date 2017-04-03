@@ -460,7 +460,12 @@ instance EvalItem Mobility where
 
 -- Here we do not calculate pawn mobility (which, calculated as attacks, is useless)
 mobDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-mobDiff p ew mide = mad (mad (mad (mad mide (ewMobilityKnight ew) n) (ewMobilityBishop ew) b) (ewMobilityRook ew) r) (ewMobilityQueen ew) q
+mobDiff p ew mide = mad (mad (mad (mad (mad (mad mide (ewMobilityBishop0 ew) b0)
+                                            (ewMobilityKnight0 ew) n0)
+                                       (ewMobilityKnight ew) n)
+                                  (ewMobilityBishop ew) b)
+                             (ewMobilityRook ew) r)
+                        (ewMobilityQueen ew) q
     where !myN = popCount $ myNAttacs p `less` (me p .|. yoPAttacs p)
           !myB = popCount $ myBAttacs p `less` (me p .|. yoPAttacs p)
           !myR = popCount $ myRAttacs p `less` (me p .|. yoA1)
@@ -477,6 +482,16 @@ mobDiff p ew mide = mad (mad (mad (mad mide (ewMobilityKnight ew) n) (ewMobility
           !b = myB - yoB
           !r = myR - yoR
           !q = myQ - yoQ
+          !mb0 | bishops p .&. me p /= 0 && myB == 0 = 1
+               | otherwise                           = 0
+          !yb0 | bishops p .&. yo p /= 0 && yoB == 0 = 1
+               | otherwise                           = 0
+          !mn0 | knights p .&. me p /= 0 && myN == 0 = 1
+               | otherwise                           = 0
+          !yn0 | knights p .&. yo p /= 0 && yoN == 0 = 1
+               | otherwise                           = 0
+          !b0 = mb0 - yb0
+          !n0 = mn0 - yn0
 
 ------ Center control ------
 data Center = Center
