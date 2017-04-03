@@ -460,38 +460,44 @@ instance EvalItem Mobility where
 
 -- Here we do not calculate pawn mobility (which, calculated as attacks, is useless)
 mobDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-mobDiff p ew mide = mad (mad (mad (mad (mad (mad mide (ewMobilityBishop0 ew) b0)
-                                            (ewMobilityKnight0 ew) n0)
-                                       (ewMobilityKnight ew) n)
+mobDiff p ew mide = mad (mad (mad (mad mide (ewMobilityKnight ew) n)
                                   (ewMobilityBishop ew) b)
                              (ewMobilityRook ew) r)
                         (ewMobilityQueen ew) q
-    where !myN = popCount $ myNAttacs p `less` (me p .|. yoPAttacs p)
-          !myB = popCount $ myBAttacs p `less` (me p .|. yoPAttacs p)
-          !myR = popCount $ myRAttacs p `less` (me p .|. yoA1)
-          !myQ = popCount $ myQAttacs p `less` (me p .|. yoA2)
-          !yoA1 = yoPAttacs p .|. yoNAttacs p .|. yoBAttacs p
-          !yoA2 = yoA1 .|. yoRAttacs p
-          !yoN = popCount $ yoNAttacs p `less` (yo p .|. myPAttacs p)
-          !yoB = popCount $ yoBAttacs p `less` (yo p .|. myPAttacs p)
-          !yoR = popCount $ yoRAttacs p `less` (yo p .|. myA1)
-          !yoQ = popCount $ yoQAttacs p `less` (yo p .|. myA2)
-          !myA1 = myPAttacs p .|. myNAttacs p .|. myBAttacs p
-          !myA2 = myA1 .|. myRAttacs p
+    where -- !myN = popCount $ myNAttacs p `less` (me p .|. yoPAttacs p)
+          -- !myB = popCount $ myBAttacs p `less` (me p .|. yoPAttacs p)
+          -- !myR = popCount $ myRAttacs p `less` (me p .|. yoA1)
+          -- !myQ = popCount $ myQAttacs p `less` (me p .|. yoA2)
+          yoA1 = yoPAttacs p .|. yoNAttacs p .|. yoBAttacs p
+          yoA2 = yoA1 .|. yoRAttacs p
+          -- !yoN = popCount $ yoNAttacs p `less` (yo p .|. myPAttacs p)
+          -- !yoB = popCount $ yoBAttacs p `less` (yo p .|. myPAttacs p)
+          -- !yoR = popCount $ yoRAttacs p `less` (yo p .|. myA1)
+          -- !yoQ = popCount $ yoQAttacs p `less` (yo p .|. myA2)
+          myA1 = myPAttacs p .|. myNAttacs p .|. myBAttacs p
+          myA2 = myA1 .|. myRAttacs p
+          !myN = mobi mobKnights (knights p) (me p) (myNAttacs p) (yoPAttacs p)
+          !myB = mobi mobBishops (bishops p) (me p) (myBAttacs p) (yoPAttacs p)
+          !myR = mobi mobRooks   (rooks   p) (me p) (myRAttacs p)  yoA1
+          !myQ = mobi mobQueens  (queens  p) (me p) (myQAttacs p)  yoA2
+          !yoN = mobi mobKnights (knights p) (yo p) (yoNAttacs p) (myPAttacs p)
+          !yoB = mobi mobBishops (bishops p) (yo p) (yoBAttacs p) (myPAttacs p)
+          !yoR = mobi mobRooks   (rooks   p) (yo p) (yoRAttacs p)  myA1
+          !yoQ = mobi mobQueens  (queens  p) (yo p) (yoQAttacs p)  myA2
           !n = myN - yoN
           !b = myB - yoB
           !r = myR - yoR
           !q = myQ - yoQ
-          !mb0 | bishops p .&. me p /= 0 && myB == 0 = 1
-               | otherwise                           = 0
-          !yb0 | bishops p .&. yo p /= 0 && yoB == 0 = 1
-               | otherwise                           = 0
-          !mn0 | knights p .&. me p /= 0 && myN == 0 = 1
-               | otherwise                           = 0
-          !yn0 | knights p .&. yo p /= 0 && yoN == 0 = 1
-               | otherwise                           = 0
-          !b0 = mb0 - yb0
-          !n0 = mn0 - yn0
+          mobi arr pie who matt yatt
+              | pie .&. who == 0 = 0
+              | otherwise        = arr `unsafeAt` (popCount $ matt `less` (who .|. yatt))
+
+-- Non linear mobility values:
+mobKnights, mobBishops, mobRooks, mobQueens :: UArray Int Int
+mobKnights = listArray (0, 16)  $ [-2, 0] ++ [i | i <- [1..15]]
+mobBishops = listArray (0, 26)  $ [-2, 0] ++ [i | i <- [1..25]]
+mobRooks   = listArray (0, 28)  $ [-2, 0] ++ [i | i <- [1..27]]
+mobQueens  = listArray (0, 128) $ [-2, 0] ++ [i `div` 2 | i <- [1..127]]
 
 ------ Center control ------
 data Center = Center
