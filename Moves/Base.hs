@@ -303,11 +303,18 @@ materVal = do
 qsDelta :: Game Int
 qsDelta = do
     p <- getPos
-    if yo p .&. queens p .&. myAttacs p /= 0
-       then return $! matPiece White Queen
-       else if yo p .&. rooks p .&. myAttacs p /= 0
-           then return $! matPiece White Rook
-           else return $! matPiece White Bishop
+    let !pat = yo p .&. myAttacs p
+    if pat == 0
+       then return 0	-- we have no captures anymore, fail low without generating moves
+       else if pat .&. queens p /= 0
+               then return qval
+               else if pat .&. rooks p /= 0
+                       then return rval
+                       else return bval
+    where qsDeltaMargin = matPiece White Pawn
+          qval = qsDeltaMargin + matPiece White Queen
+          rval = qsDeltaMargin + matPiece White Rook
+          bval = qsDeltaMargin + matPiece White Bishop
 
 {-# INLINE ttRead #-}
 ttRead :: Game (Int, Int, Int, Move, Int64)

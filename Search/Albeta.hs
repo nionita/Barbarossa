@@ -108,9 +108,8 @@ iidNewDepth :: Int -> Int
 iidNewDepth = subtract 1
 
 -- Parameter for quiescenst search
-inEndlessCheck, qsDeltaMargin :: Int
+inEndlessCheck :: Int
 inEndlessCheck = -scoreGrain	-- there is a risk to be left in check
-qsDeltaMargin  = 100
 
 type Search a = CState PVState Game a
 
@@ -1037,9 +1036,7 @@ pvQSearch !a !b !c = do
                          return b
                      else do
                          !qsdelta <- lift qsDelta
-                         let !a1 = a - qsdelta - qsDeltaMargin
-                         -- what if hsc + ... > a?
-                         if stp < a1
+                         if stp < a - qsdelta
                              then do
                                  when collectFens $ finWithNodes "DELT"
                                  return a

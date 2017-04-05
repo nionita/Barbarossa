@@ -38,7 +38,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.5.0"
-progVerSuff = "kon"
+progVerSuff = "epr"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -429,7 +429,7 @@ compTime tim tpm fixmtg cursc isdraw
     | tim == 0 && tpm == 0 = (  0,   0,  False)
     | otherwise            = (ctm, tmx, ttroub)
     where mtg = if fixmtg > 0 then fixmtg else estimateMovesToGo cursc
-          mtr | isdraw    = 1	-- repetition draw
+          mtr | isdraw    = 3	-- repetition draw
               | mtg == 0  = 1
               | otherwise = mtg
           ctn = tpm + tim `div` mtr
@@ -595,7 +595,7 @@ timeFactor tp cha draft tim osc sc chgs mvs = round $ fromIntegral tim * min (tp
 
 reduceBegin :: Maybe Int -> Int -> Int
 reduceBegin mi ms | Just i <- mi,
-                    i < 10    = (ms * i) `div` 10
+                    i < 4     = (ms * i) `div` 4
                   | otherwise = ms
 
 storeBestMove :: [Move] -> Int -> CtxIO ()
