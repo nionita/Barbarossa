@@ -510,7 +510,7 @@ pvSearch nst !a !b !d = do
               else do
                 nodes0 <- gets (sNodes . stats)
                 -- futility pruning:
-                prune <- isPruneFutil d a True (staticScore pos)
+                prune <- isPruneFutil d a True pos
                 -- Loop thru the moves
                 let !nsti = resetNSt (pathFromScore "low limit" a) NoKiller nst'
                 nstf <- pvSLoop b d prune nsti edges
@@ -569,7 +569,7 @@ pvZeroW !nst !b !d !lastnull redu = do
                       else do
                         !nodes0 <- gets (sNodes . stats)
                         -- futility pruning:
-                        prune <- isPruneFutil d bGrain False (staticScore pos)
+                        prune <- isPruneFutil d bGrain False pos
                         -- Loop thru the moves
                         let kill1 = case nmhigh of
                                         NullMoveThreat s -> newTKiller pos d s
@@ -957,14 +957,15 @@ pvLoop f s (Alt (e:es)) = do
 -- B. When we are in check, and also much below alpha, we have even less chances to come out,
 --    so it is ok to not exclude here check escapes, and maybe we should even make the margin
 --    lower (experiemnts, tune!) Maybe this is also depth dependent
-isPruneFutil :: Int -> Int -> Bool -> Int -> Search Bool
-isPruneFutil d a pv v
+isPruneFutil :: Int -> Int -> Bool -> MyPos -> Search Bool
+isPruneFutil d a pv pos
     | nearmate a              = return False
     | pv && d > maxFutilDepth = return False
     | d > maxFutilDepth + 1   = return False	-- for zero window searches we allow higher futility depth
+    | tacticalPos pos         = return False
     | otherwise = do
         m <- varFutVal	-- variable futility value
-        return $! v + futilMargins d m <= a
+        return $! staticScore pos + futilMargins d m <= a
 
 updateFutil :: Int -> Search ()
 updateFutil sd = do
