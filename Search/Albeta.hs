@@ -41,8 +41,6 @@ useTTinPv   = False	-- retrieve from TT in PV?
 minPvDepth  = 2		-- from this depth we use alpha beta search
 
 -- Parameters for late move reduction:
-lmrActive :: Bool
-lmrActive   = True
 lmrInitLv, lmrInitLim, lmrLevMin, lmrLevMax :: Int
 lmrInitLv   = 8
 lmrInitLim  = 8500
@@ -773,7 +771,7 @@ pvInnerLoopExtenZ b d spec !exd nst redu = do
     -- late move reduction
     let !d1 = d + exd' - 1	-- this is the normal (unreduced) depth for next search
         !d' = if redu
-                 then reduceLmr d1 (nearmate b) spec exd (lmrlv old) (movno nst - spcno nst)
+                 then reduceLmr (nearmate b) spec d1 (lmrlv old) (movno nst - spcno nst)
                  else d1
     let !onemB = scoreGrain - b
     if not redu || d' == d1
@@ -903,10 +901,10 @@ genAndSort nst mttmv a b d = do
 -- With a variable lmrlev the reduction should stay in a region
 -- where the number of researches has an acceptable level
 {-# INLINE reduceLmr #-}
-reduceLmr :: Int -> Bool -> Bool -> Int -> Int -> Int -> Int
-reduceLmr !d nearmatea !spec !exd lmrlev w
-    | not lmrActive || spec || exd > 0 || d <= 1 || nearmatea = d
-    | otherwise                                               = max 1 $ d - lmrArr!(lmrlev, w)
+reduceLmr :: Bool -> Bool -> Int -> Int -> Int -> Int
+reduceLmr nearmatea spec d lmrlev w
+    | spec || d <= 1 || nearmatea = d
+    | otherwise                   = max 1 $ d - lmrArr!(lmrlev, w)
 
 -- Adjust the LMR related parameters in the state
 moreLMR :: Bool -> Int -> Search ()
