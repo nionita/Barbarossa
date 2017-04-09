@@ -70,7 +70,6 @@ posToState p c h e = MyState {
                        hash = c,
                        hist = h,
                        mstats = ssts0,
-                       gstats = ssts0,
                        evalst = e
                    }
     where stsc = evalState (posEval p) e
@@ -82,7 +81,7 @@ posNewSearch p = p { hash = newGener (hash p) }
 draftStats :: SStats -> Game ()
 draftStats dst = do
     s <- get
-    put s { mstats = addStats (mstats s) dst, gstats = addStats (gstats s) dst }
+    put s { mstats = addStats (mstats s) dst }
 
 -- Loosing captures after non-captures?
 loosingLast :: Bool

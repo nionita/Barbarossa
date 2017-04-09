@@ -1,8 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 module Uci.UCI (
-         UCIMess(..), Option(..), Pos(..), GoCmds(..), ExpCommand(..),
-         parseUciStr, parseMoveStr, parseExploreStr,
-         findDepth, findTInc, findTime, findMovesToGo
+         UCIMess(..), Option(..), Pos(..), GoCmds(..),
+         parseUciStr, parseMoveStr, findDepth, findTInc, findTime, findMovesToGo
     ) where
 
 import Data.Char
@@ -22,6 +21,7 @@ data UCIMess
     | Stop
     | Ponderhit
     | Quit
+    | Eval
     deriving Show
 
 data Option
@@ -47,25 +47,11 @@ data GoCmds
     | Infinite
     deriving (Eq, Show)
 
-data ExpCommand = Fen String	-- new game, position from fen
-             | Init		-- new game, initial position
-             | Moves		-- print all moves
-             | QMoves		-- print quiescent moves
-             | Down Move	-- one level deep with the move
-             | Up 		-- one level up with the Int as score
-             | Eval 		-- evaluate the position
-             | QEval 		-- evaluate the position after quiescent search
-             | Help		-- print some help
-             | Exit		-- exit program
-
 parseUciStr :: String -> Either P.ParseError UCIMess
 parseUciStr = P.parse parseUCIMess ""
 
 parseMoveStr :: String -> Either P.ParseError Move
 parseMoveStr = P.parse parseMove ""
-
-parseExploreStr :: String -> Either P.ParseError ExpCommand
-parseExploreStr = P.parse parseExplore ""
 
 literal :: String -> Parser ()
 literal s = P.spaces >> P.string s >> return ()
@@ -84,7 +70,8 @@ parseUCIMess = P.choice $ map P.try [
         parsePosition,
         -- parsePonderhit,
         parseGo,
-        parseQuit
+        parseQuit,
+        parseEval
     ]
 
 parseUci :: Parser UCIMess
@@ -201,6 +188,9 @@ parseGo = do
     gcs <- P.many parseGoCmd
     return $ Go gcs
 
+parseEval :: Parser UCIMess
+parseEval = literal "eval" >> return Eval
+
 parseGoCmd :: Parser GoCmds
 parseGoCmd = P.choice $ map P.try [
         parsePonder,
@@ -258,44 +248,7 @@ parseMoveTime = parseWithInt "movetime" MoveTime
 parseInfinite :: Parser GoCmds
 parseInfinite = literal "infinite" >> return Infinite
 
--- Parsing the explore commands:
-parseExplore :: Parser ExpCommand
-parseExplore = parseExpFen <|> parseExpInit <|> parseExpMoves <|> parseExpQMoves
-            <|> parseExpDown <|> parseExpUp <|> parseExpHelp <|> parseExpExit
-            <|> parseExpEval <|> parseExpQEval
-
-parseExpFen :: Parser ExpCommand
-parseExpFen  = fmap Fen $ P.char 'f' >> P.spaces >> parseFenPosition
-
-parseExpInit :: Parser ExpCommand
-parseExpInit = P.char 'i' >> return Init
-
-parseExpMoves :: Parser ExpCommand
-parseExpMoves = P.char 'm' >> return Moves
-
-parseExpQMoves :: Parser ExpCommand
-parseExpQMoves = P.char 'q' >> return QMoves
-
-parseExpDown :: Parser ExpCommand
-parseExpDown = fmap Down $ P.char 'd' >> parseMove
-
-parseExpUp :: Parser ExpCommand
-parseExpUp   = P.char 'u' >> return Up
-
-parseExpEval :: Parser ExpCommand
-parseExpEval = P.char 'e' >> return Eval
-
-parseExpQEval :: Parser ExpCommand
-parseExpQEval = P.char 'v' >> return QEval
-
-parseExpHelp :: Parser ExpCommand
-parseExpHelp = P.char 'h' >> return Help
-
-parseExpExit :: Parser ExpCommand
-parseExpExit = P.char 'x' >> return Exit
-
 -- Some utilities to find information in the uci go commands:
-
 findDepth :: [GoCmds] -> Maybe Int
 findDepth [] = Nothing
 findDepth (Depth d : _) = Just d
