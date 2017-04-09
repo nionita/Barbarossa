@@ -718,33 +718,44 @@ data SEEPars = SEEPars {
 -- and the value of the first captured piece
 seeMoveValue :: MyPos -> Attacks -> Square -> Square -> Int -> Int
 seeMoveValue pos !attacks sqfirstmv sqto gain0 = v
-    where v = go sp0 [gain0]
-          go :: SEEPars -> [Int] -> Int
-          go seepars acc =
-             let !gain'   = seeVal  seepars -     seeGain seepars
-                 !moved'  = seeMovd seepars .|.   seeFrom seepars
-                 !attacs1 = seeAtts seepars `xor` seeFrom seepars
+    where !v = go [gain0] sp0
+          go :: [Int] -> SEEPars -> Int
+          go acc seepars =
+             let !attacs1 = seeAtts seepars `xor` seeFrom seepars
                  (!from', !val') = chooseAttacker pos (attacs1 .&. seeAgrs seepars)
-                 attacs2  = newAttacs sqto moved' (seeAttsRec seepars)
-                 acc' = gain' : acc
-                 seepars1 = SEEPars { seeGain = gain', seeVal = val', seeAtts = attacs1,
-                                      seeFrom = from', seeMovd = moved', seeDefn = seeAgrs seepars,
-                                      seeAgrs = seeDefn seepars,
-                                      seeAttsRec = seeAttsRec seepars }
-                 seepars2 = SEEPars { seeGain = gain', seeVal = val', seeAtts = atAtt attacs2,
-                                      seeFrom = from', seeMovd = moved', seeDefn = seeAgrs seepars,
-                                      seeAgrs = seeDefn seepars,
-                                      seeAttsRec = attacs2 }
              in if from' == 0
                    then unimax (minBound+2) acc
                    -- With the new attacks: is it perhaps better to recalculate always?
-                   else if usePosXRay
-                           then if posXRay && seeFrom seepars .&. mayXRay /= 0
-                                   then go seepars2 acc'
-                                   else go seepars1 acc'
-                           else if seeFrom seepars .&. mayXRay /= 0
-                                   then go seepars2 acc'
-                                   else go seepars1 acc'
+                   else let gain'   = seeVal  seepars  -  seeGain seepars
+                            moved'  = seeMovd seepars .|. seeFrom seepars
+                            acc' = gain' : acc
+                        in if usePosXRay
+                              then if posXRay && seeFrom seepars .&. mayXRay /= 0
+                                      then let !attacs2 = newAttacs sqto moved' (seeAttsRec seepars)
+                                           in go acc' $ SEEPars { seeGain = gain', seeVal = val',
+                                                                  seeAtts = atAtt attacs2,
+                                                                  seeFrom = from', seeMovd = moved',
+                                                                  seeDefn = seeAgrs seepars,
+                                                                  seeAgrs = seeDefn seepars,
+                                                                  seeAttsRec = attacs2 }
+                                      else go acc' $ SEEPars { seeGain = gain', seeVal = val',
+                                                               seeAtts = attacs1, seeFrom = from',
+                                                               seeMovd = moved', seeDefn = seeAgrs seepars,
+                                                               seeAgrs = seeDefn seepars,
+                                                               seeAttsRec = seeAttsRec seepars }
+                              else if seeFrom seepars .&. mayXRay /= 0
+                                      then let !attacs2 = newAttacs sqto moved' (seeAttsRec seepars)
+                                           in go acc' $ SEEPars { seeGain = gain', seeVal = val',
+                                                                  seeAtts = atAtt attacs2,
+                                                                  seeFrom = from', seeMovd = moved',
+                                                                  seeDefn = seeAgrs seepars,
+                                                                  seeAgrs = seeDefn seepars,
+                                                                  seeAttsRec = attacs2 }
+                                      else go acc' $ SEEPars { seeGain = gain', seeVal = val',
+                                                               seeAtts = attacs1, seeFrom = from',
+                                                               seeMovd = moved', seeDefn = seeAgrs seepars,
+                                                               seeAgrs = seeDefn seepars,
+                                                               seeAttsRec = seeAttsRec seepars }
           !mayXRay = pawns pos .|. bishops pos .|. rooks pos .|. queens pos  -- could be calc.
           posXRay = xrayAttacs pos sqto  -- only once, as it is per pos (but it's cheap anyway)
           !moved0 = uBit sqfirstmv
