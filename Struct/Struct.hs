@@ -396,7 +396,6 @@ makeCastleFor Black False = Move 0xFF3A	-- black, queenside
 encodeFromTo :: Square -> Square -> Word16
 encodeFromTo f t = fromIntegral t .|. (fromIntegral f `unsafeShiftL` 6)
 
--- {-# INLINE movePiece #-}
 movePiece :: Move -> Piece
 movePiece m@(Move w)
     | moveIsNormal m
@@ -415,7 +414,7 @@ moveHisAdr (Move w) = fromIntegral $ (w `unsafeShiftR` 12) .&. 0x7
 -- For history purposes: quick 'n' dirty "color"
 {-# INLINE moveHisOfs #-}
 moveHisOfs :: Move -> Int
-moveHisOfs (Move w) = fromIntegral $ w `unsafeShiftR` 15
+moveHisOfs (Move w) = fromIntegral $ (w `unsafeShiftR` 15) .&. 0x1
 
 -- {-# INLINE fromSquare #-}
 fromSquare :: Move -> Square

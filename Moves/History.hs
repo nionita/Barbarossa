@@ -19,11 +19,10 @@ import Struct.Struct
 -- Int32 should be enough for now with max depth 20
 type History = V.IOVector Int32
 
-pieces, squares, vsize, bloff :: Int
+pieces, squares, vsize :: Int
 pieces  = 16
-squares = 64
-vsize = pieces * squares
-bloff = vsize `div` 2
+squares = 6	-- for 64 squares
+vsize = pieces `unsafeShiftL` squares
 
 -- Did we play with this layout? Could be some other layout better for cache?
 {-# INLINE adr #-}
@@ -41,11 +40,12 @@ adrs (m:ms) = off + adr' m : map f ms
 
 {-# INLINE adr' #-}
 adr' :: Move -> Int
-adr' m = squares * moveHisAdr m + toSquare m
+adr' m = (moveHisAdr m `unsafeShiftL` squares) + toSquare m
 
 {-# INLINE ofs' #-}
 ofs' :: Move -> Int
-ofs' m = bloff * moveHisOfs m
+ofs' m = moveHisOfs m `unsafeShiftL` sq3	-- this is 0 or 8 * squares
+    where sq3 = squares + 3
 
 newHist :: IO History
 newHist = V.replicate vsize 0
@@ -142,15 +142,18 @@ mtsList (MTS h uwa k)
           uh <- unsafeIOToST $ U.unsafeFreeze h
           let -- Indirect history value:
               hival = U.unsafeIndex uh . takeAddr . U.unsafeIndex uwa
+              mvsco = moveScore . takeMove . U.unsafeIndex uwa
               -- To find index of min history values
               go !i !i0 !v0
                   | i > k     = i0
                   | otherwise =
-                       let v = hival i	-- history value of this position
+                       -- Lower v is better because the trick
+                       -- So we subtract the score, which is: higher is better
+                       let v = hival i - mvsco i	-- history value - move score
                        in if v < v0	-- we take minimum coz that trick (bigger is worse)
                              then go (i+1) i  v
                              else go (i+1) i0 v0
-          let !v0 = hival 0
+          let !v0 = hival 0 - mvsco 0
               !i = go 1 0 v0
               !w = takeMove $ U.unsafeIndex uwa i		-- this is the (first) best move
           -- Now swap the minimum with the last active element for both vectors
@@ -174,12 +177,20 @@ oneMove uwa = [ Move $ takeMove $ U.unsafeIndex uwa 0 ]
 dirSort :: History -> [Move] -> [Move]
 dirSort h ms = runST $ do
     uh <- unsafeIOToST $ U.unsafeFreeze h
-    let uz = U.fromListN maxMoves $ zipWith hivalMove ms $ map (U.unsafeIndex uh) $ adrs ms
+    let uz = U.fromListN maxMoves $ zipWith hivalScMove ms $ map (U.unsafeIndex uh) $ adrs ms
     vz <- U.unsafeThaw uz
     H.sortBy (comparing ((.&.) mask)) vz
     uz' <- U.unsafeFreeze vz
     return $ map (Move . fromIntegral . ((.&.) 0xFFFF)) $ U.toList uz'
     where mask = complement 0xFFFF
 
-hivalMove :: Move -> Int32 -> Int64
-hivalMove (Move w) i = (fromIntegral i `unsafeShiftL` 16) .|. fromIntegral w
+hivalScMove :: Move -> Int32 -> Int64
+hivalScMove (Move w) i = (fromIntegral isc `unsafeShiftL` 16) .|. fromIntegral w
+    where !isc = i - moveScore w
+
+-- Move score "added" to history
+-- Higher score is better
+-- We prefer pawn moves over other - they are irreversible
+moveScore :: Word16 -> Int32
+moveScore w = - (fromIntegral $ moveHisAdr m)
+    where m = Move w
