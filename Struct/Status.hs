@@ -118,8 +118,8 @@ data EvalWeights
 instance CollectParams EvalParams where
     type CollectFor EvalParams = EvalParams
     npColInit = EvalParams {
-                    epMovingMid  = 156,		-- SGD with shift 0.8
-                    epMovingEnd  = 156,		-- with 5 M positions
+                    epMovingMid  = 152,		-- Thompson after first run
+                    epMovingEnd  = 158,		-- with 16k games
                     epMaterMinor = 1,
                     epMaterRook  = 4,
                     epMaterQueen = 13,
