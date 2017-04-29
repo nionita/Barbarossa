@@ -39,7 +39,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.5.0"
-progVerSuff = "lmre"
+progVerSuff = "self"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -237,9 +237,10 @@ theReader = do
     ctxLog DebugUci $ "Input: " ++ line
     let euci = parseUciStr line
     stop <- case euci of
-        Left _    -> do
+        Left erm  -> do
             ctxLog LogWarning $ "Input: " ++ line
-            ctxLog LogWarning $ "Parse: " ++ show euci
+            ctxLog LogWarning $ "Parse: " ++ show erm
+            answer $ infos $ "Parse: " ++ show erm
             return False
         Right uci -> interpret uci
     unless stop theReader
@@ -524,14 +525,16 @@ searchTheTree draft mdraft timx tim tpm mtg rept lsc lpv rmvs = do
         redp  = reduceBegin $ realPly chg
         start = srchStrtMs chg
         used  = currms - start
-        over  = used >= mx
+        over  = mx > 0 && used >= mx
         onlyone = ms > 0 && length rmvsf == 1 && draft >= 4	-- only in normal play
         draftmax = draft >= mdraft	--  or maximal draft
         mes = "Draft " ++ show draft ++ " Score " ++ show sc ++ " path " ++ show path
                   ++ " ms " ++ show ms ++ " used " ++ show used
     ctxLog LogInfo mes
     ctxLog LogInfo $ "Time factors (reds/redp): " ++ show reds ++ " / " ++ show redp
-    (justStop, mxr) <- stopByChance (reds * redp) exte ms used mx draft ch totch ldCh
+    (justStop, mxr) <- if mx > 0
+                          then stopByChance (reds * redp) exte ms used mx draft ch totch ldCh
+                          else return (False, 0)
     ctxLog LogInfo $ "compTime (ms/mx/mxr): " ++ show ms ++ " / " ++ show mx ++ " / " ++ show mxr
     if draftmax || timint || over || onlyone || justStop
        then do

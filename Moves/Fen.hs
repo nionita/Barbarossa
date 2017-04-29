@@ -81,8 +81,8 @@ fenFromString fen = zipWith ($) fenfuncs fentails
           getFenMv   = headOrDefault "w"
           getFenCast = headOrDefault "-"
           getFenEp   = headOrDefault "-"
-          getFenHalf = headOrDefault "-"
-          getFenMvNo = headOrDefault "-"
+          getFenHalf = headOrDefault "0"
+          getFenMvNo = headOrDefault "0"
 
 updatePos :: MyPos -> MyPos
 updatePos !p = p {
