@@ -497,7 +497,7 @@ pvSearch nst !a !b !d = do
               else do
                 nodes0 <- gets (sNodes . stats)
                 -- futility pruning:
-                prune <- isPruneFutil d a True (staticScore pos)
+                prune <- isPruneFutil d a (staticScore pos) True True
                 -- Loop thru the moves
                 let !nsti = resetNSt (pathFromScore "low limit" a) NoKiller nst'
                 nstf <- pvSLoop b d prune nsti edges
@@ -540,7 +540,11 @@ pvZeroW !nst !b !d !lastnull redu = do
                lift $ betaCut True adp e
            reSucc nodes' >> return ttpath
        else do
-           when (hdeep < 0) reFail
+           hnode <- if hdeep < 0	-- we use the knowledge that we found the node
+                       then do		-- in hash (or not) to do futility pruning
+                           reFail	-- a bit deeper
+                           return False
+                       else return True
            pos <- lift getPos
            nmhigh <- nullMoveFailsHigh pos nst b d lastnull
            whenAbort (pathFromScore "Aborted" b) $ do
@@ -556,7 +560,7 @@ pvZeroW !nst !b !d !lastnull redu = do
                       else do
                         !nodes0 <- gets (sNodes . stats)
                         -- futility pruning:
-                        prune <- isPruneFutil d bGrain False (staticScore pos)
+                        prune <- isPruneFutil d bGrain (staticScore pos) False hnode
                         -- Loop thru the moves
                         let kill1 = case nmhigh of
                                         NullMoveThreat s -> newTKiller pos d s
@@ -940,15 +944,14 @@ pvLoop f s (Alt (e:es)) = do
 --    - result after QS
 --    Material would be very cheap, but risky, unless we know material ~ static val (statistic)
 --    QS looks to be too expensive, but maybe it can be done for higher depths
---    Experiemnts should be done
 -- B. When we are in check, and also much below alpha, we have even less chances to come out,
---    so it is ok to not exclude here check escapes, and maybe we should even make the margin
---    lower (experiemnts, tune!) Maybe this is also depth dependent
-isPruneFutil :: Int -> Int -> Bool -> Int -> Search Bool
-isPruneFutil d a pv v
-    | nearmate a              = return False
-    | pv && d > maxFutilDepth = return False
-    | d > maxFutilDepth + 1   = return False	-- for zero window searches we allow higher futility depth
+--    so it is ok to not exclude here check escapes
+isPruneFutil :: Int -> Int -> Int -> Bool -> Bool -> Search Bool
+isPruneFutil d a v pv hn
+    | nearmate a                  = return False
+    | pv && d > maxFutilDepth     = return False	-- normal futility depth
+    | hn && d > maxFutilDepth + 1 = return False	-- one higher for zero window in hash
+    | d > maxFutilDepth + 2       = return False	-- one more higher for new node
     | otherwise = do
         m <- varFutVal	-- variable futility value
         return $! v + futilMargins d m <= a
