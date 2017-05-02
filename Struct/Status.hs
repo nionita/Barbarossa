@@ -200,7 +200,7 @@ instance CollectParams EvalWeights where
           ewEnpHanging      = tme (-21) (-34),
           ewEnpEnPrise      = tme (-28) (-26),
           ewEnpAttacked     = tme  (-6) (-7),
-          ewWepAttacked     = tme  48 64,
+          ewWepAttacked     = tme  34 98,	-- After 10k Thompson steps
           ewLastLinePenalty = tme 119 3,
           ewBishopPair      = tme 387 321,
           ewRedundanceRook  = tme (-32) (-67),
