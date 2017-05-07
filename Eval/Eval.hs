@@ -18,6 +18,7 @@ import Data.Ord (comparing)
 import Struct.Struct
 import Struct.Status
 import Struct.Config
+import Eval.BasicEval (adjustScore)
 import Moves.Moves
 import Moves.BitBoard
 import Moves.Pattern
@@ -53,11 +54,8 @@ evalItems = [ EvIt Material,	-- material balance (i.e. white - black material
 
 ------------------------------------------------------------------
 -- Parameters of this module ------------
-granCoarse, granCoarse2, granCoarseM, shift2Cp :: Int
-granCoarse    = 4	-- coarse granularity
-granCoarse2   = granCoarse `div` 2
-granCoarseM   = complement (granCoarse - 1)
-shift2Cp      = 3	-- we have 2^shift2Cp units per centipawn
+shift2Cp :: Int
+shift2Cp = 3	-- we have 2^shift2Cp units per centipawn
 -----------------------------------------------
 
 initEvalState :: [(String, Double)] -> EvalState
@@ -66,15 +64,11 @@ initEvalState sds = EvalState {
         esEWeights = npSetParm (colParams sds :: CollectFor EvalWeights)
     }
 
-matesc :: Int
-matesc = 20000 - 255	-- warning, this is also defined in Base.hs!!
-
 posEval :: MyPos -> State EvalState Int
 posEval !p = do
     sti <- get
     let sce = evalDispatch p sti
-        !scl = min matesc $ max (-matesc) sce
-        !scc = if granCoarse > 0 then (scl + granCoarse2) .&. granCoarseM else scl
+        !scc = adjustScore sce
     return scc
 
 evalDispatch :: MyPos -> EvalState -> Int

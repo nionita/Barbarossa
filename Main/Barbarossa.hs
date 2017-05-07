@@ -33,13 +33,14 @@ import Moves.History
 import Search.CStateMonad (execCState)
 import Search.AlbetaTypes
 import Eval.FileParams (makeEvalState)
+import Eval.BasicEval (mateScore)
 
 -- Name, author, version and suffix:
 progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.5.0"
-progVerSuff = "self"
+progVerSuff = "inc"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file

@@ -17,6 +17,7 @@ import Data.Maybe (fromMaybe)
 import Search.CStateMonad
 import Search.AlbetaTypes
 import Struct.Struct
+import Eval.BasicEval
 import Moves.BaseTypes
 import Moves.Base
 import Moves.Fen (initPos)
@@ -31,10 +32,14 @@ collectFens = True
 useAspirWin :: Bool
 useAspirWin = False
 
+-- Expansion
+minExpand, maxExpand :: Int
+minExpand = 32
+maxExpand = 400
+
 -- Some fix search parameter
-scoreGrain, depthForCM, maxDepthExt, minPvDepth :: Int
+depthForCM, maxDepthExt, minPvDepth :: Int
 useTTinPv :: Bool
-scoreGrain  = 4	-- score granularity
 depthForCM  = 7 -- from this depth inform current move
 maxDepthExt = 3 -- maximum depth extension
 useTTinPv   = False	-- retrieve from TT in PV?
@@ -85,9 +90,9 @@ qsMaxChess = 2		-- max number of chess for a quiet search path
 nulMoves :: Int
 nulMoves  = 1	-- how many null moves in sequence are allowed (one or two)
 nulMargin, nulSubmrg, nulTrig :: Int
-nulMargin = 1		-- margin to search the null move (over beta) (in scoreGrain units!)
-nulSubmrg = 2		-- improved margin (in scoreGrain units!)
-nulTrig   = -15	-- static margin to beta, to trigger null move (in scoreGrain units!)
+nulMargin = 1		-- margin to search the null move (over beta) (in granCoarse units!)
+nulSubmrg = 2		-- improved margin (in granCoarse units!)
+nulTrig   = -15	-- static margin to beta, to trigger null move (in granCoarse units!)
 nulSubAct :: Bool
 nulSubAct = True
 
@@ -106,7 +111,7 @@ iidNewDepth = subtract 1
 
 -- Parameter for quiescenst search
 inEndlessCheck, qsDeltaMargin :: Int
-inEndlessCheck = -scoreGrain	-- there is a risk to be left in check
+inEndlessCheck = -granCoarse	-- there is a risk to be left in check
 qsDeltaMargin  = 100
 
 type Search a = CState PVState Game a
@@ -502,29 +507,49 @@ pvSearch nst !a !b !d = do
               then return $ trimaxPath a b $ if tacticalPos pos then matedPath else staleMate
               else do
                 nodes0 <- gets (sNodes . stats)
-                -- futility pruning:
-                prune <- isPruneFutil d a True (staticScore pos)
-                -- Loop thru the moves
-                let !nsti = resetNSt (pathFromScore "low limit" a) NoKiller nst'
-                nstf <- pvSLoop b d prune nsti edges
-                let s = cursc nstf
-                whenAbort s $ do
-                    if pathScore s > a
-                       then checkFailHard "pvSLoop improve" a b (pathScore s) >> return s
-                       else if movno nstf > 1
-                               then do
-                                   -- here we failed low
-                                   let de = max d $ pathDepth s
-                                   nodes1 <- gets (sNodes . stats)
-                                   -- store as upper score, and as move, the first one generated
-                                   lift $ do
-                                       let typ = 0
-                                           !deltan = nodes1 - nodes0
-                                           mv = head $ unalt edges	-- not null - we are on "else" of noMove
-                                       ttStore de typ a mv deltan
-                                   checkFailHard "pvSLoop low" a b (pathScore s)
-                                   return s
-                               else return $ trimaxPath a b $ if tacticalPos pos then matedPath else staleMate
+                let as = if a > 0 then calcExcess a d else [a]
+                searchOptimistic nst b d edges nodes0 pos as
+
+searchOptimistic :: NodeState -> Int -> Int -> Alt Move -> Int64 -> MyPos -> [Int] -> Search Path
+searchOptimistic nst b d edges nodes0 pos = go 0 staleMate
+    where go a s [] = do
+             -- here we failed low
+             let de = max d $ pathDepth s
+             nodes1 <- gets (sNodes . stats)
+             -- store as upper score, and as move, the first one generated
+             lift $ do
+                 let typ = 0
+                     !deltan = nodes1 - nodes0
+                     mv = head $ unalt edges	-- not null - we are on "else" of noMove
+                 ttStore de typ a mv deltan
+             checkFailHard "pvSLoop low" a b (pathScore s)
+             return s
+          go _ _ (a:as) = do
+             -- futility pruning:
+             prune <- isPruneFutil d a True (staticScore pos)
+             (s, mvno) <- search a prune
+             whenAbort s $ do
+                 if pathScore s > a
+                    then checkFailHard "pvSLoop improve" a b (pathScore s) >> return s
+                    else if mvno <= 1
+                           then return $ trimaxPath a b $ if tacticalPos pos then matedPath else staleMate
+                           else go a s as
+          search a prune = do
+              -- Loop thru the moves
+              let !nsti = resetNSt (pathFromScore "low limit" a) NoKiller nst
+              nstf <- pvSLoop b d prune nsti edges
+              return (cursc nstf, movno nstf)
+
+calcExcess :: Int -> Int -> [Int]
+calcExcess a d
+    | a > minExpand && a < maxExpand && a' > a = [a', a]
+    | otherwise                                = [a]
+    where a' = adjustScore $ a * (c4 + c5 * d) `unsafeShiftR` c3
+          c1 = 5
+          c2 = 7
+          c3 = c1 + c2
+          c4 = 1 `unsafeShiftL` c3
+          c5 = (1 `unsafeShiftL` c1) + 1
 
 -- PV Zero Window
 pvZeroW :: NodeState -> Int -> Int -> Int -> Bool -> Search Path
@@ -532,7 +557,7 @@ pvZeroW !_ !b !d !_ _ | d <= 0 = do
     v <- pvQSearch bGrain b 0
     checkFailHard "QS" bGrain b v
     return $ pathFromScore ("pvQSearch 21:" ++ show v) v
-    where !bGrain = b - scoreGrain
+    where !bGrain = b - granCoarse
 pvZeroW !nst !b !d !lastnull redu = do
     -- Check if we have it in TT
     (hdeep, tp, hsc, e, nodes') <- reTrieve >> lift ttRead
@@ -587,7 +612,7 @@ pvZeroW !nst !b !d !lastnull redu = do
                                                ttStore de typ bGrain mv deltan
                                            return s
                                        else return $ trimaxPath bGrain b $ if tacticalPos pos then matedPath else staleMate
-    where !bGrain = b - scoreGrain
+    where !bGrain = b - granCoarse
 
 data NullMoveResult = NoNullMove | NullMoveHigh | NullMoveLow | NullMoveThreat Path
 
@@ -597,7 +622,7 @@ nullMoveFailsHigh pos nst b d lastnull
       || crtnt nst == AllNode = return NoNullMove	-- no null move in all nodes
     | otherwise = do
         let v = staticScore pos
-        if v < b + nulTrig * scoreGrain
+        if v < b + nulTrig * granCoarse
            then return NoNullMove
            else do
                when nulDebug $ incReBe 1
@@ -623,8 +648,8 @@ nullMoveFailsHigh pos nst b d lastnull
                           else return $ NullMoveThreat val
     where d1  = nmDArr1 `unsafeAt` d	-- here we have always d >= 1
           d2  = nmDArr2 `unsafeAt` d	-- this is for bigger differences
-          nmb = if nulSubAct then b - (nulSubmrg * scoreGrain) else b
-          nma = nmb - (nulMargin * scoreGrain)
+          nmb = if nulSubAct then b - (nulSubmrg * granCoarse) else b
+          nma = nmb - (nulMargin * granCoarse)
           lastnull1 = lastnull - 1
           bigDiff = 500	-- if we are very far ahead
 
@@ -779,7 +804,7 @@ pvInnerLoopExtenZ b d spec !exd nst redu = do
         !d' = if redu
                  then reduceLmr (nearmate b) spec d1 (lmrlv old) (movno nst - spcno nst)
                  else d1
-    let !onemB = scoreGrain - b
+    let !onemB = granCoarse - b
     if not redu || d' == d1
        then do
            moreLMR True 1	-- more LMR

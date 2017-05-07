@@ -34,7 +34,7 @@ import Moves.Notation
 import Moves.History
 import Search.CStateMonad (execCState)
 import Eval.FileParams (makeEvalState)
--- import Eval.Eval	-- not yet needed
+import Eval.BasicEval (mateScore)
 import Uci.UciGlue
 
 debug :: Bool

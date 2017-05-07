@@ -1,12 +1,26 @@
 module Eval.BasicEval (
-    matPiece
+    matPiece, adjustScore, mateScore, granCoarse
 ) where
 
 -- import Data.Array.Unboxed
 -- import Data.Array.Base
 -- import GHC.Arr (unsafeIndex)
 
+import Data.Bits
 import Struct.Struct
+
+mateScore, granCoarse, granCoarse2, granCoarseM :: Int
+mateScore   = 20000
+granCoarse  = 4	-- coarse granularity
+granCoarse2 = granCoarse `div` 2
+granCoarseM = complement (granCoarse - 1)
+
+{-# INLINE adjustScore #-}
+adjustScore :: Int -> Int
+adjustScore sc = scc
+    where scl = min mateScore $ max (-mateScore) sc
+          scc = if granCoarse > 0 then (scl + granCoarse2) .&. granCoarseM else scl
+
 
 {--
 matvals :: UArray Piece Int

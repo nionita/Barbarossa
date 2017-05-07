@@ -10,7 +10,7 @@ module Moves.Base (
     doRealMove, doMove, undoMove, genMoves, genTactMoves, canPruneMove,
     tacticalPos, zugZwang, isMoveLegal, isKillCand, isTKillCand,
     betaCut, doNullMove, ttRead, ttStore, curNodes, isTimeout, informCtx,
-    mateScore, scoreDiff, qsDelta,
+    scoreDiff, qsDelta,
     draftStats,
     finNode, countRepetitions,
     showMyPos, logMes,
@@ -48,9 +48,6 @@ nearmate i = i >= mateScore - 255 || i <= -mateScore + 255
 
 printEvalInt :: Int64
 printEvalInt   = 2 `shiftL` 12 - 1	-- if /= 0: print eval info every so many nodes
-
-mateScore :: Int
-mateScore = 20000
 
 curNodes :: Game Int64
 {-# INLINE curNodes #-}
