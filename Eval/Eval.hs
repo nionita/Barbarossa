@@ -456,23 +456,33 @@ perRook allp myp rsq (ho, op)
 data Mobility = Mobility	-- "safe" moves
 
 instance EvalItem Mobility where
-    evalItem _ _ ew p _ mide = mobDiff p ew mide
+    evalItem _ _ ew p _ mide
+        | moving p == White = mobDiff p r23 r67 pbw pbb ew mide
+        | otherwise         = mobDiff p r67 r23 pbb pbw ew mide
+        where r23 = row2 .|. row3
+              r67 = row6 .|. row7
+              pbw = occup p `unsafeShiftR` 8
+              pbb = occup p `unsafeShiftL` 8
 
 -- Here we do not calculate pawn mobility (which, calculated as attacks, is useless)
-mobDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-mobDiff p ew mide = mad (mad (mad (mad mide (ewMobilityKnight ew) n) (ewMobilityBishop ew) b) (ewMobilityRook ew) r) (ewMobilityQueen ew) q
-    where !myN = popCount $ myNAttacs p `less` (me p .|. yoPAttacs p)
-          !myB = popCount $ myBAttacs p `less` (me p .|. yoPAttacs p)
-          !myR = popCount $ myRAttacs p `less` (me p .|. yoA1)
-          !myQ = popCount $ myQAttacs p `less` (me p .|. yoA2)
-          !yoA1 = yoPAttacs p .|. yoNAttacs p .|. yoBAttacs p
-          !yoA2 = yoA1 .|. yoRAttacs p
-          !yoN = popCount $ yoNAttacs p `less` (yo p .|. myPAttacs p)
-          !yoB = popCount $ yoBAttacs p `less` (yo p .|. myPAttacs p)
-          !yoR = popCount $ yoRAttacs p `less` (yo p .|. myA1)
-          !yoQ = popCount $ yoQAttacs p `less` (yo p .|. myA2)
-          !myA1 = myPAttacs p .|. myNAttacs p .|. myBAttacs p
-          !myA2 = myA1 .|. myRAttacs p
+-- Mobility inspired by Stockfish, with mobility aria
+mobDiff :: MyPos -> BBoard -> BBoard -> BBoard -> BBoard -> EvalWeights -> MidEnd -> MidEnd
+mobDiff p mylr yolr mypb yopb ew mide = mad (mad (mad (mad mide (ewMobilityKnight ew) n)
+                                                      (ewMobilityBishop ew) b)
+                                                 (ewMobilityRook ew) r)
+                                            (ewMobilityQueen ew) q
+    where !myPMA = me p .&. pawns p .&. (mylr .|. mypb)
+          !yoPMA = yo p .&. pawns p .&. (yolr .|. yopb)
+          !myMA  = complement $ myPMA .|. (kings p .&. me p) .|. yoPAttacs p
+          !yoMA  = complement $ yoPMA .|. (kings p .&. yo p) .|. myPAttacs p
+          !myN = popCount $ myNAttacs p .&. myMA
+          !myB = popCount $ myBAttacs p .&. myMA
+          !myR = popCount $ myRAttacs p .&. myMA
+          !myQ = popCount $ myQAttacs p .&. myMA
+          !yoN = popCount $ yoNAttacs p .&. yoMA
+          !yoB = popCount $ yoBAttacs p .&. yoMA
+          !yoR = popCount $ yoRAttacs p .&. yoMA
+          !yoQ = popCount $ yoQAttacs p .&. yoMA
           !n = myN - yoN
           !b = myB - yoB
           !r = myR - yoR
