@@ -105,6 +105,7 @@ data EvalWeights
           ewWepAttacked     :: !MidEnd,
           ewLastLinePenalty :: !MidEnd,
           ewBishopPair      :: !MidEnd,
+          ewBishopPawns     :: !MidEnd,
           ewRedundanceRook  :: !MidEnd,
           ewRookPawn        :: !MidEnd,
           ewAdvPawn6        :: !MidEnd,
@@ -203,6 +204,7 @@ instance CollectParams EvalWeights where
           ewWepAttacked     = tme  48 64,
           ewLastLinePenalty = tme 119 3,
           ewBishopPair      = tme 387 321,
+          ewBishopPawns     = tme (-24) (-64),
           ewRedundanceRook  = tme (-32) (-67),
           ewRookPawn        = tme (-52) (-41),
           ewAdvPawn5        = tme    4 131,
@@ -279,6 +281,8 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
         ("end.lastLinePenalty", setEndLastLinePenalty),
         ("mid.bishopPair",      setMidBishopPair),
         ("end.bishopPair",      setEndBishopPair),
+        ("mid.bishopPawns",     setMidBishopPawns),
+        ("end.bishopPawns",     setEndBishopPawns),
         ("mid.redundanceRook",  setMidRedundanceRook),
         ("end.redundanceRook",  setEndRedundanceRook),
         ("mid.rookPawn",        setMidRookPawn),
@@ -358,6 +362,8 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
           setEndLastLinePenalty v' ew' = ew' { ewLastLinePenalty = (ewLastLinePenalty ew') { end = round v' }}
           setMidBishopPair      v' ew' = ew' { ewBishopPair      = (ewBishopPair      ew') { mid = round v' }}
           setEndBishopPair      v' ew' = ew' { ewBishopPair      = (ewBishopPair      ew') { end = round v' }}
+          setMidBishopPawns     v' ew' = ew' { ewBishopPawns     = (ewBishopPawns     ew') { mid = round v' }}
+          setEndBishopPawns     v' ew' = ew' { ewBishopPawns     = (ewBishopPawns     ew') { end = round v' }}
           setMidRedundanceRook  v' ew' = ew' { ewRedundanceRook  = (ewRedundanceRook  ew') { mid = round v' }}
           setEndRedundanceRook  v' ew' = ew' { ewRedundanceRook  = (ewRedundanceRook  ew') { end = round v' }}
           setMidRookPawn        v' ew' = ew' { ewRookPawn        = (ewRookPawn        ew') { mid = round v' }}

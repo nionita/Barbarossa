@@ -714,7 +714,9 @@ instance EvalItem Redundance where
 
 -- This function is optimised
 evalRedundance :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-evalRedundance p ew mide = mad (mad mide (ewBishopPair ew) bp) (ewRedundanceRook ew) rr
+evalRedundance p ew mide = mad (mad (mad mide (ewBishopPawns ew) pa)
+                                    (ewBishopPair ew) bp)
+                               (ewRedundanceRook ew) rr
     where !wbl = bishops p .&. me p .&. lightSquares
           !wbd = bishops p .&. me p .&. darkSquares
           !bbl = bishops p .&. yo p .&. lightSquares
@@ -727,6 +729,13 @@ evalRedundance p ew mide = mad (mad mide (ewBishopPair ew) bp) (ewRedundanceRook
           !wrr = popCount wro `unsafeShiftR` 1	-- tricky here: 2, 3 are the same...
           !brr = popCount bro `unsafeShiftR` 1	-- and here
           !rr  = wrr - brr
+          !mpa | (wbl == 0) == (wbd == 0) = 0
+               | wbl == 0   = popCount (me p .&. pawns p .&. darkSquares)
+               | otherwise  = popCount (me p .&. pawns p .&. lightSquares)
+          !ypa | (bbl == 0) == (bbd == 0) = 0
+               | bbl == 0   = popCount (yo p .&. pawns p .&. darkSquares)
+               | otherwise  = popCount (yo p .&. pawns p .&. lightSquares)
+          !pa = mpa - ypa
 
 {--
 ------ Knight & Rook correction according to own pawns ------
