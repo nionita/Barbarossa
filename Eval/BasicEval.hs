@@ -1,5 +1,5 @@
 module Eval.BasicEval (
-    matPiece
+    matPiece, seeValue
 ) where
 
 -- import Data.Array.Unboxed
@@ -16,7 +16,7 @@ matvals = listArray (Pawn, King) [ 100, 325, 325, 500, 975, 20000 ]
 matPiece1 :: Piece -> Int
 matPiece1 Pawn   = 100
 matPiece1 Knight = 360
-matPiece1 Bishop = 361
+matPiece1 Bishop = 372
 matPiece1 Rook   = 565
 matPiece1 Queen  = 1100
 matPiece1 King   = 20000
@@ -33,3 +33,11 @@ matPiece c = fun c . matPiece1
 matPiece White = unsafeAt matvals . unsafeIndex (Pawn, King)
 matPiece Black = negate . unsafeAt matvals . unsafeIndex (Pawn, King)
 -}
+
+seeValue :: Piece -> Int
+seeValue Pawn   = 1
+seeValue Knight = 3
+seeValue Bishop = 3
+seeValue Rook   = 5
+seeValue Queen  = 10
+seeValue King   = 200
