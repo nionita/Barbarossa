@@ -627,12 +627,12 @@ findLKA0 pt ksq psq
 -- Choose the cheapest of a set of pieces
 chooseAttacker :: MyPos -> BBoard -> (BBoard, Int)
 chooseAttacker pos !frompieces
-    | p /= 0 = p1 `seq` (p1, value Pawn)
-    | n /= 0 = n1 `seq` (n1, value Knight)
-    | b /= 0 = b1 `seq` (b1, value Bishop)
-    | r /= 0 = r1 `seq` (r1, value Rook)
-    | q /= 0 = q1 `seq` (q1, value Queen)
-    | k /= 0 = k1 `seq` (k1, value King)
+    | p /= 0 = p1 `seq` (p1, seeValue Pawn)
+    | n /= 0 = n1 `seq` (n1, seeValue Knight)
+    | b /= 0 = b1 `seq` (b1, seeValue Bishop)
+    | r /= 0 = r1 `seq` (r1, seeValue Rook)
+    | q /= 0 = q1 `seq` (q1, seeValue Queen)
+    | k /= 0 = k1 `seq` (k1, seeValue King)
     | otherwise = (0, 0)
     where p = frompieces .&. pawns pos
           n = frompieces .&. knights pos
@@ -698,9 +698,6 @@ xrayAttacs pos sq = sa1 /= sa0
 
 unimax :: Int -> [Int] -> Int
 unimax = foldl' (\a g -> min g (-a))
-
-value :: Piece -> Int
-value = matPiece White
 
 usePosXRay :: Bool
 usePosXRay = False
@@ -800,7 +797,7 @@ perCaptFieldWL pos mypc advdefence sq mvlst
     where !myAttRec = theAttacs pos sq
           myattacs = mypc .&. atAtt myAttRec
           Busy _ pcto = tabla pos sq
-          valto = value pcto
+          valto = seeValue pcto
           hanging = not (advdefence `testBit` sq)
           prAgrsqs = bbToSquares prPawns
           reAgrsqs = bbToSquares reAtts
@@ -827,7 +824,7 @@ perCaptWL !pos !attacks promo vict !gain0 !sq !sqfa (wsqs, lsqs)
     where ss = moveToLMove attc vict $ moveAddPiece attc $ moveFromTo sqfa sq
           approx = approximateEasyCapts && gain0 >= v0
           Busy _ attc = tabla pos sqfa
-          v0  = value attc
+          v0  = seeValue attc
           adv = seeMoveValue pos attacks sqfa sq v0
 
 -- Captures of hanging pieces are always winning
