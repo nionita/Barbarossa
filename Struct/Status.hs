@@ -182,13 +182,13 @@ instance CollectParams EvalWeights where
           ewRookHOpen       = tme 178 200,
           ewRookOpen        = tme 234 207,
           ewRookConn        = tme 104  59,
-          ewMobilityKnight  = tme 51 68,	-- Evalo 200 steps:
-          ewMobilityBishop  = tme 57 32,	-- length 10, depth 6, batch 128
+          ewMobilityKnight  = tme 51 68,	-- Evalo 200 steps: length 10, depth 6, batch 128
+          ewMobilityBishop  = tme 58 32,	-- adjusted bc bishop pawns
           ewMobilityRook    = tme 26 28,
           ewMobilityQueen   = tme  4  3,
           ewCenterPAtts     = tme 84 66,
           ewCenterNAtts     = tme 49 46,
-          ewCenterBAtts     = tme 57 42,
+          ewCenterBAtts     = tme 58 42,	-- adjusted bc bishop pawns
           ewCenterRAtts     = tme 11 33,
           ewCenterQAtts     = tme  4 61,
           ewCenterKAtts     = tme  2 54,
@@ -203,7 +203,7 @@ instance CollectParams EvalWeights where
           ewEnpAttacked     = tme  (-6) (-7),
           ewWepAttacked     = tme  48 64,
           ewLastLinePenalty = tme 119 3,
-          ewBishopPair      = tme 387 321,
+          ewBishopPair      = tme 390 320,
           ewBishopPawns     = tme (-24) (-64),
           ewRedundanceRook  = tme (-32) (-67),
           ewRookPawn        = tme (-52) (-41),
