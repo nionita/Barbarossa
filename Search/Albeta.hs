@@ -87,7 +87,7 @@ nulMoves  = 1	-- how many null moves in sequence are allowed (one or two)
 nulMargin, nulSubmrg, nulTrig :: Int
 nulMargin = 1		-- margin to search the null move (over beta) (in scoreGrain units!)
 nulSubmrg = 2		-- improved margin (in scoreGrain units!)
-nulTrig   = 5		-- static margin to beta, to trigger null move (in scoreGrain units!)
+nulTrig   = -25		-- static margin to beta, to trigger null move (in scoreGrain units!)
 nulSubAct :: Bool
 nulSubAct = True
 
