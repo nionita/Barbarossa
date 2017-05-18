@@ -413,6 +413,7 @@ checkFailOrPVRoot xstats b d e s nst = whenAbort (True, nst) $ do
                     then do	-- failed low
                         let xpvslb = insertToPvs d pvg (pvsl nst)
                             nst1   = nst { movno = mn + 1, pvsl = xpvslb, killer = newKiller d s nst }
+                        lift $ betaCut False (absdp sst) e
                         return (False, nst1)
                     else if pathScore s >= b
                             then do
@@ -824,6 +825,7 @@ checkFailOrPVLoop xstats b d e s nst = whenAbort (True, nst) $ do
     if pathScore s <= pathScore (cursc nst)
        then do
            let nst1 = nst { movno = mn+1, killer = newKiller d s nst }
+           lift $ betaCut False (absdp sst) e
            return (False, nst1)
        else do
            let nodes0 = sNodes xstats
@@ -857,6 +859,7 @@ checkFailOrPVLoopZ xstats b d e s nst = whenAbort (True, nst) $ do
     if pathScore s < b	-- failed low
        then do
            let nst1 = nst { movno = mn+1, killer = newKiller d s nst }
+           lift $ betaCut False (absdp sst) e
            return (False, nst1)
        else do	-- here is s >= b: failed high
            let nodes0 = sNodes xstats

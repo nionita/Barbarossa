@@ -19,11 +19,10 @@ import Struct.Struct
 -- Int32 should be enough for now with max depth 20
 type History = V.IOVector Int32
 
-pieces, squares, vsize, bloff :: Int
+pieces, squares, vsize :: Int
 pieces  = 16
 squares = 64
 vsize = pieces * squares
-bloff = vsize `div` 2
 
 -- Did we play with this layout? Could be some other layout better for cache?
 {-# INLINE adr #-}
@@ -45,44 +44,39 @@ adr' m = squares * moveHisAdr m + toSquare m
 
 {-# INLINE ofs' #-}
 ofs' :: Move -> Int
-ofs' m = bloff * moveHisOfs m
+ofs' m = vsize * moveHisOfs m `unsafeShiftR` 1
 
 newHist :: IO History
 newHist = V.replicate vsize 0
 
-{-# INLINE histw #-}
-histw :: Int -> Int32
-histw !d = 1 `unsafeShiftL` dm
-    where !dm = maxd - d
-          maxd = 20
+{-# INLINE hista #-}
+hista :: Int32 -> Int32
+hista !d = d * d
+
+{-# INLINE hists #-}
+hists :: Int32 -> Int32
+hists !d = d
+
+{-# INLINE maked #-}
+maked :: Int -> Int32
+maked !d = fromIntegral $ suppd - d
+    where suppd = 9
 
 toHist :: History -> Bool -> Move -> Int -> IO ()
-toHist h True  m d = addHist h (adr m) (histw d)
-toHist h False m d = subHist h (adr m) (histw d)
-
-{--
-{-# INLINE valHist #-}
-valHist :: History -> Move -> IO Int32
-valHist !h = V.unsafeRead h . adr
---}
+toHist h True  !m !d = addHist h (adr m) (hista $ maked d)
+toHist h False !m !d = subHist h (adr m) (hists $ maked d)
 
 addHist :: History -> Int -> Int32 -> IO ()
 addHist h !ad !p = do
     a <- V.unsafeRead h ad
     let !u = a - p	-- trick here: we subtract, so that the sort is big to small
-        !v = if u < lowLimit then lowHalf else u
-    V.unsafeWrite h ad v
-    where lowLimit = -1000000000
-          lowHalf  =  -500000000
+    V.unsafeWrite h ad u
 
 subHist :: History -> Int -> Int32 -> IO ()
 subHist h !ad !p = do
     a <- V.unsafeRead h ad
     let !u = a + p	-- trick here: we add, so that the sort is big to small
-        !v = if u > higLimit then higHalf else u
-    V.unsafeWrite h ad v
-    where higLimit = 1000000000
-          higHalf  =  500000000
+    V.unsafeWrite h ad u
 
 -- We use a data structure to allow lazyness for the selection of the next
 -- best move (by history values), because we want to use by every selected move

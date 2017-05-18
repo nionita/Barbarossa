@@ -338,6 +338,7 @@ ttStore !deep !tp !sc !bestm !nds = do
 -- History heuristic table update when beta cut
 betaCut :: Bool -> Int -> Move -> Game ()
 betaCut good absdp m
+    | absdp > 8 = return ()	-- limit history changes to the first 8 plys
     | moveIsCastle m = do
         s <- get
         liftIO $ toHist (hist s) good m absdp
