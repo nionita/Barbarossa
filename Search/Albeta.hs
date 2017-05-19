@@ -337,7 +337,7 @@ pvInnerRoot :: Int 	-- current beta
             -> Search (Bool, NodeState)
 pvInnerRoot b d nst e = timeToAbort (True, nst) $ do
          -- do the move
-         exd <- lift $ doMove e False
+         exd <- lift $ doMove e
          if legalResult exd
             then do
                 old <- get
@@ -667,7 +667,7 @@ pvInnerLoop b d prune nst e = timeToAbort (True, nst) $ do
                 return (False, nst1)
             else do
                 old <- get
-                exd <- lift $ doMove e False	-- do the move
+                exd <- lift $ doMove e	-- do the move
                 if legalResult exd
                    then do
                        newNode d
@@ -705,7 +705,7 @@ pvInnerLoopZ b d prune nst e redu = timeToAbort (True, nst) $ do
                 return (False, nst1)
             else do
                 old <- get
-                exd <- lift $ doMove e False	-- do the move
+                exd <- lift $ doMove e	-- do the move
                 -- even the legality could be checked before, maybe much cheaper
                 if legalResult exd
                    then do
@@ -1005,8 +1005,7 @@ pvQSearch !a !b !c = do
            pos <- lift $ getPos
            if tacticalPos pos
               then do
-                  (es1, es2) <- lift $ genMoves 0
-                  let edges = Alt $ es1 ++ es2
+                  edges <- Alt <$> lift genEscapeMoves
                   if noMove edges
                      then return $! trimax a b (-mateScore)
                      else if c >= qsMaxChess
@@ -1036,7 +1035,7 @@ pvQSearch !a !b !c = do
                                  when collectFens $ finWithNodes "DELT"
                                  return a
                              else do
-                                 edges <- liftM Alt $ lift genTactMoves
+                                 edges <- Alt <$> lift genTactMoves
                                  if noMove edges
                                     then do	-- no more captures
                                         when collectFens $ finWithNodes "NOCA"
@@ -1057,13 +1056,11 @@ pvQLoop b c = go
 
 pvQInnerLoop :: Int -> Int -> Int -> Move -> Search (Bool, Int)
 pvQInnerLoop !b c !a e = timeToAbort (True, b) $ do
-         r <- lift $ doMove e True
+         r <- lift $ doQSMove e
          if legalResult r
             then do
                 newNodeQS
-                !sc <- case r of
-                           Final sc -> return (-sc)
-                           _        -> negate <$> pvQSearch (-b) (-a) c
+                !sc <- negate <$> pvQSearch (-b) (-a) c
                 lift undoMove
                 if sc >= b
                    then return (True, b)

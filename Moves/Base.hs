@@ -7,9 +7,10 @@
 
 module Moves.Base (
     posToState, getPos, posNewSearch,
-    doRealMove, doMove, undoMove, genMoves, genTactMoves, canPruneMove,
+    doRealMove, doMove, doQSMove, doNullMove, undoMove,
+    genMoves, genTactMoves, genEscapeMoves, canPruneMove,
     tacticalPos, zugZwang, isMoveLegal, isKillCand, isTKillCand,
-    betaCut, doNullMove, ttRead, ttStore, curNodes, isTimeout, informCtx,
+    betaCut, ttRead, ttStore, curNodes, isTimeout, informCtx,
     mateScore, scoreDiff, qsDelta,
     draftStats,
     finNode, countRepetitions,
@@ -43,17 +44,14 @@ nearmate :: Int -> Bool
 nearmate i = i >= mateScore - 255 || i <= -mateScore + 255
 
 -- Some options and parameters:
--- debug :: Bool
--- debug = False
-
 printEvalInt :: Int64
 printEvalInt   = 2 `shiftL` 12 - 1	-- if /= 0: print eval info every so many nodes
 
 mateScore :: Int
 mateScore = 20000
 
-curNodes :: Game Int64
 {-# INLINE curNodes #-}
+curNodes :: Game Int64
 curNodes = gets (sNodes . mstats)
 
 {-# INLINE getPos #-}
@@ -83,36 +81,34 @@ draftStats dst = do
     s <- get
     put s { mstats = addStats (mstats s) dst }
 
--- Loosing captures after non-captures?
-loosingLast :: Bool
-loosingLast = True
-
 genMoves :: Int -> Game ([Move], [Move])
 genMoves d = do
     p <- getPos
-    if isCheck p $ moving p
+    if inCheck p
        then return (genMoveFCheck p, [])
        else do
             h <- gets hist
             let l0 = genMoveCast p
                 l1 = genMovePromo p
                 (l2w, l2l) = genMoveCaptWL p
-                l3' = genMoveNCapt p
-                l3 = histSortMoves d h l3'
-            return $! if loosingLast
-                         then (l1 ++ l2w, l0 ++ l3 ++ l2l)
-                         else (l1 ++ l2w ++ l2l, l0 ++ l3)
+                l3 = histSortMoves d h $ genMoveNCapt p
+            -- Loosing captures after non-captures
+            return (l1 ++ l2w, l0 ++ l3 ++ l2l)
 
--- Generate only tactical moves, i.e. promotions, captures & check escapes
+-- Generate only tactical moves, i.e. promotions & captures
+-- Needed only in QS, when we know we are not in check
 genTactMoves :: Game [Move]
 genTactMoves = do
     p <- getPos
-    if isCheck p $ moving p
-       then return $ genMoveFCheck p
-       else do
-           let l1  = genMovePromo p
-               l2w = fst $ genMoveCaptWL p
-           return $ l1 ++ l2w
+    let l1  = genMovePromo p
+        l2w = fst $ genMoveCaptWL p
+    return $ l1 ++ l2w
+
+-- Generate only escape moves: needed only in QS when we know we have to escape
+genEscapeMoves :: Game [Move]
+genEscapeMoves = do
+    p <- getPos
+    return $ genMoveFCheck p
 
 {--
 checkGenMoves :: MyPos -> [Move] -> [Move]
@@ -136,11 +132,6 @@ checkGenMove p m@(Move w)
           wrong mes = Left $ "checkGenMove: " ++ mes ++ " for move "
                             ++ showHex w (" in pos\n" ++ showMyPos p)
 --}
-
--- massert :: String -> Game Bool -> Game ()
--- massert s mb = do
---     b <- mb
---     if b then return () else error s
 
 showMyPos :: MyPos -> String
 showMyPos p = showTab (black p) (slide p) (kkrq p) (diag p) ++ "================ " ++ mc ++ "\n"
@@ -182,9 +173,9 @@ doRealMove m = do
                    put s { stack = p' : stack s }
                    return $ Exten 0 False
 
--- Move from a node to a descendent - the search version
-doMove :: Move -> Bool -> Game DoResult
-doMove m qs = do
+-- Move from a node to a descendent - the normal search version
+doMove :: Move -> Game DoResult
+doMove m = do
     s <- get
     let (pc:_) = stack s	-- we never saw an empty stack error until now
         -- Moving a non-existent piece?
@@ -205,12 +196,28 @@ doMove m qs = do
                then return Illegal
                else do
                    put s { stack = p : stack s }
-                   remis <- if qs then return False else checkRemisRules p
+                   remis <- checkRemisRules p
                    if remis
                       then return $ Final 0
                       else do
                           let dext = if inCheck p then 1 else 0
                           return $! Exten dext $ moveIsCaptPromo pc m
+
+-- Move from a node to a descendent - the QS search version
+-- Here we do only a restricted check for illegal moves
+-- It does not check for remis, so it can't return Final
+-- It does not check for extensions a.s.o.
+doQSMove :: Move -> Game DoResult
+doQSMove m = do
+    s <- get
+    let (pc:_) = stack s	-- we never saw an empty stack error until now
+        sts = evalState (posEval p) (evalst s)
+        p   = doFromToMove m pc { staticScore = sts }
+    if not $ checkOk p
+       then return Illegal
+       else do
+           put s { stack = p : stack s }
+           return $ Exten 0 False
 
 doNullMove :: Game ()
 doNullMove = do
@@ -270,14 +277,6 @@ isKillCand p mm ym
 isTKillCand :: MyPos -> Move -> Bool
 isTKillCand p mm = not $ moveIsCapture p mm
 
--- Static evaluation function
--- This does not detect mate or stale mate, it only returns the calculated
--- static score from a position which has already to be valid
--- Mate/stale mate has to be detected by search!
--- {-# INLINE staticVal #-}
--- staticVal :: Game Int
--- staticVal = staticScore <$> getPos
-
 {-# INLINE finNode #-}
 finNode :: String -> Int64 -> Game ()
 finNode str nodes =
@@ -292,16 +291,6 @@ finNode str nodes =
         -- logMes $ "Eval info " ++ mv ++ ":"
         --               ++ concatMap (\(n, v) -> " " ++ n ++ "=" ++ show v)
         --                            (("score", staticScore p) : weightPairs (staticFeats p))
-
-{--
-materVal :: Game Int
-materVal = do
-    t <- getPos
-    let !m = mater t
-    return $! case moving t of
-                   White -> m
-                   _     -> -m
---}
 
 {-# INLINE qsDelta #-}
 qsDelta :: Game Int
