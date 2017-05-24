@@ -724,19 +724,31 @@ instance EvalItem Redundance where
 
 -- This function is optimised
 evalRedundance :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-evalRedundance p ew mide = mad (mad mide (ewBishopPair ew) bp) (ewRedundanceRook ew) rr
+evalRedundance p ew mide = mad (mad (mad mide (ewBishopPawns ew) pa)
+                                    (ewBishopPair ew) bp)
+                               (ewRedundanceRook ew) rr
     where !wbl = bishops p .&. me p .&. lightSquares
           !wbd = bishops p .&. me p .&. darkSquares
           !bbl = bishops p .&. yo p .&. lightSquares
           !bbd = bishops p .&. yo p .&. darkSquares
-          !bpw = popCount wbl .&. popCount wbd	-- tricky here: exact 1 and 1 is ok
-          !bpb = popCount bbl .&. popCount bbd	-- and here
+          !bpwl = popCount wbl
+          !bpwd = popCount wbd
+          !bpw = bpwl .&. bpwd	-- tricky here: exact 1 and 1 is ok
+          !bpbl = popCount bbl
+          !bpbd = popCount bbd
+          !bpb = bpbl .&. bpbd	-- and here
           !bp  = bpw - bpb
+          !mpal = bpwl * (popCount (pawns p .&. lightSquares) - pawnEven)
+          !mpad = bpwd * (popCount (pawns p .&. darkSquares) - pawnEven)
+          !ypal = bpbl * (popCount (pawns p .&. lightSquares) - pawnEven)
+          !ypad = bpbd * (popCount (pawns p .&. darkSquares) - pawnEven)
+          !pa = mpal + mpad - ypal - ypad
           !wro = rooks p .&. me p
           !bro = rooks p .&. yo p
           !wrr = popCount wro `unsafeShiftR` 1	-- tricky here: 2, 3 are the same...
           !brr = popCount bro `unsafeShiftR` 1	-- and here
           !rr  = wrr - brr
+          pawnEven = 6
 
 {--
 ------ Knight & Rook correction according to own pawns ------
