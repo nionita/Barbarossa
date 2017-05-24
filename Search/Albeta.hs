@@ -77,10 +77,6 @@ futMinVal = 30
 futDecayB = 13
 futDecayW = (1 `unsafeShiftL` futDecayB) - 1
 
--- Parameters for quiescent search:
-qsMaxChess :: Int
-qsMaxChess = 2		-- max number of chess for a quiet search path
-
 -- Parameters for null move pruning
 nulMoves :: Int
 nulMoves  = 1	-- how many null moves in sequence are allowed (one or two)
@@ -105,9 +101,8 @@ iidNewDepth :: Int -> Int
 iidNewDepth = subtract 1
 
 -- Parameter for quiescenst search
-inEndlessCheck, qsDeltaMargin :: Int
-inEndlessCheck = -scoreGrain	-- there is a risk to be left in check
-qsDeltaMargin  = 100
+qsDeltaMargin :: Int
+qsDeltaMargin = 100
 
 type Search a = CState PVState Game a
 
@@ -462,7 +457,7 @@ checkFailHard s a b c =
 -- PV Search
 pvSearch :: NodeState -> Int -> Int -> Int -> Search Path
 pvSearch _ !a !b !d | d <= 0 = do
-    v <- pvQSearch a b 0
+    v <- pvQSearch a b
     checkFailHard "QS" a b v
     return $ pathFromScore ("pvQSearch 1:" ++ show v) v	-- ok: fail hard in QS
 pvSearch nst !a !b !d = do
@@ -529,7 +524,7 @@ pvSearch nst !a !b !d = do
 -- PV Zero Window
 pvZeroW :: NodeState -> Int -> Int -> Int -> Bool -> Search Path
 pvZeroW !_ !b !d !_ _ | d <= 0 = do
-    v <- pvQSearch bGrain b 0
+    v <- pvQSearch bGrain b
     checkFailHard "QS" bGrain b v
     return $ pathFromScore ("pvQSearch 21:" ++ show v) v
     where !bGrain = b - scoreGrain
@@ -985,8 +980,8 @@ trimax a b x
     | otherwise = x
 
 -- PV Quiescent Search
-pvQSearch :: Int -> Int -> Int -> Search Int
-pvQSearch !a !b !c = do
+pvQSearch :: Int -> Int -> Search Int
+pvQSearch !a !b = do
     -- TODO: use e as first move if legal & capture
     -- (hdeep, tp, hsc, e, _) <- reTrieve >> lift ttRead
     (hdeep, tp, hsc, _, _) <- reTrieve >> lift ttRead
@@ -1008,17 +1003,7 @@ pvQSearch !a !b !c = do
                   edges <- Alt <$> lift genEscapeMoves
                   if noMove edges
                      then return $! trimax a b (-mateScore)
-                     else if c >= qsMaxChess
-                             then do
-                                 when collectFens $ finWithNodes "ENDL"
-                                 return $! trimax a b inEndlessCheck
-                             else do
-                                 -- for check extensions in case of very few moves (1 or 2):
-                                 -- if 1 move: extend 1 (same depth)
-                                 -- if 2 moves: no extension
-                                 let !esc = lenmax2 $ unalt edges
-                                     !nc = c + esc - 1
-                                 pvQLoop b nc a edges
+                     else pvQLoop b a edges	-- Score a is wrong when only pseudo legal moves!
               else do
                   let !stp = staticScore pos
                   -- what if hsc < b?
@@ -1041,26 +1026,24 @@ pvQSearch !a !b !c = do
                                         when collectFens $ finWithNodes "NOCA"
                                         return $! trimax a b stp
                                     else if stp > a
-                                            then pvQLoop b c stp edges
-                                            else pvQLoop b c a   edges
-    where lenmax2 (_:_:_) = 2
-          lenmax2 _       = 1	-- we know here it is not empty
+                                            then pvQLoop b stp edges
+                                            else pvQLoop b a   edges
 
-pvQLoop :: Int -> Int -> Int -> Alt Move -> Search Int
-pvQLoop b c = go
+pvQLoop :: Int -> Int -> Alt Move -> Search Int
+pvQLoop b = go
     where go !s (Alt [])     = return s
           go !s (Alt (e:es)) = do
-              (!cut, !s') <- pvQInnerLoop b c s e
+              (!cut, !s') <- pvQInnerLoop b s e
               if cut then return s'
                      else go s' $ Alt es
 
-pvQInnerLoop :: Int -> Int -> Int -> Move -> Search (Bool, Int)
-pvQInnerLoop !b c !a e = timeToAbort (True, b) $ do
+pvQInnerLoop :: Int -> Int -> Move -> Search (Bool, Int)
+pvQInnerLoop !b !a e = timeToAbort (True, b) $ do
          r <- lift $ doQSMove e
          if legalResult r
             then do
                 newNodeQS
-                !sc <- negate <$> pvQSearch (-b) (-a) c
+                !sc <- negate <$> pvQSearch (-b) (-a)
                 lift undoMove
                 if sc >= b
                    then return (True, b)
