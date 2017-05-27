@@ -82,8 +82,6 @@ qsMaxChess :: Int
 qsMaxChess = 2		-- max number of chess for a quiet search path
 
 -- Parameters for null move pruning
-nulMoves :: Int
-nulMoves  = 1	-- how many null moves in sequence are allowed (one or two)
 nulMargin, nulSubmrg, nulTrig :: Int
 nulMargin = 1		-- margin to search the null move (over beta) (in scoreGrain units!)
 nulSubmrg = 2		-- improved margin (in scoreGrain units!)
@@ -377,7 +375,7 @@ pvInnerRootExten b d !exd nst = do
        else do
            -- no futility pruning & no LMR for root moves!
            -- Here we expect to fail low
-           s1 <- pnextlev <$> pvZeroW nst (-a) d1 nulMoves True
+           s1 <- pnextlev <$> pvZeroW nst (-a) d1 True
            whenAbort s1 $ do
                checkFailHard "pvZeroW" a b (pathScore s1)
                if pathScore s1 <= a -- we failed low as expected
@@ -527,13 +525,13 @@ pvSearch nst !a !b !d = do
                                else return $ trimaxPath a b $ if tacticalPos pos then matedPath else staleMate
 
 -- PV Zero Window
-pvZeroW :: NodeState -> Int -> Int -> Int -> Bool -> Search Path
-pvZeroW !_ !b !d !_ _ | d <= 0 = do
+pvZeroW :: NodeState -> Int -> Int -> Bool -> Search Path
+pvZeroW !_ !b !d _ | d <= 0 = do
     v <- pvQSearch bGrain b 0
     checkFailHard "QS" bGrain b v
     return $ pathFromScore ("pvQSearch 21:" ++ show v) v
     where !bGrain = b - scoreGrain
-pvZeroW !nst !b !d !lastnull redu = do
+pvZeroW !nst !b !d redu = do
     -- Check if we have it in TT
     (hdeep, tp, hsc, e, nodes') <- reTrieve >> lift ttRead
     if hdeep >= d && (tp == 2 || tp == 1 && hsc >= b || tp == 0 && hsc < b)
@@ -548,7 +546,7 @@ pvZeroW !nst !b !d !lastnull redu = do
        else do
            when (hdeep < 0) reFail
            pos <- lift getPos
-           nmhigh <- nullMoveFailsHigh pos nst b d lastnull
+           nmhigh <- nullMoveFailsHigh pos nst b d
            whenAbort (pathFromScore "Aborted" b) $ do
                case nmhigh of
                  NullMoveHigh -> return $ pathFromScore "NullMoveHigh" b
@@ -591,9 +589,9 @@ pvZeroW !nst !b !d !lastnull redu = do
 
 data NullMoveResult = NoNullMove | NullMoveHigh | NullMoveLow | NullMoveThreat Path
 
-nullMoveFailsHigh :: MyPos -> NodeState -> Int -> Int -> Int -> Search NullMoveResult
-nullMoveFailsHigh pos nst b d lastnull
-    | lastnull < 1 || tacticalPos pos || zugZwang pos	-- go smooth into QS
+nullMoveFailsHigh :: MyPos -> NodeState -> Int -> Int -> Search NullMoveResult
+nullMoveFailsHigh pos nst b d
+    | d < 2 || tacticalPos pos || zugZwang pos		-- no null move at d < 2
       || crtnt nst == AllNode = return NoNullMove	-- no null move in all nodes
     | otherwise = do
         let v = staticScore pos
@@ -606,8 +604,8 @@ nullMoveFailsHigh pos nst b d lastnull
                xchangeFutil
                let nst' = deepNSt nst
                val <- if v > b + bigDiff
-                         then fmap pnextlev $ pvZeroW nst' (-nma) d2 lastnull1 True
-                         else fmap pnextlev $ pvZeroW nst' (-nma) d1 lastnull1 True
+                         then fmap pnextlev $ pvZeroW nst' (-nma) d2 True
+                         else fmap pnextlev $ pvZeroW nst' (-nma) d1 True
                lift undoMove	-- undo null move
                xchangeFutil
                if pathScore val >= nmb
@@ -625,7 +623,6 @@ nullMoveFailsHigh pos nst b d lastnull
           d2  = nmDArr2 `unsafeAt` d	-- this is for bigger differences
           nmb = if nulSubAct then b - (nulSubmrg * scoreGrain) else b
           nma = nmb - (nulMargin * scoreGrain)
-          lastnull1 = lastnull - 1
           bigDiff = 500	-- if we are very far ahead
 
 -- This is now more than reduction 3 for depth over 9
@@ -760,7 +757,7 @@ pvInnerLoopExten b d !exd nst = do
        else do
           -- Here we must be in a Cut node (will fail low)
           -- and we should have: crtnt = CutNode, nxtnt = AllNode
-          s1 <- pnextlev <$> pvZeroW nst (-a) d1 nulMoves True
+          s1 <- pnextlev <$> pvZeroW nst (-a) d1 True
           whenAbort s1 $ do
               if pathScore s1 <= a
                  then return s1	-- failed low (as expected) or aborted
@@ -783,15 +780,15 @@ pvInnerLoopExtenZ b d spec !exd nst redu = do
     if not redu || d' == d1
        then do
            moreLMR True 1	-- more LMR
-           pnextlev <$> pvZeroW nst onemB d' nulMoves redu
+           pnextlev <$> pvZeroW nst onemB d' redu
        else do
            incRedu
            nds0 <- gets $ sNodes . stats
-           !sr <- pnextlev <$> pvZeroW nst onemB d' nulMoves True
+           !sr <- pnextlev <$> pvZeroW nst onemB d' True
            nds1 <- gets $ sNodes . stats
            let nodre = nds1 - nds0
            !s1 <- if lmrDebug
-                     then pnextlev <$> pvZeroW nst onemB d1 nulMoves False
+                     then pnextlev <$> pvZeroW nst onemB d1 False
                      else return sr
            nds2 <- gets $ sNodes . stats
            let nodnr = nds2 - nds1
@@ -811,7 +808,7 @@ pvInnerLoopExtenZ b d spec !exd nst redu = do
                     moreLMR False d'	-- less LMR
                     -- Now we expect to fail high, i.e. exchange the crt/nxt node type
                     let nst1 = nst { crtnt = nxtnt nst, nxtnt = crtnt nst }
-                    sf <- pnextlev <$> pvZeroW nst1 onemB d1 nulMoves True
+                    sf <- pnextlev <$> pvZeroW nst1 onemB d1 True
                     whenAbort sf $ do
                         when (pathScore sf >= b) $ moreLMR False d1
                         return sf
@@ -1082,7 +1079,7 @@ bestMoveFromIID nst a b d
           = do s <- pvSearch nst a b d'
                return $! unseq $ pathMoves s
     | nt == CutNode && (d >= minIIDCut || (d >= minIIDCutNK && killer nst == NoKiller))
-          = do s <- pvZeroW nst b d' nulMoves False
+          = do s <- pvZeroW nst b d' False
                return $! unseq $ pathMoves s
     | otherwise =  return []
     where d' = min maxIIDDepth (iidNewDepth d)
