@@ -623,13 +623,13 @@ nullMoveFailsHigh pos nst b d
           d2  = nmDArr2 `unsafeAt` d	-- this is for bigger differences
           nmb = if nulSubAct then b - (nulSubmrg * scoreGrain) else b
           nma = nmb - (nulMargin * scoreGrain)
-          bigDiff = 500	-- if we are very far ahead
+          bigDiff = 550	-- if we are very far ahead
 
 -- The reduction was at least 4, now it is 3, but increases later
 nmDArr1, nmDArr2 :: UArray Int Int
-------------------------------0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18  19  20
-nmDArr1 = listArray (0, 20) [ 0, 0, 0, 0, 1, 2, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10 ]
-nmDArr2 = listArray (0, 20) [ 0, 0, 0, 0, 0, 1, 2, 3, 3, 4, 4, 5, 5, 6, 6, 6, 7, 7, 7,  8,  8 ]
+------------------------------0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20
+nmDArr1 = listArray (0, 20) [ 0, 0, 0, 0, 0, 1, 2, 3, 3, 4, 4, 5, 5, 5, 6, 6, 6, 7, 7, 7, 8]
+nmDArr2 = listArray (0, 20) [ 0, 0, 0, 0, 0, 0, 1, 2, 2, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 6]
 
 pvSLoop :: Int -> Int -> Bool -> NodeState -> Alt Move -> Search NodeState
 pvSLoop b d p = go
