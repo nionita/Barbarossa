@@ -200,7 +200,8 @@ doMove m = do
                    if remis
                       then return $ Final 0
                       else do
-                          let dext = if inCheck p then 1 else 0
+                          -- Extend when in check, but only when we have a queen and are dangerous
+                          let dext = if inCheck p && (yo p .&. queens p /= 0) then 1 else 0
                           return $! Exten dext $ moveIsCaptPromo pc m
 
 -- Move from a node to a descendent - the QS search version
