@@ -793,58 +793,42 @@ instance EvalItem Outpost where
 
 outpost :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 outpost p ew mide
+    | nb == 0   = mide
     | moving p == White
-        = let (morw, mow, mors, mos) = outpostWhite (yoPAttacs p) (myPAttacs p)
-                                                    (me p .&. nb) (myBAttacs p .|. myNAttacs p)
-              (yorw, yow, yors, yos) = outpostBlack (myPAttacs p) (yoPAttacs p)
-                                                    (yo p .&. nb) (yoBAttacs p .|. yoNAttacs p)
-              !nb = knights p .|. bishops p
-              !rw = morw - yorw
+        = let (mow, mos) = outpostWhite (yoPAttacs p) (myPAttacs p) (me p .&. nb)
+              (yow, yos) = outpostBlack (myPAttacs p) (yoPAttacs p) (yo p .&. nb)
               !w  = mow  - yow
-              !rs = mors - yors
               !s  = mos  - yos
-          in mad (mad (mad (mad mide (ewOutpostRW ew) rw)
-                           (ewOutpostW ew) w)
-                      (ewOutpostRS ew) rs)
-                 (ewOutpostS ew) s
+          in mad (mad mide (ewOutpostW ew) w) (ewOutpostS ew) s
     | otherwise
-        = let (morw, mow, mors, mos) = outpostBlack (yoPAttacs p) (myPAttacs p)
-                                                    (me p .&. nb) (myBAttacs p .|. myNAttacs p)
-              (yorw, yow, yors, yos) = outpostWhite (myPAttacs p) (yoPAttacs p)
-                                                    (yo p .&. nb) (yoBAttacs p .|. yoNAttacs p)
-              !nb = knights p .|. bishops p
-              !rw = morw - yorw
+        = let (mow, mos) = outpostBlack (yoPAttacs p) (myPAttacs p) (me p .&. nb)
+              (yow, yos) = outpostWhite (myPAttacs p) (yoPAttacs p) (yo p .&. nb)
               !w  = mow  - yow
-              !rs = mors - yors
               !s  = mos  - yos
-          in mad (mad (mad (mad mide (ewOutpostRW ew) rw)
-                           (ewOutpostW ew) w)
-                      (ewOutpostRS ew) rs)
-                 (ewOutpostS ew) s
+          in mad (mad mide (ewOutpostW ew) w) (ewOutpostS ew) s
+    where !nb = knights p .|. bishops p
 
-outpostWhite :: BBoard -> BBoard -> BBoard -> BBoard -> (Int, Int, Int, Int)
-outpostWhite !ypa !mpa !mmi !mma
-    | outp == 0 = (0, 0, 0, 0)
-    | otherwise = theOutposts outp mpa mmi mma
+outpostWhite :: BBoard -> BBoard -> BBoard -> (Int, Int)
+outpostWhite !ypa !mpa !mmi
+    | outp == 0 = (0, 0)
+    | otherwise = theOutposts outp mpa mmi
     where outpa = (fileC .|. fileD .|. fileE .|. fileF) .&. (row4 .|. row5 .|. row6)
           !apa  = ypa .|. (ypa `unsafeShiftR` 8) .|. (ypa `unsafeShiftR` 16)
           !outp = outpa `less` apa
 
-outpostBlack :: BBoard -> BBoard -> BBoard -> BBoard -> (Int, Int, Int, Int)
-outpostBlack !ypa !mpa !mmi !mma
-    | outp == 0 = (0, 0, 0, 0)
-    | otherwise = theOutposts outp mpa mmi mma
+outpostBlack :: BBoard -> BBoard -> BBoard -> (Int, Int)
+outpostBlack !ypa !mpa !mmi
+    | outp == 0 = (0, 0)
+    | otherwise = theOutposts outp mpa mmi
     where outpa = (fileC .|. fileD .|. fileE .|. fileF) .&. (row4 .|. row5 .|. row3)
           !apa  = ypa .|. (ypa `unsafeShiftL` 8) .|. (ypa `unsafeShiftL` 16)
           !outp = outpa `less` apa
 
-theOutposts :: BBoard -> BBoard -> BBoard -> BBoard -> (Int, Int, Int, Int)
-theOutposts !outp !mpa !mmi !mma = (rw, w, rs, s)
+theOutposts :: BBoard -> BBoard -> BBoard -> (Int, Int)
+theOutposts !outp !mpa !mmi = (w, s)
     where !outs = outp .&. mpa		-- strong outpost positions
           !outw = outp `less` outs	-- weak outpost positions
-          !rw = popCount $ outw .&. mma	-- reachable weak outposts
           !w  = popCount $ outw .&. mmi	-- weak outposts
-          !rs = popCount $ outs .&. mma	-- reachable strong outposts
           !s  = popCount $ outs .&. mmi	-- strong outposts
 
 ------ Blocked pawns ------

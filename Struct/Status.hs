@@ -108,9 +108,7 @@ data EvalWeights
           ewBishopPawns     :: !MidEnd,
           ewRedundanceRook  :: !MidEnd,
           ewRookPawn        :: !MidEnd,
-          ewOutpostRW       :: !MidEnd,
           ewOutpostW        :: !MidEnd,
-          ewOutpostRS       :: !MidEnd,
           ewOutpostS        :: !MidEnd,
           ewAdvPawn5        :: !MidEnd,
           ewAdvPawn6        :: !MidEnd,
@@ -211,10 +209,8 @@ instance CollectParams EvalWeights where
           ewBishopPawns     = tme (-24) (-64),
           ewRedundanceRook  = tme (-32) (-67),
           ewRookPawn        = tme (-52) (-41),
-          ewOutpostRW       = tme   8   8,
-          ewOutpostW        = tme  32  40,
-          ewOutpostRS       = tme  32  32,
-          ewOutpostS        = tme 128 160,
+          ewOutpostW        = tme 100 100,
+          ewOutpostS        = tme 150 150,
           ewAdvPawn5        = tme   4 131,
           ewAdvPawn6        = tme 396 370,
           ewPawnBlockP      = tme (-128) (-100),
@@ -295,12 +291,8 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
         ("end.redundanceRook",  setEndRedundanceRook),
         ("mid.rookPawn",        setMidRookPawn),
         ("end.rookPawn",        setEndRookPawn),
-        ("mid.outpostRW",       setMidOutpostRW),
-        ("end.outpostRW",       setEndOutpostRW),
         ("mid.outpostW",        setMidOutpostW),
         ("end.outpostW",        setEndOutpostW),
-        ("mid.outpostRS",       setMidOutpostRS),
-        ("end.outpostRS",       setEndOutpostRS),
         ("mid.outpostS",        setMidOutpostS),
         ("end.outpostS",        setEndOutpostS),
         ("mid.advPawn5",        setMidAdvPawn5),
@@ -384,12 +376,8 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
           setEndRedundanceRook  v' ew' = ew' { ewRedundanceRook  = (ewRedundanceRook  ew') { end = round v' }}
           setMidRookPawn        v' ew' = ew' { ewRookPawn        = (ewRookPawn        ew') { mid = round v' }}
           setEndRookPawn        v' ew' = ew' { ewRookPawn        = (ewRookPawn        ew') { end = round v' }}
-          setMidOutpostRW       v' ew' = ew' { ewOutpostRW       = (ewOutpostRW       ew') { mid = round v' }}
-          setEndOutpostRW       v' ew' = ew' { ewOutpostRW       = (ewOutpostRW       ew') { end = round v' }}
           setMidOutpostW        v' ew' = ew' { ewOutpostW        = (ewOutpostW        ew') { mid = round v' }}
           setEndOutpostW        v' ew' = ew' { ewOutpostW        = (ewOutpostW        ew') { end = round v' }}
-          setMidOutpostRS       v' ew' = ew' { ewOutpostRS       = (ewOutpostRS       ew') { mid = round v' }}
-          setEndOutpostRS       v' ew' = ew' { ewOutpostRS       = (ewOutpostRS       ew') { end = round v' }}
           setMidOutpostS        v' ew' = ew' { ewOutpostS        = (ewOutpostS        ew') { mid = round v' }}
           setEndOutpostS        v' ew' = ew' { ewOutpostS        = (ewOutpostS        ew') { end = round v' }}
           setMidAdvPawn5        v' ew' = ew' { ewAdvPawn5        = (ewAdvPawn5        ew') { mid = round v' }}
