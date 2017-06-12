@@ -672,22 +672,18 @@ instance EvalItem EnPrise where
 -- - if he has only one attack, we are somehow restricted to defend or move that piece
 -- In 2 we have a more complicated analysis, which maybe is not worth to do
 enPrise :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-enPrise p ew mide = mad (mad (mad (mad mide (ewEnpHanging ew) ha)
-                                  (ewEnpEnPrise ew) ep)
-                             (ewEnpAttacked ew) at)
+enPrise p ew mide = mad (mad (mad mide (ewEnpHanging ew) ha)
+                             (ewEnpEnPrise ew) ep)
                         (ewWepAttacked ew) wp
     where !meP = me p .&. pawns   p	-- my pieces
           !meM = me p .&. (knights p .|. bishops p)
           !meR = me p .&. rooks   p
           !meQ = me p .&. queens  p
-          !atP = meP  .&. yoAttacs p	-- my attacked pieces
-          !atM = meM  .&. yoAttacs p
-          !atR = meR  .&. yoAttacs p
-          !atQ = meQ  .&. yoAttacs p
-          !haP = atP `less` myAttacs p	-- attacked and not defended (hanging)
-          !haM = atM `less` myAttacs p
-          !haR = atR `less` myAttacs p
-          !haQ = atQ `less` myAttacs p
+          !ynma = yoAttacs p .&. complement (myAttacs p)	-- micro optimization
+          !haP = meP .&. ynma	-- attacked and not defended (hanging)
+          !haM = meM .&. ynma
+          !haR = meR .&. ynma
+          !haQ = meQ .&. ynma
           !epM = meM .&. yoPAttacs p	-- defended, but attacked by less valuable opponent pieces
           !epR = meR .&. yoA1
           !epQ = meQ .&. yoA2
@@ -695,9 +691,8 @@ enPrise p ew mide = mad (mad (mad (mad mide (ewEnpHanging ew) ha)
           !yoA2 = yoA1 .|. yoRAttacs p
           !ha = popCount haP + 3 * popCount haM + 5 * popCount haR + 9 * popCount haQ
           !ep =                3 * popCount epM + 5 * popCount epR + 9 * popCount epQ
-          !at = popCount atP + 3 * popCount atM + 5 * popCount atR + 9 * popCount atQ
-          !wp1 = popCount$ (meP `less` myPAttacs p) .&. yoAttacs p	-- my weak attacked pawns
-          !wp2 = popCount$ (yo p .&. pawns p `less` yoPAttacs p) .&. myAttacs p	-- your weak attacked pawns
+          !wp1 = popCount $ (meP `less` myPAttacs p) .&. yoAttacs p	-- my weak attacked pawns
+          !wp2 = popCount $ (yo p .&. pawns p `less` yoPAttacs p) .&. myAttacs p	-- your weak attacked pawns
           !wp = wp2 - wp1
 
 ------ Last Line ------
