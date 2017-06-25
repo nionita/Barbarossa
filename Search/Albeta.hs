@@ -244,7 +244,7 @@ alphaBeta abc = do
         searchFull    lp  = pvRootSearch alpha0 beta0 d lp  rmvs False
         pvro = PVReadOnly { draft = d, albest = best abc,
                             timeli = stoptime abc /= 0, abmili = stoptime abc }
-        pvs0 = pvsInit { ronly = pvro }	-- :: PVState
+        pvs0 = pvsInit { ronly = pvro, lmrlv = min (20-d) lmrLevMax }
     r <- if useAspirWin
          then case lastscore abc of
              Just sp -> do
