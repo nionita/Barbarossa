@@ -43,7 +43,7 @@ minPvDepth  = 2		-- from this depth we use alpha beta search
 -- Parameters for late move reduction:
 lmrInitLv, lmrInitLim, lmrLevMin, lmrLevMax :: Int
 lmrInitLv   = 8
-lmrInitLim  = 8500
+lmrInitLim  = 1024
 lmrLevMin   = 0
 lmrLevMax   = 15
 
