@@ -42,10 +42,10 @@ minPvDepth  = 2		-- from this depth we use alpha beta search
 
 -- Parameters for late move reduction:
 lmrInitLv, lmrInitLim, lmrLevMin, lmrLevMax :: Int
-lmrInitLv   = 8
+lmrInitLv   = 11
 lmrInitLim  = 8500
-lmrLevMin   = 0
-lmrLevMax   = 15
+lmrLevMin   = 11
+lmrLevMax   = 13
 
 -- The late move reduction is variable and regulated by the number of re-searches
 -- Lower levels (towards 0) means less reductions, higher - more
