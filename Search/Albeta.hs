@@ -218,7 +218,7 @@ pvsInit = PVState { ronly = pvro00, stats = ssts0, absdp = 0, usedext = 0, abort
                     lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
 nst0 :: NodeState
 nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore "Zero" 0, rbmch = -1,
-             movno = 1, spcno = 1, killer = NoKiller, albe = False, cpos = initPos, pvsl = [] }
+             movno = 1, spcno = 1000, killer = NoKiller, albe = False, cpos = initPos, pvsl = [] }
              -- we start with spcno = 1 as we consider the first move as special
              -- to avoid in any way reducing the tt move
 
@@ -229,7 +229,7 @@ resetStats = do
     return $ stats st
 
 resetNSt :: Path -> Killer -> NodeState -> NodeState
-resetNSt !sc !kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill }
+resetNSt !sc !kill nst = nst { cursc = sc, movno = 1, spcno = 1000, killer = kill }
 
 pvro00 :: PVReadOnly
 pvro00 = PVReadOnly { draft = 0, albest = False, timeli = False, abmili = 0 }
@@ -325,6 +325,10 @@ legalResult :: DoResult -> Bool
 legalResult Illegal = False
 legalResult _       = True
 
+isMarker :: Move -> Bool
+isMarker (Move 0) = True
+isMarker _        = False
+
 -- This is the inner loop of the PV search of the root, executed at root once per possible move
 -- See the parameter
 -- Returns: ...flag if it was a beta cut and new status
@@ -333,7 +337,10 @@ pvInnerRoot :: Int 	-- current beta
             -> NodeState 	-- node status
             -> Move	-- move to search
             -> Search (Bool, NodeState)
-pvInnerRoot b d nst e = timeToAbort (True, nst) $ do
+pvInnerRoot b d nst e = timeToAbort (True, nst) $
+    if isMarker e
+       then return (False, nst)
+       else do
          -- do the move
          exd <- lift $ doMove e
          if legalResult exd
@@ -656,8 +663,11 @@ pvInnerLoop :: Int 	-- current beta
             -> NodeState 	-- node status
             -> Move	-- move to search
             -> Search (Bool, NodeState)
-pvInnerLoop b d prune nst e = timeToAbort (True, nst) $ do
-         -- What about TT & killer moves???
+pvInnerLoop b d prune nst e = timeToAbort (True, nst) $
+    if isMarker e
+       then return (False, nst)
+       else do
+         -- What about TT & killer moves? We should prune only after the marker
          if prune && movno nst > 1 && canPruneMove (cpos nst) e
             then do
                 let !nst1 = nst { movno = movno nst + 1 }
@@ -694,8 +704,11 @@ pvInnerLoopZ :: Int 	-- current beta
             -> Move	-- move to search
             -> Bool	-- reduce in LMR?
             -> Search (Bool, NodeState)
-pvInnerLoopZ b d prune nst e redu = timeToAbort (True, nst) $ do
-         -- What about TT & killer moves???
+pvInnerLoopZ b d prune nst e redu = timeToAbort (True, nst) $
+    if isMarker e
+       then return (False, resetSpc nst)
+       else do
+         -- What about TT & killer moves? We should prune only after the marker
          if prune && canPruneMove (cpos nst) e
             then do
                 let !nst1 = nst { movno = movno nst + 1 }
@@ -710,20 +723,13 @@ pvInnerLoopZ b d prune nst e redu = timeToAbort (True, nst) $ do
                        modify $ \s -> s { absdp = absdp s + 1 }
                        s <- case exd of
                          Exten exd' spc -> do
-                             if spc
-                                then do
-                                    xchangeFutil
-                                    s <- pvInnerLoopExtenZ b d spc exd' (deepNSt $ resetSpc nst) redu
-                                    xchangeFutil
-                                    return s
-                                else do
-                                    when (exd' == 0) $ do
-                                        sdiff <- lift scoreDiff
-                                        updateFutil sdiff	-- e
-                                    xchangeFutil
-                                    s <- pvInnerLoopExtenZ b d spc exd' (deepNSt nst) redu
-                                    xchangeFutil
-                                    return s
+                             when (not spc && exd' == 0) $ do
+                                 sdiff <- lift scoreDiff
+                                 updateFutil sdiff	-- e
+                             xchangeFutil
+                             s <- pvInnerLoopExtenZ b d spc exd' (deepNSt nst) redu
+                             xchangeFutil
+                             return s
                          Final sco -> return $! pathFromScore "Final" (-sco)
                          Illegal   -> error "Cannot be illegal here"
                        lift undoMove	-- undo the move
@@ -906,8 +912,8 @@ genAndSort nst mttmv a b d = do
 {-# INLINE reduceLmr #-}
 reduceLmr :: Bool -> Bool -> Int -> Int -> Int -> Int
 reduceLmr nearmatea spec d lmrlev w
-    | spec || d <= 1 || nearmatea = d
-    | otherwise                   = max 1 $ d - lmrArr!(lmrlev, w)
+    | spec || d <= 1 || nearmatea || w < 0 = d
+    | otherwise                            = max 1 $ d - lmrArr!(lmrlev, w)
 
 -- Adjust the LMR related parameters in the state
 moreLMR :: Bool -> Int -> Search ()
@@ -1180,13 +1186,13 @@ incReBe n = modStat $ \s -> s { sReBe = sReBe s + n }
 incReMi :: Search ()
 incReMi = modStat $ \s -> s { sReMi = sReMi s + 1 }
 
-{-# SPECIALIZE bestFirst :: [Move] -> [Move] -> ([Move], [Move]) -> [Move] #-}
-bestFirst :: Eq e => [e] -> [e] -> ([e], [e]) -> [e]
+bestFirst :: [Move] -> [Move] -> ([Move], [Move]) -> [Move]
 bestFirst path kl (es1, es2)
-    | null path = es1 ++ kl ++ delall es2 kl
-    | otherwise = e : delete e es1 ++ kl ++ delall es2 (e : kl)
+    | null path = es1 ++ kl ++ marker ++ delall es2 kl
+    | otherwise = e : delete e es1 ++ kl ++ marker ++ delall es2 (e : kl)
     where delall = foldr delete
           (e:_)  = path
+          marker = [Move 0]
 
 pushKiller :: Move -> Killer -> Killer
 pushKiller !e NoKiller = OneKiller e
