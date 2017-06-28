@@ -222,12 +222,6 @@ nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore "Zero" 0, rbm
              -- we start with spcno = 1 as we consider the first move as special
              -- to avoid in any way reducing the tt move
 
-resetStats :: Search SStats
-resetStats = do
-    st <- get
-    put st { stats = ssts0 }
-    return $ stats st
-
 resetNSt :: Path -> Killer -> NodeState -> NodeState
 resetNSt !sc !kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill }
 
@@ -1214,8 +1208,7 @@ logmes s = informCtx (LogMes s)
 
 informPV :: Int -> Int -> [Move] -> Search ()
 informPV s d es = do
-    dst <- resetStats
+    ss <- gets stats
     lift $ do
-        draftStats dst
-        n <- curNodes
+        n <- curNodes $ sNodes ss
         informCtx (BestMv s d n es)

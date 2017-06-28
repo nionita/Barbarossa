@@ -51,8 +51,8 @@ mateScore :: Int
 mateScore = 20000
 
 {-# INLINE curNodes #-}
-curNodes :: Game Int64
-curNodes = gets (sNodes . mstats)
+curNodes :: Int64 -> Game Int64
+curNodes n = (n + ) <$> gets (sNodes . mstats)
 
 {-# INLINE getPos #-}
 getPos :: Game MyPos
@@ -284,13 +284,7 @@ finNode str nodes =
         s <- get
         let (p:_) = stack s	-- we never saw an empty stack error until now
             fen = posToFen p
-            -- mv = case tail $ words fen of
-            --          mv':_ -> mv'
-            --          _     -> error "Wrong fen in finNode"
-        logMes $ str ++ " Fen: " ++ fen
-        -- logMes $ "Eval info " ++ mv ++ ":"
-        --               ++ concatMap (\(n, v) -> " " ++ n ++ "=" ++ show v)
-        --                            (("score", staticScore p) : weightPairs (staticFeats p))
+        logMes $ str ++ " Score: " ++ show (staticScore p) ++ " Fen: " ++ fen
 
 {-# INLINE qsDelta #-}
 qsDelta :: Game Int
