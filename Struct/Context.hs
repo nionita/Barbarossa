@@ -92,7 +92,8 @@ collectTimeParams (s, v) tp = lookApply s v tp [
 -- This is the variable context part (global mutable context)
 data Changing = Chg {
         working    :: Bool,             -- are we in tree search?
-        compThread :: Maybe ThreadId,   -- the search thread id
+        noThreads  :: Int,              -- number of search threads
+        compThread :: [ThreadId],       -- the search thread ids
         crtStatus  :: MyState,          -- current state
         realPly    :: Maybe Int,	-- real ply so far (if defined)
         forGui     :: Maybe InfoToGui,  -- info for gui
