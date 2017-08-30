@@ -6,6 +6,7 @@ import Control.Concurrent
 import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Data.Int
+import qualified Data.Map.Strict as Map
 import System.Time
 
 import Struct.Struct
@@ -93,7 +94,7 @@ collectTimeParams (s, v) tp = lookApply s v tp [
 data Changing = Chg {
         working    :: Bool,             -- are we in tree search?
         noThreads  :: Int,              -- number of search threads
-        compThread :: [ThreadId],       -- the search thread ids
+        compThread :: Map.Map ThreadId Int,       -- the search thread ids
         crtStatus  :: MyState,          -- current state
         realPly    :: Maybe Int,	-- real ply so far (if defined)
         forGui     :: Maybe InfoToGui,  -- info for gui
@@ -122,16 +123,20 @@ modifyChanging f = do
 ctxLog :: LogLevel -> String -> CtxIO ()
 ctxLog lev mes = do
     ctx <- ask
-    when (lev >= loglev ctx) $ liftIO $ logging (logger ctx) (startSecond ctx) (levToPrf lev) mes
+    when (lev >= loglev ctx) $ do
+        chg <- readChanging
+        myTid <- liftIO myThreadId
+        let tid = maybe 0 id $ Map.lookup myTid $ compThread chg
+        liftIO $ logging (logger ctx) (startSecond ctx) tid (levToPrf lev) mes
 
 startSecond :: Context -> Integer
 startSecond ctx = s
     where TOD s _ = strttm ctx
 
-logging :: Chan String -> Integer -> String -> String -> IO ()
-logging lchan refs prf mes = do
+logging :: Chan String -> Integer -> Int -> String -> String -> IO ()
+logging lchan refs tid prf mes = do
     cms <- currMilli refs
-    writeChan lchan $ show cms ++ " [" ++ prf ++ "]: " ++ mes
+    writeChan lchan $ show cms ++ " [" ++ prf ++ "][T" ++ show tid ++ "]: " ++ mes
 
 -- Current time in ms since program start
 currMilli :: Integer -> IO Int
@@ -141,12 +146,12 @@ currMilli ref = do
 
 -- Communicate the best path so far
 informGui :: Int -> Int -> Int64 -> [Move] -> CtxIO ()
-informGui sc tief nds path = do
+informGui sc depth nds path = do
     ctx <- ask
     chg <- readChanging
     currt <- lift $ currMilli $ startSecond ctx
     let gi = Info {
-                infoDepth = tief,
+                infoDepth = depth,
                 infoTime = currt - srchStrtMs chg,
                 infoNodes = nds,
                 infoPv = path,
@@ -163,9 +168,9 @@ informGuiCM m cm = do
 
 -- Communicate the current depth
 informGuiDepth :: Int -> CtxIO ()
-informGuiDepth tief = do
+informGuiDepth depth = do
     ctx <- ask
-    let gi = InfoD { infoDepth = tief }
+    let gi = InfoD { infoDepth = depth }
     liftIO $ writeChan (inform ctx) gi
 
 informGuiString :: String -> CtxIO ()

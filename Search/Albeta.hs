@@ -124,9 +124,9 @@ data Killer = NoKiller | OneKiller !Move | TwoKillers !Move !Move deriving (Eq, 
 data PVReadOnly
     = PVReadOnly {
           draft  :: !Int,	-- root search depth
-          albest :: !Bool,	-- always choose the best move (i.e. first)
-          timeli :: !Bool,	-- do we have time limit?
-          abmili :: !Int	-- abort when after this milisecond
+          abmili :: !Int,	-- abort when after this milisecond
+          ismain :: !Bool,	-- is this the main search thread?
+          timeli :: !Bool	-- do we have time limit?
     } deriving Show
 
 data PVState
@@ -226,7 +226,7 @@ resetNSt :: Path -> Killer -> NodeState -> NodeState
 resetNSt !sc !kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill }
 
 pvro00 :: PVReadOnly
-pvro00 = PVReadOnly { draft = 0, albest = False, timeli = False, abmili = 0 }
+pvro00 = PVReadOnly { draft = 0, abmili = 0, ismain = False, timeli = False }
 
 alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int)
 alphaBeta abc = do
@@ -236,7 +236,7 @@ alphaBeta abc = do
         searchReduced a b = pvRootSearch a      b     d lpv rmvs True
         -- We have lastpath as a parameter here (can change after fail low or high)
         searchFull    lp  = pvRootSearch alpha0 beta0 d lp  rmvs False
-        pvro = PVReadOnly { draft = d, albest = best abc,
+        pvro = PVReadOnly { draft = d, ismain = mainThrd abc,
                             timeli = stoptime abc /= 0, abmili = stoptime abc }
         pvs0 = pvsInit { ronly = pvro }	-- :: PVState
     r <- if useAspirWin
@@ -301,7 +301,9 @@ pvRootSearch a b d lastpath rmvs aspir = do
     -- Root is pv node, cannot fail low, except when aspiration fails!
     if sc <= a	-- failed low or timeout when searching PV
          then do
-           unless (abrt || aspir) $ lift $ informStr "Failed low at root??"
+           unless (abrt || aspir) $ do
+               mn <- gets $ ismain . ronly
+               when mn $ lift $ informStr "Failed low at root??"
            return (a, emptySeq, edges, rbmch nstf)	-- just to permit aspiration to retry
          else do
             -- lift $ mapM_ (\m -> informStr $ "Root move: " ++ show m) (pvsl nstf)
@@ -333,7 +335,8 @@ pvInnerRoot b d nst e = timeToAbort (True, nst) $ do
          if legalResult exd
             then do
                 old <- get
-                when (draft (ronly old) >= depthForCM) $ lift $ informCM e $ movno nst
+                when (ismain (ronly old) && draft (ronly old) >= depthForCM)
+                    $ lift $ informCM e $ movno nst
                 newNode d
                 modify $ \s -> s { absdp = absdp s + 1 }
                 s <- case exd of
@@ -420,7 +423,7 @@ checkFailOrPVRoot xstats b d e s nst = whenAbort (True, nst) $ do
                             else do	-- means: > a && < b
                               let sc = pathScore s
                                   pa = unseq $ pathMoves s
-                              informPV sc (draft $ ronly sst) pa
+                              when (ismain $ ronly sst) $ informPV sc (draft $ ronly sst) pa
                               lift $ do
                                   let typ = 2	-- best move so far (score is exact)
                                   ttStore de typ sc e nodes'
@@ -1094,7 +1097,7 @@ timeToAbort a act = do
                           !abrt <- lift $ isTimeout $ abmili ro
                           if abrt
                              then do
-                                 lift $ informStr "Albeta: search abort!"
+                                 when (ismain ro) $ lift $ informStr "Albeta: search abort!"
                                  put s { abort = True }
                                  return a
                              else act

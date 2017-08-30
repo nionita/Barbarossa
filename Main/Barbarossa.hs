@@ -12,6 +12,7 @@ import Data.Array.Unboxed
 import Data.Foldable (foldrM)
 import Data.List (intersperse)
 import Data.Maybe
+import qualified Data.Map.Strict as Map
 import Data.Typeable
 import System.Console.GetOpt
 import System.Environment (getArgs)
@@ -99,14 +100,14 @@ initContext opts = do
     lchan <- newChan
     wchan  <- newChan
     ichan <- newChan
-    ha <- newCache 32	-- it will take the minimum number of entries (temporyry: 32)
+    ha <- newCache 1	-- it will take the minimum number of entries
     hi <- newHist
     let paramList = stringToParams $ concat $ intersperse "," $ optParams opts
     (parc, evs) <- makeEvalState (optConfFile opts) paramList progVersion progVerSuff
     let chg = Chg {
             working = False,
             noThreads = 1,
-            compThread = [],
+            compThread = Map.empty,
             crtStatus = posToState initPos ha hi evs,
             realPly = Nothing,
             forGui = Nothing,
@@ -206,7 +207,7 @@ theWriter inter wchan lchan mustlog refs = forever $ do
     when inter $ do	-- we write only in intercative mode
         putStrLn s
         hFlush stdout
-    when mustlog $ logging lchan refs "Output" s
+    when mustlog $ logging lchan refs 0 "Output" s
 
 -- The informer is getting structured data from the main searching thread
 -- and formats it to a string which is sent to the writer
@@ -304,8 +305,7 @@ setOptionHash sval =
         [(val, "")] -> do
             chg <- readChanging
             let st = crtStatus chg
-            -- ha <- liftIO $ newCache val
-            ha <- liftIO $ newCache $ min val 32	-- temporary: 32
+            ha <- liftIO $ newCache val
             modifyChanging $ \c -> c { crtStatus = st { hash = ha }}
             ctxLog LogInfo $ "Cache was set on " ++ sval ++ " MB"
         _           -> ctxLog LogError $ "GUI: wrong number of MB for option Hash: " ++ sval
@@ -480,7 +480,7 @@ startWorking tim tpm mtg dpt rept = do
     chg <- readChanging
     let nt = noThreads chg
     tids <- forM [1..nt] $ \tnr -> newThread (startSearchThread tnr chg tim tpm mtg dpt rept)
-    modifyChanging (\c -> c { compThread = tids })
+    modifyChanging (\c -> c { compThread = Map.fromList $ zip tids [1..nt] })
     return ()
 
 -- We use modifyChanging in at least 2 threads: in the reader and
@@ -491,10 +491,9 @@ startSearchThread :: Int -> Changing -> Int -> Int -> Int -> Int -> Int -> CtxIO
 startSearchThread tnr chg tim tpm mtg dpt rept = do
     crtchg <- if tnr == 1
                  then return chg	-- first thread works with original status
-                 else do	-- the helper threads copy their own status (in 1st step including hash)
-                     ha <- liftIO $ newCache 32	-- this is temporary, so choose fix cache size
+                 else do	-- the helper threads copy their own status (except hash)
                      hi <- liftIO $ newHist
-                     return $ chg { crtStatus = (crtStatus chg) { hash = ha, hist = hi } }
+                     return $ chg { crtStatus = (crtStatus chg) { hist = hi } }
     ctxCatch (void $ searchTheTree tnr crtchg 1 dpt 0 tim tpm mtg rept Nothing [] [])
         $ \e -> do
             -- This will not work in step 1
@@ -518,70 +517,79 @@ ctxCatch a f = do
             (\e -> runReaderT (f e) ctx)
 
 -- Search with the given depth
-searchTheTree :: Int -> Changing -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Maybe Int -> [Move] -> [Move] -> CtxIO Int
+-- The main thread takes care of time issues
+-- The helper threads just work as long as the main thread works
+searchTheTree :: Int -> Changing -> Int -> Int -> Int -> Int -> Int -> Int -> Int
+              -> Maybe Int -> [Move] -> [Move] -> CtxIO Int
 searchTheTree tnr chg draft mdraft timx tim tpm mtg rept lsc lpv rmvs = do
+    let ismain = tnr == 1
     ctxLog LogInfo $ "searchTheTree starts draft " ++ show draft
-    ctx <- ask
     -- chg <- readChanging
-    ctxLog LogInfo $ "Time = " ++ show tim ++ " Timx = " ++ show timx
-    (path, sc, rmvsf, timint, stfin, ch) <- bestMoveCont draft timx True (crtStatus chg) lsc lpv rmvs
-    let totch = totBmCh chg + ch
-        ldCh | ch > 0    = draft
-             | otherwise = lastChDr chg
-    when (ch > 0) $
-        ctxLog LogInfo $ "Changes in draft " ++ show draft ++ ": " ++ show ch ++ " / " ++ show totch
-    -- modifyChanging $ \c -> c { crtStatus = stfin, totBmCh = totch, lastChDr = ldCh,
-    --                            forGui = Just $ InfoB { infoPv = path, infoScore = sc }}
-    let chg' = chg { crtStatus = stfin, totBmCh = totch, lastChDr = ldCh,
-                     forGui = Just $ InfoB { infoPv = path, infoScore = sc }}
-    currms <- lift $ currMilli (startSecond ctx)
-    let (ms, mx) = compTime tim tpm mtg sc rept
-        exte = maybe False id $ do
-                  los <- lsc
-                  gls <- lmvScore chg
-                  return $ sc < los - extendScoreMargin
-                        || sc < gls - extendScoreMargin
-        reds = case lmvScore chg of
-                   Just osc -> timeProlongation osc sc
-                   _        -> 1
-        redp  = reduceBegin $ realPly chg
-        start = srchStrtMs chg
-        used  = currms - start
-        over  = mx > 0 && used >= mx
-        onlyone = ms > 0 && length rmvsf == 1 && draft >= 4	-- only in normal play
-        draftmax = draft >= mdraft	--  or maximal draft
-        mes = "Draft " ++ show draft ++ " Score " ++ show sc ++ " path " ++ show path
-                  ++ " ms " ++ show ms ++ " used " ++ show used
-    ctxLog LogInfo mes
-    ctxLog LogInfo $ "Time factors (reds/redp): " ++ show reds ++ " / " ++ show redp
-    (justStop, mxr) <- if mx > 0
-                          then stopByChance (reds * redp) exte ms used mx draft ch totch ldCh
-                          else return (False, 0)
-    ctxLog LogInfo $ "compTime (ms/mx/mxr): " ++ show ms ++ " / " ++ show mx ++ " / " ++ show mxr
-    if draftmax || timint || over || onlyone || justStop
-       then do
-           ctxLog LogInfo $ "searchTheTree terminated in first if: "
-               ++ show draftmax ++ "/"
-               ++ show timint ++ "/"
-               ++ show over ++ "/"
-               ++ show onlyone ++ "/"
-               ++ show justStop
-           -- Store last score for this move
-           modifyChanging $ \c -> c { lmvScore = Just sc }
-           giveBestMove path
-           totalStatistics tnr chg'
-           return sc
-       else do
+    when ismain $ ctxLog LogInfo $ "Time = " ++ show tim ++ " Timx = " ++ show timx
+    (path, sc, rmvsf, timint, stfin, ch)
+        <- bestMoveCont draft timx ismain (crtStatus chg) lsc lpv rmvs
+    let start = srchStrtMs chg
+    esc <- if ismain
+              then do
+                  modifyChanging $ \c -> c { forGui = Just $ InfoB { infoPv = path, infoScore = sc }}
+                  let totch = totBmCh chg + ch
+                      ldCh | ch > 0    = draft
+                           | otherwise = lastChDr chg
+                  when (ch > 0) $
+                      ctxLog LogInfo $ "Changes in draft " ++ show draft ++ ": " ++ show ch ++ " / " ++ show totch
+                  sse <- asks startSecond
+                  currms <- lift $ currMilli sse
+                  let (ms, mx) = compTime tim tpm mtg sc rept
+                      exte = maybe False id $ do
+                                los <- lsc
+                                gls <- lmvScore chg
+                                return $ sc < los - extendScoreMargin
+                                      || sc < gls - extendScoreMargin
+                      reds = case lmvScore chg of
+                                 Just osc -> timeProlongation osc sc
+                                 _        -> 1
+                      redp  = reduceBegin $ realPly chg
+                      used  = currms - start
+                      over  = mx > 0 && used >= mx
+                      onlyone = ms > 0 && length rmvsf == 1 && draft >= 4	-- only in normal play
+                      draftmax = draft >= mdraft	--  or maximal draft
+                      mes = "Draft " ++ show draft ++ " Score " ++ show sc ++ " path " ++ show path
+                                ++ " ms " ++ show ms ++ " used " ++ show used
+                  ctxLog LogInfo mes
+                  ctxLog LogInfo $ "Time factors (reds/redp): " ++ show reds ++ " / " ++ show redp
+                  (justStop, mxr) <- if mx > 0
+                                        then stopByChance (reds * redp) exte ms used mx draft ch totch ldCh
+                                        else return (False, 0)
+                  ctxLog LogInfo $ "compTime (ms/mx/mxr): " ++ show ms ++ " / " ++ show mx ++ " / " ++ show mxr
+                  if draftmax || timint || over || onlyone || justStop
+                     then do
+                         ctxLog LogInfo $ "searchTheTree terminated in first if: "
+                             ++ show draftmax ++ "/"
+                             ++ show timint ++ "/"
+                             ++ show over ++ "/"
+                             ++ show onlyone ++ "/"
+                             ++ show justStop
+                         -- Store last score for this move
+                         modifyChanging $ \c -> c { lmvScore = Just sc }
+                         giveBestMove path
+                         totalStatistics tnr stfin
+                         chg' <- readChanging
+                         killSearchThreads chg'
+                         return $ Right sc
+                     else return $ Left (chg { crtStatus = stfin, totBmCh = totch, lastChDr = ldCh }, mx, mxr)
+              else return $ Left (chg { crtStatus = stfin }, 0, 0)
+    case esc of
+        Right sc' -> return sc'
+        Left (chg', mx, mxr) -> do
            ctxLog LogInfo $ "searchTheTree finishes draft " ++ show draft
-           -- This will not work in step 1
-           -- chg' <- readChanging
-           if working chg'
-               then if mx == 0	-- no time constraint (take original maximum)
+           wrk <- working <$> readChanging
+           if wrk
+               then if not ismain || mx == 0	-- no time constraint (take original maximum)
                        then searchTheTree tnr chg' (draft + 1) mdraft 0             tim tpm mtg rept (Just sc) path rmvsf
                        else searchTheTree tnr chg' (draft + 1) mdraft (start + mxr) tim tpm mtg rept (Just sc) path rmvsf
                else do
-                   ctxLog DebugUci "in searchTheTree: not working"
-                   giveBestMove path -- was stopped
+                   ctxLog LogInfo $ "In searchTheTree: not working"
+                   when ismain $ giveBestMove path -- was stopped
                    return sc
 
 -- The time management changes like this:
@@ -666,16 +674,15 @@ timeProlongation osc sc
 giveBestMove :: [Move] -> CtxIO ()
 giveBestMove mvs = do
     -- ctxLog "Info" $ "The moves: " ++ show mvs
-    modifyChanging $ \c -> c { working = False, compThread = [], forGui = Nothing }
+    modifyChanging $ \c -> c { working = False, forGui = Nothing }
     if null mvs
         then answer $ infos "empty pv"
         else answer $ bestMove (head mvs) Nothing
 
-totalStatistics :: Int -> Changing -> CtxIO ()
-totalStatistics tnr chg = do
-    let mst = mstats $ crtStatus chg
+totalStatistics :: Int -> MyState -> CtxIO ()
+totalStatistics tnr stf = do
     ctxLog LogInfo $ "Search statistics thread " ++ show tnr ++ ":"
-    mapM_ (ctxLog LogInfo) $ formatStats mst
+    mapM_ (ctxLog LogInfo) $ formatStats $ mstats stf
 
 beforeReadLoop :: CtxIO ()
 beforeReadLoop = do
@@ -698,12 +705,15 @@ doStop :: CtxIO ()
 doStop = do
     chg <- readChanging
     when (working chg) $ do
-        modifyChanging $ \c -> c { working = False }
         case forGui chg of
             Just ifg -> giveBestMove $ infoPv ifg
-            Nothing  -> return ()
-        liftIO $ forM_ (compThread chg) $ \tid -> killThread tid
-        modifyChanging $ \c -> c { compThread = [] }
+            Nothing  -> modifyChanging $ \c -> c { working = False }
+    killSearchThreads chg
+
+killSearchThreads :: Changing -> CtxIO ()
+killSearchThreads chg = liftIO $ do
+    myTid <- myThreadId
+    forM_ (Map.keys $ compThread chg) $ \tid -> when (tid /= myTid) $ killThread tid
 
 doPonderhit :: CtxIO ()
 doPonderhit = notImplemented "doPonderhit"
