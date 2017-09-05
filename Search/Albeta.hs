@@ -928,7 +928,7 @@ moreLMR = do
 lessLMR :: Int -> Search ()
 lessLMR !d = do
     s <- get
-    let !i = lmrrs s - (1 `unsafeShiftL` d) * (lmrDec ! (lmrlv s))
+    let !i = lmrrs s - d * d * (lmrDec ! (lmrlv s))
     if i < 0
        then if lmrlv s <= lmrLevMin
                then put s { lmrrs = i + lmrLimit }
