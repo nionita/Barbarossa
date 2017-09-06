@@ -559,7 +559,7 @@ spaceBlack !mpawns !matts !ypatts !yatts = sv
 spaceVals :: UArray Int Int
 spaceVals = listArray (0, 24) $ map f [1..25]
     where f x = round $ spf * (sqrt x - 1)
-          spf = 200 :: Double
+          spf = 270 :: Double
 
 -------- Attacks to adverse squares ----------
 data Advers = Advers
