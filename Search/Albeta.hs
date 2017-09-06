@@ -7,7 +7,6 @@ module Search.Albeta (
 
 import Control.Monad
 import Control.Monad.State hiding (gets, modify)
-import Data.Array.Base (unsafeAt)
 import Data.Array.Unboxed
 import Data.Bits
 import Data.Int
@@ -603,9 +602,10 @@ nullMoveFailsHigh pos nst b d
                newNode d
                xchangeFutil
                let nst' = deepNSt nst
-               val <- if v > b + bigDiff
-                         then fmap pnextlev $ pvZeroW nst' (-nma) d2 True
-                         else fmap pnextlev $ pvZeroW nst' (-nma) d1 True
+                   -- d1   = max 0 $ d - 4 - ((v + cpShift - b) `unsafeShiftR` 9)
+                   vb   = v - b
+                   d1   = max 0 $ d - 4 - ((vb * (cpA + cpB * vb)) `unsafeShiftR` 20)
+               val <- fmap pnextlev $ pvZeroW nst' (-nma) d1 True
                lift undoMove	-- undo null move
                xchangeFutil
                if pathScore val >= nmb
@@ -619,17 +619,11 @@ nullMoveFailsHigh pos nst b d
                        if nullSeq (pathMoves val)
                           then return $ NullMoveLow
                           else return $ NullMoveThreat val
-    where d1  = nmDArr1 `unsafeAt` d	-- here we have always d >= 1
-          d2  = nmDArr2 `unsafeAt` d	-- this is for bigger differences
-          nmb = if nulSubAct then b - (nulSubmrg * scoreGrain) else b
+    where nmb = if nulSubAct then b - (nulSubmrg * scoreGrain) else b
           nma = nmb - (nulMargin * scoreGrain)
-          bigDiff = 500	-- if we are very far ahead
-
--- This is now more than reduction 3 for depth over 9
-nmDArr1, nmDArr2 :: UArray Int Int
-------------------------------0  1  2  3  4  5  6  7  8  9 10 11 12 13  14  15  16  17  18  19  20
-nmDArr1 = listArray (0, 20) [ 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 15 ]
-nmDArr2 = listArray (0, 20) [ 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8,  9, 10, 11, 12, 13, 14, 14 ]
+          -- cpShift = 128
+          cpA = 1000
+          cpB = 2
 
 pvSLoop :: Int -> Int -> Bool -> NodeState -> Alt Move -> Search NodeState
 pvSLoop b d p = go
