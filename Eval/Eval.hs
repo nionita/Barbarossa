@@ -795,41 +795,51 @@ outpost :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 outpost p ew mide
     | nb == 0   = mide
     | moving p == White
-        = let (mow, mos) = outpostWhite (yoPAttacs p) (myPAttacs p) (me p .&. nb)
-              (yow, yos) = outpostBlack (myPAttacs p) (yoPAttacs p) (yo p .&. nb)
+        = let (mow, mos) = outpostWhite (yoPAttacs p) (myPAttacs p) (me p .&. nb) mnba (me p)
+              (yow, yos) = outpostBlack (myPAttacs p) (yoPAttacs p) (yo p .&. nb) ynba (yo p)
               !w  = mow  - yow
               !s  = mos  - yos
           in mad (mad mide (ewOutpostW ew) w) (ewOutpostS ew) s
     | otherwise
-        = let (mow, mos) = outpostBlack (yoPAttacs p) (myPAttacs p) (me p .&. nb)
-              (yow, yos) = outpostWhite (myPAttacs p) (yoPAttacs p) (yo p .&. nb)
+        = let (mow, mos) = outpostBlack (yoPAttacs p) (myPAttacs p) (me p .&. nb) mnba (me p)
+              (yow, yos) = outpostWhite (myPAttacs p) (yoPAttacs p) (yo p .&. nb) ynba (yo p)
               !w  = mow  - yow
               !s  = mos  - yos
           in mad (mad mide (ewOutpostW ew) w) (ewOutpostS ew) s
     where !nb = knights p .|. bishops p
+          !mnba = myNAttacs p .|. myBAttacs p
+          !ynba = yoNAttacs p .|. yoBAttacs p
 
-outpostWhite :: BBoard -> BBoard -> BBoard -> (Int, Int)
-outpostWhite !ypa !mpa !mmi
+outpostWhite :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> (Int, Int)
+outpostWhite !ypa !mpa !mmi !mma !mpi
+    | mmi  == 0 = (0, 0)
     | outp == 0 = (0, 0)
-    | otherwise = theOutposts outp mpa mmi
-    where outpa = (fileC .|. fileD .|. fileE .|. fileF) .&. (row4 .|. row5 .|. row6)
-          !apa  = ypa .|. (ypa `unsafeShiftR` 8) .|. (ypa `unsafeShiftR` 16)
-          !outp = outpa `less` apa
+    | otherwise = theOutposts outp mpa mmi mma mpi
+    -- where outpa = (fileC .|. fileD .|. fileE .|. fileF) .&. (row4 .|. row5 .|. row6)
+    where outpa = row4 .|. row5 .|. row6
+          apa  = ypa .|. (ypa `unsafeShiftR` 8) .|. (ypa `unsafeShiftR` 16)
+          outp = outpa `less` apa
 
-outpostBlack :: BBoard -> BBoard -> BBoard -> (Int, Int)
-outpostBlack !ypa !mpa !mmi
+outpostBlack :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> (Int, Int)
+outpostBlack !ypa !mpa !mmi !mma !mpi
+    | mmi  == 0 = (0, 0)
     | outp == 0 = (0, 0)
-    | otherwise = theOutposts outp mpa mmi
-    where outpa = (fileC .|. fileD .|. fileE .|. fileF) .&. (row4 .|. row5 .|. row3)
-          !apa  = ypa .|. (ypa `unsafeShiftL` 8) .|. (ypa `unsafeShiftL` 16)
-          !outp = outpa `less` apa
+    | otherwise = theOutposts outp mpa mmi mma mpi
+    -- where outpa = (fileC .|. fileD .|. fileE .|. fileF) .&. (row4 .|. row5 .|. row3)
+    where outpa = row4 .|. row5 .|. row3
+          apa  = ypa .|. (ypa `unsafeShiftL` 8) .|. (ypa `unsafeShiftL` 16)
+          outp = outpa `less` apa
 
-theOutposts :: BBoard -> BBoard -> BBoard -> (Int, Int)
-theOutposts !outp !mpa !mmi = (w, s)
+theOutposts :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> (Int, Int)
+theOutposts !outp !mpa !mmi !mma !mpi = (wt, st)
     where !outs = outp .&. mpa		-- strong outpost positions
           !outw = outp `less` outs	-- weak outpost positions
-          !w  = popCount $ outw .&. mmi	-- weak outposts
           !s  = popCount $ outs .&. mmi	-- strong outposts
+          !w  = popCount $ outw .&. mmi	-- weak outposts
+          !sa = popCount $ (outs .&. mma) `less` mpi	-- strong outposts moves
+          !wa = popCount $ (outw .&. mma) `less` mpi	-- weak outposts moves
+          !st = 2 * s + sa
+          !wt = 2 * w + wa
 
 ------ Blocked pawns ------
 data PaBlo = PaBlo
