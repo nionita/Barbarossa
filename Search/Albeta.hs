@@ -1048,7 +1048,7 @@ pvQLoop b c = go
 pvQInnerLoop :: Int -> Int -> Int -> Move -> Search (Bool, Int)
 pvQInnerLoop !b c !a e = timeToAbort (True, b) $ do
          r <- lift $ doQSMove e
-         if legalResult r
+         if r
             then do
                 newNodeQS
                 !sc <- negate <$> pvQSearch (-b) (-a) c

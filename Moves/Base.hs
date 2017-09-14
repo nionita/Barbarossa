@@ -70,7 +70,7 @@ posToState p c h e = MyState {
                        mstats = ssts0,
                        evalst = e
                    }
-    where stsc = evalState (posEval p) e
+    where stsc = posEval p e
           p'' = p { staticScore = stsc }
 
 posNewSearch :: MyState -> MyState
@@ -182,7 +182,7 @@ doMove m = do
         il  = occup pc `uBitClear` fromSquare m
         -- Capturing one king?
         kc  = kings pc `uBitSet` toSquare m
-        sts = evalState (posEval p) (evalst s)
+        sts = posEval p (evalst s)
         p   = doFromToMove m pc { staticScore = sts }
     if (il || kc)
        then do
@@ -207,23 +207,23 @@ doMove m = do
 -- Here we do only a restricted check for illegal moves
 -- It does not check for remis, so it can't return Final
 -- It does not check for extensions a.s.o.
-doQSMove :: Move -> Game DoResult
+doQSMove :: Move -> Game Bool
 doQSMove m = do
     s <- get
     let (pc:_) = stack s	-- we never saw an empty stack error until now
-        sts = evalState (posEval p) (evalst s)
+        sts = posEval p (evalst s)
         p   = doFromToMove m pc { staticScore = sts }
     if not $ checkOk p
-       then return Illegal
+       then return False
        else do
            put s { stack = p : stack s }
-           return $ Exten 0 False
+           return True
 
 doNullMove :: Game ()
 doNullMove = do
     s <- get
     let (pc:_) = stack s	-- we never saw an empty stack error until now
-        sts = evalState (posEval p) (evalst s)
+        sts = posEval p (evalst s)
         p   = reverseMoving pc { staticScore = sts }
     put s { stack = p : stack s }
 
