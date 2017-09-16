@@ -150,6 +150,7 @@ data NodeState
           nxtnt  :: !NodeType,	-- expected child node type
           movno  :: !Int,	-- current move number
           spcno  :: !Int,	-- last move number of a special move
+          pruno  :: !Bool,	-- can prune moves? (only after marker)
           albe   :: !Bool,	-- in alpha/beta search (for small depths)
           rbmch  :: !Int,	-- number of changes in root best move
           cursc  :: Path,	-- current alpha value (now plus path & depth)
@@ -218,9 +219,10 @@ pvsInit = PVState { ronly = pvro00, stats = ssts0, absdp = 0, usedext = 0, abort
                     lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
 nst0 :: NodeState
 nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore "Zero" 0, rbmch = -1,
-             movno = 1, spcno = 1000, killer = NoKiller, albe = False, cpos = initPos, pvsl = [] }
+             movno = 1, spcno = 1, pruno = False, killer = NoKiller,
              -- we start with spcno = 1 as we consider the first move as special
              -- to avoid in any way reducing the tt move
+             albe = False, cpos = initPos, pvsl = [] }
 
 resetStats :: Search SStats
 resetStats = do
@@ -229,7 +231,7 @@ resetStats = do
     return $ stats st
 
 resetNSt :: Path -> Killer -> NodeState -> NodeState
-resetNSt !sc !kill nst = nst { cursc = sc, movno = 1, spcno = 1000, killer = kill }
+resetNSt !sc !kill nst = nst { cursc = sc, movno = 1, spcno = 1, pruno = False, killer = kill }
 
 pvro00 :: PVReadOnly
 pvro00 = PVReadOnly { draft = 0, albest = False, timeli = False, abmili = 0 }
@@ -665,13 +667,11 @@ pvInnerLoop :: Int 	-- current beta
             -> Search (Bool, NodeState)
 pvInnerLoop b d prune nst e = timeToAbort (True, nst) $
     if isMarker e
-       then return (False, nst)
+       then return (False, setPrune nst)
        else do
-         -- What about TT & killer moves? We should prune only after the marker
-         if prune && movno nst > 1 && canPruneMove (cpos nst) e
-            then do
-                let !nst1 = nst { movno = movno nst + 1 }
-                return (False, nst1)
+         -- We prune only after the marker
+         if prune && pruno nst && movno nst > 1 && canPruneMove (cpos nst) e
+            then return (False, nst { movno = movno nst + 1 })
             else do
                 old <- get
                 exd <- lift $ doMove e	-- do the move
@@ -706,13 +706,11 @@ pvInnerLoopZ :: Int 	-- current beta
             -> Search (Bool, NodeState)
 pvInnerLoopZ b d prune nst e redu = timeToAbort (True, nst) $
     if isMarker e
-       then return (False, resetSpc nst)
+       then return (False, setPrune nst)
        else do
-         -- What about TT & killer moves? We should prune only after the marker
-         if prune && canPruneMove (cpos nst) e
-            then do
-                let !nst1 = nst { movno = movno nst + 1 }
-                return (False, nst1)
+         -- We prune only after the marker
+         if prune && pruno nst && canPruneMove (cpos nst) e
+            then return (False, nst { movno = movno nst + 1 })
             else do
                 old <- get
                 exd <- lift $ doMove e	-- do the move
@@ -723,11 +721,13 @@ pvInnerLoopZ b d prune nst e redu = timeToAbort (True, nst) $
                        modify $ \s -> s { absdp = absdp s + 1 }
                        s <- case exd of
                          Exten exd' spc -> do
+                             let nst' | spc       = deepNSt $ resetSpc nst
+                                      | otherwise = deepNSt nst
                              when (not spc && exd' == 0) $ do
                                  sdiff <- lift scoreDiff
                                  updateFutil sdiff	-- e
                              xchangeFutil
-                             s <- pvInnerLoopExtenZ b d spc exd' (deepNSt nst) redu
+                             s <- pvInnerLoopExtenZ b d spc exd' nst' redu
                              xchangeFutil
                              return s
                          Final sco -> return $! pathFromScore "Final" (-sco)
@@ -740,6 +740,9 @@ pvInnerLoopZ b d prune nst e redu = timeToAbort (True, nst) $
 
 resetSpc :: NodeState -> NodeState
 resetSpc nst = nst { spcno = movno nst }
+
+setPrune :: NodeState -> NodeState
+setPrune nst = nst { pruno = True }
 
 reserveExtension :: Int -> Int -> Search Int
 reserveExtension !uex !exd
@@ -912,8 +915,8 @@ genAndSort nst mttmv a b d = do
 {-# INLINE reduceLmr #-}
 reduceLmr :: Bool -> Bool -> Int -> Int -> Int -> Int
 reduceLmr nearmatea spec d lmrlev w
-    | spec || d <= 1 || nearmatea || w < 0 = d
-    | otherwise                            = max 1 $ d - lmrArr!(lmrlev, w)
+    | spec || d <= 1 || nearmatea = d
+    | otherwise                   = max 1 $ d - lmrArr!(lmrlev, w)
 
 -- Adjust the LMR related parameters in the state
 moreLMR :: Bool -> Int -> Search ()
