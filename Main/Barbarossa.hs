@@ -519,15 +519,19 @@ startSearchThread tnr chg tim tpm mtg dpt rept = do
                      return $ chg { crtStatus = (crtStatus chg) { hist = hi } }
     ctxCatch (void $ searchTheTree tnr crtchg 1 dpt 0 tim tpm mtg rept Nothing [] [])
         $ \e -> do
-            -- This will not work in step 1
-            chg' <- readChanging
-            let mes = "searchTheTree terminated by exception: " ++ show e
-            -- answer $ infos mes
-            case forGui chg' of
-                Just ifg -> giveBestMove $ infoPv ifg
-                Nothing  -> return ()
-            ctxLog LogError mes
-            lift $ collectError $ SomeException (SearchException mes)
+            when (tnr == 1) $ do
+                chg' <- readChanging
+                case forGui chg' of
+                    Just ifg -> giveBestMove $ infoPv ifg
+                    Nothing  -> return ()
+            bad <- case fromException e of
+                       Just ThreadKilled -> return False
+                       Just _            -> return True
+                       Nothing           -> return True
+            when bad $ do
+                let mes = "searchTheTree terminated by exception: " ++ show e
+                ctxLog LogError mes
+                lift $ collectError $ SomeException (SearchException mes)
 
 data SearchException = SearchException String deriving (Show, Typeable)
 
