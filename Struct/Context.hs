@@ -26,6 +26,7 @@ data InfoToGui = Info {
                     infoScore :: Int
                 }
                 | InfoD { infoDepth :: Int }
+                | InfoN { infoNodes :: Int64 }
                 | InfoCM {
                     infoMove :: Move,
                     infoCurMove :: Int
@@ -50,6 +51,7 @@ data Context = Ctx {
         logger :: Chan String,          -- the logger channel
         writer :: Chan String,          -- the writer channel
         inform :: Chan InfoToGui,       -- the gui informer channel
+        nodsta :: Chan InfoToGui,	-- the node statistics channel
         strttm :: ClockTime,            -- the program start time
         loglev :: LogLevel,             -- loglevel, only higher messages will be logged
         evpid  :: String,		-- identifier for the eval parameter config
@@ -145,6 +147,7 @@ currMilli ref = do
     return $ fromIntegral $ (s-ref)*1000 + ps `div` 1000000000
 
 -- Communicate the best path so far
+-- In multi threading take also the nodes of the other threads into consideration
 informGui :: Int -> Int -> Int64 -> [Move] -> CtxIO ()
 informGui sc depth nds path = do
     ctx <- ask
@@ -157,7 +160,13 @@ informGui sc depth nds path = do
                 infoPv = path,
                 infoScore = sc
              }
-    liftIO $ writeChan (inform ctx) gi
+    liftIO $ writeChan (nodsta ctx) gi
+
+informGuiNodes :: Int64 -> CtxIO ()
+informGuiNodes n = do
+    ctx <- ask
+    let gi = InfoN { infoNodes = n }
+    liftIO $ writeChan (nodsta ctx) gi
 
 -- Communicate the current move
 informGuiCM :: Move -> Int -> CtxIO ()

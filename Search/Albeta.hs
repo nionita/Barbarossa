@@ -423,7 +423,9 @@ checkFailOrPVRoot xstats b d e s nst = whenAbort (True, nst) $ do
                             else do	-- means: > a && < b
                               let sc = pathScore s
                                   pa = unseq $ pathMoves s
-                              when (ismain $ ronly sst) $ informPV sc (draft $ ronly sst) pa
+                              if ismain $ ronly sst
+                                 then informPV sc (draft $ ronly sst) pa
+                                 else informNs
                               lift $ do
                                   let typ = 2	-- best move so far (score is exact)
                                   ttStore de typ sc e nodes'
@@ -1215,3 +1217,10 @@ informPV s d es = do
     lift $ do
         n <- curNodes $ sNodes ss
         informCtx (BestMv s d n es)
+
+informNs :: Search ()
+informNs = do
+    ss <- gets stats
+    lift $ do
+        n <- curNodes $ sNodes ss
+        informCtx (Nodes n)

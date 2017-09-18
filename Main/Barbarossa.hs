@@ -10,6 +10,7 @@ import Control.Concurrent
 import Control.Exception
 import Data.Array.Unboxed
 import Data.Foldable (foldrM)
+import Data.Int
 import Data.List (intersperse)
 import Data.Maybe
 import qualified Data.Map.Strict as Map
@@ -98,8 +99,9 @@ initContext opts = do
     clktm <- getClockTime
     let llev = optLogging opts
     lchan <- newChan
-    wchan  <- newChan
+    wchan <- newChan
     ichan <- newChan
+    schan <- newChan
     ha <- newCache 1	-- it will take the minimum number of entries
     hi <- newHist
     let paramList = stringToParams $ concat $ intersperse "," $ optParams opts
@@ -120,6 +122,7 @@ initContext opts = do
             logger = lchan,
             writer = wchan,
             inform = ichan,
+            nodsta = schan,
             strttm = clktm,
             change = ctxVar,
             loglev = llev,
@@ -146,6 +149,7 @@ interMachine = do
     startLogger logFileName
     startWriter True
     startInformer
+    startStater
     beforeReadLoop
     ctxCatch theReader
         $ \e -> ctxLog LogError $ "Reader error: " ++ show e
@@ -222,14 +226,33 @@ theInformer :: Chan InfoToGui -> CtxIO ()
 theInformer ichan = forever $ do
     s <- liftIO $ readChan ichan
     chg <- readChanging
-    when (working chg) $ toGui s
+    when (working chg) $ case s of
+        InfoS s'   -> answer $ infos s'
+        InfoD _    -> answer $ formInfoDepth s
+        InfoCM _ _ -> answer $ formInfoCM s
+        InfoN _    -> return ()	-- this should no happen here
+        _          -> answer $ formInfo s
 
-toGui :: InfoToGui -> CtxIO ()
-toGui s = case s of
-            InfoS s'   -> answer $ infos s'
-            InfoD _    -> answer $ formInfoDepth s
-            InfoCM _ _ -> answer $ formInfoCM s
-            _          -> answer $ formInfo s
+-- There is a thread which reads only nodes statistics and best move information
+-- add them together and send them to the informer
+-- This is necessary in multi threading mode
+newtype StaterState = StaterState Int64
+
+startStater :: CtxIO ()
+startStater = do
+    ctx <- ask
+    void $ newThread (theStater (inform ctx) (nodsta ctx) (StaterState 0))
+    return ()
+
+theStater :: Chan InfoToGui -> Chan InfoToGui -> StaterState -> CtxIO ()
+theStater ichan schan a@(StaterState acc) = do
+    m <- liftIO $ readChan schan
+    case m of
+        Info d t n p s -> do
+            liftIO $ writeChan ichan $ Info d t (acc + n) p s
+            theStater ichan schan (StaterState 0)
+        InfoN n        -> theStater ichan schan $! StaterState $ acc + n
+        _              -> theStater ichan schan a
 
 -- The reader is executed by the main thread
 -- It reads commands from the GUI and interprets them
@@ -491,7 +514,7 @@ startSearchThread :: Int -> Changing -> Int -> Int -> Int -> Int -> Int -> CtxIO
 startSearchThread tnr chg tim tpm mtg dpt rept = do
     crtchg <- if tnr == 1
                  then return chg	-- first thread works with original status
-                 else do	-- the helper threads copy their own status (except hash)
+                 else do		-- the helper threads copy their own status (except hash)
                      hi <- liftIO $ newHist
                      return $ chg { crtStatus = (crtStatus chg) { hist = hi } }
     ctxCatch (void $ searchTheTree tnr crtchg 1 dpt 0 tim tpm mtg rept Nothing [] [])

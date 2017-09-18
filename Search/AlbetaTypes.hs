@@ -30,6 +30,7 @@ data Comm = LogMes String
           | BestMv Int Int Int64 [Move]
           | CurrMv Move Int
           | InfoStr String
+          | Nodes Int64
 
 -- Data type for search statistics:
 data SStats = SStats {

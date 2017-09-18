@@ -58,10 +58,6 @@ curNodes n = (n + ) <$> gets (sNodes . mstats)
 getPos :: Game MyPos
 getPos = gets (head . stack)
 
-{-# INLINE informCtx #-}
-informCtx :: Comm -> Game ()
-informCtx = lift . talkToContext
-
 posToState :: MyPos -> Cache -> History -> EvalState -> MyState
 posToState p c h e = MyState {
                        stack = [p''],
@@ -369,11 +365,16 @@ isTimeout msx = do
 showStack :: Int -> [MyPos] -> String
 showStack n = concatMap showMyPos . take n
 
+{-# INLINE informCtx #-}
+informCtx :: Comm -> Game ()
+informCtx = lift . talkToContext
+
 talkToContext :: Comm -> CtxIO ()
 talkToContext (LogMes s)       = ctxLog LogInfo s
 talkToContext (BestMv a b c d) = informGui a b c d
 talkToContext (CurrMv a b)     = informGuiCM a b
 talkToContext (InfoStr s)      = informGuiString s
+talkToContext (Nodes n)        = informGuiNodes n
 
 timeFromContext :: CtxIO Int
 timeFromContext = do
