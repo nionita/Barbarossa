@@ -86,7 +86,7 @@ gamePhase p = g
           rs = popCount $ rooks p
           bs = popCount $ bishops p
           ns = popCount $ knights p
-          !g = qs * 39 + rs * 20 + (bs + ns) * 12	-- opening: 254, end: 0
+          !g = qs * 40 + rs * 20 + (bs + ns) * 12	-- opening: 256, end: 0
 
 evalSideNoPawns :: MyPos -> EvalState -> Int
 evalSideNoPawns p !sti
@@ -760,8 +760,8 @@ passPawns !gph ep p !ew mide = mad mide (ewPassPawnLev ew) dpp
           !yopp = sum $ map (perPassedPawn gph ep p yoc) $ bbToSquares yppbb
           !dpp  = mypp - yopp
 
--- The value of the passed pawn depends answers to this questions:
--- - is it defended/attacked? by which pieces?
+-- The value of the passed pawn depends on the answers to this questions:
+-- - is it defended/attacked?
 -- - how many squares ahead are blocked by own/opponent pieces?
 -- - how many squares ahead are controlled by own/opponent pieces?
 -- - does it has a rook behind?
@@ -782,8 +782,6 @@ perPassedPawnOk !gph ep p c sq sqbb moi toi moia toia = val
     where (!way, !behind, !asq)
               | c == White = (shadowUp sqbb, shadowDown sqbb, sq+8)
               | otherwise  = (shadowDown sqbb, shadowUp sqbb, sq-8)
-          !mblo = popCount $ moi .&. way
-          !yblo = popCount $ toi .&. way
           !rookBehind = behind .&. (rooks p .|. queens p)
           !mebehind = rookBehind .&. moi /= 0
                    && rookBehind .&. toi == 0
@@ -791,13 +789,13 @@ perPassedPawnOk !gph ep p c sq sqbb moi toi moia toia = val
                    && rookBehind .&. toi /= 0
           !bbmyctrl | mebehind  = way
                     | otherwise = moia .&. way
-          !bbyoctrl | yobehind  = way `less` bbmyctrl
-                    | otherwise = toia .&. (way `less` bbmyctrl)
-          !bbfree   = way `less` (bbmyctrl .|. bbyoctrl)
-          !myctrl = popCount bbmyctrl
-          !yoctrl = popCount bbyoctrl
-          !free   = popCount bbfree
-          !x = myctrl + yoctrl + free
+          !bbyoctrl | yobehind  = way
+                    | otherwise = toia .&. way
+          !myctrl = max 2 $ popCount bbmyctrl
+          !yoctrl = max 2 $ popCount bbyoctrl
+          !mblo = popCount $ moi .&. way
+          !yblo = popCount $ toi .&. way
+          !x = popCount way
           a0 = 10
           b0 = -120
           c0 = 410

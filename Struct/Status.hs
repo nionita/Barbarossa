@@ -120,7 +120,7 @@ instance CollectParams EvalParams where
     type CollectFor EvalParams = EvalParams
     npColInit = EvalParams {
                     epMovingMid  = 156,		-- SGD with shift 0.8
-                    epMovingEnd  = 156,		-- with 5 M positions
+                    epMovingEnd  = 146,		-- with 5 M positions
                     epMaterMinor = 1,
                     epMaterRook  = 4,
                     epMaterQueen = 13,
@@ -131,8 +131,8 @@ instance CollectParams EvalParams where
                     epPassBlockO = 11,
                     epPassBlockA = 17,
                     epPassMin    = 30,
-                    epPassMyCtrl = 6,
-                    epPassYoCtrl = 7
+                    epPassMyCtrl = 10,
+                    epPassYoCtrl = 10
                 }
     npColParm = collectEvalParams
     npSetParm = id
