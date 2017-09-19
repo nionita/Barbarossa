@@ -15,7 +15,8 @@ module Moves.Base (
     draftStats,
     finNode, countRepetitions,
     showMyPos, logMes,
-    nearmate
+    nearmate,
+    moveKey, tkDeferMove, tkStartSearching, tkFinishedSearch
 ) where
 
 import Data.Bits
@@ -37,6 +38,7 @@ import Eval.BasicEval
 import Eval.Eval
 import Moves.ShowMe
 import Moves.History
+import Moves.CurSe
 import Moves.Notation
 
 {-# INLINE nearmate #-}
@@ -46,6 +48,9 @@ nearmate i = i >= mateScore - 255 || i <= -mateScore + 255
 -- Some options and parameters:
 printEvalInt :: Int64
 printEvalInt   = 2 `shiftL` 12 - 1	-- if /= 0: print eval info every so many nodes
+
+csMind :: Int	-- minimum depth to look in table
+csMind = 3	-- "currently searching"
 
 mateScore :: Int
 mateScore = 20000
@@ -58,10 +63,11 @@ curNodes n = (n + ) <$> gets (sNodes . mstats)
 getPos :: Game MyPos
 getPos = gets (head . stack)
 
-posToState :: MyPos -> Cache -> History -> EvalState -> MyState
-posToState p c h e = MyState {
+posToState :: MyPos -> Cache -> CurSe -> History -> EvalState -> MyState
+posToState p t c h e = MyState {
                        stack = [p''],
-                       hash = c,
+                       hash = t,
+                       curse = c,
                        hist = h,
                        mstats = ssts0,
                        evalst = e
@@ -364,6 +370,25 @@ isTimeout msx = do
 
 showStack :: Int -> [MyPos] -> String
 showStack n = concatMap showMyPos . take n
+
+moveKey :: MyPos -> Move -> ZKey
+moveKey pos (Move w) = zobkey pos `xor` (fromIntegral w * 1664525 + 1013094223)
+
+{-# INLINE withCorrectDepth #-}
+withCorrectDepth :: (CurSe -> ZKey -> IO a) -> a -> ZKey -> Int -> Game a
+withCorrectDepth _ a _    d | d < csMind = return a
+withCorrectDepth f _ zkey _ = do
+    c <- gets curse
+    liftIO $ f c zkey
+
+tkDeferMove :: ZKey -> Int -> Game Bool
+tkDeferMove = withCorrectDepth deferMove False
+
+tkStartSearching :: ZKey -> Int -> Game ()
+tkStartSearching = withCorrectDepth startSearching ()
+
+tkFinishedSearch :: ZKey -> Int -> Game ()
+tkFinishedSearch = withCorrectDepth finishedSearch ()
 
 {-# INLINE informCtx #-}
 informCtx :: Comm -> Game ()

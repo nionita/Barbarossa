@@ -13,12 +13,14 @@ module Struct.Status (
 import Struct.Struct
 import Struct.Config
 import Moves.History
+import Moves.CurSe
 import Hash.TransTab
 import Search.AlbetaTypes
 
 data MyState = MyState {
         stack  :: [MyPos],	-- stack of played positions
         hash   :: Cache,	-- transposition table
+        curse  :: CurSe,	-- currently searching table
         hist   :: History,	-- history table
         mstats :: SStats,	-- per move search statistics
         evalst :: EvalState	-- eval status (parameter & statistics)

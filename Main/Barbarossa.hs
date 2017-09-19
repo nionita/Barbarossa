@@ -32,6 +32,7 @@ import Moves.Base
 import Moves.Moves (movesInit)
 import Moves.Board (posFromFen, initPos)
 import Moves.History
+import Moves.CurSe
 import Search.CStateMonad (execCState)
 import Search.AlbetaTypes
 import Eval.FileParams (makeEvalState)
@@ -41,7 +42,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.5.0"
-progVerSuff = "abd1"
+progVerSuff = "abd2"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -103,6 +104,7 @@ initContext opts = do
     ichan <- newChan
     schan <- newChan
     ha <- newCache 1	-- it will take the minimum number of entries
+    hc <- newCurSe
     hi <- newHist
     let paramList = stringToParams $ concat $ intersperse "," $ optParams opts
     (parc, evs) <- makeEvalState (optConfFile opts) paramList progVersion progVerSuff
@@ -110,7 +112,7 @@ initContext opts = do
             working = False,
             noThreads = 1,
             compThread = Map.empty,
-            crtStatus = posToState initPos ha hi evs,
+            crtStatus = posToState initPos ha hc hi evs,
             realPly = Nothing,
             forGui = Nothing,
             srchStrtMs = 0,
@@ -359,13 +361,16 @@ doPosition fen mvs = do
         else do
             hi <- liftIO newHist
             let es = evalst $ crtStatus chg
-            (mi, ns) <- newState fen mvs (hash . crtStatus $ chg) hi es
+                cs = crtStatus chg
+                ha = hash cs
+                hc = curse cs
+            (mi, ns) <- newState fen mvs ha hc hi es
             -- reset the last move score when we begin new game:
             let lsc = case mi of
                           Just x  -> if x == 1 || x == 2 then Nothing else lmvScore chg
                           Nothing -> lmvScore chg
             modifyChanging $ \c -> c { crtStatus = ns, realPly = mi, myColor = myCol, lmvScore = lsc }
-    where newState fpos ms c h es = foldM execMove (stateFromFen fpos c h es) ms
+    where newState fpos ms t c h es = foldM execMove (stateFromFen fpos t c h es) ms
           execMove (mi, s) m = do
               let mj = ((+) 1) <$> mi	-- increment real ply
               s' <- execCState (doRealMove m) s
@@ -373,9 +378,9 @@ doPosition fen mvs = do
           fenColor = movingColor fen
           myCol = if even (length mvs) then fenColor else other fenColor
 
-stateFromFen :: Pos -> Cache -> History -> EvalState -> (Maybe Int, MyState)
-stateFromFen StartPos  c h es = (Just 1,  posToState initPos c h es)
-stateFromFen (Pos fen) c h es = (Nothing, posToState (posFromFen fen) c h es)
+stateFromFen :: Pos -> Cache -> CurSe -> History -> EvalState -> (Maybe Int, MyState)
+stateFromFen StartPos  t c h es = (Just 1,  posToState initPos t c h es)
+stateFromFen (Pos fen) t c h es = (Nothing, posToState (posFromFen fen) t c h es)
 
 movingColor :: Pos -> Color
 movingColor fen

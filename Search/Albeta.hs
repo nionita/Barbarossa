@@ -143,7 +143,7 @@ data PVState
           lmrrs   :: !Int	-- counter for nodes/re-searches, to adapt the LMR level
       } deriving Show
 
--- This is a state which reflects the status of alpha beta in a node while going through the edges
+-- This is a state which reflects the status of alpha beta in a node while going through the moves
 data NodeState
     = NSt {
           crtnt  :: !NodeType,	-- parent node type (actually expected)
@@ -155,7 +155,9 @@ data NodeState
           cursc  :: Path,	-- current alpha value (now plus path & depth)
           killer :: Killer,	-- the current killer moves
           cpos   :: MyPos,	-- current position for this node
-          pvsl   :: [Pvsl]	-- principal variation list (at root) with node statistics
+          pvsl   :: [Pvsl],	-- principal variation list (at root) with node statistics
+          moves  :: [Move],	-- the moves to search
+          defer  :: [Move]	-- deferred moves
       } deriving Show
 
 deepNSt :: NodeState -> NodeState
@@ -174,7 +176,6 @@ nextNodeType :: NodeType -> NodeType
 nextNodeType PVNode = CutNode
 nextNodeType t      = t
 
-newtype Alt e = Alt { unalt :: [e] } deriving Show
 newtype Seq e = Seq { unseq :: [e] } deriving Show
 
 data Path
@@ -203,8 +204,8 @@ pnearmate = nearmate . pathScore
 pnextlev :: Path -> Path
 pnextlev p = p { pathScore = - pathScore p, pathOrig = "pnextlev (" ++ pathOrig p ++ ")" }
 
-noMove :: Alt Move -> Bool
-noMove (Alt es) = null es
+noMove :: [Move] -> Bool
+noMove = null
 
 nullSeq :: Seq Move -> Bool
 nullSeq (Seq es) = null es
@@ -218,12 +219,13 @@ pvsInit = PVState { ronly = pvro00, stats = ssts0, absdp = 0, usedext = 0, abort
                     lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
 nst0 :: NodeState
 nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore "Zero" 0, rbmch = -1,
-             movno = 1, spcno = 1, killer = NoKiller, albe = False, cpos = initPos, pvsl = [] }
+             movno = 1, spcno = 1, killer = NoKiller, albe = False, cpos = initPos, pvsl = [],
+             moves = [], defer = [] }
              -- we start with spcno = 1 as we consider the first move as special
              -- to avoid in any way reducing the tt move
 
-resetNSt :: Path -> Killer -> NodeState -> NodeState
-resetNSt !sc !kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill }
+resetNSt :: Path -> Killer -> [Move] -> NodeState -> NodeState
+resetNSt !sc !kill mvs nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, moves = mvs }
 
 pvro00 :: PVReadOnly
 pvro00 = PVReadOnly { draft = 0, abmili = 0, ismain = False, timeli = False }
@@ -231,7 +233,7 @@ pvro00 = PVReadOnly { draft = 0, abmili = 0, ismain = False, timeli = False }
 alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int)
 alphaBeta abc = do
     let !d = maxdepth abc
-        rmvs = Alt $ rootmvs abc
+        rmvs = rootmvs abc
         lpv  = Seq $ lastpv abc
         searchReduced a b = pvRootSearch a      b     d lpv rmvs True
         -- We have lastpath as a parameter here (can change after fail low or high)
@@ -261,9 +263,10 @@ alphaBeta abc = do
     -- when aborted, return the last found good move
     -- we have to trust that abort is never done in draft 1!
     case fst r of
-        (s, Seq path, Alt rmvs', ch) -> if null path
-           then return (fromMaybe 0 $ lastscore abc, lastpv abc, [], timint, 0)
-           else return (s, path, rmvs', timint, ch)
+        (s, Seq path, rmvs', ch) ->
+           if null path
+              then return (fromMaybe 0 $ lastscore abc, lastpv abc, [], timint, 0)
+              else return (s, path, rmvs', timint, ch)
 
 {--
 aspirWin :: Int -> Int -> Int -> Seq Move -> Alt Move -> Int -> m (Int, Seq Move, Alt Move)
@@ -281,17 +284,17 @@ aspirWin a b d lpv rmvs t = do
 --}
 
 -- Root PV Search
-pvRootSearch :: Int -> Int -> Int -> Seq Move -> Alt Move -> Bool
-             -> Search (Int, Seq Move, Alt Move, Int)
+pvRootSearch :: Int -> Int -> Int -> Seq Move -> [Move] -> Bool
+             -> Search (Int, Seq Move, [Move], Int)
 pvRootSearch a b d lastpath rmvs aspir = do
     pos <- lift getPos
-    edges <- if null (unalt rmvs)	-- only when d==1, but we could have lastpath from the previous real move
+    edges <- if null rmvs	-- only when d==1, but we could have lastpath from the previous real move
                 then genAndSort nst0 { cpos = pos } Nothing a b d	-- no IID here as d==1
                 else case lastpath of
                          Seq []    -> return rmvs	-- does this happens? - check to simplify!
-                         Seq (e:_) -> return $ Alt $ e : delete e (unalt rmvs)
-    let !nsti = nst0 { cursc = pathFromScore "Alpha" a, cpos = pos }
-    nstf <- pvLoop (pvInnerRoot b d) nsti edges
+                         Seq (e:_) -> return $ e : delete e rmvs
+    let !nsti = nst0 { cursc = pathFromScore "Alpha" a, cpos = pos, moves = edges }
+    nstf <- pvLoop b d nsti
     abrt <- gets abort
     reportStats
     let (sc, pm) | d > 1             = (pathScore (cursc nstf), pathMoves (cursc nstf))
@@ -309,13 +312,25 @@ pvRootSearch a b d lastpath rmvs aspir = do
             -- lift $ mapM_ (\m -> informStr $ "Root move: " ++ show m) (pvsl nstf)
             -- when (d < depthForCM) $ informPV sc d p
             let (best':_) = p
-                allrmvs = if sc >= b then unalt edges else map pvslToMove (pvsl nstf)
-                xrmvs = Alt $ best' : delete best' allrmvs	-- best on top
+                allrmvs = if sc >= b then edges else map pvslToMove (pvsl nstf)
+                xrmvs = best' : delete best' allrmvs	-- best on top
             return (sc, Seq p, xrmvs, rbmch nstf)
 
 pvslToMove :: Pvsl -> Move
 pvslToMove (Pvsl { pvPath = Path { pathMoves = Seq (m:_)}}) = m
 pvslToMove _ = undefined	-- just for Wall
+
+toDeferList :: Move -> NodeState -> NodeState
+toDeferList e nst@(NSt { defer = ds }) = nst { defer = e : ds }
+
+deferMove :: Bool -> Move -> Int -> NodeState -> Search Bool
+deferMove False _ _ _ = return False
+deferMove _     e d nst
+    = if movno nst == 0
+         then return False
+         else do
+             let key = moveKey (cpos nst) e
+             lift $ tkDeferMove key d
 
 legalResult :: DoResult -> Bool
 legalResult Illegal = False
@@ -326,10 +341,15 @@ legalResult _       = True
 -- Returns: ...flag if it was a beta cut and new status
 pvInnerRoot :: Int 	-- current beta
             -> Int	-- current search depth
+            -> Bool	-- defer phase: first True, then False
             -> NodeState 	-- node status
             -> Move	-- move to search
             -> Search (Bool, NodeState)
-pvInnerRoot b d nst e = timeToAbort (True, nst) $ do
+pvInnerRoot b d phase nst e = timeToAbort (True, nst) $ do
+    skip <- deferMove phase e d nst
+    if skip
+       then return (False, toDeferList e nst)
+       else do
          -- do the move
          exd <- lift $ doMove e
          if legalResult exd
@@ -502,8 +522,8 @@ pvSearch nst !a !b !d = do
                 -- futility pruning:
                 prune <- isPruneFutil d a True (staticScore pos)
                 -- Loop thru the moves
-                let !nsti = resetNSt (pathFromScore "low limit" a) NoKiller nst'
-                nstf <- pvSLoop b d prune nsti edges
+                let !nsti = resetNSt (pathFromScore "low limit" a) NoKiller edges nst'
+                nstf <- pvSLoop b d prune nsti
                 let s = cursc nstf
                 whenAbort s $ do
                     if pathScore s > a
@@ -517,7 +537,7 @@ pvSearch nst !a !b !d = do
                                    lift $ do
                                        let typ = 0
                                            !deltan = nodes1 - nodes0
-                                           mv = head $ unalt edges	-- not null - we are on "else" of noMove
+                                           mv = head edges	-- not null - we are on "else" of noMove
                                        ttStore de typ a mv deltan
                                    checkFailHard "pvSLoop low" a b (pathScore s)
                                    return s
@@ -564,8 +584,8 @@ pvZeroW !nst !b !d redu = do
                         let kill1 = case nmhigh of
                                         NullMoveThreat s -> newTKiller pos d s
                                         _                -> NoKiller
-                            !nsti = resetNSt (pathFromScore "low limit" bGrain) kill1 nst'
-                        nstf <- pvZLoop b d prune redu nsti edges
+                            !nsti = resetNSt (pathFromScore "low limit" bGrain) kill1 edges nst'
+                        nstf <- pvZLoop b d prune redu nsti
                         let s = cursc nstf
                         whenAbort s $ do
                             checkFailHard "pvZLoop" bGrain b (pathScore s)
@@ -580,7 +600,7 @@ pvZeroW !nst !b !d redu = do
                                            lift $ do
                                                let typ = 0
                                                    !deltan = nodes1 - nodes0
-                                                   mv = head $ unalt edges	-- not null, we are in "else" of noMove
+                                                   mv = head edges	-- not null, we are in "else" of noMove
                                                ttStore de typ bGrain mv deltan
                                            return s
                                        else return $ trimaxPath bGrain b $ if tacticalPos pos then matedPath else staleMate
@@ -630,32 +650,21 @@ nmDArr1, nmDArr2 :: UArray Int Int
 nmDArr1 = listArray (0, 20) [ 0, 0, 0, 0, 0, 1, 2, 3, 4, 4, 5, 6, 7, 7, 8, 9, 9, 10, 11, 11, 12 ]
 nmDArr2 = listArray (0, 20) [ 0, 0, 0, 0, 0, 0, 1, 2, 3, 3, 4, 5, 6, 6, 7, 8, 8,  9, 10, 10, 11 ]
 
-pvSLoop :: Int -> Int -> Bool -> NodeState -> Alt Move -> Search NodeState
-pvSLoop b d p = go
-    where go !s (Alt []) = return s
-          go !s (Alt (e:es)) = do
-              (!cut, !s') <- pvInnerLoop b d p s e
-              if cut then return s'
-                     else go s' $ Alt es
-
-pvZLoop :: Int -> Int -> Bool -> Bool -> NodeState -> Alt Move -> Search NodeState
-pvZLoop b d p redu = go
-    where go !s (Alt []) = return s
-          go !s (Alt (e:es)) = do
-              (!cut, !s') <- pvInnerLoopZ b d p s e redu
-              if cut then return s'
-                     else go s' $ Alt es
-
 -- This is the inner loop of the PV search, executed at every level (except root) once per possible move
 -- See the parameter
 -- Returns: flag if it was a beta cut and new status
 pvInnerLoop :: Int 	-- current beta
             -> Int	-- current search depth
+            -> Bool	-- defer move phase
             -> Bool	-- prune?
             -> NodeState 	-- node status
             -> Move	-- move to search
             -> Search (Bool, NodeState)
-pvInnerLoop b d prune nst e = timeToAbort (True, nst) $ do
+pvInnerLoop b d phase prune nst e = timeToAbort (True, nst) $ do
+    skip <- deferMove phase e d nst
+    if skip
+       then return (False, toDeferList e nst)
+       else do
          -- What about TT & killer moves???
          if prune && movno nst > 1 && canPruneMove (cpos nst) e
             then do
@@ -688,12 +697,17 @@ pvInnerLoop b d prune nst e = timeToAbort (True, nst) $ do
 -- This part for the zero window search
 pvInnerLoopZ :: Int 	-- current beta
             -> Int	-- current search depth
+            -> Bool	-- defer move phase
             -> Bool	-- prune?
             -> NodeState 	-- node status
             -> Move	-- move to search
             -> Bool	-- reduce in LMR?
             -> Search (Bool, NodeState)
-pvInnerLoopZ b d prune nst e redu = timeToAbort (True, nst) $ do
+pvInnerLoopZ b d phase prune nst e redu = timeToAbort (True, nst) $ do
+    skip <- deferMove phase e d nst
+    if skip
+       then return (False, toDeferList e nst)
+       else do
          -- What about TT & killer moves???
          if prune && canPruneMove (cpos nst) e
             then do
@@ -886,7 +900,7 @@ newTKiller pos d s
 
 -- We don't sort the moves here, they have to come sorted from genMoves
 -- But we consider the best move first (TT or IID) and the killers
-genAndSort :: NodeState -> Maybe Move -> Int -> Int -> Int -> Search (Alt Move)
+genAndSort :: NodeState -> Maybe Move -> Int -> Int -> Int -> Search [Move]
 genAndSort nst mttmv a b d = do
     path <- case mttmv of
                 Just mv -> return [mv]
@@ -897,7 +911,7 @@ genAndSort nst mttmv a b d = do
         let kl = filter (isMoveLegal (cpos nst)) $ killerToList (killer nst)
         esp <- genMoves d
         let es = bestFirst path kl esp
-        return $ Alt es
+        return es
 
 -- Late Move Reduction
 -- With a variable lmrlev the reduction should stay in a region
@@ -927,13 +941,39 @@ moreLMR more !d = do
     where fdir x = x `unsafeShiftL` 2
           find x = max 1 $ x `unsafeShiftR` 1
 
--- This is a kind of monadic fold optimized for (beta) cut
-pvLoop :: Monad m => (s -> e -> m (Bool, s)) -> s -> Alt e -> m s
-pvLoop _ s (Alt [])     = return s
-pvLoop f s (Alt (e:es)) = do
-    (cut, s') <- f s e
-    if cut then return s'
-           else pvLoop f s' $ Alt es
+-- Looping through the moves is a bit different in every of root, PV and zero window searches
+pvLoop :: Int -> Int -> NodeState -> Search NodeState
+pvLoop b d = goDefe
+    where goDefe s = go True  s { moves = [] } (moves s)
+          goRest s = go False s { defer = [] } (reverse $ defer s)
+          go True  !s [] = goRest s
+          go False !s [] = return s
+          go phase !s (e:es) = do
+              (!cut, !s') <- pvInnerRoot b d phase s e
+              if cut then return s'
+                     else go phase s' es
+
+pvSLoop :: Int -> Int -> Bool -> NodeState -> Search NodeState
+pvSLoop b d p = goDefe
+    where goDefe s = go True  s { moves = [] } (moves s)
+          goRest s = go False s { defer = [] } (reverse $ defer s)
+          go True  !s [] = goRest s
+          go False !s [] = return s
+          go phase !s (e:es) = do
+              (!cut, !s') <- pvInnerLoop b d phase p s e
+              if cut then return s'
+                     else go phase s' es
+
+pvZLoop :: Int -> Int -> Bool -> Bool -> NodeState -> Search NodeState
+pvZLoop b d p redu = goDefe
+    where goDefe s = go True  s { moves = [] } (moves s)
+          goRest s = go False s { defer = [] } (reverse $ defer s)
+          go True  !s [] = goRest s
+          go False !s [] = return s
+          go phase !s (e:es) = do
+              (!cut, !s') <- pvInnerLoopZ b d phase p s e redu
+              if cut then return s'
+                     else go phase s' es
 
 -- About futility pruning:
 -- A. 3 versions would be possible:
@@ -1001,7 +1041,7 @@ pvQSearch !a !b !c = do
            pos <- lift $ getPos
            if tacticalPos pos
               then do
-                  edges <- Alt <$> lift genEscapeMoves
+                  edges <- lift genEscapeMoves
                   if noMove edges
                      then return $! trimax a b (-mateScore)
                      else if c >= qsMaxChess
@@ -1012,7 +1052,7 @@ pvQSearch !a !b !c = do
                                  -- for check extensions in case of very few moves (1 or 2):
                                  -- if 1 move: extend 1 (same depth)
                                  -- if 2 moves: no extension
-                                 let !esc = lenmax2 $ unalt edges
+                                 let !esc = lenmax2 edges
                                      !nc = c + esc - 1
                                  pvQLoop b nc a edges
               else do
@@ -1031,7 +1071,7 @@ pvQSearch !a !b !c = do
                                  when collectFens $ finWithNodes "DELT"
                                  return a
                              else do
-                                 edges <- Alt <$> lift genTactMoves
+                                 edges <- lift genTactMoves
                                  if noMove edges
                                     then do	-- no more captures
                                         when collectFens $ finWithNodes "NOCA"
@@ -1042,13 +1082,13 @@ pvQSearch !a !b !c = do
     where lenmax2 (_:_:_) = 2
           lenmax2 _       = 1	-- we know here it is not empty
 
-pvQLoop :: Int -> Int -> Int -> Alt Move -> Search Int
+pvQLoop :: Int -> Int -> Int -> [Move] -> Search Int
 pvQLoop b c = go
-    where go !s (Alt [])     = return s
-          go !s (Alt (e:es)) = do
+    where go !s []     = return s
+          go !s (e:es) = do
               (!cut, !s') <- pvQInnerLoop b c s e
               if cut then return s'
-                     else go s' $ Alt es
+                     else go s' es
 
 pvQInnerLoop :: Int -> Int -> Int -> Move -> Search (Bool, Int)
 pvQInnerLoop !b c !a e = timeToAbort (True, b) $ do
