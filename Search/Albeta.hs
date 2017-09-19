@@ -44,8 +44,8 @@ minPvDepth  = 2		-- from this depth we use alpha beta search
 lmrInitLv, lmrInitLim, lmrLevMin, lmrLevMax :: Int
 lmrInitLv  = 7
 lmrInitLim = 8192
-lmrLevMin  = 1
-lmrLevMax  = 16
+lmrLevMin  = 2
+lmrLevMax  = 17
 
 -- The late move reduction is variable and regulated by the number of re-searches
 -- Lower levels (towards 0) means less reductions, higher - more
@@ -59,7 +59,7 @@ varImp :: Double -> Double -> Int
 varImp lev w = round $ go 0 lev w
     where go :: Double -> Double -> Double -> Double
           go !lv !b !i | i <= b    = lv
-                       | otherwise = go (lv+1) (b*1.2) (i-b)
+                       | otherwise = go (lv+1) (b*1.25) (i-b)
 
 -- Parameters for futility pruning:
 maxFutilDepth :: Int
