@@ -783,18 +783,26 @@ perPassedPawnOk !gph ep p c sq sqbb moi toi moia toia = val
               | c == White = (shadowUp sqbb, shadowDown sqbb, sq+8)
               | otherwise  = (shadowDown sqbb, shadowUp sqbb, sq-8)
           !rookBehind = behind .&. (rooks p .|. queens p)
-          !mebehind = rookBehind .&. moi /= 0
-                   && rookBehind .&. toi == 0
-          !yobehind = rookBehind .&. moi == 0
-                   && rookBehind .&. toi /= 0
-          !bbmyctrl | mebehind  = way
-                    | otherwise = moia .&. way
-          !bbyoctrl | yobehind  = way
-                    | otherwise = toia .&. way
-          !myctrl = max 2 $ popCount bbmyctrl
-          !yoctrl = max 2 $ popCount bbyoctrl
-          !mblo = popCount $ moi .&. way
-          !yblo = popCount $ toi .&. way
+          !rbm = rookBehind .&. moi
+          !rbt = rookBehind .&. toi
+          !mebehind
+              | rbm /= 0 && rbt == 0 = 1
+              | otherwise            = 0
+          !yobehind
+              | rbt /= 0 && rbm == 0 = 1
+              | otherwise            = 0
+          !myctrl
+              | moia .&. way /= 0 = 1 + mebehind
+              | otherwise         = mebehind
+          !yoctrl
+              | toia .&. way /= 0 = 1 + yobehind
+              | otherwise         = yobehind
+          !mblo
+              | moi .&. way /= 0 = 1
+              | otherwise        = 0
+          !yblo
+              | toi .&. way /= 0 = 1
+              | otherwise        = 0
           !x = popCount way
           a0 = 10
           b0 = -120
@@ -810,11 +818,12 @@ perPassedPawnOk !gph ep p c sq sqbb moi toi moia toia = val
           !val  = (val2 * (128 + epPassMyCtrl ep * myctrl) * (128 - epPassYoCtrl ep * yoctrl))
                     `unsafeShiftR` 14
 
-kdDistArr :: UArray Int Int  --  -7 -6 -5 -4 -3 -2 -1  0  1  2  3  4  5  6  7
-kdDistArr = listArray (0, 14) $ [-4,-3,-3,-3,-2,-2,-1, 0, 1, 2, 2, 3, 3, 3, 4]
+-- kdDistArr :: UArray Int Int  --  -7 -6 -5 -4 -3 -2 -1  0  1  2  3  4  5  6  7
+-- kdDistArr = listArray (0, 14) $ [-4,-3,-3,-3,-2,-2,-1, 0, 1, 2, 2, 3, 3, 3, 4]
 
 kdDist :: Int -> Int
-kdDist = (kdDistArr `unsafeAt`) . (7+)
+-- kdDist = (kdDistArr `unsafeAt`) . (7+)
+kdDist = id
 
 
 ------ Advanced pawns, on 6th & 7th rows (not passed) ------
