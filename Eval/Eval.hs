@@ -210,16 +210,18 @@ data Flc = Flc !Int !Int
 fadd :: Flc -> Flc -> Flc
 fadd (Flc f1 q1) (Flc f2 q2) = Flc (f1+f2) (q1+q2)
 
-fmul :: Flc -> Int
-fmul (Flc f q) = f * q
-
 ksSide :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
 ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
     | myq == 0  = 0
     | otherwise = mattacs
-    where !freey = popCount $ yok `less` (mya .|. yop)
-          qual a p = let c = popCount $ yok .&. a
-                     in Flc (flaCoef `unsafeAt` c) (c * p)
+    where qual a p
+              | yoka == 0 = Flc 0 0
+              | c == 1    = Flc 1 p
+              | c == 2    = Flc 1 (p `unsafeShiftL` 1)
+              | c == 3    = Flc 1 (p `unsafeShiftL` 2)
+              | otherwise = Flc 1 (p `unsafeShiftL` 3)
+              where !yoka = yok .&. a
+                    c = popCount yoka
           -- qualWeights = [1, 2, 2, 4, 8, 2]
           !qp = qual myp 1
           !qn = qual myn 2
@@ -227,15 +229,15 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
           !qr = qual myr 4
           !qq = qual myq 8
           !qk = qual myk 2
-          !ixm = fmul (fadd qp $ fadd qn $ fadd qb $ fadd qr $ fadd qq qk) `unsafeShiftR` 2
-               + 8 + ksShift - freey
-          !mattacs = attCoef `unsafeAt` ixm
-          ksShift = 5
-
--- We want to eliminate "if yok .&. a /= 0 ..."
--- by using an array
-flaCoef :: UArray Int Int
-flaCoef = listArray (0, 8) [ 0, 1, 1, 1, 1, 1, 1, 1, 1 ]
+          !(Flc c q) = fadd qp $ fadd qn $ fadd qb $ fadd qr $ fadd qq qk
+          !mattacs
+              | c == 0 = 0
+              | otherwise = attCoef `unsafeAt` ixt
+              where !freey = popCount $ yok `less` (mya .|. yop)
+                    !conce = popCount $ yok .&. mya
+                    !ixm = c * q `unsafeShiftR` 2
+                    !ixt = ixm + ksShift + 8 - freey + c - conce
+                    ksShift = 5
 
 -- We take the maximum of 240 because:
 -- Quali max: 8 * (1 + 2 + 2 + 4 + 8 + 2) < 160
