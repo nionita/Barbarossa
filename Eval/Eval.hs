@@ -216,12 +216,12 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
     | otherwise = mattacs
     where qual a p
               | yoka == 0 = Flc 0 0
-              | c == 1    = Flc 1 p
-              | c == 2    = Flc 1 (p `unsafeShiftL` 1)
-              | c == 3    = Flc 1 (p `unsafeShiftL` 2)
+              | y == 1    = Flc 1 p
+              | y == 2    = Flc 1 (p `unsafeShiftL` 1)
+              | y == 3    = Flc 1 (p `unsafeShiftL` 2)
               | otherwise = Flc 1 (p `unsafeShiftL` 3)
               where !yoka = yok .&. a
-                    c = popCount yoka
+                    y = popCount yoka
           -- qualWeights = [1, 2, 2, 4, 8, 2]
           !qp = qual myp 1
           !qn = qual myn 2
@@ -234,10 +234,11 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
               | c == 0 = 0
               | otherwise = attCoef `unsafeAt` ixt
               where !freey = popCount $ yok `less` (mya .|. yop)
+                    !nearp = popCount $ yok .&. yop
                     !conce = popCount $ yok .&. mya
                     !ixm = c * q `unsafeShiftR` 2
-                    !ixt = ixm + ksShift + 8 - freey + c - conce
-                    ksShift = 5
+                    !ixt = ixm + ksShift - freey - nearp + c - conce
+                    ksShift = 15
 
 -- We take the maximum of 240 because:
 -- Quali max: 8 * (1 + 2 + 2 + 4 + 8 + 2) < 160
