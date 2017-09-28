@@ -233,23 +233,19 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
           !mattacs
               | c == 0 = 0
               | otherwise = attCoef `unsafeAt` ixt
-              where !freey = popCount $ yok `less` (mya .|. yop)
-                    !nearp = popCount $ yok .&. yop
-                    !conce = popCount $ yok .&. mya
+              where !purat = popCount $ yok .&. (mya `less` yop)
                     !ixm = c * q `unsafeShiftR` 2
-                    !ixt = ixm + ksShift - freey - nearp + c - conce
-                    ksShift = 15
+                    !ixt = ixm + ksShift + c + purat
+                    ksShift = 10
 
 -- We take the maximum of 240 because:
--- Quali max: 8 * (1 + 2 + 2 + 4 + 8 + 2) < 160
--- Flag max: 6
--- 6 * 160 / 4 = 240
--- Here the beginning of -8 is actually wrong, which comes to the same
--- as increasing the importance of king safety
+-- Flag max * Quali max / 4 = 576
+-- + max 30 => 1023 should be secure
 attCoef :: UArray Int Int
-attCoef = listArray (0, 248) $ take 8 (repeat 0) ++ [ f x | x <- [0..63] ] ++ repeat (f 63)
+attCoef = listArray (0, 1023) $ take zeros (repeat 0) ++ [ f x | x <- [0..63] ] ++ repeat (f 63)
     where f :: Int -> Int
           f x = let y = fromIntegral x :: Double in round $ (2.92968750 - 0.03051758*y)*y*y
+          zeros = 8
 
 kingSquare :: BBoard -> BBoard -> Square
 kingSquare kingsb colorp = head $ bbToSquares $ kingsb .&. colorp
