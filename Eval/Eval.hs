@@ -49,8 +49,8 @@ posEval p !sti = scc
 evalDispatch :: MyPos -> EvalState -> Int
 evalDispatch p !sti
     | pawns p == 0 = evalNoPawns p sti
-    | pawns p .&. me p == 0 ||
-      pawns p .&. yo p == 0 = evalSideNoPawns p sti
+    -- | pawns p .&. me p == 0 ||
+    --   pawns p .&. yo p == 0 = evalSideNoPawns p sti
     | kings p .|. pawns p == occup p,
       Just r <- pawnEndGame p = r
     | otherwise    = normalEval p sti
@@ -88,6 +88,7 @@ gamePhase p = g
           ns = popCount $ knights p
           !g = qs * 39 + rs * 20 + (bs + ns) * 12	-- opening: 254, end: 0
 
+{--
 evalSideNoPawns :: MyPos -> EvalState -> Int
 evalSideNoPawns p !sti
     | npwin && insufficient = 0
@@ -100,6 +101,7 @@ evalSideNoPawns p !sti
           bishopcnt = popCount $ bishops p .&. npside
           minorcnt  = popCount $ (bishops p .|. knights p) .&. npside
           majorcnt  = popCount $ (queens p .|. rooks p) .&. npside
+--}
 
 -- These evaluation function distiguishes between some known finals with no pawns
 evalNoPawns :: MyPos -> EvalState -> Int
@@ -109,7 +111,7 @@ evalNoPawns p !sti = sc
               | kbbk        = mateKBBK p kaloneyo	-- 2 bishops
               | kbnk        = mateKBNK p kaloneyo	-- bishop + knight
               | kMxk        = mateKMajxK p kaloneyo	-- simple mate with at least one major
-              | lessRook p  = (normalEval p sti) `div` 2
+              -- | lessRook p  = (normalEval p sti) `div` 4
               | otherwise   = normalEval p sti
           kaloneme = me p `less` kings p == 0
           kaloneyo = yo p `less` kings p == 0
@@ -127,6 +129,7 @@ evalNoPawns p !sti = sc
 -- Has one of the players less then one rook advantage (without pawns)?
 -- In this case it is drawish (if the winning part has no pawns)
 -- This is a primitive first approach
+{--
 lessRook :: MyPos -> Bool
 lessRook p | mq == yq && mr == yr = mb + mn - yb - yn `elem` [-1, 0, 1]
            | otherwise = False
@@ -138,6 +141,7 @@ lessRook p | mq == yq && mr == yr = mb + mn - yb - yn `elem` [-1, 0, 1]
           !yb = popCount $ bishops p .&. yo p
           !mn = popCount $ knights p .&. me p
           !yn = popCount $ knights p .&. yo p
+--}
 
 winBonus :: Int
 winBonus = 200	-- when it's known win
@@ -256,8 +260,19 @@ kingSquare kingsb colorp = head $ bbToSquares $ kingsb .&. colorp
 
 materDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 materDiff p !ew mide = mad mide (ewMaterialDiff ew) md
-    where !md | moving p == White =   mater p
-              | otherwise         = - mater p
+    where !md | moving p == White = pawnFactor p $   mater p
+              | otherwise         = pawnFactor p $ - mater p
+
+-- Reduce the value of material difference when advantaged part has 1 or 0 pawns
+pawnFactor :: MyPos -> Int -> Int
+pawnFactor p mymat
+    | mymat > 0 = reduce $ pawns p .&. me p
+    | mymat < 0 = reduce $ pawns p .&. yo p
+    | otherwise = 0
+    where reduce myp
+              | myp == 0          = mymat `div` 2
+              | popCount myp == 1 = 2 * mymat `div` 3
+              | otherwise         = mymat
 
 ------ King placement and opennes ------
 
