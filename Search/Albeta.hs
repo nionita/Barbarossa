@@ -42,10 +42,10 @@ minPvDepth  = 2		-- from this depth we use alpha beta search
 
 -- Parameters for late move reduction:
 lmrInitLv, lmrInitLim, lmrLevMin, lmrLevMax :: Int
-lmrInitLv   = 8
-lmrInitLim  = 8500
-lmrLevMin   = 0
-lmrLevMax   = 15
+lmrInitLv  = 7
+lmrInitLim = 8192
+lmrLevMin  = 1
+lmrLevMax  = 16
 
 -- The late move reduction is variable and regulated by the number of re-searches
 -- Lower levels (towards 0) means less reductions, higher - more
@@ -1093,7 +1093,7 @@ pvQLoop b c = go
 pvQInnerLoop :: Int -> Int -> Int -> Move -> Search (Bool, Int)
 pvQInnerLoop !b c !a e = timeToAbort (True, b) $ do
          r <- lift $ doQSMove e
-         if legalResult r
+         if r
             then do
                 newNodeQS
                 !sc <- negate <$> pvQSearch (-b) (-a) c
