@@ -65,6 +65,10 @@ varImp lev w = round $ go 0 lev w
 maxFutilDepth :: Int
 maxFutilDepth = 3
 
+-- Razoring
+razorMargins :: UArray Int Int
+razorMargins = listArray (0, 3) [0, 572, 604, 556]
+
 -- Futility margins
 futilMargins :: Int -> Int -> Int
 futilMargins 1 s = s
@@ -491,7 +495,7 @@ pvSearch nst !a !b !d = do
                nst'  = nst { cpos = pos }
            edges <- genAndSort nst' mttmv a b d
            if noMove edges
-              then return $ trimaxPath a b $ if tacticalPos pos then matedPath else staleMate
+              then return $ limitScoreNoMove pos a b
               else do
                 nodes0 <- gets (sNodes . stats)
                 -- futility pruning:
@@ -516,7 +520,7 @@ pvSearch nst !a !b !d = do
                                        ttStore de typ a mv deltan
                                    checkFailHard "pvSLoop low" a b (pathScore s)
                                    return s
-                               else return $ trimaxPath a b $ if tacticalPos pos then matedPath else staleMate
+                               else return $ limitScoreNoMove pos a b
 
 -- PV Zero Window
 pvZeroW :: NodeState -> Int -> Int -> Bool -> Search Path
@@ -540,46 +544,60 @@ pvZeroW !nst !b !d redu = do
        else do
            when (hdeep < 0) reFail
            pos <- lift getPos
-           nmhigh <- nullMoveFailsHigh pos nst b d
-           whenAbort (pathFromScore "Aborted" b) $ do
-               case nmhigh of
-                 NullMoveHigh -> return $ pathFromScore "NullMoveHigh" b
-                 _ -> do
-                   -- Use the TT move as best move
-                   let mttmv = if hdeep > 0 then Just e else Nothing
-                       nst' = nst { cpos = pos }
-                   edges <- genAndSort nst' mttmv bGrain b d
-                   if noMove edges
-                      then return $ trimaxPath bGrain b $ if tacticalPos pos then matedPath else staleMate
-                      else do
-                        !nodes0 <- gets (sNodes . stats)
-                        -- futility pruning:
-                        prune <- isPruneFutil d bGrain False (staticScore pos)
-                        -- Loop thru the moves
-                        let kill1 = case nmhigh of
-                                        NullMoveThreat s -> newTKiller pos d s
-                                        _                -> NoKiller
-                            !nsti = resetNSt (pathFromScore "low limit" bGrain) kill1 nst'
-                        nstf <- pvZLoop b d prune redu nsti edges
-                        let s = cursc nstf
-                        whenAbort s $ do
-                            checkFailHard "pvZLoop" bGrain b (pathScore s)
-                            -- Here we expect bGrain <= s < b -- this must be checked
-                            if pathScore s >= b
-                               then return s	-- failed high
-                               else if movno nstf > 1 -- we failed low
-                                       then do
-                                           let !de = max d $ pathDepth s
-                                           !nodes1 <- gets (sNodes . stats)
-                                           -- store as upper score, and as move the first one (generated)
-                                           lift $ do
-                                               let typ = 0
-                                                   !deltan = nodes1 - nodes0
-                                                   mv = head $ unalt edges	-- not null, we are in "else" of noMove
-                                               ttStore de typ bGrain mv deltan
-                                           return s
-                                       else return $ trimaxPath bGrain b $ if tacticalPos pos then matedPath else staleMate
+           mr <- razoring pos nst d b
+           case mr of
+               Just v  -> return $ pathFromScore "Razoring" $ trimax bGrain b v
+               Nothing -> do
+                   nmhigh <- nullMoveFailsHigh pos nst b d
+                   whenAbort (pathFromScore "Aborted" b) $ do
+                       case nmhigh of
+                         NullMoveHigh -> return $ pathFromScore "NullMoveHigh" b
+                         _ -> do
+                           -- Use the TT move as best move
+                           let mttmv = if hdeep > 0 then Just e else Nothing
+                               nst' = nst { cpos = pos }
+                           edges <- genAndSort nst' mttmv bGrain b d
+                           if noMove edges
+                              then return $ limitScoreNoMove pos bGrain b
+                              else do
+                                !nodes0 <- gets (sNodes . stats)
+                                -- futility pruning:
+                                prune <- isPruneFutil d bGrain False (staticScore pos)
+                                -- Loop thru the moves
+                                let kill1 = case nmhigh of
+                                                NullMoveThreat s -> newTKiller pos d s
+                                                _                -> NoKiller
+                                    !nsti = resetNSt (pathFromScore "low limit" bGrain) kill1 nst'
+                                nstf <- pvZLoop b d prune redu nsti edges
+                                let s = cursc nstf
+                                whenAbort s $ do
+                                    checkFailHard "pvZLoop" bGrain b (pathScore s)
+                                    -- Here we expect bGrain <= s < b -- this must be checked
+                                    if pathScore s >= b
+                                       then return s	-- failed high
+                                       else if movno nstf > 1 -- we failed low
+                                               then do
+                                                   let !de = max d $ pathDepth s
+                                                   !nodes1 <- gets (sNodes . stats)
+                                                   -- store as upper score, and as move the first one (generated)
+                                                   lift $ do
+                                                       let typ = 0
+                                                           !deltan = nodes1 - nodes0
+                                                           mv = head $ unalt edges	-- not null, we are in "else" of noMove
+                                                       ttStore de typ bGrain mv deltan
+                                                   return s
+                                               else return $ limitScoreNoMove pos bGrain b
     where !bGrain = b - scoreGrain
+
+razoring :: MyPos -> NodeState -> Int -> Int -> Search (Maybe Int)
+razoring pos nst d b
+    | d >= 4 || crtnt nst == PVNode || tacticalPos pos || staticScore pos >= rb
+                = return Nothing
+    | d <= 1    = Just <$> pvQSearch (b-scoreGrain) b 0
+    | otherwise = do
+        v <- pvQSearch (rb-scoreGrain) rb 0
+        if v < rb then return (Just v) else return Nothing
+    where rb = b - (razorMargins `unsafeAt` d)
 
 data NullMoveResult = NoNullMove | NullMoveHigh | NullMoveLow | NullMoveThreat Path
 
@@ -968,6 +986,9 @@ varFutVal = max futMinVal <$> gets futme
 
 trimaxPath :: Int -> Int -> Path -> Path
 trimaxPath a b x = x { pathScore = trimax a b (pathScore x) }
+
+limitScoreNoMove :: MyPos -> Int -> Int -> Path
+limitScoreNoMove pos a b = trimaxPath a b $ if tacticalPos pos then matedPath else staleMate
 
 trimax :: Int -> Int -> Int -> Int
 trimax a b x
