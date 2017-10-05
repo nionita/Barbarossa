@@ -85,7 +85,7 @@ qsMaxChess = 2		-- max number of chess for a quiet search path
 nulMargin, nulSubmrg, nulTrig :: Int
 nulMargin = 1		-- margin to search the null move (over beta) (in scoreGrain units!)
 nulSubmrg = 2		-- improved margin (in scoreGrain units!)
-nulTrig   = -15	-- static margin to beta, to trigger null move (in scoreGrain units!)
+nulTrig   = -15		-- static margin to beta, to trigger null move (in scoreGrain units!)
 nulSubAct :: Bool
 nulSubAct = True
 
@@ -585,8 +585,10 @@ data NullMoveResult = NoNullMove | NullMoveHigh | NullMoveLow | NullMoveThreat P
 
 nullMoveFailsHigh :: MyPos -> NodeState -> Int -> Int -> Search NullMoveResult
 nullMoveFailsHigh pos nst b d
-    | d < 2 || tacticalPos pos || zugZwang pos		-- no null move at d < 2
-      || crtnt nst == AllNode = return NoNullMove	-- no null move in all nodes
+    | d < 2 || tacticalPos pos	-- no null move at d < 2 or in check
+        || crtnt nst == AllNode	-- no null move in all nodes
+        || zugZwang pos
+        = return NoNullMove
     | otherwise = do
         let v = staticScore pos
         if v < b + nulTrig * scoreGrain
@@ -597,9 +599,11 @@ nullMoveFailsHigh pos nst b d
                newNode d
                xchangeFutil
                let nst' = deepNSt nst
-               val <- if v > b + bigDiff
-                         then fmap pnextlev $ pvZeroW nst' (-nma) d2 True
-                         else fmap pnextlev $ pvZeroW nst' (-nma) d1 True
+                   -- Smooth scaling as proposed by Dann Corbit & Michael Sherwin (adapted)
+                   del  = min 511 $ max 1 (v - b)
+                   r    = (341 * d + (log5 `unsafeAt` del)) `unsafeShiftR` 10
+                   dr   = d - r
+               val <- fmap pnextlev $ pvZeroW nst' (-nma) dr True
                lift undoMove	-- undo null move
                xchangeFutil
                if pathScore val >= nmb
@@ -613,17 +617,14 @@ nullMoveFailsHigh pos nst b d
                        if nullSeq (pathMoves val)
                           then return $ NullMoveLow
                           else return $ NullMoveThreat val
-    where d1  = nmDArr1 `unsafeAt` d	-- here we have always d >= 1
-          d2  = nmDArr2 `unsafeAt` d	-- this is for bigger differences
-          nmb = if nulSubAct then b - (nulSubmrg * scoreGrain) else b
+    where nmb = if nulSubAct then b - (nulSubmrg * scoreGrain) else b
           nma = nmb - (nulMargin * scoreGrain)
-          bigDiff = 500	-- if we are very far ahead
 
--- This is now more than reduction 3 for depth over 9
-nmDArr1, nmDArr2 :: UArray Int Int
-------------------------------0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16  17  18  19  20
-nmDArr1 = listArray (0, 20) [ 0, 0, 0, 0, 0, 1, 2, 3, 4, 4, 5, 6, 7, 7, 8, 9, 9, 10, 11, 11, 12 ]
-nmDArr2 = listArray (0, 20) [ 0, 0, 0, 0, 0, 0, 1, 2, 3, 3, 4, 5, 6, 6, 7, 8, 8,  9, 10, 10, 11 ]
+log5 :: UArray Int Int
+log5 = listArray (0, 511) $ map (1706 +)
+                          $ 0 : take 511 [ round (fac * log (fromIntegral i)) | i <- [one..]]
+    where one = 1::Int
+          fac = 1024 * 0.2 :: Double
 
 pvSLoop :: Int -> Int -> Bool -> NodeState -> Alt Move -> Search NodeState
 pvSLoop b d p = go
