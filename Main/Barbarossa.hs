@@ -181,7 +181,7 @@ data LoggerState = LoggerFile String
 startLogger :: String -> CtxIO ()
 startLogger file = do
     ctx <- ask
-    void $ liftIO $ forkIO $ catch (theLogger (logger ctx) (LoggerFile file)) collectError
+    void $ liftIO $ forkIO $ catch (theLogger (logger ctx) (LoggerFile file)) (collectError "logger")
     ctxLog LogInfo "Logger started"
 
 theLogger :: Chan String -> LoggerState -> IO ()
@@ -189,12 +189,12 @@ theLogger lchan lst = do
     s <- readChan lchan
     case lst of
         LoggerError  -> theLogger lchan lst
-        LoggerFile f -> handle collectError $ do
+        LoggerFile f -> handle (collectError "logger1") $ do
             h <- openFile f AppendMode
             hPutStrLn h s
             hFlush h
             theLogger lchan (LoggerHandle h)
-        LoggerHandle h -> do
+        LoggerHandle h -> handle (collectError "logger2") $ do
             hPutStrLn h s
             hFlush h
             theLogger lchan lst
@@ -536,7 +536,7 @@ startSearchThread tnr chg tim tpm mtg dpt rept = do
             when bad $ do
                 let mes = "searchTheTree terminated by exception: " ++ show e
                 ctxLog LogError mes
-                lift $ collectError $ SomeException (SearchException mes)
+                lift $ collectError "search" $ SomeException (SearchException mes)
 
 data SearchException = SearchException String deriving (Show, Typeable)
 
@@ -609,7 +609,9 @@ searchTheTree tnr chg draft mdraft timx tim tpm mtg rept lsc lpv rmvs = do
                          killSearchThreads chg'
                          return $ Right sc
                      else return $ Left (chg { crtStatus = stfin, totBmCh = totch, lastChDr = ldCh }, mx, mxr)
-              else return $ Left (chg { crtStatus = stfin }, 0, 0)
+              else if draft >= mdraft
+                      then return $ Right sc	-- helper thread reached maximum draft
+                      else return $ Left (chg { crtStatus = stfin }, 0, 0)
     case esc of
         Right sc' -> return sc'
         Left (chg', mx, mxr) -> do
@@ -884,12 +886,12 @@ makeOptionVals (UGOTList li) = foldl (\a x -> a ++ " var " ++ x) "" li
 makeOptionVals UGOTNone = ""
 
 -- Append error info to error file:
-collectError :: SomeException -> IO ()
-collectError e = handle cannot $ do
+collectError :: String -> SomeException -> IO ()
+collectError org e = handle cannot $ do
     let efname = "Barbarossa_collected_errors.txt"
-    TOD tm _ <- getClockTime
+    tm <- getClockTime >>= toCalendarTime
     ef <- openFile efname AppendMode
-    hPutStrLn ef $ show tm ++ " " ++ idName ++ ": " ++ show e
+    hPutStrLn ef $ calendarTimeToString tm ++ " " ++ idName ++ ", " ++ org ++ ": " ++ show e
     hClose ef
     where cannot :: IOException -> IO ()
           cannot _ = return ()

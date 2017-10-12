@@ -1,8 +1,10 @@
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE BangPatterns #-}
 module Struct.Context where
 
 import Control.Concurrent.Chan
 import Control.Concurrent
+import Control.DeepSeq (deepseq)
 import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Data.Int
@@ -138,7 +140,8 @@ startSecond ctx = s
 logging :: Chan String -> Integer -> Int -> String -> String -> IO ()
 logging lchan refs tid prf mes = do
     cms <- currMilli refs
-    writeChan lchan $ show cms ++ " [" ++ prf ++ "][T" ++ show tid ++ "]: " ++ mes
+    let !cmes = deepseq mes $ show cms ++ " [" ++ prf ++ "][T" ++ show tid ++ "]: " ++ mes
+    writeChan lchan cmes
 
 -- Current time in ms since program start
 currMilli :: Integer -> IO Int

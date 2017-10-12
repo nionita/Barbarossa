@@ -24,7 +24,7 @@ bestMoveCont :: Int -> Int -> Bool -> MyState -> Maybe Int -> [Move] -> [Move] -
 bestMoveCont depth sttime main stati lastsc lpv rmvs = do
     when main $ do
         informGuiDepth depth
-        ctxLog LogInfo $ "start search for depth " ++ show depth
+        ctxLog LogInfo $ "Main thread: start search for depth " ++ show depth
     let abc = ABC {
                 maxdepth  = depth,
                 lastpv    = lpv,
@@ -38,5 +38,5 @@ bestMoveCont depth sttime main stati lastsc lpv rmvs = do
     when main $ do
         let n = sNodes $ mstats statf
         informGui sc depth n path
-        ctxLog LogInfo $ "score " ++ show sc ++ " path " ++ show path
+        ctxLog LogInfo $ "Main thread: score " ++ show sc ++ " path " ++ show path
     return (path, sc, rmvsf, timint, statf, ch)

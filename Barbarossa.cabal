@@ -23,6 +23,7 @@ Executable Barbarossa
   Build-depends:
       base >= 4.5,
       array,
+      deepseq,
       old-time,
       containers,
       mtl,
@@ -44,6 +45,7 @@ Executable Barbarossa
       Moves.BaseTypes,
       Moves.BitBoard,
       Moves.Board,
+      Moves.CurSe,
       Moves.Fen,
       Moves.GenMagics,
       Moves.History,

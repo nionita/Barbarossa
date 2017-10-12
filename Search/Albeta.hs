@@ -225,7 +225,8 @@ nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore "Zero" 0, rbm
              -- to avoid in any way reducing the tt move
 
 resetNSt :: Path -> Killer -> [Move] -> NodeState -> NodeState
-resetNSt !sc !kill mvs nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, moves = mvs }
+resetNSt !sc !kill mvs nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill,
+                                   moves = mvs, defer = [] }
 
 pvro00 :: PVReadOnly
 pvro00 = PVReadOnly { draft = 0, abmili = 0, ismain = False, timeli = False }
@@ -326,11 +327,22 @@ toDeferList e nst@(NSt { defer = ds }) = nst { defer = e : ds }
 deferMove :: Bool -> Move -> Int -> NodeState -> Search Bool
 deferMove False _ _ _ = return False
 deferMove _     e d nst
-    = if movno nst == 0
-         then return False
-         else do
-             let key = moveKey (cpos nst) e
-             lift $ tkDeferMove key d
+    | movno nst == 1 && crtnt nst /= AllNode
+                     = return False
+    | otherwise      = do
+         let key = moveKey (cpos nst) e
+         lift $ tkDeferMove key d
+
+startSearching :: Int -> Move -> NodeState -> Search ()
+startSearching d e nst = lift $ tkStartSearching (moveKey (cpos nst) e) d
+
+finishedSearch :: Int -> Move -> NodeState -> Search ()
+finishedSearch d e nst = lift $ tkFinishedSearch (moveKey (cpos nst) e) d
+
+logDeferred :: Int -> Move -> NodeState -> Search ()
+logDeferred d e nst
+    | d <= 10   = return ()
+    | otherwise = lift $ logmes $ "Deferred: depth " ++ show d ++ " move " ++ show e ++ " (" ++ show (movno nst) ++ ")"
 
 legalResult :: DoResult -> Bool
 legalResult Illegal = False
@@ -348,7 +360,9 @@ pvInnerRoot :: Int 	-- current beta
 pvInnerRoot b d phase nst e = timeToAbort (True, nst) $ do
     skip <- deferMove phase e d nst
     if skip
-       then return (False, toDeferList e nst)
+       then do
+           logDeferred d e nst
+           return (False, toDeferList e nst)
        else do
          -- do the move
          exd <- lift $ doMove e
@@ -361,12 +375,14 @@ pvInnerRoot b d phase nst e = timeToAbort (True, nst) $ do
                 modify $ \s -> s { absdp = absdp s + 1 }
                 s <- case exd of
                          Exten exd' spc -> do
+                             startSearching d e nst
                              when (exd' == 0 && not spc) $ do
                                  sdiff <- lift scoreDiff
                                  updateFutil sdiff	-- e
                              xchangeFutil
                              s <- pvInnerRootExten b d exd' (deepNSt nst)
                              xchangeFutil
+                             finishedSearch d e nst
                              return s
                          Final sco -> return $! pathFromScore "Final" (-sco)
                          Illegal   -> error "Cannot be illegal here"
@@ -663,7 +679,9 @@ pvInnerLoop :: Int 	-- current beta
 pvInnerLoop b d phase prune nst e = timeToAbort (True, nst) $ do
     skip <- deferMove phase e d nst
     if skip
-       then return (False, toDeferList e nst)
+       then do
+           logDeferred d e nst
+           return (False, toDeferList e nst)
        else do
          -- What about TT & killer moves???
          if prune && movno nst > 1 && canPruneMove (cpos nst) e
@@ -679,12 +697,14 @@ pvInnerLoop b d phase prune nst e = timeToAbort (True, nst) $ do
                        modify $ \s -> s { absdp = absdp s + 1 }
                        s <- case exd of
                            Exten exd' spc -> do
+                               startSearching d e nst
                                when (exd' == 0 && not spc) $ do	-- not quite ok here
                                    sdiff <- lift scoreDiff	-- cause spc has a slighty
                                    updateFutil sdiff	-- e	-- different meaning...
                                xchangeFutil
                                s <- pvInnerLoopExten b d exd' (deepNSt nst)
                                xchangeFutil
+                               finishedSearch d e nst
                                return s
                            Final sco -> return $! pathFromScore "Final" (-sco)
                            Illegal   -> error "Cannot be illegal here"
@@ -695,6 +715,8 @@ pvInnerLoop b d phase prune nst e = timeToAbort (True, nst) $ do
                    else return (False, nst)
 
 -- This part for the zero window search
+-- In zero window search we use LMR, but now, that we defer some moves,
+-- the LMR is not quite correct anymore
 pvInnerLoopZ :: Int 	-- current beta
             -> Int	-- current search depth
             -> Bool	-- defer move phase
@@ -706,7 +728,9 @@ pvInnerLoopZ :: Int 	-- current beta
 pvInnerLoopZ b d phase prune nst e redu = timeToAbort (True, nst) $ do
     skip <- deferMove phase e d nst
     if skip
-       then return (False, toDeferList e nst)
+       then do
+           logDeferred d e nst
+           return (False, toDeferList e nst)
        else do
          -- What about TT & killer moves???
          if prune && canPruneMove (cpos nst) e
@@ -717,33 +741,29 @@ pvInnerLoopZ b d phase prune nst e redu = timeToAbort (True, nst) $ do
                 old <- get
                 exd <- lift $ doMove e	-- do the move
                 -- even the legality could be checked before, maybe much cheaper
-                if legalResult exd
-                   then do
+                if not (legalResult exd)
+                   then return (False, nst)
+                   else do
                        newNode d
                        modify $ \s -> s { absdp = absdp s + 1 }
                        s <- case exd of
-                         Exten exd' spc -> do
-                             if spc
-                                then do
-                                    xchangeFutil
-                                    s <- pvInnerLoopExtenZ b d spc exd' (deepNSt $ resetSpc nst) redu
-                                    xchangeFutil
-                                    return s
-                                else do
-                                    when (exd' == 0) $ do
+                                Exten exd' spc -> do
+                                    startSearching d e nst
+                                    let nst' = if spc then resetSpc nst else nst
+                                    when (exd' == 0 && not spc) $ do
                                         sdiff <- lift scoreDiff
                                         updateFutil sdiff	-- e
                                     xchangeFutil
-                                    s <- pvInnerLoopExtenZ b d spc exd' (deepNSt nst) redu
+                                    s <- pvInnerLoopExtenZ b d spc exd' (deepNSt nst') redu
                                     xchangeFutil
+                                    finishedSearch d e nst
                                     return s
-                         Final sco -> return $! pathFromScore "Final" (-sco)
-                         Illegal   -> error "Cannot be illegal here"
+                                Final sco -> return $! pathFromScore "Final" (-sco)
+                                Illegal   -> error "Cannot be illegal here"
                        lift undoMove	-- undo the move
                        modify $ \s' -> s' { absdp = absdp old, usedext = usedext old }
                        let s' = addToPath e s
                        checkFailOrPVLoopZ (stats old) b d e s' nst
-                   else return (False, nst)
 
 resetSpc :: NodeState -> NodeState
 resetSpc nst = nst { spcno = movno nst }
@@ -942,6 +962,8 @@ moreLMR more !d = do
           find x = max 1 $ x `unsafeShiftR` 1
 
 -- Looping through the moves is a bit different in every of root, PV and zero window searches
+-- Still we could unify these 3 if we pass a function (NodeState -> Search NodeState)
+-- as a parameter (but take care of inlines!)
 pvLoop :: Int -> Int -> NodeState -> Search NodeState
 pvLoop b d = goDefe
     where goDefe s = go True  s { moves = [] } (moves s)

@@ -50,7 +50,7 @@ printEvalInt :: Int64
 printEvalInt   = 2 `shiftL` 12 - 1	-- if /= 0: print eval info every so many nodes
 
 csMind :: Int	-- minimum depth to look in table
-csMind = 3	-- "currently searching"
+csMind = 4	-- "currently searching"
 
 mateScore :: Int
 mateScore = 20000
