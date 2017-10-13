@@ -107,6 +107,10 @@ inEndlessCheck, qsDeltaMargin :: Int
 inEndlessCheck = -scoreGrain	-- there is a risk to be left in check
 qsDeltaMargin  = 100
 
+-- Parameter for multi threading
+minCurrSearch :: Int
+minCurrSearch = 4
+
 type Search a = CState PVState Game a
 
 alpha0, beta0 :: Int
@@ -325,19 +329,20 @@ toDeferList :: Move -> NodeState -> NodeState
 toDeferList e nst@(NSt { defer = ds }) = nst { defer = e : ds }
 
 deferMove :: Bool -> Move -> Int -> NodeState -> Search Bool
-deferMove False _ _ _ = return False
-deferMove _     e d nst
-    | movno nst == 1 && crtnt nst /= AllNode
-                     = return False
-    | otherwise      = do
-         let key = moveKey (cpos nst) e
-         lift $ tkDeferMove key d
+deferMove ph e d nst
+    | not ph || d < minCurrSearch            = return False
+    | movno nst == 1 && crtnt nst /= AllNode = return False
+    | otherwise                              = lift $ tkDeferMove e
 
-startSearching :: Int -> Move -> NodeState -> Search ()
-startSearching d e nst = lift $ tkStartSearching (moveKey (cpos nst) e) d
+startSearching :: Int -> Move -> NodeState -> Search Int
+startSearching d e nst
+    | d < minCurrSearch = return 0
+    | otherwise         = lift $ tkStartSearching (zobkey (cpos nst)) e
 
-finishedSearch :: Int -> Move -> NodeState -> Search ()
-finishedSearch d e nst = lift $ tkFinishedSearch (moveKey (cpos nst) e) d
+finishedSearch :: Int -> Int -> Search ()
+finishedSearch d i
+    | d < minCurrSearch = return ()
+    | otherwise         = lift $ tkFinishedSearch i
 
 logDeferred :: Int -> Move -> NodeState -> Search ()
 logDeferred d e nst
@@ -375,14 +380,14 @@ pvInnerRoot b d phase nst e = timeToAbort (True, nst) $ do
                 modify $ \s -> s { absdp = absdp s + 1 }
                 s <- case exd of
                          Exten exd' spc -> do
-                             startSearching d e nst
+                             f <- startSearching d e nst
                              when (exd' == 0 && not spc) $ do
                                  sdiff <- lift scoreDiff
                                  updateFutil sdiff	-- e
                              xchangeFutil
-                             s <- pvInnerRootExten b d exd' (deepNSt nst)
+                             s <- pvInnerRootExten b d exd' f (deepNSt nst)
                              xchangeFutil
-                             finishedSearch d e nst
+                             finishedSearch d f
                              return s
                          Final sco -> return $! pathFromScore "Final" (-sco)
                          Illegal   -> error "Cannot be illegal here"
@@ -393,8 +398,8 @@ pvInnerRoot b d phase nst e = timeToAbort (True, nst) $ do
                 checkFailOrPVRoot (stats old) b d e s' nst
             else return (False, nst)
 
-pvInnerRootExten :: Int -> Int -> Int -> NodeState -> Search Path
-pvInnerRootExten b d !exd nst = do
+pvInnerRootExten :: Int -> Int -> Int -> Int -> NodeState -> Search Path
+pvInnerRootExten b d !exd f nst = do
     old <- get
     exd' <- reserveExtension (usedext old) exd
     let !inPv = crtnt nst == PVNode
@@ -416,6 +421,8 @@ pvInnerRootExten b d !exd nst = do
                   else do
                       -- Here we didn't fail low and need re-search
                       -- As we don't reduce (beeing in a PV node), re-search is full window
+                      -- Delete the current searching for this move, to get help in searching it
+                      finishedSearch d f
                       lift $ logmes $ "Research: a = " ++ show a ++ ", s1 = " ++ show s1
                       let nst' = nst { crtnt = PVNode, nxtnt = PVNode }
                       pnextlev <$> pvSearch nst' (-b) (-a) d1
@@ -697,14 +704,14 @@ pvInnerLoop b d phase prune nst e = timeToAbort (True, nst) $ do
                        modify $ \s -> s { absdp = absdp s + 1 }
                        s <- case exd of
                            Exten exd' spc -> do
-                               startSearching d e nst
+                               f <- startSearching d e nst
                                when (exd' == 0 && not spc) $ do	-- not quite ok here
                                    sdiff <- lift scoreDiff	-- cause spc has a slighty
                                    updateFutil sdiff	-- e	-- different meaning...
                                xchangeFutil
-                               s <- pvInnerLoopExten b d exd' (deepNSt nst)
+                               s <- pvInnerLoopExten b d exd' f (deepNSt nst)
                                xchangeFutil
-                               finishedSearch d e nst
+                               finishedSearch d f
                                return s
                            Final sco -> return $! pathFromScore "Final" (-sco)
                            Illegal   -> error "Cannot be illegal here"
@@ -748,7 +755,7 @@ pvInnerLoopZ b d phase prune nst e redu = timeToAbort (True, nst) $ do
                        modify $ \s -> s { absdp = absdp s + 1 }
                        s <- case exd of
                                 Exten exd' spc -> do
-                                    startSearching d e nst
+                                    f <- startSearching d e nst
                                     let nst' = if spc then resetSpc nst else nst
                                     when (exd' == 0 && not spc) $ do
                                         sdiff <- lift scoreDiff
@@ -756,7 +763,7 @@ pvInnerLoopZ b d phase prune nst e redu = timeToAbort (True, nst) $ do
                                     xchangeFutil
                                     s <- pvInnerLoopExtenZ b d spc exd' (deepNSt nst') redu
                                     xchangeFutil
-                                    finishedSearch d e nst
+                                    finishedSearch d f
                                     return s
                                 Final sco -> return $! pathFromScore "Final" (-sco)
                                 Illegal   -> error "Cannot be illegal here"
@@ -775,8 +782,8 @@ reserveExtension !uex !exd
         modify $ \s -> s { usedext = usedext s + exd }
         return exd
 
-pvInnerLoopExten :: Int -> Int -> Int -> NodeState -> Search Path
-pvInnerLoopExten b d !exd nst = do
+pvInnerLoopExten :: Int -> Int -> Int -> Int -> NodeState -> Search Path
+pvInnerLoopExten b d !exd f nst = do
     old <- get
     exd' <- reserveExtension (usedext old) exd
     let !inPv = crtnt nst == PVNode
@@ -796,6 +803,8 @@ pvInnerLoopExten b d !exd nst = do
                  then return s1	-- failed low (as expected) or aborted
                  else do
                      -- we didn't fail low and need re-search: full window
+                     -- Delete the current searching for this move, to get help in searching it
+                     finishedSearch d f
                      let nst1 = nst { crtnt = PVNode, nxtnt = PVNode }
                      pnextlev <$> pvSearch nst1 (-b) (-a) d1
 

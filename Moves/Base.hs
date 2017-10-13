@@ -16,7 +16,7 @@ module Moves.Base (
     finNode, countRepetitions,
     showMyPos, logMes,
     nearmate,
-    moveKey, tkDeferMove, tkStartSearching, tkFinishedSearch
+    tkDeferMove, tkStartSearching, tkFinishedSearch
 ) where
 
 import Data.Bits
@@ -48,9 +48,6 @@ nearmate i = i >= mateScore - 255 || i <= -mateScore + 255
 -- Some options and parameters:
 printEvalInt :: Int64
 printEvalInt   = 2 `shiftL` 12 - 1	-- if /= 0: print eval info every so many nodes
-
-csMind :: Int	-- minimum depth to look in table
-csMind = 4	-- "currently searching"
 
 mateScore :: Int
 mateScore = 20000
@@ -371,24 +368,26 @@ isTimeout msx = do
 showStack :: Int -> [MyPos] -> String
 showStack n = concatMap showMyPos . take n
 
-moveKey :: MyPos -> Move -> ZKey
-moveKey pos (Move w) = zobkey pos `xor` (fromIntegral w * 1664525 + 1013094223)
+moveKey :: ZKey -> Move -> ZKey
+moveKey zob (Move w) = zob `xor` (fromIntegral w * 1664525 + 1013094223)
 
-{-# INLINE withCorrectDepth #-}
-withCorrectDepth :: (CurSe -> ZKey -> IO a) -> a -> ZKey -> Int -> Game a
-withCorrectDepth _ a _    d | d < csMind = return a
-withCorrectDepth f _ zkey _ = do
+tkDeferMove :: Move -> Game Bool
+tkDeferMove m = do
+    s <- get
+    let c = curse s
+        p = head $ stack s
+        z = zobkey p
+    liftIO $ deferMove c $ moveKey z m
+
+tkStartSearching :: ZKey -> Move -> Game Int
+tkStartSearching z m = do
     c <- gets curse
-    liftIO $ f c zkey
+    liftIO $ startSearching c $ moveKey z m
 
-tkDeferMove :: ZKey -> Int -> Game Bool
-tkDeferMove = withCorrectDepth deferMove False
-
-tkStartSearching :: ZKey -> Int -> Game ()
-tkStartSearching = withCorrectDepth startSearching ()
-
-tkFinishedSearch :: ZKey -> Int -> Game ()
-tkFinishedSearch = withCorrectDepth finishedSearch ()
+tkFinishedSearch :: Int -> Game ()
+tkFinishedSearch i = do
+    c <- gets curse
+    liftIO $ finishedSearch c i
 
 {-# INLINE informCtx #-}
 informCtx :: Comm -> Game ()

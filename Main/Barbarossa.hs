@@ -42,7 +42,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.5.0"
-progVerSuff = "abd2"
+progVerSuff = "abd3"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -360,10 +360,10 @@ doPosition fen mvs = do
         then ctxLog LogWarning "GUI sent Position while I'm working..."
         else do
             hi <- liftIO newHist
+            hc <- liftIO newCurSe
             let es = evalst $ crtStatus chg
                 cs = crtStatus chg
                 ha = hash cs
-                hc = curse cs
             (mi, ns) <- newState fen mvs ha hc hi es
             -- reset the last move score when we begin new game:
             let lsc = case mi of
