@@ -61,13 +61,13 @@ varImp lev w = round $ go 0 lev w
           go !lv !b !i | i <= b    = lv
                        | otherwise = go (lv+1) (b*1.2) (i-b)
 
+-- Razoring
+razorMargins :: UArray Int Int
+razorMargins = listArray (0, 3) [0, 700, 800, 900]
+
 -- Parameters for futility pruning:
 maxFutilDepth :: Int
 maxFutilDepth = 3
-
--- Razoring
-razorMargins :: UArray Int Int
-razorMargins = listArray (0, 3) [0, 572, 604, 556]
 
 -- Futility margins
 futilMargins :: Int -> Int -> Int
@@ -104,7 +104,7 @@ minIIDCut   = 8
 maxIIDDepth = 2
 
 iidNewDepth :: Int -> Int
-iidNewDepth = subtract 1
+iidNewDepth d = (3 * d) `unsafeShiftR` 2 - 2
 
 -- Parameter for quiescenst search
 inEndlessCheck, qsDeltaMargin :: Int
@@ -544,7 +544,7 @@ pvZeroW !nst !b !d redu = do
        else do
            when (hdeep < 0) reFail
            pos <- lift getPos
-           mr <- razoring pos nst d b
+           mr <- razoring pos d b
            case mr of
                Just v  -> return $ pathFromScore "Razoring" $ trimax bGrain b v
                Nothing -> do
@@ -589,9 +589,10 @@ pvZeroW !nst !b !d redu = do
                                                else return $ limitScoreNoMove pos bGrain b
     where !bGrain = b - scoreGrain
 
-razoring :: MyPos -> NodeState -> Int -> Int -> Search (Maybe Int)
-razoring pos nst d b
-    | d >= 4 || crtnt nst == PVNode || tacticalPos pos || staticScore pos >= rb
+razoring :: MyPos -> Int -> Int -> Search (Maybe Int)
+razoring pos d b
+    -- | d >= 4 || tacticalPos pos || staticScore pos >= rb
+    | d >= 3 || tacticalPos pos || staticScore pos >= rb
                 = return Nothing
     | d <= 1    = Just <$> pvQSearch (b-scoreGrain) b 0
     | otherwise = do
@@ -1091,13 +1092,13 @@ finWithNodes s = do
 bestMoveFromIID :: NodeState -> Int -> Int -> Int -> Search [Move]
 bestMoveFromIID nst a b d
     | nt == PVNode  && d >= minIIDPV
-          = do s <- pvSearch nst a b d'
+          = do s <- pvSearch nst a b $ iidNewDepth d
                return $! unseq $ pathMoves s
     | nt == CutNode && (d >= minIIDCut || (d >= minIIDCutNK && killer nst == NoKiller))
-          = do s <- pvZeroW nst b d' False
+          = do s <- pvZeroW nst b d2 False
                return $! unseq $ pathMoves s
     | otherwise =  return []
-    where d' = min maxIIDDepth (iidNewDepth d)
+    where d2 = min maxIIDDepth (iidNewDepth d)
           nt = crtnt nst
 
 {-# INLINE timeToAbort #-}
