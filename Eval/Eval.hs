@@ -275,31 +275,25 @@ kingPlace ep p !ew mide = made (madm (mad (mad (mad mide (ewKingPawn2 ew) kpa2)
           !kpd = (mpi - ypi) `unsafeShiftR` epPawnBonusScale  ep
           !mks = kingSquare (kings p) $ me p
           !yks = kingSquare (kings p) $ yo p
-          !mkm = materFun yminor yrooks yqueens
-          !ykm = materFun mminor mrooks mqueens
           (!mpl, !ypl, !mpi, !ypi)
-              | moving p == White = ( kingMaterBonus yqueens White mpawns mkm mks
-                                    , kingMaterBonus mqueens Black ypawns ykm yks
+              | moving p == White = ( kingMaterBonus yqueens White mpawns (myKAttacs p)
+                                    , kingMaterBonus mqueens Black ypawns (yoKAttacs p)
                                     , kingPawnsBonus mks mpassed ypassed
                                     , kingPawnsBonus yks mpassed ypassed
                                     )
-              | otherwise         = ( kingMaterBonus yqueens Black mpawns mkm mks
-                                    , kingMaterBonus mqueens White ypawns ykm yks
+              | otherwise         = ( kingMaterBonus yqueens Black mpawns (myKAttacs p)
+                                    , kingMaterBonus mqueens White ypawns (yoKAttacs p)
                                     , kingPawnsBonus mks ypassed mpassed
                                     , kingPawnsBonus yks ypassed mpassed
                                     )
           !mrooks  = popCount $ rooks p .&. me p
           !mqueens = popCount $ queens p .&. me p
-          !mminor  = popCount $ (bishops p .|. knights p) .&. me p
           !yrooks  = popCount $ rooks p .&. yo p
           !yqueens = popCount $ queens p .&. yo p
-          !yminor  = popCount $ (bishops p .|. knights p) .&. yo p
           !mpawns  = pawns p .&. me p
           !ypawns  = pawns p .&. yo p
           !mpassed = passed p .&. me p
           !ypassed = passed p .&. yo p
-          materFun m r q = (m * epMaterMinor ep + r * epMaterRook ep + q * epMaterQueen ep)
-                               `unsafeShiftR` epMaterScale ep
           !ko = adv - own
           mwb = popCount $ bAttacs paw mks `less` paw
           mwr = popCount $ rAttacs paw mks `less` paw
@@ -337,61 +331,51 @@ kingPawnsBonus !ksq !wpass !bpass = bonus
                        $ map promoW (bbToSquares wpass) ++ map promoB (bbToSquares bpass)
           !bonus = bpsqs + bqsqs
 
--- This is a bonus for the king beeing near one corner
--- It's bigger when the enemy has more material (only pieces)
--- and when that corner has a pawn shelter
-kingMaterBonus :: Int -> Color -> BBoard -> Int -> Square -> Int
-kingMaterBonus !qs c !myp !mat !ksq
-    | qs == 0   = 0
-    | otherwise = kMatBonus c myp mat ksq
-
-kMatBonus :: Color -> BBoard -> Int -> Square -> Int
-kMatBonus c !myp !mat !ksq
-    | c == White = matFactor mat * prxw
-    | otherwise  = matFactor mat * prxb
-    where !prxw = prxWA + prxWH
-          !prxb = prxBA + prxBH
-          !prxWA = (unsafeShiftL (opawns shWA2) 1 + opawns shWA3) * (prxBoQ wa + prxBo wb)
-          !prxWH = (unsafeShiftL (opawns shWH2) 1 + opawns shWH3) * (prxBoQ wh + prxBo wg)
-          !prxBA = (unsafeShiftL (opawns shBA7) 1 + opawns shBA6) * (prxBoQ ba + prxBo bb)
-          !prxBH = (unsafeShiftL (opawns shBH7) 1 + opawns shBH6) * (prxBoQ bh + prxBo bg)
-          opawns = popCount . (.&. myp)
-          prxBo  = proxyBonus . squareDistance ksq
-          prxBoQ = flip unsafeShiftR 2 . prxBo
-          matFactor = unsafeAt matKCArr
-          -- The interesting squares and bitboards about king placement
-          wa = 0
-          wb = 1
-          wg = 6
-          wh = 7
-          ba = 56
-          bb = 57
-          bg = 62
-          bh = 63
-          shWA2 = row2 .&. (fileA .|. fileB .|. fileC)
-          shWA3 = row3 .&. (fileA .|. fileB .|. fileC)
-          shWH2 = row2 .&. (fileF .|. fileG .|. fileH)
-          shWH3 = row3 .&. (fileF .|. fileG .|. fileH)
-          shBA6 = row6 .&. (fileA .|. fileB .|. fileC)
-          shBA7 = row7 .&. (fileA .|. fileB .|. fileC)
-          shBH6 = row6 .&. (fileF .|. fileG .|. fileH)
-          shBH7 = row7 .&. (fileF .|. fileG .|. fileH)
-
--- Make it longer, for artificially increased distances
-proxyBonusArr :: UArray Int Int    -- 0   1  2  3  4  5  6  7
-proxyBonusArr = listArray (0, 15) $ [55, 20, 8, 4, 3, 2, 1] ++ repeat 0
-
 pawnBonusArr :: UArray Int Int     -- 0    1   2   3   4   5  6  7
 pawnBonusArr = listArray (0, 15) $ [220, 120, 70, 35, 23, 14, 7] ++ repeat 0
-
-proxyBonus :: Int -> Int
-proxyBonus = unsafeAt proxyBonusArr
 
 pawnBonus :: Int -> Int
 pawnBonus = unsafeAt pawnBonusArr
 
-matKCArr :: UArray Int Int   -- 0              5             10
-matKCArr = listArray (0, 63) $ [0, 0, 0, 1, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12] ++ repeat 12
+-- This is a bonus for the king beeing near one corner
+-- It's bigger when that corner has a pawn shelter
+kingMaterBonus :: Int -> Color -> BBoard -> BBoard -> Int
+kingMaterBonus !qs c !myp !myk
+    | qs == 0   = 0
+    | otherwise = kMatBonus c myp myk
+
+kMatBonus :: Color -> BBoard -> BBoard -> Int
+kMatBonus c !myp !myk
+    | c == White = kMatBonusW myk myp * 440
+    | otherwise  = kMatBonusB myk myp * 440
+
+kMatBonusW :: BBoard -> BBoard -> Int
+kMatBonusW myk myp
+    | pog /= 0  = kBonusG pog myp shG - kAdvanced myk kad
+    | otherwise = kBonusB myk myp shB - kAdvanced myk kad
+    where !pog = myk .&. shG
+          shB = row2 .&. (fileA .|. fileB .|. fileC)
+          shG = row2 .&. (fileF .|. fileG .|. fileH)
+          kad = (row4 .|. row5 .|. row6 .|. row7 .|. row8) `less` (fileA .|. fileH)
+
+kMatBonusB :: BBoard -> BBoard -> Int
+kMatBonusB myk myp
+    | pog /= 0  = kBonusG pog myp shG - kAdvanced myk kad
+    | otherwise = kBonusB myk myp shB - kAdvanced myk kad
+    where !pog = myk .&. shG
+          shB = row7 .&. (fileA .|. fileB .|. fileC)
+          shG = row7 .&. (fileF .|. fileG .|. fileH)
+          kad = (row5 .|. row4 .|. row3 .|. row2 .|. row1) `less` (fileA .|. fileH)
+
+kAdvanced :: BBoard -> BBoard -> Int
+kAdvanced myk adv = c * c
+    where c = popCount $ myk .&. adv
+
+kBonusG :: BBoard -> BBoard -> BBoard -> Int
+kBonusG pog myp shi = popCount pog * popCount (shi .&. myp)
+
+kBonusB :: BBoard -> BBoard -> BBoard -> Int
+kBonusB myk myp shi = popCount (myk .&. shi) * popCount (shi .&. myp)
 
 ------ Rook placement points ------
 
