@@ -59,7 +59,7 @@ varImp :: Double -> Double -> Int
 varImp lev w = round $ go 0 lev w
     where go :: Double -> Double -> Double -> Double
           go !lv !b !i | i <= b    = lv
-                       | otherwise = go (lv+1) (b*1.2) (i-b)
+                       | otherwise = go (lv+1) (b*1.22) (i-b)
 
 -- Parameters for futility pruning:
 maxFutilDepth :: Int
