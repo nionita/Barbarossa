@@ -86,7 +86,7 @@ gamePhase p = g
           rs = popCount $ rooks p
           bs = popCount $ bishops p
           ns = popCount $ knights p
-          !g = qs * 40 + rs * 20 + (bs + ns) * 12	-- opening: 256, end: 0
+          !g = qs * 39 + rs * 20 + (bs + ns) * 12	-- opening: 254, end: 0
 
 evalSideNoPawns :: MyPos -> EvalState -> Int
 evalSideNoPawns p !sti

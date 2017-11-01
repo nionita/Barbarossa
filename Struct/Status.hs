@@ -120,7 +120,7 @@ instance CollectParams EvalParams where
     type CollectFor EvalParams = EvalParams
     npColInit = EvalParams {
                     epMovingMid  = 156,		-- SGD with shift 0.8 with 5 M positions
-                    epMovingEnd  = 166,		-- just try
+                    epMovingEnd  = 156,		-- with 5 M positions
                     epMaterMinor = 1,
                     epMaterRook  = 4,
                     epMaterQueen = 13,
@@ -129,10 +129,10 @@ instance CollectParams EvalParams where
                     epPawnBonusScale  = 1,
                     epPassKingProx    = 12,	-- max after ~12k Clop games (ELO +23 +- 12)
                     epPassMin    = 30,
-                    epPassBlockO =  6,
-                    epPassBlockA = 20,
-                    epPassMyCtrl = 11,
-                    epPassYoCtrl = 11
+                    epPassBlockO = 11,
+                    epPassBlockA = 17,
+                    epPassMyCtrl =  6,
+                    epPassYoCtrl =  7
                 }
     npColParm = collectEvalParams
     npSetParm = id
