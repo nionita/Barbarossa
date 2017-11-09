@@ -10,6 +10,8 @@ module Struct.Status (
     mad, madm, made, tme
 ) where
 
+import Data.Int
+
 import Struct.Struct
 import Struct.Config
 import Moves.History
@@ -23,6 +25,7 @@ data MyState = MyState {
         curse  :: CurSe,	-- currently searching table
         hist   :: History,	-- history table
         mstats :: SStats,	-- per move search statistics
+        lnodes :: Int64,	-- last reported nodes
         evalst :: EvalState	-- eval status (parameter & statistics)
     }
 

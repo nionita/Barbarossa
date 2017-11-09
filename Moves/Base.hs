@@ -52,23 +52,25 @@ printEvalInt   = 2 `shiftL` 12 - 1	-- if /= 0: print eval info every so many nod
 mateScore :: Int
 mateScore = 20000
 
+-- When reporting the node statistics we need to report only
+-- new nodes since last reporting, so that in multi threading
+-- the node statistic reporting thread can word correctly
 {-# INLINE curNodes #-}
 curNodes :: Int64 -> Game Int64
-curNodes n = (n + ) <$> gets (sNodes . mstats)
+curNodes n = do
+    s <- get
+    let !tn = n + sNodes (mstats s)
+        !rn = tn - lnodes s
+    put s { lnodes = tn }
+    return rn
 
 {-# INLINE getPos #-}
 getPos :: Game MyPos
 getPos = gets (head . stack)
 
 posToState :: MyPos -> Cache -> CurSe -> History -> EvalState -> MyState
-posToState p t c h e = MyState {
-                       stack = [p''],
-                       hash = t,
-                       curse = c,
-                       hist = h,
-                       mstats = ssts0,
-                       evalst = e
-                   }
+posToState p t c h e = MyState { stack = [p''], hash = t, curse = c, hist = h,
+                                 mstats = ssts0, lnodes = 0, evalst = e }
     where stsc = posEval p e
           p'' = p { staticScore = stsc }
 

@@ -252,8 +252,9 @@ theStater ichan schan a@(StaterState acc) = do
     case m of
         Info d t n p s -> do
             liftIO $ writeChan ichan $ Info d t (acc + n) p s
-            theStater ichan schan (StaterState 0)
+            theStater ichan schan $! StaterState $ acc + n
         InfoN n        -> theStater ichan schan $! StaterState $ acc + n
+        InfoR          -> theStater ichan schan (StaterState 0)
         _              -> theStater ichan schan a
 
 -- The reader is executed by the main thread
@@ -506,6 +507,7 @@ startWorking tim tpm mtg dpt rept = do
     modifyChanging $ \c -> c { working = True, srchStrtMs = currms, totBmCh = 0,
                                lastChDr = 0, crtStatus = posNewSearch (crtStatus c) }
     chg <- readChanging
+    informGuiReset
     let nt = noThreads chg
     tids <- forM [1..nt] $ \tnr -> newThread (startSearchThread tnr chg tim tpm mtg dpt rept)
     modifyChanging (\c -> c { compThread = Map.fromList $ zip tids [1..nt] })

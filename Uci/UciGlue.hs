@@ -35,8 +35,8 @@ bestMoveCont depth sttime main stati lastsc lpv rmvs = do
                 stoptime  = sttime
                 }
     ((sc, path, rmvsf, timint, ch), statf) <- SM.runCState (alphaBeta abc) stati
-    when main $ do
-        let n = sNodes $ mstats statf
-        informGui sc depth n path
-        ctxLog LogInfo $ "Main thread: score " ++ show sc ++ " path " ++ show path
+    -- when main $ do
+    --     let n = sNodes $ mstats statf
+    --     informGui sc depth n path
+    --     ctxLog LogInfo $ "Main thread: score " ++ show sc ++ " path " ++ show path
     return (path, sc, rmvsf, timint, statf, ch)

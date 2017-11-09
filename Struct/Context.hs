@@ -34,6 +34,7 @@ data InfoToGui = Info {
                     infoCurMove :: Int
                 }
                 | InfoS { infoString :: String }
+                | InfoR
 
 data LogLevel = DebugSearch | DebugUci | LogInfo | LogWarning | LogError | LogNever
     deriving (Eq, Ord)
@@ -150,7 +151,7 @@ currMilli ref = do
     return $ fromIntegral $ (s-ref)*1000 + ps `div` 1000000000
 
 -- Communicate the best path so far
--- In multi threading take also the nodes of the other threads into consideration
+-- Because of multi threading send that to the statistics thread
 informGui :: Int -> Int -> Int64 -> [Move] -> CtxIO ()
 informGui sc depth nds path = do
     ctx <- ask
@@ -170,6 +171,11 @@ informGuiNodes n = do
     ctx <- ask
     let gi = InfoN { infoNodes = n }
     liftIO $ writeChan (nodsta ctx) gi
+
+informGuiReset :: CtxIO ()
+informGuiReset = do
+    ctx <- ask
+    liftIO $ writeChan (nodsta ctx) InfoR
 
 -- Communicate the current move
 informGuiCM :: Move -> Int -> CtxIO ()
