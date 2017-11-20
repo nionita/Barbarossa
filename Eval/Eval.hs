@@ -49,8 +49,8 @@ posEval p !sti = scc
 evalDispatch :: MyPos -> EvalState -> Int
 evalDispatch p !sti
     | pawns p == 0 = evalNoPawns p sti
-    -- | pawns p .&. me p == 0 ||
-    --   pawns p .&. yo p == 0 = evalSideNoPawns p sti
+    | pawns p .&. me p == 0 ||
+      pawns p .&. yo p == 0 = evalSideNoPawns p sti
     | kings p .|. pawns p == occup p,
       Just r <- pawnEndGame p = r
     | otherwise    = normalEval p sti
@@ -88,11 +88,10 @@ gamePhase p = g
           ns = popCount $ knights p
           !g = qs * 39 + rs * 20 + (bs + ns) * 12	-- opening: 254, end: 0
 
-{--
 evalSideNoPawns :: MyPos -> EvalState -> Int
 evalSideNoPawns p !sti
     | npwin && insufficient = 0
-    | npwin && lessRook p   = nsc `div` 4
+    -- | npwin && lessRook p   = nsc `div` 4
     | otherwise             = nsc
     where nsc = normalEval p sti
           npside = if pawns p .&. me p == 0 then me p else yo p
@@ -101,7 +100,6 @@ evalSideNoPawns p !sti
           bishopcnt = popCount $ bishops p .&. npside
           minorcnt  = popCount $ (bishops p .|. knights p) .&. npside
           majorcnt  = popCount $ (queens p .|. rooks p) .&. npside
---}
 
 -- These evaluation function distiguishes between some known finals with no pawns
 evalNoPawns :: MyPos -> EvalState -> Int
@@ -264,15 +262,18 @@ materDiff p !ew mide = mad mide (ewMaterialDiff ew) md
               | otherwise         = pawnFactor p $ - mater p
 
 -- Reduce the value of material difference when advantaged part has 1 or 0 pawns
+-- But only when there are no queens or rooks
 pawnFactor :: MyPos -> Int -> Int
 pawnFactor p mymat
+    | queens p /= 0 = mymat
     | mymat > 0 = reduce $ pawns p .&. me p
     | mymat < 0 = reduce $ pawns p .&. yo p
     | otherwise = 0
     where reduce myp
-              | myp == 0          = mymat `div` 2
-              | popCount myp == 1 = 2 * mymat `div` 3
+              | myp == 0          = m4 + m4
+              | popCount myp == 1 = m4 + m4 + m4
               | otherwise         = mymat
+              where m4 = mymat `unsafeShiftR` 2
 
 ------ King placement and opennes ------
 
