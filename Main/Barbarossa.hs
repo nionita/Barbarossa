@@ -42,7 +42,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.5.0"
-progVerSuff = "abd3"
+progVerSuff = "abd3-2"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -110,7 +110,7 @@ initContext opts = do
     (parc, evs) <- makeEvalState (optConfFile opts) paramList progVersion progVerSuff
     let chg = Chg {
             working = False,
-            noThreads = 1,
+            noThreads = 2,
             compThread = Map.empty,
             crtStatus = posToState initPos ha hc hi evs,
             realPly = Nothing,
