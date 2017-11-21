@@ -101,7 +101,9 @@ initContext opts = do
     ichan <- newChan
     ha <- newCache 1	-- it will take the minimum number of entries
     hi <- newHist
-    let paramList = stringToParams $ concat $ intersperse "," $ optParams opts
+    let paramList
+            | null $ optParams opts = []
+            | otherwise             = stringToParams $ concat $ intersperse "," $ optParams opts
     (parc, evs) <- makeEvalState (optConfFile opts) paramList progVersion progVerSuff
     let chg = Chg {
             working = False,
