@@ -13,11 +13,12 @@ import Eval.Eval (initEvalState)
 
 -- Opens a parameter file for eval, read it and create an eval state
 makeEvalState :: Maybe FilePath -> [(String, Double)] -> String -> String -> IO (FilePath, EvalState)
-makeEvalState argfile assigns pver psuff =
+makeEvalState argfile assigns pver psuff = do
+    -- putStrLn $ "makeEvalState: " ++ show argfile
     case argfile of
         Just afn -> do	-- config file as argument
             fex <- doesFileExist afn
-            if fex then filState afn afn assigns else defState
+            if fex then filState afn afn assigns else error $ "makeEvalState: no such file: " ++ afn
         Nothing  -> go $ configFileNames pver psuff
     where defState = return ("", initEvalState assigns)
           go [] = defState
@@ -33,7 +34,10 @@ filState fn ident ass = do
 fileToState :: FilePath -> [(String, Double)] -> IO EvalState
 fileToState fn ass = do
     fCont <- readFile fn
-    return $ initEvalState $ ass ++ fileToParams fCont
+    -- putStrLn $ "This is the file " ++ fn ++ ":" ++ fCont
+    let ies = initEvalState $ ass ++ fileToParams fCont
+    -- putStrLn $ "This is state: " ++ show ies
+    return ies
 
 -- This produces a list of config file names depending on
 -- program version and programm version suffix
