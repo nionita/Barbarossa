@@ -1011,29 +1011,26 @@ pvQSearch !a !b !c = do
                                      !nc = c + esc - 1
                                  pvQLoop b nc a edges
               else do
-                  let !stp = staticScore pos
-                  -- what if hsc < b?
+                  let stp = staticScore pos
                   if stp >= b
                      then do
                          when collectFens $ finWithNodes "BETA"
                          return b
                      else do
-                         !qsdelta <- lift qsDelta
-                         let !a1 = a - qsdelta - qsDeltaMargin
-                         -- what if hsc + ... > a?
-                         if stp < a1
-                             then do
-                                 when collectFens $ finWithNodes "DELT"
-                                 return a
-                             else do
-                                 edges <- Alt <$> lift genTactMoves
-                                 if noMove edges
-                                    then do	-- no more captures
-                                        when collectFens $ finWithNodes "NOCA"
-                                        return $! trimax a b stp
-                                    else if stp > a
-                                            then pvQLoop b c stp edges
-                                            else pvQLoop b c a   edges
+                         !dcut <- lift $ qsDelta $ a - stp - qsDeltaMargin
+                         if dcut
+                            then do
+                                when collectFens $ finWithNodes "DELT"
+                                return a
+                            else do
+                                edges <- Alt <$> lift genTactMoves
+                                if noMove edges
+                                   then do	-- no more captures
+                                       when collectFens $ finWithNodes "NOCA"
+                                       return $! trimax a b stp
+                                   else if stp > a
+                                           then pvQLoop b c stp edges
+                                           else pvQLoop b c a   edges
     where lenmax2 (_:_:_) = 2
           lenmax2 _       = 1	-- we know here it is not empty
 
