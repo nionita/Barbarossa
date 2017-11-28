@@ -62,7 +62,7 @@ data EvalParams
           epMaterQueen :: !Int,
           epMaterScale :: !Int,
           epMaterBonusScale :: !Int,
-          epPawnBonusScale  :: !Int,
+          -- epPawnBonusScale  :: !Int,
           epPassKingProx    :: !Int,
           epPassBlockO :: !Int,
           epPassBlockA :: !Int,
@@ -126,8 +126,8 @@ instance CollectParams EvalParams where
                     epMaterQueen = 13,
                     epMaterScale = 1,
                     epMaterBonusScale = 5,
-                    epPawnBonusScale  = 1,
-                    epPassKingProx    = 12,	-- max after ~12k Clop games (ELO +23 +- 12)
+                    -- epPawnBonusScale  = 8,	-- not used
+                    epPassKingProx    = 13,
                     epPassBlockO = 11,
                     epPassBlockA = 17,
                     epPassMin    = 30,
@@ -146,7 +146,7 @@ collectEvalParams (s, v) ep = lookApply s v ep [
         ("epMaterQueen",      setEpMaterQueen),
         ("epMaterScale",      setEpMaterScale),
         ("epMaterBonusScale", setEpMaterBonusScale),
-        ("epPawnBonusScale",  setEpPawnBonusScale),
+        -- ("epPawnBonusScale",  setEpPawnBonusScale),
         ("epPassKingProx",    setEpPassKingProx),
         ("epPassBlockO",      setEpPassBlockO),
         ("epPassBlockA",      setEpPassBlockA),
@@ -161,7 +161,7 @@ collectEvalParams (s, v) ep = lookApply s v ep [
           setEpMaterQueen      v' ep' = ep' { epMaterQueen      = round v' }
           setEpMaterScale      v' ep' = ep' { epMaterScale      = round v' }
           setEpMaterBonusScale v' ep' = ep' { epMaterBonusScale = round v' }
-          setEpPawnBonusScale  v' ep' = ep' { epPawnBonusScale  = round v' }
+          -- setEpPawnBonusScale  v' ep' = ep' { epPawnBonusScale  = round v' }
           setEpPassKingProx    v' ep' = ep' { epPassKingProx    = round v' }
           setEpPassBlockO      v' ep' = ep' { epPassBlockO      = round v' }
           setEpPassBlockA      v' ep' = ep' { epPassBlockA      = round v' }
@@ -176,7 +176,7 @@ instance CollectParams EvalWeights where
           ewKingSafe        = tme 1 0,
           ewKingOpen        = tme 2 4,
           ewKingPlaceCent   = tme 8 1,
-          ewKingPlacePwns   = tme 0 4,
+          ewKingPlacePwns   = tme 400 200,
           ewKingPawn1       = tme 11 42,
           ewKingPawn2       = tme 10 69,
           ewRookHOpen       = tme 167 183,
