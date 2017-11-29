@@ -119,20 +119,20 @@ data EvalWeights
 instance CollectParams EvalParams where
     type CollectFor EvalParams = EvalParams
     npColInit = EvalParams {
-                    epMovingMid  = 158,		-- With DSPSA, 5000 steps
-                    epMovingEnd  = 158,		-- AdaDelta
+                    epMovingMid  = 156,		-- With DSPSA, 5000 steps
+                    epMovingEnd  = 156,		-- AdaDelta
                     epMaterMinor = 1,
                     epMaterRook  = 4,
                     epMaterQueen = 13,
                     epMaterScale = 1,
                     epMaterBonusScale = 5,
                     -- epPawnBonusScale  = 8,	-- not used
-                    epPassKingProx    = 12,
+                    epPassKingProx    = 13,
                     epPassBlockO = 12,
-                    epPassBlockA = 22,
-                    epPassMin    = 38,
-                    epPassMyCtrl = 8,
-                    epPassYoCtrl = 9
+                    epPassBlockA = 17,
+                    epPassMin    = 31,
+                    epPassMyCtrl = 6,
+                    epPassYoCtrl = 8
                 }
     npColParm = collectEvalParams
     npSetParm = id
@@ -176,9 +176,9 @@ instance CollectParams EvalWeights where
           ewKingSafe        = tme 1 0,
           ewKingOpen        = tme 2 4,
           ewKingPlaceCent   = tme 8 1,
-          ewKingPlacePwns   = tme 403 196,
-          ewKingPawn1       = tme  2 40,
-          ewKingPawn2       = tme 12 72,
+          ewKingPlacePwns   = tme 399 198,
+          ewKingPawn1       = tme 11 43,
+          ewKingPawn2       = tme 10 68,
           ewRookHOpen       = tme 167 183,
           ewRookOpen        = tme 205 179,
           ewRookConn        = tme 92  58,
@@ -186,7 +186,7 @@ instance CollectParams EvalWeights where
           ewMobilityBishop  = tme 53 33,
           ewMobilityRook    = tme 18 32,
           ewMobilityQueen   = tme  2 11,
-          ewCenterPAtts     = tme 77 61,
+          ewCenterPAtts     = tme 73 59,
           ewCenterNAtts     = tme 48 37,
           ewCenterBAtts     = tme 52 35,
           ewCenterRAtts     = tme 14 23,
@@ -194,10 +194,10 @@ instance CollectParams EvalWeights where
           ewCenterKAtts     = tme  2 62,
           ewSpace           = tme  1  0,
           ewAdvAtts         = tme  1 17,
-          ewIsolPawns       = tme (-43) (-106),
-          ewIsolPassed      = tme (-57) (-142),
-          ewBackPawns       = tme (-98) (-151),
-          ewBackPOpen       = tme (-21)  (-27),
+          ewIsolPawns       = tme (-38) (-106),
+          ewIsolPassed      = tme (-57) (-151),
+          ewBackPawns       = tme (-106) (-148),
+          ewBackPOpen       = tme (-22)  (-28),
           ewEnpHanging      = tme (-19) (-27),
           ewEnpEnPrise      = tme (-29) (-26),
           ewEnpAttacked     = tme  (-2) (-14),
@@ -206,13 +206,13 @@ instance CollectParams EvalWeights where
           ewBishopPair      = tme 386 323,
           ewBishopPawns     = tme (-25) (-54),
           ewRedundanceRook  = tme (-27) (-52),
-          ewRookPawn        = tme (-49) (-30),
-          ewAdvPawn5        = tme   13 108,
-          ewAdvPawn6        = tme  363 335,
-          ewPawnBlockP      = tme (-114) (-96),
-          ewPawnBlockO      = tme  (-15) (-21),
-          ewPawnBlockA      = tme  (-15) (-60),
-          ewPassPawnLev     = tme 0 8
+          ewRookPawn        = tme (-49) (-26),
+          ewAdvPawn5        = tme    9 108,
+          ewAdvPawn6        = tme  358 329,
+          ewPawnBlockP      = tme (-117) (-94),
+          ewPawnBlockO      = tme  (-20) (-28),
+          ewPawnBlockA      = tme  (-15) (-66),
+          ewPassPawnLev     = tme 1 8
         }
     npColParm = collectEvalWeights
     npSetParm = id
