@@ -10,6 +10,7 @@ module Eval.Eval (
 
 import Data.Array.Base (unsafeAt)
 import Data.Bits
+import Data.Int
 import Data.List (minimumBy)
 import Data.Array.Unboxed
 import Data.Ord (comparing)
@@ -167,14 +168,16 @@ scoreToMate f p mywin = msc
           !wsc = if mywin then sc else -sc
           !msc = mtr + wsc
 
-squareDistArr :: UArray (Square, Square) Int
-squareDistArr = array ((0,0), (63,63)) [((s1, s2), squareDist s1 s2) | s1 <- [0..63], s2 <- [0..63]]
+-- Take Int16 to reduce array size
+squareDistArr :: UArray (Square, Square) Int16
+squareDistArr = array ((0, 0), (63, 63))
+                      [((s1, s2), fromIntegral $ squareDist s1 s2) | s1 <- [0..63], s2 <- [0..63]]
     where squareDist f t = max (abs (fr - tr)) (abs (fc - tc))
               where (fr, fc) = f `divMod` 8
                     (tr, tc) = t `divMod` 8
 
 squareDistance :: Square -> Square -> Int
-squareDistance = curry (squareDistArr!)
+squareDistance x y = fromIntegral $ squareDistArr!(x, y)
 
 -- This center distance should be pre calculated
 centerDistance :: Int -> Int
@@ -224,8 +227,8 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
           !qk = qual myk 2
           !(Flc c q) = fadd qp $ fadd qn $ fadd qb $ fadd qr $ fadd qq qk
           !mattacs
-              | c == 0 = 0
-              | otherwise = attCoef `unsafeAt` ixt
+              | c == 0    = 0
+              | otherwise = fromIntegral $ attCoef `unsafeAt` ixt
               -- where !freey = popCount $ yok `less` (mya .|. yop)
               --       !conce = popCount $ yok .&. mya
               -- This is equivalent to:
@@ -238,10 +241,11 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
 -- Quali max: 8 * (1 + 2 + 2 + 4 + 8 + 2) = 168
 -- Flag max: 6
 -- 6 * 168 / 4 + 6 + 13 = 272
-attCoef :: UArray Int Int
+-- Take Int16 to reduce the size
+attCoef :: UArray Int Int16
 attCoef = listArray (0, 272) $ take zeros (repeat 0) ++ [ f x | x <- [0..63] ] ++ repeat (f 63)
     where -- Without the scaling, f will take max value of 4000 for 63
-          f :: Int -> Int
+          f :: Int -> Int16
           f x = let y = fromIntegral x :: Double
                 in round $ maxks * (2.92968750 - 0.03051758*y)*y*y / 4000
           zeros = 8
@@ -358,7 +362,7 @@ kMatBonus c !myp !mat !ksq
           opawns = popCount . (.&. myp)
           prxBo  = proxyBonus . squareDistance ksq
           prxBoQ = flip unsafeShiftR 2 . prxBo
-          matFactor = unsafeAt matKCArr
+          matFactor = fromIntegral . unsafeAt matKCArr
           -- The interesting squares and bitboards about king placement
           wa = 0
           wb = 1
@@ -390,7 +394,7 @@ proxyBonus = unsafeAt proxyBonusArr
 pawnBonus :: Int -> Int
 pawnBonus = unsafeAt pawnBonusArr
 
-matKCArr :: UArray Int Int   -- 0              5             10
+matKCArr :: UArray Int Int16 -- 0              5             10
 matKCArr = listArray (0, 63) $ [0, 0, 0, 1, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12] ++ repeat 12
 
 ------ Rook placement points ------

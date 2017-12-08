@@ -82,7 +82,7 @@ draftStats dst = do
     put s { mstats = addStats (mstats s) dst }
 
 genMoves :: Int -> Game ([Move], [Move])
-genMoves d = do
+genMoves !d = do
     p <- getPos
     if inCheck p
        then return (genMoveFCheck p, [])
@@ -320,7 +320,7 @@ ttStore !deep !tp !sc !bestm !nds = do
 
 -- History heuristic table update when beta cut
 betaCut :: Bool -> Int -> Move -> Game ()
-betaCut good absdp m
+betaCut good !absdp m
     | moveIsCastle m = do
         s <- get
         liftIO $ toHist (hist s) good m absdp
