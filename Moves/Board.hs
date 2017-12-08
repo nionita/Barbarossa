@@ -38,7 +38,7 @@ inCheck = (/= 0) . check
 
 goPromo :: MyPos -> Move -> Bool
 goPromo p m
-    | moveIsPromo m = True
+    | moveIsPromo m  = True
     | movePassed p m = True
     | otherwise      = False
 
@@ -151,12 +151,12 @@ findChecking !pos = concat [ pChk, nChk, bChk, rChk, qbChk, qrChk ]
 -- Generate move when in check
 genMoveFCheck :: MyPos -> [Move]
 genMoveFCheck !p
-    | null chklist = error "genMoveFCheck"
+    | null chklist        = error "genMoveFCheck"
     | null $ tail chklist = r1 ++ kGen ++ r2	-- simple check
-    | otherwise = kGen				-- double check, only king moves help
-    where !chklist = findChecking p
-          !kGen = map (moveAddColor (moving p) . moveAddPiece King . uncurry moveFromTo)
-                      $ srcDests (legal . kAttacs) ksq
+    | otherwise           = kGen		-- double check, only king moves help
+    where chklist = findChecking p
+          kGen = map (moveAddColor (moving p) . moveAddPiece King . uncurry moveFromTo)
+                     $ srcDests (legal . kAttacs) ksq
           !ksq = firstOne kbb
           !kbb = kings p .&. me p
           !ocp1 = occup p `less` kbb
@@ -248,29 +248,34 @@ beatOrBlock f !p sq = (beat, block)
           !line = findLKA f aksq sq
           !block = blockAt p line
 
-genMoveNCaptToCheck :: MyPos -> [(Square, Square)]
+genMoveNCaptToCheck :: MyPos -> [Move]
 genMoveNCaptToCheck p = genMoveNCaptDirCheck p ++ genMoveNCaptIndirCheck p
 
 -- Todo: check with pawns (should be also without promotions)
-genMoveNCaptDirCheck :: MyPos -> [(Square, Square)]
-genMoveNCaptDirCheck p = concat [ qGenC, rGenC, bGenC, nGenC ]
-    where nGenC = concatMap (srcDests (target nTar . nAttacs))
-                     $ bbToSquares $ knights p .&. me p
-          bGenC = concatMap (srcDests (target bTar . bAttacs (occup p)))
-                     $ bbToSquares $ bishops p .&. me p
-          rGenC = concatMap (srcDests (target rTar . rAttacs (occup p)))
-                     $ bbToSquares $ rooks p .&. me p
-          qGenC = concatMap (srcDests (target qTar . qAttacs (occup p)))
-                     $ bbToSquares $ queens p .&. me p
+genMoveNCaptDirCheck :: MyPos -> [Move]
+genMoveNCaptDirCheck p = map (moveAddColor $ moving p) $ concat [ qGenC, rGenC, bGenC, nGenC ]
+    where nGenC = map (moveAddPiece Knight . uncurry moveFromTo)
+                      $ filtQPSEE p Knight $ concatMap (srcDests (target nTar . nAttacs))
+                      $ bbToSquares  $ knights p .&. me p
+          bGenC = map (moveAddPiece Bishop . uncurry moveFromTo)
+                      $ filtQPSEE p Bishop $ concatMap (srcDests (target bTar . bAttacs (occup p)))
+                      $ bbToSquares  $ bishops p .&. me p
+          rGenC = map (moveAddPiece Rook   . uncurry moveFromTo)
+                      $ filtQPSEE p Rook   $ concatMap (srcDests (target rTar . rAttacs (occup p)))
+                      $ bbToSquares  $ rooks p .&. me p
+          qGenC = map (moveAddPiece Queen  . uncurry moveFromTo)
+                      $ filtQPSEE p Queen  $ concatMap (srcDests (target qTar . qAttacs (occup p)))
+                      $ bbToSquares  $ queens p .&. me p
           target b = (.&. b)
+          !nyop = complement $ yo p
           !ksq  = firstOne $ yo p .&. kings p
-          !nTar = fAttacs ksq Knight (occup p) `less` yo p
-          !bTar = fAttacs ksq Bishop (occup p) `less` yo p
-          !rTar = fAttacs ksq Rook   (occup p) `less` yo p
+          !nTar = fAttacs ksq Knight (occup p) .&. nyop
+          !bTar = fAttacs ksq Bishop (occup p) .&. nyop
+          !rTar = fAttacs ksq Rook   (occup p) .&. nyop
           !qTar = bTar .|. rTar
 
 -- TODO: indirect non capture checking moves
-genMoveNCaptIndirCheck :: MyPos -> [(Square, Square)]
+genMoveNCaptIndirCheck :: MyPos -> [Move]
 genMoveNCaptIndirCheck _ = []
 
 -- Generate the castle moves
@@ -785,7 +790,7 @@ genEPCapts !pos
     | epBB == 0 = []
     | otherwise = map (\s -> makeEnPas s dst) $ bbToSquares srcBB
     where !epBB = epcas pos .&. epMask
-          dst = head $ bbToSquares epBB	-- safe because epBB /= 0
+          dst   = head $ bbToSquares epBB	-- safe because epBB /= 0
           srcBB = pAttacs (other $ moving pos) dst .&. me pos .&. pawns pos
 
 perCaptFieldWL :: MyPos -> BBoard -> BBoard -> Square -> ([LMove], [LMove]) -> ([LMove], [LMove])
@@ -835,3 +840,12 @@ addHanging pos vict to from (wsqs, lsqs)
 
 addHangingP :: Piece -> Square -> Square -> ([LMove], [LMove]) -> ([LMove], [LMove])
 addHangingP vict to from (wsqs, lsqs) = ((moveToLMove Pawn vict $ makePromo Queen from to) : wsqs, lsqs)
+
+filtQPSEE :: MyPos -> Piece -> [(Square, Square)] -> [(Square, Square)]
+filtQPSEE !pos piece = filter (quietPositiveSEE pos v0)
+    where v0 = seeValue piece
+
+quietPositiveSEE :: MyPos -> Int -> (Square, Square) -> Bool
+quietPositiveSEE !pos !v0 (!sqfa, !sq) = adv <= 0
+    where !allAttRec = theAttacs pos sq
+          adv = seeMoveValue pos allAttRec sqfa sq v0

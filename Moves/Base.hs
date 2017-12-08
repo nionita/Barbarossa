@@ -97,12 +97,17 @@ genMoves d = do
 
 -- Generate only tactical moves, i.e. promotions & captures
 -- Needed only in QS, when we know we are not in check
-genTactMoves :: Game [Move]
-genTactMoves = do
+-- In the fronties nodes (i.e. first level QS) we generate
+-- also checking quiet moves with non-negative SEE
+genTactMoves :: Bool -> Game [Move]
+genTactMoves front = do
     p <- getPos
     let l1  = genMovePromo p
         l2w = fst $ genMoveCaptWL p
-    return $ l1 ++ l2w
+        l3  = genMoveNCaptToCheck p
+    if front
+       then return $ l1 ++ l2w ++ l3
+       else return $ l1 ++ l2w
 
 -- Generate only escape moves: needed only in QS when we know we have to escape
 genEscapeMoves :: Game [Move]
