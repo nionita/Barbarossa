@@ -614,6 +614,7 @@ searchTheTree tnr chg draft mdraft timx tim tpm mtg rept lsc lpv rmvs = do
               else if draft >= mdraft
                       then return $ Right sc	-- helper thread reached maximum draft
                       else return $ Left (chg { crtStatus = stfin }, 0, 0)
+    when (draft >= 8) $ multiThreadStats tnr stfin
     case esc of
         Right sc' -> return sc'
         Left (chg', mx, mxr) -> do
@@ -719,6 +720,15 @@ totalStatistics :: Int -> MyState -> CtxIO ()
 totalStatistics tnr stf = do
     ctxLog LogInfo $ "Search statistics thread " ++ show tnr ++ ":"
     mapM_ (ctxLog LogInfo) $ formatStats $ mstats stf
+
+multiThreadStats :: Int -> MyState -> CtxIO ()
+multiThreadStats tnr stf = do
+    ctxLog LogInfo $ "Multi thread stats for thread " ++ show tnr ++ ":"
+    ctxLog LogInfo $ "- defer requests yes: " ++ show (mtsDeferY mts)
+    ctxLog LogInfo $ "- defer requests no:  " ++ show (mtsDeferN mts)
+    ctxLog LogInfo $ "- search starts:      " ++ show (mtsStart  mts)
+    ctxLog LogInfo $ "- search finishs:     " ++ show (mtsFinish mts)
+    where mts = mtstat stf
 
 beforeReadLoop :: CtxIO ()
 beforeReadLoop = do

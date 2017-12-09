@@ -8,6 +8,7 @@ module Hash.TransTab (
     ) where
 
 -- import Control.Applicative ((<$>))
+import Control.Monad (when)
 import Data.Bits
 import Data.Int
 import Data.Word
@@ -166,6 +167,10 @@ isSameKey !mmask !mzkey !ptr =
     let w = inlinePerformIO $ peek ptr
     in w .&. mmask == mzkey
 
+-- Same but with the first word already read
+sameKey :: Word64 -> Word64 -> Word64 -> Bool
+sameKey !mmask !mzkey !w = w .&. mmask == mzkey
+
 -- Search a position in table based on ZKey
 -- The position ZKey determines the cell where the TT entry should be, and there we do a linear search
 -- (i.e. 4 comparisons in case of a miss)
@@ -208,21 +213,33 @@ writeCache !tt !zkey !depth !tp !score !move !nodes = do
         pCE   = quintToCacheEn tt zkey depth tp score move nodes
         mkey  = zkey .&. zemask tt
         lasta = bas `plusPtr` lastaAmount
-    store gen (zemask tt) mkey pCE lasta bas bas maxBound
-    where store !gen !mmask !mkey !pCE !lasta = go
-              where go !crt0 !rep0 !sco0
-                       = if isSameKey mmask mkey crt0
-                            then poke (castPtr crt0) pCE	 -- here we found the same entry: just update (but depth?)
-                            else do
-                                lowc <- peek (crt0 `plusPtr` 8)	-- take the low word
-                                scoreReplaceLow gen lowc crt0 rep0 sco0
-                                    (\r -> poke (castPtr r) pCE)
-                                    (\r s -> if crt0 >= lasta
-                                                then poke (castPtr r) pCE
-                                                else go (crt0 `plusPtr` pCacheEnSize) r s)
+        tpden = fromIntegral $ (tp `unsafeShiftL` 6) .|. (depth .&. 0x3F)
+    store gen (zemask tt) mkey pCE lasta tpden bas bas maxBound
+    where store !gen !mmask !mkey !pCE !lasta !tpden = go
+              where go !crt0 !rep0 !sco0 = do
+                        higc <- peek  crt0		-- take the higher word
+                        lowc <- peek (crt0 `plusPtr` 8)	-- take the lower word
+                        if sameKey mmask mkey higc
+                            then do
+                                -- here we found the same entry: because of multi thread
+                                -- we overwrite only when:
+                                -- - entry type is better (2 > 1 > 0), or, if equal, when
+                                -- - depth is higher
+                                when (alwaysOverwrite || tpden >= ((lowc `unsafeShiftR` 48) .&. 0xFF))
+                                    $ poke (castPtr crt0) pCE
+                            else scoreReplaceLow gen lowc crt0 rep0 sco0
+                                     (\r -> poke (castPtr r) pCE)
+                                     (\r s -> if crt0 >= lasta
+                                                 then poke (castPtr r) pCE
+                                                 else go (crt0 `plusPtr` pCacheEnSize) r s)
 
+-- For computation of the last address in the cell
 lastaAmount :: Int
-lastaAmount = 3 * pCacheEnSize	-- for computation of the last address in the cell
+lastaAmount = 3 * pCacheEnSize
+
+-- To overwrite always the same key entry (independent of type & depth)
+alwaysOverwrite :: Bool
+alwaysOverwrite = False
 
 -- Here we implement the logic which decides which entry is weaker
 -- the low word is the score (when the move is masked away):

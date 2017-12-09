@@ -6,6 +6,7 @@ module Struct.Status (
     EvalState(..),
     EvalParams(..),
     EvalWeights(..),
+    MTStats(..),
     MidEnd(..),
     mad, madm, made, tme
 ) where
@@ -26,6 +27,7 @@ data MyState = MyState {
         hist   :: History,	-- history table
         mstats :: SStats,	-- per move search statistics
         lnodes :: Int64,	-- last reported nodes
+        mtstat :: MTStats,	-- multi threading search statistics
         evalst :: EvalState	-- eval status (parameter & statistics)
     }
 
@@ -33,6 +35,11 @@ data EvalState = EvalState {
         esEParams   :: EvalParams,
         esEWeights  :: EvalWeights
     } deriving Show
+
+-- Statistics for multi threading searches
+data MTStats = MTStats {
+        mtsDeferY, mtsDeferN, mtsStart, mtsFinish :: !Int
+    }
 
 data MidEnd = MidEnd { mid, end :: !Int } deriving Show
 

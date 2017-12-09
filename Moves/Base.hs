@@ -54,7 +54,7 @@ mateScore = 20000
 
 -- When reporting the node statistics we need to report only
 -- new nodes since last reporting, so that in multi threading
--- the node statistic reporting thread can word correctly
+-- the node statistic reporting thread can work correctly
 {-# INLINE curNodes #-}
 curNodes :: Int64 -> Game Int64
 curNodes n = do
@@ -70,9 +70,10 @@ getPos = gets (head . stack)
 
 posToState :: MyPos -> Cache -> CurSe -> History -> EvalState -> MyState
 posToState p t c h e = MyState { stack = [p''], hash = t, curse = c, hist = h,
-                                 mstats = ssts0, lnodes = 0, evalst = e }
+                                 mstats = ssts0, lnodes = 0, mtstat = mts0, evalst = e }
     where stsc = posEval p e
           p'' = p { staticScore = stsc }
+          mts0 = MTStats { mtsDeferY = 0, mtsDeferN = 0, mtsStart = 0, mtsFinish = 0 }
 
 posNewSearch :: MyState -> MyState
 posNewSearch p = p { hash = newGener (hash p) }
@@ -379,17 +380,44 @@ tkDeferMove m = do
     let c = curse s
         p = head $ stack s
         z = zobkey p
-    liftIO $ deferMove c $ moveKey z m
+    yn <- liftIO $ deferMove c $ moveKey z m
+    if yn then incDeferY s else incDeferN s
+    return yn
+
 
 tkStartSearching :: ZKey -> Move -> Game Int
 tkStartSearching z m = do
-    c <- gets curse
+    s <- get
+    let c = curse s
+    incStartS s
     liftIO $ startSearching c $ moveKey z m
 
 tkFinishedSearch :: Int -> Game ()
 tkFinishedSearch i = do
-    c <- gets curse
+    s <- get
+    let c = curse s
+    incFinish s
     liftIO $ finishedSearch c i
+
+incDeferY :: MyState -> Game ()
+incDeferY s = put s { mtstat = mts }
+    where !nv  = mtsDeferY (mtstat s) + 1
+          !mts = (mtstat s) { mtsDeferY = nv }
+
+incDeferN :: MyState -> Game ()
+incDeferN s = put s { mtstat = mts }
+    where !nv  = mtsDeferN (mtstat s) + 1
+          !mts = (mtstat s) { mtsDeferN = nv }
+
+incStartS :: MyState -> Game ()
+incStartS s = put s { mtstat = mts }
+    where !nv  = mtsStart (mtstat s) + 1
+          !mts = (mtstat s) { mtsStart = nv }
+
+incFinish :: MyState -> Game ()
+incFinish s = put s { mtstat = mts }
+    where !nv  = mtsFinish (mtstat s) + 1
+          !mts = (mtstat s) { mtsFinish = nv }
 
 {-# INLINE informCtx #-}
 informCtx :: Comm -> Game ()

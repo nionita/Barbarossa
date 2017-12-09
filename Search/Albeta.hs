@@ -300,7 +300,6 @@ pvRootSearch a b d lastpath rmvs aspir = do
                          Seq (e:_) -> return $ e : delete e rmvs
     let !nsti = nst0 { cursc = pathFromScore "Alpha" a, cpos = pos, moves = edges }
     nstf <- pvLoop b d nsti
-    reportStats
     let (sc, pm) | d > 1             = (pathScore (cursc nstf), pathMoves (cursc nstf))
                  | ms:_ <- pvsl nstf = (pathScore $ pvPath ms,  pathMoves (pvPath ms))
                  | otherwise         = (a, emptySeq)
@@ -310,6 +309,7 @@ pvRootSearch a b d lastpath rmvs aspir = do
     if mn
        then informPV sc (draft $ ronly sst) p
        else informNs
+    reportStats
     -- Root is pv node, cannot fail low, except when aspiration fails!
     if sc <= a	-- failed low or timeout when searching PV
          then do
