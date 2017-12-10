@@ -203,20 +203,16 @@ retrieveEntry tt zkey =
 -- but also keep track of the weakest entry in the cell, which will be replaced otherwise
 writeCache :: Cache -> ZKey -> Int -> Int -> Int -> Move -> Int64 -> IO ()
 writeCache !tt !zkey !depth !tp !score !move !nodes = do
-    let bas   = zKeyToCell tt zkey
-        gen   = gener tt
-        pCE   = quintToCacheEn tt zkey depth tp score move nodes
-        mkey  = zkey .&. zemask tt
-        lasta = bas `plusPtr` lastaAmount
-    store gen (zemask tt) mkey pCE lasta bas bas maxBound
+    let !bas   = zKeyToCell tt zkey
+        !pCE   = quintToCacheEn tt zkey depth tp score move nodes
+    store (gener tt) (zemask tt) (zkey .&. zemask tt) pCE (bas `plusPtr` lastaAmount) bas bas maxBound
     where store !gen !mmask !mkey !pCE !lasta = go
               where go !crt0 !rep0 !sco0
                        = if isSameKey mmask mkey crt0
                             then poke (castPtr crt0) pCE	 -- here we found the same entry: just update (but depth?)
                             else do
-                                lowc <- peek (crt0 `plusPtr` 8)	-- take the low word
-                                scoreReplaceLow gen lowc crt0 rep0 sco0
-                                    (\r -> poke (castPtr r) pCE)
+                                clow <- peek (crt0 `plusPtr` 8)	-- take the low word
+                                scoreReplaceLow gen clow crt0 rep0 sco0
                                     (\r s -> if crt0 >= lasta
                                                 then poke (castPtr r) pCE
                                                 else go (crt0 `plusPtr` pCacheEnSize) r s)
@@ -224,22 +220,33 @@ writeCache !tt !zkey !depth !tp !score !move !nodes = do
 lastaAmount :: Int
 lastaAmount = 3 * pCacheEnSize	-- for computation of the last address in the cell
 
--- Here we implement the logic which decides which entry is weaker
--- the low word is the score (when the move is masked away):
--- generation (when > curr gen: whole score is 0)
+-- Here we implement the logic to decides which TT entry from this bucket to replace:
+-- higher generation: entry must be from another game, score 0 (lowest)
+-- ohterwise: when masking the move in the lower word64 we get a valid score:
+-- lower generations: score is lower
+-- same generation: maybe node type, depth and number of nodes are preferred in this order
 -- type (2 - exact - only few entries, PV, 1 - lower bound: have good moves, 0 - upper bound)
--- depth
--- nodes
+-- depth: higher is better
+-- nodes: higher is better
 scoreReplaceLow :: Word64 -> Word64 -> Ptr Word64 -> Ptr Word64 -> Word64
-    -> (Ptr Word64 -> IO ())		-- terminating function
-    -> (Ptr Word64 -> Word64 -> IO ())	-- continue function
+    -> (Ptr Word64 -> Word64 -> IO ())	-- continuation function
     -> IO ()
-scoreReplaceLow gen lowc crt rep sco term cont
-    | generation > gen = term crt
-    | lowm < sco = cont crt lowm
-    | otherwise  = cont rep sco
-    where generation = lowc .&. generMsk
-          lowm = lowc .&. 0xFFFF	-- mask the move
+scoreReplaceLow gen clow crt rep sco cont
+    | genc > gen = cont crt 0		-- generation overflow
+    | csco < sco = cont crt csco	-- current is weaker
+    | otherwise  = cont rep sco		-- previous is weaker
+    where genc = clow .&. generMsk
+          csco = clow .&. scoreMask	-- mask move or move & type
+
+-- Score for TT entries when generation ok (means no overflow and equal)
+-- can be done with or without node type
+nodeTypePreferred :: Bool
+nodeTypePreferred = False
+
+scoreMask :: Mask
+scoreMask
+    | nodeTypePreferred = 0xFFFFFFFFFFFF0000
+    | otherwise         = 0xFF3FFFFFFFFF0000
 
 quintToCacheEn :: Cache -> ZKey -> Int -> Int -> Int -> Move -> Int64 -> PCacheEn
 quintToCacheEn !tt !zkey !depth !tp !score !(Move move) !nodes = pCE
