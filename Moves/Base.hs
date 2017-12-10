@@ -300,10 +300,10 @@ qsDelta = do
 ttRead :: Game (Int, Int, Int, Move, Int64)
 ttRead = do
     s <- get
-    p <- getPos
+    let (p:_) = stack s
     mhr <- liftIO $ do
-        let ptr = retrieveEntry (hash s) (zobkey p)
-        readCache ptr
+        let (ptr, genw) = retrieveEntry (hash s) (zobkey p)
+        readCache ptr genw
     case mhr of
         Nothing -> return empRez
         Just t@(_, _, _, m, _) ->
@@ -314,7 +314,7 @@ ttRead = do
 ttStore :: Int -> Int -> Int -> Move -> Int64 -> Game ()
 ttStore !deep !tp !sc !bestm !nds = do
     s <- get
-    p <- getPos
+    let (p:_) = stack s
     -- We use the type: 0 - upper limit, 1 - lower limit, 2 - exact score
     liftIO $ writeCache (hash s) (zobkey p) deep tp sc bestm nds
 

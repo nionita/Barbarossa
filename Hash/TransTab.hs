@@ -7,7 +7,6 @@ module Hash.TransTab (
     -- checkProp
     ) where
 
--- import Control.Applicative ((<$>))
 import Data.Bits
 import Data.Int
 import Data.Word
@@ -17,8 +16,6 @@ import Foreign.Storable
 import Foreign.Ptr
 import Data.Text.Unsafe (inlinePerformIO)
 -- import Test.QuickCheck hiding ((.&.))
-
-import GHC.Exts
 
 import Struct.Struct
 
@@ -169,28 +166,26 @@ isSameKey !mmask !mzkey !ptr =
 -- Search a position in table based on ZKey
 -- The position ZKey determines the cell where the TT entry should be, and there we do a linear search
 -- (i.e. 4 comparisons in case of a miss)
-readCache :: Addr# -> IO (Maybe (Int, Int, Int, Move, Int64))
-#if __GLASGOW_HASKELL__ >= 708
-readCache addr = if isTrue# (eqAddr# addr nullAddr#)
-#else
-readCache addr = if         (eqAddr# addr nullAddr#)
-#endif
-                    then return Nothing
-                    else Just . cacheEnToQuint <$> peek (castPtr (Ptr addr))
+readCache :: Ptr Word64 -> Word64 -> IO (Maybe (Int, Int, Int, Move, Int64))
+readCache ptr genw
+    | ptr == nullPtr = return Nothing
+    | otherwise = do
+        pCE <- peek (castPtr ptr)					-- because we fount it,
+        poke (ptr `plusPtr` 8) (genw .|. (lo pCE .&. generMsk))	-- set current generation
+        return $ Just $ cacheEnToQuint pCE
 
-retrieveEntry :: Cache -> ZKey -> Addr#
+retrieveEntry :: Cache -> ZKey -> (Ptr Word64, Word64)
 retrieveEntry tt zkey =
     let bas   = zKeyToCell tt zkey
         mkey  = zkey .&. zemask tt
         lasta = bas `plusPtr` lastaAmount
-    in retrieve (zemask tt) mkey lasta bas
-    where retrieve mmask mkey lasta = go
-              where go !crt0@(Ptr a)
-                        = if isSameKey mmask mkey crt0
-                             then a
-                             else if crt0 >= lasta
-                                     then nullAddr#
-                                     else go $ crt0 `plusPtr` pCacheEnSize
+    in retrieve (zemask tt) mkey lasta (gener tt) bas
+    where retrieve mmask mkey lasta gen = go
+              where go !crt0 = if isSameKey mmask mkey crt0
+                                  then (crt0, gen .&. generMsk)
+                                  else if crt0 >= lasta
+                                          then (nullPtr, 0)
+                                          else go $ crt0 `plusPtr` pCacheEnSize
 
 -- Write the position in the table
 -- We want to keep table entries that:
