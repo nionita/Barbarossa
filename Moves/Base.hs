@@ -16,7 +16,7 @@ module Moves.Base (
     finNode, countRepetitions,
     showMyPos, logMes,
     nearmate,
-    tkDeferMove, tkStartSearching, tkFinishedSearch
+    tkDeferMove, tkStartSearching, tkFinishedSearch, tkReserveSearch
 ) where
 
 import Data.Bits
@@ -384,7 +384,6 @@ tkDeferMove m = do
     if yn then incDeferY s else incDeferN s
     return yn
 
-
 tkStartSearching :: ZKey -> Move -> Game Int
 tkStartSearching z m = do
     s <- get
@@ -398,6 +397,18 @@ tkFinishedSearch i = do
     let c = curse s
     incFinish s
     liftIO $ finishedSearch c i
+
+tkReserveSearch :: Move -> Game (Maybe Int)
+tkReserveSearch m = do
+    s <- get
+    let c = curse s
+        p = head $ stack s
+        z = zobkey p
+    res <- liftIO $ reserveSearch c $ moveKey z m
+    case res of
+        Nothing -> incDeferN s
+        Just _  -> incDeferY s
+    return res
 
 incDeferY :: MyState -> Game ()
 incDeferY s = put s { mtstat = mts }

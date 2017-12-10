@@ -109,7 +109,7 @@ qsDeltaMargin  = 100
 
 -- Parameter for multi threading
 minCurrSearch :: Int
-minCurrSearch = 4
+minCurrSearch = 2
 
 type Search a = CState PVState Game a
 
@@ -329,26 +329,37 @@ pvslToMove _ = undefined	-- just for Wall
 toDeferList :: Move -> NodeState -> NodeState
 toDeferList e nst@(NSt { defer = ds }) = nst { defer = e : ds }
 
+{-
 deferMove :: Bool -> Move -> Int -> NodeState -> Search Bool
 deferMove ph e d nst
-    | not ph || d < minCurrSearch            = return False
-    | movno nst == 1 && crtnt nst /= AllNode = return False
-    | otherwise                              = lift $ tkDeferMove e
+    | not ph || d < minCurrSearch = return False
+    -- | movno nst == 1 && crtnt nst /= AllNode = return False
+    | movno nst == 1              = return False
+    | otherwise                   = lift $ tkDeferMove e
 
 startSearching :: Int -> Move -> NodeState -> Search Int
 startSearching d e nst
     | d < minCurrSearch = return 0
     | otherwise         = lift $ tkStartSearching (zobkey (cpos nst)) e
+-}
 
 finishedSearch :: Int -> Int -> Search ()
 finishedSearch d i
-    | d < minCurrSearch = return ()
-    | otherwise         = lift $ tkFinishedSearch i
+    | i < 0 || d < minCurrSearch = return ()
+    | otherwise                  = lift $ tkFinishedSearch i
 
+reserveSearch :: Bool -> Move -> Int -> NodeState -> Search (Maybe Int)
+reserveSearch ph e d nst
+    | not ph || d < minCurrSearch || movno nst == 1
+                = return $ Just (-1)
+    | otherwise = lift $ tkReserveSearch e
+
+{-
 logDeferred :: Int -> Move -> NodeState -> Search ()
 logDeferred d e nst
     | d <= 10   = return ()
     | otherwise = lift $ logmes $ "Deferred: depth " ++ show d ++ " move " ++ show e ++ " (" ++ show (movno nst) ++ ")"
+-}
 
 legalResult :: DoResult -> Bool
 legalResult Illegal = False
@@ -364,12 +375,12 @@ pvInnerRoot :: Int 	-- current beta
             -> Move	-- move to search
             -> Search (Bool, NodeState)
 pvInnerRoot b d phase nst e = timeToAbort (True, nst) $ do
-    skip <- deferMove phase e d nst
-    if skip
-       then do
-           logDeferred d e nst
-           return (False, toDeferList e nst)
-       else do
+    res <- reserveSearch phase e d nst
+    case res of
+       Nothing -> do
+         -- logDeferred d e nst
+         return (False, toDeferList e nst)
+       Just rs -> do
          -- do the move
          exd <- lift $ doMove e
          if legalResult exd
@@ -381,14 +392,14 @@ pvInnerRoot b d phase nst e = timeToAbort (True, nst) $ do
                 modify $ \s -> s { absdp = absdp s + 1 }
                 s <- case exd of
                          Exten exd' spc -> do
-                             f <- startSearching d e nst
+                             -- f <- startSearching d e nst
                              when (exd' == 0 && not spc) $ do
                                  sdiff <- lift scoreDiff
                                  updateFutil sdiff	-- e
                              xchangeFutil
-                             s <- pvInnerRootExten b d exd' f (deepNSt nst)
+                             s <- pvInnerRootExten b d exd' rs (deepNSt nst)
                              xchangeFutil
-                             finishedSearch d f
+                             finishedSearch d rs
                              return s
                          Final sco -> return $! pathFromScore "Final" (-sco)
                          Illegal   -> error "Cannot be illegal here"
@@ -685,12 +696,12 @@ pvInnerLoop :: Int 	-- current beta
             -> Move	-- move to search
             -> Search (Bool, NodeState)
 pvInnerLoop b d phase prune nst e = timeToAbort (True, nst) $ do
-    skip <- deferMove phase e d nst
-    if skip
-       then do
-           logDeferred d e nst
-           return (False, toDeferList e nst)
-       else do
+    res <- reserveSearch phase e d nst
+    case res of
+       Nothing -> do
+         -- logDeferred d e nst
+         return (False, toDeferList e nst)
+       Just rs -> do
          -- What about TT & killer moves???
          if prune && movno nst > 1 && canPruneMove (cpos nst) e
             then do
@@ -705,14 +716,14 @@ pvInnerLoop b d phase prune nst e = timeToAbort (True, nst) $ do
                        modify $ \s -> s { absdp = absdp s + 1 }
                        s <- case exd of
                            Exten exd' spc -> do
-                               f <- startSearching d e nst
+                               -- f <- startSearching d e nst
                                when (exd' == 0 && not spc) $ do	-- not quite ok here
                                    sdiff <- lift scoreDiff	-- cause spc has a slighty
                                    updateFutil sdiff	-- e	-- different meaning...
                                xchangeFutil
-                               s <- pvInnerLoopExten b d exd' f (deepNSt nst)
+                               s <- pvInnerLoopExten b d exd' rs (deepNSt nst)
                                xchangeFutil
-                               finishedSearch d f
+                               finishedSearch d rs
                                return s
                            Final sco -> return $! pathFromScore "Final" (-sco)
                            Illegal   -> error "Cannot be illegal here"
@@ -734,12 +745,12 @@ pvInnerLoopZ :: Int 	-- current beta
             -> Bool	-- reduce in LMR?
             -> Search (Bool, NodeState)
 pvInnerLoopZ b d phase prune nst e redu = timeToAbort (True, nst) $ do
-    skip <- deferMove phase e d nst
-    if skip
-       then do
-           logDeferred d e nst
-           return (False, toDeferList e nst)
-       else do
+    res <- reserveSearch phase e d nst
+    case res of
+       Nothing -> do
+         -- logDeferred d e nst
+         return (False, toDeferList e nst)
+       Just rs -> do
          -- What about TT & killer moves???
          if prune && canPruneMove (cpos nst) e
             then do
@@ -756,15 +767,15 @@ pvInnerLoopZ b d phase prune nst e redu = timeToAbort (True, nst) $ do
                        modify $ \s -> s { absdp = absdp s + 1 }
                        s <- case exd of
                                 Exten exd' spc -> do
-                                    f <- startSearching d e nst
+                                    -- f <- startSearching d e nst
                                     let nst' = if spc then resetSpc nst else nst
                                     when (exd' == 0 && not spc) $ do
                                         sdiff <- lift scoreDiff
                                         updateFutil sdiff	-- e
                                     xchangeFutil
-                                    s <- pvInnerLoopExtenZ b d spc exd' (deepNSt nst') redu
+                                    s <- pvInnerLoopExtenZ b d spc exd' rs (deepNSt nst') redu
                                     xchangeFutil
-                                    finishedSearch d f
+                                    finishedSearch d rs
                                     return s
                                 Final sco -> return $! pathFromScore "Final" (-sco)
                                 Illegal   -> error "Cannot be illegal here"
@@ -810,8 +821,8 @@ pvInnerLoopExten b d !exd f nst = do
                      pnextlev <$> pvSearch nst1 (-b) (-a) d1
 
 -- For zero window
-pvInnerLoopExtenZ :: Int -> Int -> Bool -> Int -> NodeState -> Bool -> Search Path
-pvInnerLoopExtenZ b d spec !exd nst redu = do
+pvInnerLoopExtenZ :: Int -> Int -> Bool -> Int -> Int -> NodeState -> Bool -> Search Path
+pvInnerLoopExtenZ b d spec !exd f nst redu = do
     old  <- get
     exd' <- reserveExtension (usedext old) exd
     -- late move reduction
@@ -847,6 +858,7 @@ pvInnerLoopExtenZ b d spec !exd nst redu = do
                     return sr		-- failed low (as expected)
                   else do
                     -- was reduced and didn't fail low: re-search with full depth
+                    finishedSearch d f
                     incReSe nodre	-- so many nodes we wasted by reducing this time
                     moreLMR False d'	-- less LMR
                     -- Now we expect to fail high, i.e. exchange the crt/nxt node type
