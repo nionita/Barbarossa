@@ -83,6 +83,7 @@ data EvalWeights
           ewRookHOpen       :: !MidEnd,
           ewRookOpen        :: !MidEnd,
           ewRookConn        :: !MidEnd,
+          ewRook7th         :: !MidEnd,
           ewMobilityKnight  :: !MidEnd,
           ewMobilityBishop  :: !MidEnd,
           ewMobilityRook    :: !MidEnd,
@@ -179,17 +180,18 @@ instance CollectParams EvalWeights where
           ewKingPlacePwns   = tme 0 4,
           ewKingPawn1       = tme 11 42,
           ewKingPawn2       = tme 10 69,
-          ewRookHOpen       = tme 167 183,
-          ewRookOpen        = tme 205 179,
-          ewRookConn        = tme 92  58,
+          ewRookHOpen       = tme 162 182,	-- DSPSA with Adadelta
+          ewRookOpen        = tme 205 178,	-- 20k steps, depth 4,
+          ewRookConn        = tme  89  59,	-- 2 games, beta=0.95, gamma=0.8,
+          ewRook7th         = tme 201 161,	-- niu=0.99, eps=1E-6
           ewMobilityKnight  = tme 50 56,
           ewMobilityBishop  = tme 53 33,
-          ewMobilityRook    = tme 18 32,
+          ewMobilityRook    = tme 16 34,	-- DSPSA ...
           ewMobilityQueen   = tme  2 11,
           ewCenterPAtts     = tme 73 59,
           ewCenterNAtts     = tme 48 37,
           ewCenterBAtts     = tme 52 35,
-          ewCenterRAtts     = tme 14 23,
+          ewCenterRAtts     = tme 14 22,	-- DSPSA ...
           ewCenterQAtts     = tme 13 53,
           ewCenterKAtts     = tme  2 62,
           ewSpace           = tme  1  0,
@@ -205,7 +207,7 @@ instance CollectParams EvalWeights where
           ewLastLinePenalty = tme 100 0,
           ewBishopPair      = tme 386 323,
           ewBishopPawns     = tme (-25) (-54),
-          ewRedundanceRook  = tme (-27) (-52),
+          ewRedundanceRook  = tme (-27) (-51),	-- DSPSA ...
           ewRookPawn        = tme (-49) (-27),
           ewAdvPawn5        = tme    8 109,
           ewAdvPawn6        = tme  359 330,
@@ -237,6 +239,8 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
         ("end.rookOpen",       setEndRookOpen),
         ("mid.rookConn",       setMidRookConn),
         ("end.rookConn",       setEndRookConn),
+        ("mid.rook7th",        setMidRook7th),
+        ("end.rook7th",        setEndRook7th),
         ("mid.mobilityKnight", setMidMobilityKnight),
         ("end.mobilityKnight", setEndMobilityKnight),
         ("mid.mobilityBishop", setMidMobilityBishop),
@@ -318,6 +322,8 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
           setEndRookOpen        v' ew' = ew' { ewRookOpen        = (ewRookOpen        ew') { end = round v' }}
           setMidRookConn        v' ew' = ew' { ewRookConn        = (ewRookConn        ew') { mid = round v' }}
           setEndRookConn        v' ew' = ew' { ewRookConn        = (ewRookConn        ew') { end = round v' }}
+          setMidRook7th         v' ew' = ew' { ewRook7th         = (ewRook7th         ew') { mid = round v' }}
+          setEndRook7th         v' ew' = ew' { ewRook7th         = (ewRook7th         ew') { end = round v' }}
           setMidMobilityKnight  v' ew' = ew' { ewMobilityKnight  = (ewMobilityKnight  ew') { mid = round v' }}
           setEndMobilityKnight  v' ew' = ew' { ewMobilityKnight  = (ewMobilityKnight  ew') { end = round v' }}
           setMidMobilityBishop  v' ew' = ew' { ewMobilityBishop  = (ewMobilityBishop  ew') { mid = round v' }}

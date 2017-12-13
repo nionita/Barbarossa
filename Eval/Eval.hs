@@ -396,7 +396,10 @@ matKCArr = listArray (0, 63) $ [0, 0, 0, 1, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12] ++ 
 ------ Rook placement points ------
 
 evalRookPlc :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-evalRookPlc p !ew mide = mad (mad (mad mide (ewRookHOpen ew) ho) (ewRookOpen ew) op) (ewRookConn ew) rc
+evalRookPlc p !ew mide = mad (mad (mad (mad mide (ewRook7th ew) r7)
+                                       (ewRookHOpen ew) ho)
+                                  (ewRookOpen ew) op)
+                             (ewRookConn ew) rc
     where !mRs = rooks p .&. me p
           !mPs = pawns p .&. me p
           (mho, mop) = foldr (perRook (pawns p) mPs) (0, 0) $ bbToSquares mRs
@@ -410,6 +413,13 @@ evalRookPlc p !ew mide = mad (mad (mad mide (ewRookHOpen ew) ho) (ewRookOpen ew)
           !yrc | yoRAttacs p .&. yo p .&. rooks p == 0 = 0
                | otherwise                             = 1
           !rc = mrc - yrc
+          !r7 = r7m - r7y
+          (!my7, !my8, !yo7, !yo8) | moving p == White = (row7, row8, row2, row1)
+                                   | otherwise         = (row2, row1, row7, row8)
+          !r7m | yo p .&. kings p .&. my8 == 0 = 0
+               | otherwise                     = popCount $ me p .&. rooks p .&. my7
+          !r7y | me p .&. kings p .&. yo8 == 0 = 0
+               | otherwise                     = popCount $ yo p .&. rooks p .&. yo7
 
 perRook :: BBoard -> BBoard -> Square -> (Int, Int) -> (Int, Int)
 perRook allp myp rsq (ho, op)
