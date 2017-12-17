@@ -16,7 +16,7 @@ module Moves.Base (
     finNode, countRepetitions,
     showMyPos, logMes,
     nearmate,
-    tkDeferMove, tkStartSearching, tkFinishedSearch, tkReserveSearch
+    tkFinishedSearch, tkReserveSearch
 ) where
 
 import Data.Bits
@@ -73,7 +73,7 @@ posToState p t c h e = MyState { stack = [p''], hash = t, curse = c, hist = h,
                                  mstats = ssts0, lnodes = 0, mtstat = mts0, evalst = e }
     where stsc = posEval p e
           p'' = p { staticScore = stsc }
-          mts0 = MTStats { mtsDeferY = 0, mtsDeferN = 0, mtsStart = 0, mtsFinish = 0 }
+          mts0 = MTStats { mtsDeferY = 0, mtsDeferN = 0, mtsFinish = 0 }
 
 posNewSearch :: MyState -> MyState
 posNewSearch p = p { hash = newGener (hash p) }
@@ -360,7 +360,7 @@ scoreDiff = do
         _         -> return 0
 
 logMes :: String -> Game ()
-logMes s = lift $ talkToContext . LogMes $ s
+logMes s = lift $ talkToContext 0 . LogMes $ s
 
 {-# INLINE isTimeout #-}
 isTimeout :: Int -> Game Bool
@@ -373,23 +373,6 @@ showStack n = concatMap showMyPos . take n
 
 moveKey :: ZKey -> Move -> ZKey
 moveKey zob (Move w) = zob `xor` (fromIntegral w * 1664525 + 1013094223)
-
-tkDeferMove :: Move -> Game Bool
-tkDeferMove m = do
-    s <- get
-    let c = curse s
-        p = head $ stack s
-        z = zobkey p
-    yn <- liftIO $ deferMove c $ moveKey z m
-    if yn then incDeferY s else incDeferN s
-    return yn
-
-tkStartSearching :: ZKey -> Move -> Game Int
-tkStartSearching z m = do
-    s <- get
-    let c = curse s
-    incStartS s
-    liftIO $ startSearching c $ moveKey z m
 
 tkFinishedSearch :: Int -> Game ()
 tkFinishedSearch i = do
@@ -420,26 +403,21 @@ incDeferN s = put s { mtstat = mts }
     where !nv  = mtsDeferN (mtstat s) + 1
           !mts = (mtstat s) { mtsDeferN = nv }
 
-incStartS :: MyState -> Game ()
-incStartS s = put s { mtstat = mts }
-    where !nv  = mtsStart (mtstat s) + 1
-          !mts = (mtstat s) { mtsStart = nv }
-
 incFinish :: MyState -> Game ()
 incFinish s = put s { mtstat = mts }
     where !nv  = mtsFinish (mtstat s) + 1
           !mts = (mtstat s) { mtsFinish = nv }
 
 {-# INLINE informCtx #-}
-informCtx :: Comm -> Game ()
-informCtx = lift . talkToContext
+informCtx :: Int -> Comm -> Game ()
+informCtx t = lift . talkToContext t
 
-talkToContext :: Comm -> CtxIO ()
-talkToContext (LogMes s)       = ctxLog LogInfo s
-talkToContext (BestMv a b c d) = informGui a b c d
-talkToContext (CurrMv a b)     = informGuiCM a b
-talkToContext (InfoStr s)      = informGuiString s
-talkToContext (Nodes n)        = informGuiNodes n
+talkToContext :: Int -> Comm -> CtxIO ()
+talkToContext t (LogMes s)       = ctxLog t LogInfo s
+talkToContext _ (BestMv a b c d) = informGui a b c d
+talkToContext _ (CurrMv a b)     = informGuiCM a b
+talkToContext _ (InfoStr s)      = informGuiString s
+talkToContext _ (Nodes n)        = informGuiNodes n
 
 timeFromContext :: CtxIO Int
 timeFromContext = do

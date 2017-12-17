@@ -17,25 +17,26 @@ import Struct.Context
 
 -- Parameter of the search at this level:
 aspirWindow :: Int
-aspirWindow   = 24	-- initial aspiration window
+aspirWindow = 24	-- initial aspiration window
 
 -- One iteration in the search for the best move
-bestMoveCont :: Int -> Int -> Bool -> MyState -> Maybe Int -> [Move] -> [Move] -> CtxIO IterResult
-bestMoveCont depth sttime main stati lastsc lpv rmvs = do
-    when main $ do
+bestMoveCont :: Int -> Int -> Int -> Int -> MyState -> Maybe Int -> [Move] -> [Move] -> CtxIO IterResult
+bestMoveCont depth sttime tnr mcs stati lastsc lpv rmvs = do
+    when (tnr <= 1) $ do
         informGuiDepth depth
-        ctxLog LogInfo $ "Main thread: start search for depth " ++ show depth
+        ctxLog tnr LogInfo $ "Main thread: start search for depth " ++ show depth
     let abc = ABC {
                 maxdepth  = depth,
                 lastpv    = lpv,
                 lastscore = lastsc,
                 rootmvs   = rmvs,
                 window    = aspirWindow,
-                mainThrd  = main,
+                threadNr  = tnr,
+                minCurSe  = mcs,
                 stoptime  = sttime
                 }
     ((sc, path, rmvsf, timint, ch), statf) <- SM.runCState (alphaBeta abc) stati
-    -- when main $ do
+    -- when tnr <= 1 $ do
     --     let n = sNodes $ mstats statf
     --     informGui sc depth n path
     --     ctxLog LogInfo $ "Main thread: score " ++ show sc ++ " path " ++ show path

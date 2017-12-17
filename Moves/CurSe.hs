@@ -1,7 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 
 module Moves.CurSe (
-        CurSe, newCurSe, deferMove, startSearching, finishedSearch, reserveSearch
+        CurSe, newCurSe, finishedSearch, reserveSearch
     ) where
 
 import Data.Bits
@@ -27,40 +27,7 @@ adr k = fromIntegral $ (k .&. csMask) `unsafeShiftL` csWayB
 
 -- This part is credited to Tom Kerrigan
 -- http://www.tckerrigan.com/Chess/Parallel_Search/Simplified_ABDADA/simplified_abdada.html
-
--- Should we defer the search of this move?
-deferMove :: CurSe -> ZKey -> IO Bool
-deferMove curse zkey = do
-    let i = adr zkey
-    go i csWays
-    where go :: Int -> Int -> IO Bool
-          go !_ 0 = return False
-          go  i r = do
-              k <- V.unsafeRead curse i
-              if k == zkey
-                 then return True
-                 else go (i+1) (r-1)
-
--- Mark the start of a move search
--- Returns the address which was used, so that finishedSearch
--- can delete it directly
-startSearching :: CurSe -> ZKey -> IO Int
-startSearching curse zkey = do
-    let i = adr zkey
-    go i i csWays
-    where go :: Int -> Int -> Int -> IO Int
-          go !i !_ 0 = do
-              V.unsafeWrite curse i zkey
-              return i
-          go  i j r = do
-              k <- V.unsafeRead curse j
-              if k == 0
-                 then do
-                     V.unsafeWrite curse j zkey
-                     return j
-                 else if k /= zkey
-                         then go i (j+1) (r-1)
-                         else return j
+-- The API was simplified to only 2 functions
 
 -- Mark the end of a move search
 finishedSearch :: CurSe -> Int -> IO ()
@@ -90,13 +57,13 @@ reserveSearch curse zkey = do
                            | otherwise = freei
                     V.unsafeWrite curse r zkey
                     return (Just r)
-          go rem k crt freei randi =
+          go res k crt freei randi =
              if k == zkey
                 then return Nothing
                 else do
                     let !nz1 | k == 0    = crt
                              | otherwise = freei
                         !crt1 = crt + 1
-                        !rem1 = rem - 1
+                        !res1 = res - 1
                     k1 <- V.unsafeRead curse crt1
-                    go rem1 k1 crt1 nz1 randi
+                    go res1 k1 crt1 nz1 randi

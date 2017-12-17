@@ -38,7 +38,7 @@ data EvalState = EvalState {
 
 -- Statistics for multi threading searches
 data MTStats = MTStats {
-        mtsDeferY, mtsDeferN, mtsStart, mtsFinish :: !Int
+        mtsDeferY, mtsDeferN, mtsFinish :: !Int
     }
 
 data MidEnd = MidEnd { mid, end :: !Int } deriving Show

@@ -8,7 +8,6 @@ import Control.DeepSeq (deepseq)
 import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Data.Int
-import qualified Data.Map.Strict as Map
 import System.Time
 
 import Struct.Struct
@@ -99,7 +98,7 @@ collectTimeParams (s, v) tp = lookApply s v tp [
 data Changing = Chg {
         working    :: Bool,             -- are we in tree search?
         noThreads  :: Int,              -- number of search threads
-        compThread :: Map.Map ThreadId Int,       -- the search thread ids
+        compThread :: [ThreadId],       -- the search thread ids
         crtStatus  :: MyState,          -- current state
         realPly    :: Maybe Int,	-- real ply so far (if defined)
         forGui     :: Maybe InfoToGui,  -- info for gui
@@ -125,14 +124,10 @@ modifyChanging f = do
     ctx <- ask
     liftIO $ modifyMVar_ (change ctx) (return . f)
 
-ctxLog :: LogLevel -> String -> CtxIO ()
-ctxLog lev mes = do
+ctxLog :: Int -> LogLevel -> String -> CtxIO ()
+ctxLog t lev mes = do
     ctx <- ask
-    when (lev >= loglev ctx) $ do
-        chg <- readChanging
-        myTid <- liftIO myThreadId
-        let tid = maybe 0 id $ Map.lookup myTid $ compThread chg
-        liftIO $ logging (logger ctx) (startSecond ctx) tid (levToPrf lev) mes
+    when (lev >= loglev ctx) $ liftIO $ logging (logger ctx) (startSecond ctx) t (levToPrf lev) mes
 
 startSecond :: Context -> Integer
 startSecond ctx = s

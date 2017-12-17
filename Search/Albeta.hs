@@ -2,7 +2,7 @@
 {-# LANGUAGE BangPatterns #-}
 
 module Search.Albeta (
-    alphaBeta, logmes
+    alphaBeta
 ) where
 
 import Control.Monad
@@ -21,8 +21,8 @@ import Moves.BaseTypes
 import Moves.Base
 import Moves.Fen (initPos)
 
-absurd :: String -> Game ()
-absurd s = logmes $ "Absurd: " ++ s	-- used for messages when assertions fail
+absurd :: Int -> String -> Game ()
+absurd t s = logmes t $ "Absurd: " ++ s	-- used for messages when assertions fail
 
 collectFens :: Bool
 collectFens = True
@@ -107,10 +107,6 @@ inEndlessCheck, qsDeltaMargin :: Int
 inEndlessCheck = -scoreGrain	-- there is a risk to be left in check
 qsDeltaMargin  = 100
 
--- Parameter for multi threading
-minCurrSearch :: Int
-minCurrSearch = 2
-
 type Search a = CState PVState Game a
 
 alpha0, beta0 :: Int
@@ -127,10 +123,10 @@ data Killer = NoKiller | OneKiller !Move | TwoKillers !Move !Move deriving (Eq, 
 -- Read only parameters of the search, so that we can change them programatically
 data PVReadOnly
     = PVReadOnly {
+          thread :: !Int,	-- thread number: 0 - single, 1 - main, x - worker thread
           draft  :: !Int,	-- root search depth
           abmili :: !Int,	-- abort when after this milisecond
-          ismain :: !Bool,	-- is this the main search thread?
-          timeli :: !Bool	-- do we have time limit?
+          mincs  :: !Int	-- minimum depth for currently searching
     } deriving Show
 
 data PVState
@@ -233,7 +229,7 @@ resetNSt !sc !kill mvs nst = nst { cursc = sc, movno = 1, spcno = 1, killer = ki
                                    moves = mvs, defer = [] }
 
 pvro00 :: PVReadOnly
-pvro00 = PVReadOnly { draft = 0, abmili = 0, ismain = False, timeli = False }
+pvro00 = PVReadOnly { draft = 0, abmili = 0, thread = 0, mincs = 2 }
 
 alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int)
 alphaBeta abc = do
@@ -243,8 +239,7 @@ alphaBeta abc = do
         searchReduced a b = pvRootSearch a      b     d lpv rmvs True
         -- We have lastpath as a parameter here (can change after fail low or high)
         searchFull    lp  = pvRootSearch alpha0 beta0 d lp  rmvs False
-        pvro = PVReadOnly { draft = d, ismain = mainThrd abc,
-                            timeli = stoptime abc /= 0, abmili = stoptime abc }
+        pvro = PVReadOnly { draft = d, thread = threadNr abc, mincs = minCurSe abc, abmili = stoptime abc }
         pvs0 = pvsInit { ronly = pvro }	-- :: PVState
     r <- if useAspirWin
          then case lastscore abc of
@@ -305,7 +300,7 @@ pvRootSearch a b d lastpath rmvs aspir = do
                  | otherwise         = (a, emptySeq)
         p = unseq pm
     sst <- get
-    let mn = ismain (ronly sst)
+    let mn = isMain (ronly sst)
     if mn && not (abort sst)
        then informPV sc (draft $ ronly sst) p
        else informNs
@@ -314,13 +309,17 @@ pvRootSearch a b d lastpath rmvs aspir = do
     if sc <= a	-- failed low or timeout when searching PV
          then do
            unless (abort sst || aspir) $ do
-               when mn $ lift $ logmes "Failed low at root??"
+               when mn $ lift $ logmes (thread $ ronly sst) "Failed low at root??"
            return (a, emptySeq, edges, rbmch nstf)	-- just to permit aspiration to retry
          else do
             let (best':_) = p
                 allrmvs = if sc >= b then edges else map pvslToMove (pvsl nstf)
                 xrmvs = best' : delete best' allrmvs	-- best on top
             return (sc, Seq p, xrmvs, rbmch nstf)
+
+{-# INLINE isMain #-}
+isMain :: PVReadOnly -> Bool
+isMain pvro = thread pvro <= 1
 
 pvslToMove :: Pvsl -> Move
 pvslToMove (Pvsl { pvPath = Path { pathMoves = Seq (m:_)}}) = m
@@ -329,30 +328,24 @@ pvslToMove _ = undefined	-- just for Wall
 toDeferList :: Move -> NodeState -> NodeState
 toDeferList e nst@(NSt { defer = ds }) = nst { defer = e : ds }
 
-{-
-deferMove :: Bool -> Move -> Int -> NodeState -> Search Bool
-deferMove ph e d nst
-    | not ph || d < minCurrSearch = return False
-    -- | movno nst == 1 && crtnt nst /= AllNode = return False
-    | movno nst == 1              = return False
-    | otherwise                   = lift $ tkDeferMove e
-
-startSearching :: Int -> Move -> NodeState -> Search Int
-startSearching d e nst
-    | d < minCurrSearch = return 0
-    | otherwise         = lift $ tkStartSearching (zobkey (cpos nst)) e
--}
-
 finishedSearch :: Int -> Int -> Search ()
 finishedSearch d i
-    | i < 0 || d < minCurrSearch = return ()
-    | otherwise                  = lift $ tkFinishedSearch i
+    | i < 0     = return ()
+    | otherwise = do
+        ro <- gets ronly
+        if thread ro == 0
+           then return ()
+           else if d < mincs ro then return () else lift $ tkFinishedSearch i
 
 reserveSearch :: Bool -> Move -> Int -> NodeState -> Search (Maybe Int)
 reserveSearch ph e d nst
-    | not ph || d < minCurrSearch || movno nst == 1
-                = return $ Just (-1)
-    | otherwise = lift $ tkReserveSearch e
+    | not ph || movno nst == 1 = return jm1
+    | otherwise = do
+        ro <- gets ronly
+        if thread ro == 0
+           then return jm1
+           else if d < mincs ro then return jm1 else lift $ tkReserveSearch e
+    where jm1 = Just (-1)
 
 {-
 logDeferred :: Int -> Move -> NodeState -> Search ()
@@ -386,7 +379,7 @@ pvInnerRoot b d phase nst e = timeToAbort (True, nst) $ do
          if legalResult exd
             then do
                 old <- get
-                when (ismain (ronly old) && draft (ronly old) >= depthForCM)
+                when (isMain (ronly old) && draft (ronly old) >= depthForCM)
                     $ lift $ informCM e $ movno nst
                 newNode d
                 modify $ \s -> s { absdp = absdp s + 1 }
@@ -435,7 +428,7 @@ pvInnerRootExten b d !exd f nst = do
                       -- As we don't reduce (beeing in a PV node), re-search is full window
                       -- Delete the current searching for this move, to get help in searching it
                       finishedSearch d f
-                      lift $ logmes $ "Research: a = " ++ show a ++ ", s1 = " ++ show s1
+                      lift $ logmes (thread $ ronly old) $ "Research: a = " ++ show a ++ ", s1 = " ++ show s1
                       let nst' = nst { crtnt = PVNode, nxtnt = PVNode }
                       pnextlev <$> pvSearch nst' (-b) (-a) d1
 
@@ -478,7 +471,7 @@ checkFailOrPVRoot xstats b d e s nst = whenAbort (True, nst) $ do
                             else do	-- means: > a && < b
                               let sc = pathScore s
                                   pa = unseq $ pathMoves s
-                              if ismain $ ronly sst
+                              if isMain $ ronly sst
                                  then informPV sc (draft $ ronly sst) pa
                                  else informNs
                               lift $ do
@@ -509,7 +502,7 @@ insertToPvs d p ps@(q:qs)
 checkFailHard :: String -> Int -> Int -> Int -> Search ()
 checkFailHard s a b c =
     when (c < a || c > b) $ lift
-        $ absurd $ "Fail not hard (" ++ s ++ "): " ++ show a ++ " / " ++ show c ++ " / " ++ show b
+        $ absurd 0 $ "Fail not hard (" ++ s ++ "): " ++ show a ++ " / " ++ show c ++ " / " ++ show b
 
 -- PV Search
 pvSearch :: NodeState -> Int -> Int -> Int -> Search Path
@@ -521,7 +514,7 @@ pvSearch nst !a !b !d = do
     let !inPv = crtnt nst == PVNode
         ab    = albe nst
     -- Here we are always in PV if enough depth:
-    when (not $ inPv || ab) $ lift $ absurd $ "pvSearch: not inPv, not ab, nst = " ++ show nst
+    when (not $ inPv || ab) $ lift $ absurd 0 $ "pvSearch: not inPv, not ab, nst = " ++ show nst
     -- Check first for a TT entry of the position to search
     (hdeep, tp, hsc, e, nodes') <- reTrieve >> lift ttRead
     -- tp == 1 => score >= hsc, so if hsc >= asco then we improved,
@@ -667,9 +660,11 @@ nullMoveFailsHigh pos nst b d
                   else do
                        when nulDebug $ do
                            incReMi
-                           when (not $ nullSeq (pathMoves val)) $ lift $ do
-                               when collectFens $ finNode "NMLO" 0
-                               logmes $ "fail low path: " ++ show val
+                           when (not $ nullSeq (pathMoves val)) $ do
+                               t <- gets $ thread . ronly
+                               lift $ do
+                                   when collectFens $ finNode "NMLO" 0
+                                   logmes t $ "fail low path: " ++ show val
                        if nullSeq (pathMoves val)
                           then return $ NullMoveLow
                           else return $ NullMoveThreat val
@@ -1176,14 +1171,14 @@ timeToAbort a act = do
        then return a
        else do
            let ro = ronly s
-           if draft ro > 1 && timeli ro
+           if abmili ro > 0 && draft ro > 1
               then if timeNodes .&. sNodes (stats s) /= 0
                       then act
                       else do
                           !abrt <- lift $ isTimeout $ abmili ro
                           if abrt
                              then do
-                                 when (ismain ro) $ lift $ logmes "Albeta: search abort!"
+                                 lift $ logmes (thread ro) "Albeta: search abort!"
                                  put s { abort = True }
                                  return a
                              else act
@@ -1202,11 +1197,12 @@ reportStats = do
     s <- get
     lift $ do
        let dst = stats s
+           t = thread $ ronly s
        draftStats dst
-       logmes $ "Search statistics after draft " ++ show (draft $ ronly s) ++ ":"
-       mapM_ logmes $ formatStats dst
-       logmes $ "Variable futility params: me = " ++ show (futme s) ++ ", yo = " ++ show (futyo s)
-       logmes $ "Variable LMR: hi = " ++ show (lmrhi s)
+       logmes t $ "Search statistics after draft " ++ show (draft $ ronly s) ++ ":"
+       mapM_ (logmes t) $ formatStats dst
+       logmes t $ "Variable futility params: me = " ++ show (futme s) ++ ", yo = " ++ show (futyo s)
+       logmes t $ "Variable LMR: hi = " ++ show (lmrhi s)
                     ++ ", lv = " ++ show (lmrlv s) ++ ", qu = " ++ show (lmrrs s)
 
 -- Functions to keep statistics
@@ -1287,26 +1283,26 @@ killerToList (TwoKillers e1 e2) = [e1, e2]
 
 --- Communication to the outside - some convenience functions ---
 informCM :: Move -> Int -> Game ()
-informCM a b = informCtx (CurrMv a b)
+informCM a b = informCtx 0 (CurrMv a b)
 
 {--
 informStr :: String -> Game ()
-informStr s = informCtx (InfoStr s)
+informStr s = informCtx 0 (InfoStr s)
 --}
 
-logmes :: String -> Game ()
-logmes s = informCtx (LogMes s)
+logmes :: Int -> String -> Game ()
+logmes t s = informCtx t (LogMes s)
 
 informPV :: Int -> Int -> [Move] -> Search ()
 informPV s d es = do
     ss <- gets stats
     lift $ do
         n <- curNodes $ sNodes ss
-        informCtx (BestMv s d n es)
+        informCtx 0 (BestMv s d n es)
 
 informNs :: Search ()
 informNs = do
     ss <- gets stats
     lift $ do
         n <- curNodes $ sNodes ss
-        informCtx (Nodes n)
+        informCtx 0 (Nodes n)
