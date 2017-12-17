@@ -306,7 +306,7 @@ pvRootSearch a b d lastpath rmvs aspir = do
         p = unseq pm
     sst <- get
     let mn = ismain (ronly sst)
-    if mn
+    if mn && not (abort sst)
        then informPV sc (draft $ ronly sst) p
        else informNs
     reportStats
@@ -314,7 +314,7 @@ pvRootSearch a b d lastpath rmvs aspir = do
     if sc <= a	-- failed low or timeout when searching PV
          then do
            unless (abort sst || aspir) $ do
-               when mn $ lift $ informStr "Failed low at root??"
+               when mn $ lift $ logmes "Failed low at root??"
            return (a, emptySeq, edges, rbmch nstf)	-- just to permit aspiration to retry
          else do
             let (best':_) = p
@@ -1183,7 +1183,7 @@ timeToAbort a act = do
                           !abrt <- lift $ isTimeout $ abmili ro
                           if abrt
                              then do
-                                 when (ismain ro) $ lift $ informStr "Albeta: search abort!"
+                                 when (ismain ro) $ lift $ logmes "Albeta: search abort!"
                                  put s { abort = True }
                                  return a
                              else act
@@ -1289,8 +1289,10 @@ killerToList (TwoKillers e1 e2) = [e1, e2]
 informCM :: Move -> Int -> Game ()
 informCM a b = informCtx (CurrMv a b)
 
+{--
 informStr :: String -> Game ()
 informStr s = informCtx (InfoStr s)
+--}
 
 logmes :: String -> Game ()
 logmes s = informCtx (LogMes s)
