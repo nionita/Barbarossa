@@ -200,7 +200,8 @@ doMove m = do
                    if remis
                       then return $ Final 0
                       else do
-                          let dext = if inCheck p then 1 else 0
+                          -- let dext = exten pc p m
+                          let dext = exten pc p
                           return $! Exten dext $ moveIsCaptPromo pc m
 
 -- Move from a node to a descendent - the QS search version
@@ -249,6 +250,22 @@ countRepetitions s = length f6 - uniq
 {-# INLINE undoMove #-}
 undoMove :: Game ()
 undoMove = modify $ \s -> s { stack = tail $ stack s }
+
+{--
+exten :: MyPos -> MyPos -> Move -> Int
+exten p1 p2 m | queens  p1 `uBitSet` toSquare m = 1
+              | inCheck p2                      = 1
+              | otherwise                       = 0
+--}
+
+exten :: MyPos -> MyPos -> Int
+exten p1 p2 | inCheck p2             = 1
+            | queens p2 /= 0         = 0
+            | queens p1 /= 0         = 1
+            | rooks  p2 /= 0         = 0
+            | rooks  p1 /= 0         = 1
+            -- | passed p1 /= passed p2 = 1
+            | otherwise              = 0
 
 -- Tactical positions will be searched complete in quiescent search
 -- Currently only when in in check

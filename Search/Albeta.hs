@@ -36,7 +36,7 @@ scoreGrain, depthForCM, maxDepthExt, minPvDepth :: Int
 useTTinPv :: Bool
 scoreGrain  = 4	-- score granularity
 depthForCM  = 7 -- from this depth inform current move
-maxDepthExt = 3 -- maximum depth extension
+maxDepthExt = 4 -- maximum depth extension
 useTTinPv   = False	-- retrieve from TT in PV?
 minPvDepth  = 2		-- from this depth we use alpha beta search
 
