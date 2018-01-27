@@ -97,7 +97,7 @@ genMoves d = do
 
 -- Generate only tactical moves, i.e. promotions & captures
 -- Needed only in QS, when we know we are not in check
--- In the fronties nodes (i.e. first level QS) we generate
+-- In the frontier nodes (i.e. first level QS) we generate
 -- also checking quiet moves with non-negative SEE
 genTactMoves :: Bool -> Game [Move]
 genTactMoves front = do

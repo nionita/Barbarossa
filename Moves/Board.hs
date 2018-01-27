@@ -45,11 +45,17 @@ goPromo p m
 movePassed :: MyPos -> Move -> Bool
 movePassed p m = passed p .&. (uBit $ fromSquare m) /= 0
 
+moveGenAscendent :: Bool
+moveGenAscendent = False
+
 genMoveNCapt :: MyPos -> [Move]
-genMoveNCapt !p = map (moveAddColor c)
-                      $ concat [ nGenNC, bGenNC, rGenNC, qGenNC, pGenNC1, pGenNC2, kGenNC ]
+genMoveNCapt !p
+    | moveGenAscendent
+      = map (moveAddColor c) $ nGenNC ++ bGenNC ++ rGenNC ++ qGenNC ++ pGenNC1 ++ pGenNC2 ++ kGenNC
+    | otherwise
+      = map (moveAddColor c) $ qGenNC ++ rGenNC ++ bGenNC ++ nGenNC ++ pGenNC1 ++ pGenNC2 ++ kGenNC
     where pGenNC1 = map (moveAddPiece Pawn . uncurry moveFromTo)
-                      $ pAll1Moves c (pawns p .&. me p `less` traR) (occup p)
+                      $ pAll1Moves c (pawns p .&. me p .&. traR) (occup p)
           pGenNC2 = map (moveAddPiece Pawn . uncurry moveFromTo)
                       $ pAll2Moves c (pawns p .&. me p) (occup p)
           nGenNC = map (moveAddPiece Knight . uncurry moveFromTo)
@@ -67,10 +73,12 @@ genMoveNCapt !p = map (moveAddColor c)
           kGenNC = map (moveAddPiece King   . uncurry moveFromTo)
                       $            srcDests (ncapt . legal . kAttacs)
                       $ firstOne $ kings p .&. me p
-          ncapt = (`less` occup p)
-          legal = (`less` yoAttacs p)
-          traR = if c == White then 0x00FF000000000000 else 0xFF00
-          !c = moving p
+          !noccup = complement (occup p)
+          ncapt = ((.&.) noccup)
+          !nyoa = complement $ yoAttacs p
+          legal = ((.&.) nyoa)
+          traR = complement $ if c == White then 0x00FF000000000000 else 0xFF00
+          c = moving p
 
 -- Generate only promotions (now only to queen) non captures
 -- The promotion captures are generated together with the other captures
@@ -82,7 +90,7 @@ genMovePromo !p = map (uncurry (makePromo Queen)) pGenNC
           !myfpc = me p .&. traR
           -- pcapt = (.&. yo p)
           !traR = if c == White then 0x00FF000000000000 else 0xFF00
-          !c = moving p
+          c = moving p
 
 {-# INLINE srcDests #-}
 srcDests :: (Square -> BBoard) -> Square -> [(Square, Square)]
@@ -160,8 +168,8 @@ genMoveFCheck !p
           !ksq = firstOne kbb
           !kbb = kings p .&. me p
           !ocp1 = occup p `less` kbb
-          legal = (`less` alle)
-          !alle = me p .|. yoAttacs p .|. excl
+          !call = complement $ me p .|. yoAttacs p .|. excl
+          legal = ((.&.) call)
           !excl = foldl' (.|.) 0 $ map chkAtt chklist
           chkAtt (NormalCheck f s) = fAttacs s f ocp1
           chkAtt (QueenCheck f s)  = fAttacs s f ocp1
@@ -177,7 +185,7 @@ genMoveFCheck !p
 -- Generate moves ending on a given square (used to defend a check by capture or blocking)
 -- This part is only for queens, rooks, bishops and knights (no pawns and, of course, no kings)
 defendAt :: MyPos -> BBoard -> [Move]
-defendAt p !bb = map (moveAddColor $ moving p) $ concat [ nGenC, bGenC, rGenC, qGenC ]
+defendAt p !bb = map (moveAddColor $ moving p) $ nGenC ++ bGenC ++ rGenC ++ qGenC
     where nGenC = map (moveAddPiece Knight . uncurry moveFromTo)
                      $ concatMap (srcDests (target . nAttacs))
                      $ bbToSquares $ knights p .&. me p
@@ -253,7 +261,11 @@ genMoveNCaptToCheck p = genMoveNCaptDirCheck p ++ genMoveNCaptIndirCheck p
 
 -- Todo: check with pawns (should be also without promotions)
 genMoveNCaptDirCheck :: MyPos -> [Move]
-genMoveNCaptDirCheck p = map (moveAddColor $ moving p) $ concat [ qGenC, rGenC, bGenC, nGenC ]
+genMoveNCaptDirCheck p
+    | moveGenAscendent
+      = map (moveAddColor $ moving p) $ nGenC ++ bGenC ++ rGenC ++ qGenC
+    | otherwise
+      = map (moveAddColor $ moving p) $ qGenC ++ rGenC ++ bGenC ++ nGenC
     where nGenC = map (moveAddPiece Knight . uncurry moveFromTo)
                       $ filtQPSEE p Knight $ concatMap (srcDests (target nTar . nAttacs))
                       $ bbToSquares  $ knights p .&. me p
@@ -267,11 +279,13 @@ genMoveNCaptDirCheck p = map (moveAddColor $ moving p) $ concat [ qGenC, rGenC, 
                       $ filtQPSEE p Queen  $ concatMap (srcDests (target qTar . qAttacs (occup p)))
                       $ bbToSquares  $ queens p .&. me p
           target b = (.&. b)
-          !nyop = complement $ yo p
+          !nocp = complement $ occup p
           !ksq  = firstOne $ yo p .&. kings p
-          !nTar = fAttacs ksq Knight (occup p) .&. nyop
-          !bTar = fAttacs ksq Bishop (occup p) .&. nyop
-          !rTar = fAttacs ksq Rook   (occup p) .&. nyop
+          !nTar = fAttacs ksq Knight (occup p) .&. nocp
+          !bTar | me p .&. (bishops p .|. queens p) == 0 = 0
+                | otherwise                              = fAttacs ksq Bishop (occup p) .&. nocp
+          !rTar | me p .&. (rooks   p .|. queens p) == 0 = 0
+                | otherwise                              = fAttacs ksq Rook   (occup p) .&. nocp
           !qTar = bTar .|. rTar
 
 -- TODO: indirect non capture checking moves
@@ -287,12 +301,12 @@ genMoveCast p
               | c == White = (caRMKw, caRMQw, caRAKw, caRAQw)
               | otherwise  = (caRMKb, caRMQb, caRAKb, caRAQb)
           kingside  = if castKingRookOk  p c && (occup p .&. cmidk == 0) && (yoAttacs p .&. cattk == 0)
-                        then [caks] else []
+                         then [caks] else []
           queenside = if castQueenRookOk p c && (occup p .&. cmidq == 0) && (yoAttacs p .&. cattq == 0)
-                        then [caqs] else []
+                         then [caqs] else []
           caks = makeCastleFor c True
           caqs = makeCastleFor c False
-          !c = moving p
+          c = moving p
 
 {-# INLINE castKingRookOk #-}
 castKingRookOk :: MyPos -> Color -> Bool
@@ -428,7 +442,7 @@ legalMove p m
     | otherwise = False
     where src = fromSquare m
           dst = toSquare m
-          !mc  = moving p
+          mc  = moving p
 
 specialMoveIsLegal :: MyPos -> Move -> Bool
 specialMoveIsLegal p m | moveIsCastle m = elem m $ genMoveCast p
