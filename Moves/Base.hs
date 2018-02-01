@@ -258,14 +258,24 @@ exten p1 p2 m | queens  p1 `uBitSet` toSquare m = 1
               | otherwise                       = 0
 --}
 
+-- We extend when last move:
+-- - gives check
+-- - captures last queen
+-- - captures last rook when no queens
+-- - (new) is a pawn attack on a figure
 exten :: MyPos -> MyPos -> Int
 exten p1 p2 | inCheck p2             = 1
             | queens p2 /= 0         = 0
             | queens p1 /= 0         = 1
             | rooks  p2 /= 0         = 0
             | rooks  p1 /= 0         = 1
-            -- | passed p1 /= passed p2 = 1
+            | pawnThreat p1 p2       = 1
             | otherwise              = 0
+
+pawnThreat :: MyPos -> MyPos -> Bool
+pawnThreat p1 p2 = pt2 `less` pt1 /= 0
+    where !pt1 = myPAttacs p1 .&. (yo p1 `less` pawns p1)
+          !pt2 = yoPAttacs p2 .&. (me p2 `less` pawns p2)
 
 -- Tactical positions will be searched complete in quiescent search
 -- Currently only when in in check
