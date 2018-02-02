@@ -262,23 +262,36 @@ exten p1 p2 m | queens  p1 `uBitSet` toSquare m = 1
 -- - gives check
 -- - captures last queen
 -- - captures last rook when no queens
--- - (new) is a pawn attack on a figure
+-- - (new) is a (valid) pawn attack on a figure
 exten :: MyPos -> MyPos -> Int
 exten p1 p2 | inCheck p2             = 1
+            | pawnThreat p1 p2       = 1
             | queens p2 /= 0         = 0
             | queens p1 /= 0         = 1
             | rooks  p2 /= 0         = 0
             | rooks  p1 /= 0         = 1
-            | pawnThreat p1 p2       = 1
             | otherwise              = 0
 
+validThreat, majorThreat :: Bool
+validThreat = True
+majorThreat = True
+
 pawnThreat :: MyPos -> MyPos -> Bool
-pawnThreat p1 p2 = pt2 `less` pt1 /= 0
-    where !pt1 = myPAttacs p1 .&. (yo p1 `less` pawns p1)
-          !pt2 = yoPAttacs p2 .&. (me p2 `less` pawns p2)
+pawnThreat p1 p2
+    | npa .&. fig == 0 = False
+    | validThreat      = validPawnThreat p1 p2
+    | otherwise        = True
+    where !npa = yoPAttacs p2 `less` myPAttacs p1
+          !fig | majorThreat = me p2 .&. (queens p2 .|. rooks p2)
+               | otherwise   = me p2 `less` pawns p2
+
+-- Valid pawn threat is when the pawn is defended or not attacked
+validPawnThreat :: MyPos -> MyPos -> Bool
+validPawnThreat p1 p2 = mvpaw .&. yoAttacs p2 /= 0 || mvpaw .&. myAttacs p2 == 0
+    where !mvpaw = yo p2 `less` me p1
 
 -- Tactical positions will be searched complete in quiescent search
--- Currently only when in in check
+-- Currently only when in check
 {-# INLINE tacticalPos #-}
 tacticalPos :: MyPos -> Bool
 tacticalPos = (/= 0) . check
