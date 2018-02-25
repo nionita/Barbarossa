@@ -42,10 +42,10 @@ minPvDepth  = 2		-- from this depth we use alpha beta search
 
 -- Parameters for late move reduction:
 lmrInitLv, lmrInitLim, lmrLevMin, lmrLevMax :: Int
-lmrInitLv   = 8
-lmrInitLim  = 8500
-lmrLevMin   = 0
-lmrLevMax   = 15
+lmrInitLv  = 7
+lmrInitLim = 8192
+lmrLevMin  = 1
+lmrLevMax  = 16
 
 -- The late move reduction is variable and regulated by the number of re-searches
 -- Lower levels (towards 0) means less reductions, higher - more
@@ -93,14 +93,19 @@ nulSubAct = True
 useIID :: Bool
 useIID      = True
 
-minIIDPV, minIIDCut, minIIDCutNK, maxIIDDepth :: Int
-minIIDPV    = 5
+minIIDPV, minIIDCut, minIIDCutNK, iidDepthCut :: Int
+minIIDPV    = 4
 minIIDCutNK = 6
 minIIDCut   = 8
-maxIIDDepth = 2
+iidDepthCut = 2
 
 iidNewDepth :: Int -> Int
-iidNewDepth = subtract 1
+iidNewDepth = unsafeAt iidArr
+
+iidArr :: UArray Int Int
+iidArr = listArray (0, 63)
+             -- $ take minIIDPV (repeat 0) ++ [1, 1, 2, 2, 2, 3, 3, 3, 3, 3] ++ repeat 4
+             $ take minIIDPV (repeat 0) ++ [1, 1, 2, 2, 2] ++ repeat 3
 
 -- Parameter for quiescenst search
 inEndlessCheck, qsDeltaMargin :: Int
@@ -491,7 +496,7 @@ pvSearch nst !a !b !d = do
                nst'  = nst { cpos = pos }
            edges <- genAndSort nst' mttmv a b d
            if noMove edges
-              then return $ trimaxPath a b $ if tacticalPos pos then matedPath else staleMate
+              then return $ limitScoreNoMove pos a b
               else do
                 nodes0 <- gets (sNodes . stats)
                 -- futility pruning:
@@ -516,7 +521,7 @@ pvSearch nst !a !b !d = do
                                        ttStore de typ a mv deltan
                                    checkFailHard "pvSLoop low" a b (pathScore s)
                                    return s
-                               else return $ trimaxPath a b $ if tacticalPos pos then matedPath else staleMate
+                               else return $ limitScoreNoMove pos a b
 
 -- PV Zero Window
 pvZeroW :: NodeState -> Int -> Int -> Bool -> Search Path
@@ -544,13 +549,13 @@ pvZeroW !nst !b !d redu = do
            whenAbort (pathFromScore "Aborted" b) $ do
                case nmhigh of
                  NullMoveHigh -> return $ pathFromScore "NullMoveHigh" b
-                 _ -> do
+                 _            -> do
                    -- Use the TT move as best move
                    let mttmv = if hdeep > 0 then Just e else Nothing
                        nst' = nst { cpos = pos }
                    edges <- genAndSort nst' mttmv bGrain b d
                    if noMove edges
-                      then return $ trimaxPath bGrain b $ if tacticalPos pos then matedPath else staleMate
+                      then return $ limitScoreNoMove pos bGrain b
                       else do
                         !nodes0 <- gets (sNodes . stats)
                         -- futility pruning:
@@ -578,7 +583,7 @@ pvZeroW !nst !b !d redu = do
                                                    mv = head $ unalt edges	-- not null, we are in "else" of noMove
                                                ttStore de typ bGrain mv deltan
                                            return s
-                                       else return $ trimaxPath bGrain b $ if tacticalPos pos then matedPath else staleMate
+                                       else return $ limitScoreNoMove pos bGrain b
     where !bGrain = b - scoreGrain
 
 data NullMoveResult = NoNullMove | NullMoveHigh | NullMoveLow | NullMoveThreat Path
@@ -969,6 +974,9 @@ varFutVal = max futMinVal <$> gets futme
 trimaxPath :: Int -> Int -> Path -> Path
 trimaxPath a b x = x { pathScore = trimax a b (pathScore x) }
 
+limitScoreNoMove :: MyPos -> Int -> Int -> Path
+limitScoreNoMove pos a b = trimaxPath a b $ if tacticalPos pos then matedPath else staleMate
+
 trimax :: Int -> Int -> Int -> Int
 trimax a b x
     | x < a     = a
@@ -1070,14 +1078,13 @@ finWithNodes s = do
 bestMoveFromIID :: NodeState -> Int -> Int -> Int -> Search [Move]
 bestMoveFromIID nst a b d
     | nt == PVNode  && d >= minIIDPV
-          = do s <- pvSearch nst a b d'
+          = do s <- pvSearch nst a b $ iidNewDepth d
                return $! unseq $ pathMoves s
     | nt == CutNode && (d >= minIIDCut || (d >= minIIDCutNK && killer nst == NoKiller))
-          = do s <- pvZeroW nst b d' False
+          = do s <- pvZeroW nst b iidDepthCut False
                return $! unseq $ pathMoves s
     | otherwise =  return []
-    where d' = min maxIIDDepth (iidNewDepth d)
-          nt = crtnt nst
+    where nt = crtnt nst
 
 {-# INLINE timeToAbort #-}
 timeToAbort :: a -> Search a -> Search a
