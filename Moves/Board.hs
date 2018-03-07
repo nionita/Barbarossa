@@ -46,7 +46,7 @@ movePassed :: MyPos -> Move -> Bool
 movePassed p m = passed p .&. (uBit $ fromSquare m) /= 0
 
 moveGenAscendent :: Bool
-moveGenAscendent = False
+moveGenAscendent = True
 
 genMoveNCapt :: MyPos -> [Move]
 genMoveNCapt !p
@@ -77,7 +77,7 @@ genMoveNCapt !p
           ncapt = ((.&.) noccup)
           !nyoa = complement $ yoAttacs p
           legal = ((.&.) nyoa)
-          traR = complement $ if c == White then 0x00FF000000000000 else 0xFF00
+          !traR = complement $ if c == White then 0x00FF000000000000 else 0xFF00
           c = moving p
 
 -- Generate only promotions (now only to queen) non captures
