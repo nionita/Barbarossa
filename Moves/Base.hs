@@ -174,8 +174,8 @@ doRealMove m = do
                    return $ Exten 0 False
 
 -- Move from a node to a descendent - the normal search version
-doMove :: Move -> Game DoResult
-doMove m = do
+doMove :: Move -> Int -> Game DoResult
+doMove m !d = do
     s <- get
     let (pc:_) = stack s	-- we never saw an empty stack error until now
         -- Moving a non-existent piece?
@@ -199,10 +199,7 @@ doMove m = do
                    remis <- checkRemisRules p
                    if remis
                       then return $ Final 0
-                      else do
-                          -- let dext = exten pc p m
-                          let dext = exten pc p
-                          return $! Exten dext $ moveIsCaptPromo pc m
+                      else return $! Exten (exten pc p d) $ moveIsCaptPromo pc m
 
 -- Move from a node to a descendent - the QS search version
 -- Here we do only a restricted check for illegal moves
@@ -251,30 +248,26 @@ countRepetitions s = length f6 - uniq
 undoMove :: Game ()
 undoMove = modify $ \s -> s { stack = tail $ stack s }
 
-{--
-exten :: MyPos -> MyPos -> Move -> Int
-exten p1 p2 m | queens  p1 `uBitSet` toSquare m = 1
-              | inCheck p2                      = 1
-              | otherwise                       = 0
---}
+-- Parameters for extensions
+validThreat, majorThreat :: Bool
+validThreat = True	-- pawn threat must be valid?
+majorThreat = False	-- pawn threat: only majors?
+ptMaxDepth :: Int
+ptMaxDepth = 1		-- max depth for pawn threat extension
 
 -- We extend when last move:
 -- - gives check
 -- - captures last queen
 -- - captures last rook when no queens
 -- - (new) is a (valid) pawn attack on a figure
-exten :: MyPos -> MyPos -> Int
-exten p1 p2 | inCheck p2             = 1
-            | pawnThreat p1 p2       = 1
-            | queens p2 /= 0         = 0
-            | queens p1 /= 0         = 1
-            | rooks  p2 /= 0         = 0
-            | rooks  p1 /= 0         = 1
-            | otherwise              = 0
-
-validThreat, majorThreat :: Bool
-validThreat = True
-majorThreat = True
+exten :: MyPos -> MyPos -> Int -> Int
+exten p1 p2 !d | inCheck p2             = 1
+               | d <= ptMaxDepth && pawnThreat p1 p2 = 1
+               | queens p2 /= 0         = 0
+               | queens p1 /= 0         = 1
+               | rooks  p2 /= 0         = 0
+               | rooks  p1 /= 0         = 1
+               | otherwise              = 0
 
 pawnThreat :: MyPos -> MyPos -> Bool
 pawnThreat p1 p2

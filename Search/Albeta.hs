@@ -329,7 +329,7 @@ pvInnerRoot :: Int 	-- current beta
             -> Search (Bool, NodeState)
 pvInnerRoot b d nst e = timeToAbort (True, nst) $ do
          -- do the move
-         exd <- lift $ doMove e
+         exd <- lift $ doMove e d
          if legalResult exd
             then do
                 old <- get
@@ -658,7 +658,7 @@ pvInnerLoop b d prune nst e = timeToAbort (True, nst) $ do
                 return (False, nst1)
             else do
                 old <- get
-                exd <- lift $ doMove e	-- do the move
+                exd <- lift $ doMove e d	-- do the move
                 if legalResult exd
                    then do
                        newNode d
@@ -696,7 +696,7 @@ pvInnerLoopZ b d prune nst e redu = timeToAbort (True, nst) $ do
                 return (False, nst1)
             else do
                 old <- get
-                exd <- lift $ doMove e	-- do the move
+                exd <- lift $ doMove e d	-- do the move
                 -- even the legality could be checked before, maybe much cheaper
                 if legalResult exd
                    then do
