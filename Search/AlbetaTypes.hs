@@ -22,7 +22,7 @@ data ABControl = ABC {
         stoptime  :: Int
     } deriving Show
 
-data DoResult = Exten !Int !Bool	-- return mit extension & special
+data DoResult = Exten !Int !Bool !Bool	-- return mit extension, iscapt & canlmr
               | Final !Int	-- return with a final score (probably draw)
               | Illegal		-- illegal move
 
