@@ -38,7 +38,7 @@ depthForCM  = 7 -- from this depth inform current move
 maxDepthExt = 3 -- maximum depth extension
 minPvDepth  = 2		-- from this depth we use alpha beta search
 useTTinPv :: Bool
-useTTinPv   = True	-- retrieve from TT in PV?
+useTTinPv   = False	-- retrieve from TT in PV?
 
 -- Parameters for late move reduction:
 lmrInitLv, lmrInitLim, lmrLevMin, lmrLevMax :: Int
@@ -674,7 +674,7 @@ pvInnerLoopZ :: Int 	-- current beta
             -> Search (Bool, NodeState)
 pvInnerLoopZ b d prune nst e redu = timeToAbort (True, nst) $ do
          -- What about TT & killer moves???
-         if prune && canPruneMove (cpos nst) e
+         if prune && movno nst > 1 && canPruneMove (cpos nst) e
             then do
                 let !nst1 = nst { movno = movno nst + 1 }
                 return (False, nst1)
@@ -807,7 +807,10 @@ checkFailOrPVLoop b d e s nst = whenAbort (True, nst) $ do
                      nst1 = nst { cursc = fhsc, movno = mn+1, rbmch = 1 }
                  return (True, nst1)
                else do	-- means: > a && < b
-                   lift $ betaCut True (absdp sst) e -- not really a cut, but good move here
+                   lift $ do
+                       betaCut True (absdp sst) e -- not really a cut, but good move here
+                       let de = max d $ pathDepth s
+                       ttStore de 1 (pathScore s) e 0	-- best move so far (score is lower limit)
                    let nnt  = nextNodeType (nxtnt nst)
                        nst1 = nst { cursc = s, nxtnt = nnt, movno = mn+1, rbmch = 2 }
                    return (False, nst1)

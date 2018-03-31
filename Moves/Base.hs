@@ -265,14 +265,12 @@ isMoveLegal :: MyPos -> Move -> Bool
 isMoveLegal = legalMove
 
 -- Why not just like isTKillCand?
--- Also: if not normal, it is useless, as now it is not recognized as legal...
 {-# INLINE isKillCand #-}
 isKillCand :: MyPos -> Move -> Move -> Bool
 isKillCand p mm ym
     | toSquare mm == toSquare ym = False
     | otherwise                  = not $ moveIsCapture p ym
 
--- If not normal, it is useless, as now it is not recognized as legal...
 {-# INLINE isTKillCand #-}
 isTKillCand :: MyPos -> Move -> Bool
 isTKillCand p mm = not $ moveIsCapture p mm
