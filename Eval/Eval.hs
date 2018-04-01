@@ -194,8 +194,10 @@ bnMateDistance wbish sq = min (squareDistance sq ocor1) (squareDistance sq ocor2
 ------ King Safety ------
 kingSafe :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 kingSafe p !ew !mide = madm mide (ewKingSafe ew) ksafe
-    where !ksafe = ksSide (yo p) (yoKAttacs p) (myPAttacs p) (myNAttacs p) (myBAttacs p) (myRAttacs p) (myQAttacs p) (myKAttacs p) (myAttacs p)
-                 - ksSide (me p) (myKAttacs p) (yoPAttacs p) (yoNAttacs p) (yoBAttacs p) (yoRAttacs p) (yoQAttacs p) (yoKAttacs p) (yoAttacs p)
+    where !ksafe = ksSide (yo p) (yoKAttacs p) (myPAttacs p) (myNAttacs p) (myBAttacs p) (myRAttacs p)
+                          (myQAttacs p) (myKAttacs p) (myAttacs p)
+                 - ksSide (me p) (myKAttacs p) (yoPAttacs p) (yoNAttacs p) (yoBAttacs p) (yoRAttacs p)
+                          (yoQAttacs p) (yoKAttacs p) (yoAttacs p)
 
 -- To make the sum and count in one pass
 data Flc = Flc !Int !Int
@@ -206,7 +208,13 @@ fadd (Flc f1 q1) (Flc f2 q2) = Flc (f1+f2) (q1+q2)
 ksSide :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
 ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
     | myq == 0  = 0
-    | otherwise = mattacs
+    | otherwise = ksSide1 yop yok myp myn myb myr myq myk mya
+
+-- By splitting ksSide we get a bit of speed when no own queen
+-- But the qual function (altough optimized for yoka == 0, like mattacs for c == 0)
+-- contains a lot of duplicate code
+ksSide1 :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
+ksSide1 !yop !yok !myp !myn !myb !myr !myq !myk !mya = mattacs
     where qual a p
               | yoka == 0 = Flc 0 0
               | y == 1    = Flc 1 p
@@ -223,7 +231,7 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
           !qq = qual myq 8
           !qk = qual myk 2
           !(Flc c q) = fadd qp $ fadd qn $ fadd qb $ fadd qr $ fadd qq qk
-          !mattacs
+          mattacs
               | c == 0 = 0
               | otherwise = attCoef `unsafeAt` ixt
               -- where !freey = popCount $ yok `less` (mya .|. yop)
