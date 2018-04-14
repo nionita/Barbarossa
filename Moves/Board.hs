@@ -89,10 +89,12 @@ srcDests :: (Square -> BBoard) -> Square -> [(Square, Square)]
 srcDests f !s = zip (repeat s) $ bbToSquares $ f s
 
 -- This one should be called only for normal moves
+-- Not only checks, but also attacks to the king region
 {-# INLINE moveChecksDirect #-}
 moveChecks :: MyPos -> Move -> Bool
 moveChecks !p !m = moveChecksDirect p m || moveChecksIndirect p m
 
+-- Not only checks, but also attacks to the king region, when attacking queen present
 moveChecksDirect :: MyPos -> Move -> Bool
 moveChecksDirect !p !m
     | fig == Pawn   = pAttacs (moving p) t .&. yok /= 0
@@ -103,13 +105,15 @@ moveChecksDirect !p !m
     | otherwise     = False	-- king can't check directly
     where !fig = movePiece m
           !t   = toSquare m
-          !yok = kings p .&. yo p
+          !yok | queens p .&. me p == 0 =  kings p .&. yo p
+               | otherwise              = (kings p .&. yo p) .|. yoKAttacs p
           occ = occup p
           ba  = bAttacs occ t
           ra  = rAttacs occ t
 
 -- This one can be further optimised by using two bitboard arrays
 -- for the attacks on empty table
+-- This should also consider attacks in the king region, but it is too hard
 moveChecksIndirect :: MyPos -> Move -> Bool
 moveChecksIndirect !p !m = ba .&. bq /= 0 || ra .&. rq /= 0
     where !ksq = firstOne $ kings p .&. yo p
