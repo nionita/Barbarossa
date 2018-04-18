@@ -178,8 +178,8 @@ instance CollectParams EvalWeights where
           ewKingOpen        = tme 2 4,
           ewKingPlaceCent   = tme 8 1,
           ewKingPlacePwns   = tme 0 4,
-          ewKingPawn1       = tme  4 53,
-          ewKingPawn2       = tme  2 68,
+          ewKingPawn1       = tme 24 468,	-- this 2 taken from Stockfish
+          ewKingPawn2       = tme 36 1046,	-- and then manually tuned
           ewRookHOpen       = tme 162 182,	-- DSPSA with Adadelta
           ewRookOpen        = tme 205 178,	-- 20k steps, depth 4,
           ewRookConn        = tme  89  59,	-- 2 games, beta=0.95, gamma=0.8,

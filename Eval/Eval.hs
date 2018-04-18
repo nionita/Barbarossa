@@ -311,8 +311,11 @@ kingPlace ep p !ew mide = made (madm (mad (mad (mad mide (ewKingPawn2 ew) kpa2)
                                  in r + q*q
           own = comb yrooks yqueens mwb mwr
           adv = comb mrooks mqueens ywb ywr
-          pmkpa = popCount (myKAttacs p .&. paw)
-          pykpa = popCount (yoKAttacs p .&. paw)
+          -- This is now threat by king:
+          -- pawn & pieces attacked by king and not defended by a pawn
+          -- (Again taken from Stockfish)
+          pmkpa = popCount (myKAttacs p .&. yo p `less` yoPAttacs p)
+          pykpa = popCount (yoKAttacs p .&. me p `less` myPAttacs p)
           !kpa1 = mkpa1 - ykpa1
           !kpa2 = mkpa2 - ykpa2
           (mkpa1, mkpa2) | pmkpa == 0 = (0, 0)
@@ -650,8 +653,8 @@ enPrise p !ew mide = mad (mad (mad (mad mide (ewEnpHanging ew) ha)
           !ha = popCount haP + 3 * popCount haM + 5 * popCount haR + 9 * popCount haQ
           !ep =                3 * popCount epM + 5 * popCount epR + 9 * popCount epQ
           !at = popCount atP + 3 * popCount atM + 5 * popCount atR + 9 * popCount atQ
-          !wp1 = popCount$ (meP `less` myPAttacs p) .&. yoAttacs p	-- my weak attacked pawns
-          !wp2 = popCount$ (yo p .&. pawns p `less` yoPAttacs p) .&. myAttacs p	-- your weak attacked pawns
+          !wp1 = popCount $ (meP `less` myPAttacs p) .&. yoAttacs p	-- my weak attacked pawns
+          !wp2 = popCount $ (yo p .&. pawns p `less` yoPAttacs p) .&. myAttacs p	-- your weak attacked pawns
           !wp = wp2 - wp1
 
 ------ Last Line ------
