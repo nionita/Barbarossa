@@ -900,8 +900,8 @@ genAndSort nst mttmv a b d = do
 {-# INLINE reduceLmr #-}
 reduceLmr :: Bool -> Bool -> Int -> Int -> Int -> Int
 reduceLmr nearmatea spec d lmrlev w
-    | spec || d <= 1 || nearmatea = d
-    | otherwise                   = max 1 $ d - lmrArr!(lmrlev, w)
+    | spec || d <= maxFutilDepth || nearmatea = d
+    | otherwise                               = max 1 $ d - lmrArr!(lmrlev, w)
 
 -- Adjust the LMR related parameters in the state
 moreLMR :: Bool -> Int -> Search ()
