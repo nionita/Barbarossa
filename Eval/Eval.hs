@@ -59,7 +59,6 @@ normalEval :: MyPos -> EvalState -> Int
 normalEval p !sti = sc
     where ep     = esEParams  sti
           ew     = esEWeights sti
-          !gph   = gamePhase p
           !mide1 = materDiff p ew (MidEnd 0 0)
           !mide2 = evalRedundance p ew mide1
           !mide3 = evalRookPawn p ew mide2
@@ -72,10 +71,12 @@ normalEval p !sti = sc
           !midea = adversDiff p ew mide9
           !mideb = evalRookPlc p ew midea
           !midec = enPrise p ew mideb
-          !mided = pawnBl p ew midec
+          !midei = attSafePawn p ew midec
+          !mided = pawnBl p ew midei
           !midee = isolDiff p ew mided
           !midef = backDiff p ew midee
           !mideg = advPawns p ew midef
+          !gph   = gamePhase p
           !mideh = passPawns gph ep p ew mideg
           !sc = ((mid mideh + epMovingMid ep) * gph + (end mideh + epMovingEnd ep) * (256 - gph))
                    `unsafeShiftR` (shift2Cp + 8)
@@ -653,6 +654,46 @@ enPrise p !ew mide = mad (mad (mad (mad mide (ewEnpHanging ew) ha)
           !wp1 = popCount$ (meP `less` myPAttacs p) .&. yoAttacs p	-- my weak attacked pawns
           !wp2 = popCount$ (yo p .&. pawns p `less` yoPAttacs p) .&. myAttacs p	-- your weak attacked pawns
           !wp = wp2 - wp1
+
+--- Attacked by safe pawn ---
+attSafePawn :: MyPos -> EvalWeights -> MidEnd -> MidEnd
+attSafePawn p !ew mide = mad (mad (mad mide (ewASPMinor ew) mi)
+                                  (ewASPRook ew) ro)
+                             (ewASPQueen ew) qu
+    where (mmi, mro, mqu) = myAttackedBySafePawn p
+          (ymi, yro, yqu) = yoAttackedBySafePawn p
+          !mi = mmi - ymi
+          !ro = mro - yro
+          !qu = mqu - yqu
+
+myAttackedBySafePawn :: MyPos -> (Int, Int, Int)
+myAttackedBySafePawn p
+    | yopawns == 0 = (0, 0, 0)
+    | otherwise    = (mi, ro, qu)
+    where yopawns = pawns p .&. yo p
+          whitePawns = moving p /= White
+          mi = attSafePawnBB whitePawns yopawns (yoPAttacs p) (yoAttacs p) (me p .&. (knights p .|. bishops p))
+          ro = attSafePawnBB whitePawns yopawns (yoPAttacs p) (yoAttacs p) (me p .&. rooks  p)
+          qu = attSafePawnBB whitePawns yopawns (yoPAttacs p) (yoAttacs p) (me p .&. queens p)
+
+yoAttackedBySafePawn :: MyPos -> (Int, Int, Int)
+yoAttackedBySafePawn p
+    | mypawns == 0 = (0, 0, 0)
+    | otherwise    = (mi, ro, qu)
+    where mypawns = pawns p .&. me p
+          whitePawns = moving p == White
+          mi = attSafePawnBB whitePawns mypawns (myPAttacs p) (myAttacs p) (yo p .&. (knights p .|. bishops p))
+          ro = attSafePawnBB whitePawns mypawns (myPAttacs p) (myAttacs p) (yo p .&. rooks  p)
+          qu = attSafePawnBB whitePawns mypawns (myPAttacs p) (myAttacs p) (yo p .&. queens p)
+
+-- Stockfish considers also pawns that are themselves not attacked
+attSafePawnBB :: Bool -> BBoard -> BBoard -> BBoard -> BBoard -> Int
+attSafePawnBB !whitePawns !thePawns !pawnAttacks !pawnSupport !pieces
+    | attackedPieces == 0 = 0
+    | otherwise           = popCount $ attackers .&. pawnSupport
+    where attackedPieces = pawnAttacks .&. pieces
+          attackers | whitePawns = pawnBlackAttacks attackedPieces .&. thePawns
+                    | otherwise  = pawnWhiteAttacks attackedPieces .&. thePawns
 
 ------ Last Line ------
 

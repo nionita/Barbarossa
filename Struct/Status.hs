@@ -103,6 +103,9 @@ data EvalWeights
           ewEnpHanging      :: !MidEnd,
           ewEnpEnPrise      :: !MidEnd,
           ewEnpAttacked     :: !MidEnd,
+          ewASPMinor        :: !MidEnd,
+          ewASPRook         :: !MidEnd,
+          ewASPQueen        :: !MidEnd,
           ewWepAttacked     :: !MidEnd,
           ewLastLinePenalty :: !MidEnd,
           ewBishopPair      :: !MidEnd,
@@ -203,6 +206,9 @@ instance CollectParams EvalWeights where
           ewEnpHanging      = tme (-19) (-27),
           ewEnpEnPrise      = tme (-29) (-26),
           ewEnpAttacked     = tme  (-2) (-14),
+          ewASPMinor        = tme (-400) (-150),
+          ewASPRook         = tme (-800) (-250),
+          ewASPQueen        = tme (-1500) (-400),
           ewWepAttacked     = tme 35 73,
           ewLastLinePenalty = tme 100 0,
           ewBishopPair      = tme 386 323,
@@ -279,6 +285,12 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
         ("end.enpEnPrise",     setEndEnpEnPrise),
         ("mid.enpAttacked",    setMidEnpAttacked),
         ("end.enpAttacked",    setEndEnpAttacked),
+        ("mid.aspMinor",       setMidASPMinor),
+        ("end.aspMinor",       setEndASPMinor),
+        ("mid.aspRook",        setMidASPRook),
+        ("end.aspRook",        setEndASPRook),
+        ("mid.aspQueen",       setMidASPQueen),
+        ("end.aspQueen",       setEndASPQueen),
         ("mid.wepAttacked",    setMidWepAttacked),
         ("end.wepAttacked",    setEndWepAttacked),
         ("mid.lastLinePenalty", setMidLastLinePenalty),
@@ -362,6 +374,12 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
           setEndEnpEnPrise      v' ew' = ew' { ewEnpEnPrise      = (ewEnpEnPrise      ew') { end = round v' }}
           setMidEnpAttacked     v' ew' = ew' { ewEnpAttacked     = (ewEnpAttacked     ew') { mid = round v' }}
           setEndEnpAttacked     v' ew' = ew' { ewEnpAttacked     = (ewEnpAttacked     ew') { end = round v' }}
+          setMidASPMinor        v' ew' = ew' { ewASPMinor        = (ewASPMinor        ew') { mid = round v' }}
+          setEndASPMinor        v' ew' = ew' { ewASPMinor        = (ewASPMinor        ew') { end = round v' }}
+          setMidASPRook         v' ew' = ew' { ewASPRook         = (ewASPRook         ew') { mid = round v' }}
+          setEndASPRook         v' ew' = ew' { ewASPRook         = (ewASPRook         ew') { end = round v' }}
+          setMidASPQueen        v' ew' = ew' { ewASPQueen        = (ewASPQueen        ew') { mid = round v' }}
+          setEndASPQueen        v' ew' = ew' { ewASPQueen        = (ewASPQueen        ew') { end = round v' }}
           setMidWepAttacked     v' ew' = ew' { ewWepAttacked     = (ewWepAttacked     ew') { mid = round v' }}
           setEndWepAttacked     v' ew' = ew' { ewWepAttacked     = (ewWepAttacked     ew') { end = round v' }}
           setMidLastLinePenalty v' ew' = ew' { ewLastLinePenalty = (ewLastLinePenalty ew') { mid = round v' }}
