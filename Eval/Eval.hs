@@ -13,6 +13,7 @@ import Data.Bits
 import Data.List (minimumBy)
 import Data.Array.Unboxed
 import Data.Ord (comparing)
+import qualified Data.IntMap as M
 
 import Struct.Struct
 import Struct.Status
@@ -88,59 +89,88 @@ gamePhase p = g
           ns = popCount $ knights p
           !g = qs * 39 + rs * 20 + (bs + ns) * 12	-- opening: 254, end: 0
 
+figureCode :: Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int
+figureCode !wn !wb !wr !wq !ln !lb !lr !lq
+    = ((((((wn * 3 + wb) * 3 + wr) * 3 + wq) * 3 + ln) * 3 + lb) * 3 + lr) * 3 + lq
+
+-- Everything which is not in this map is factor 1 (i.e. unreduced)
+reductionFactors :: M.IntMap Int
+reductionFactors = M.fromList [
+    -- -- -- -- WN WB WR WQ LN LB LR LQ -- Red
+    (figureCode  1  0  0  0  0  0  0  0,   16),  -- KNKp...
+    (figureCode  2  0  0  0  0  0  0  0,   16),  -- KNNKp...
+    (figureCode  2  0  0  0  1  0  0  0,   16),  -- KNNKN
+    (figureCode  2  0  0  0  0  1  0  0,   16),  -- KNNKN
+    (figureCode  2  0  0  0  0  0  1  0,   16),  -- KNNKR
+    (figureCode  1  1  0  0  1  0  0  0,   12),  -- KNBKN
+    (figureCode  1  1  0  0  0  1  0  0,   12),  -- KNBKB
+    (figureCode  1  1  0  0  0  0  1  0,    8),  -- KNBKR
+    (figureCode  1  0  1  0  0  0  1  0,    8),  -- KRNKR
+    (figureCode  0  1  0  0  0  0  0  0,   16),  -- KBKp...
+    (figureCode  0  2  0  0  1  0  0  0,   16),  -- KBBKN
+    (figureCode  0  2  0  0  0  1  0  0,   16),  -- KBBKR
+    (figureCode  0  0  1  0  1  0  0  0,    4),  -- KRKN - Knight can be catched
+    (figureCode  0  0  1  0  0  1  0  0,    6),  -- KRKB - can be mated!
+    (figureCode  0  0  0  1  1  0  1  0,    8),  -- KQKRN
+    (figureCode  0  0  0  1  0  1  1  0,    8),  -- KQKRB
+    (figureCode  0  1  1  0  0  0  1  0,    2)   -- KRBKR - This is (sometimes?) a win
+    ]
+
+reduceInsufficient :: Int
+reduceInsufficient = 16
+
 evalSideNoPawns :: MyPos -> EvalState -> Int
-evalSideNoPawns p !sti
-    | npwin && insufficient = 0
-    | npwin && lessRook p   = nsc `div` 4
-    | otherwise             = nsc
-    where nsc = normalEval p sti
-          npside = if pawns p .&. me p == 0 then me p else yo p
-          npwin = npside == me p && nsc > 0 || npside == yo p && nsc < 0
-          insufficient = majorcnt == 0 && (minorcnt == 1 || minorcnt == 2 && bishopcnt == 0)
-          bishopcnt = popCount $ bishops p .&. npside
-          minorcnt  = popCount $ (bishops p .|. knights p) .&. npside
-          majorcnt  = popCount $ (queens p .|. rooks p) .&. npside
+evalSideNoPawns p !sti = reduceScore p sti npSide
+    where npSide | pawns p .&. me p == 0 = me p
+                 | otherwise             = yo p
+
+-- When the winning side has no pawn, we reduce a bit the score
+reduceScore :: MyPos -> EvalState -> BBoard -> Int
+reduceScore p !sti !reduceSide
+    | winSide .&. reduceSide == 0 = sc
+    | Just r <- M.lookup fc reductionFactors
+                                  = sc `div` r
+    | otherwise                   = sc
+    where !sc = normalEval p sti
+          !winSide | sc > 0    = me p
+                   | otherwise = yo p
+          knightWin = popCount $ knights p .&. winSide
+          bishopWin = popCount $ bishops p .&. winSide
+          rookWin   = popCount $ rooks   p .&. winSide
+          queenWin  = popCount $ queens  p .&. winSide
+          knightAll = popCount $ knights p
+          bishopAll = popCount $ bishops p
+          rookAll   = popCount $ rooks   p
+          queenAll  = popCount $ queens  p
+          fc = figureCode knightWin bishopWin rookWin queenWin
+                          (knightAll - knightWin) (bishopAll - bishopWin)
+                          (rookAll - rookWin) (queenAll - queenWin)
 
 -- These evaluation function distiguishes between some known finals with no pawns
 evalNoPawns :: MyPos -> EvalState -> Int
 evalNoPawns p !sti = sc
     where !sc | onlykings   = 0
-              | kmk || knnk = 0		-- one minor or two knights
+              | kmk || knnk = normalEval p sti `div` reduceInsufficient -- one minor or two knights
               | kbbk        = mateKBBK p kaloneyo	-- 2 bishops
               | kbnk        = mateKBNK p kaloneyo	-- bishop + knight
               | kMxk        = mateKMajxK p kaloneyo	-- simple mate with at least one major
-              | lessRook p  = (normalEval p sti) `div` 2
-              | otherwise   = normalEval p sti
+              | otherwise   = reduceScore p sti 0xFFFFFFFFFFFFFFFF
           kaloneme = me p `less` kings p == 0
           kaloneyo = yo p `less` kings p == 0
           onlykings = kaloneme && kaloneyo
-          kmk  = (kaloneme || kaloneyo) && minorcnt == 1 && majorcnt == 0
-          knnk = (kaloneme || kaloneyo) && minorcnt == 2 && majorcnt == 0 && bishops p == 0
-          kbbk = (kaloneme || kaloneyo) && minorcnt == 2 && majorcnt == 0 && knights p == 0
-          kbnk = (kaloneme || kaloneyo) && minorcnt == 2 && not (knnk || kbbk)
-          kMxk = (kaloneme || kaloneyo) && majorcnt > 0
-          minor   = bishops p .|. knights p
+          onekalone = kaloneme || kaloneyo
+          kmk  = onekalone && minorcnt == 1 && majorcnt == 0
+          knnk = onekalone && minorcnt == 2 && majorcnt == 0 && bishops p == 0
+          kbbk = onekalone && minorcnt == 2 && majorcnt == 0 && knights p == 0
+          kbnk = onekalone && minorcnt == 2 && not (knnk || kbbk)
+          kMxk = onekalone && majorcnt > 0
+          minor    = bishops p .|. knights p
           minorcnt = popCount minor
           major    = queens p .|. rooks p
           majorcnt = popCount major
 
--- Has one of the players less then one rook advantage (without pawns)?
--- In this case it is drawish (if the winning part has no pawns)
--- This is a primitive first approach
-lessRook :: MyPos -> Bool
-lessRook p | mq == yq && mr == yr = mb + mn - yb - yn `elem` [-1, 0, 1]
-           | otherwise = False
-    where !mq = popCount $ queens  p .&. me p
-          !yq = popCount $ queens  p .&. yo p
-          !mr = popCount $ rooks   p .&. me p
-          !yr = popCount $ rooks   p .&. yo p
-          !mb = popCount $ bishops p .&. me p
-          !yb = popCount $ bishops p .&. yo p
-          !mn = popCount $ knights p .&. me p
-          !yn = popCount $ knights p .&. yo p
-
 winBonus :: Int
-winBonus = 200	-- when it's known win
+winBonus = 500	-- when it's known win
 
 mateKBBK :: MyPos -> Bool -> Int
 mateKBBK = scoreToMate centerDistance
