@@ -175,11 +175,11 @@ instance CollectParams EvalWeights where
     npColInit = EvalWeights {
           ewMaterialDiff    = tme 8 8,
           ewKingSafe        = tme 1 0,
-          ewKingOpen        = tme 2 4,
-          ewKingPlaceCent   = tme 8 1,
-          ewKingPlacePwns   = tme 0 4,
-          ewKingThreat1     = tme 24 468,	-- this 2 taken from Stockfish
-          ewKingThreat2     = tme 36 1046,	-- and then manually tuned
+          ewKingOpen        = tme 4 1,		-- DSPSA...
+          ewKingPlaceCent   = tme 5 (-1),	-- DSPSA...
+          ewKingPlacePwns   = tme 4 4,		-- DSPSA...
+          ewKingThreat1     = tme 23 471,	-- DSPSA...
+          ewKingThreat2     = tme 37 1049,	-- DSPSA...
           ewRookHOpen       = tme 162 182,	-- DSPSA with Adadelta
           ewRookOpen        = tme 205 178,	-- 20k steps, depth 4,
           ewRookConn        = tme  89  59,	-- 2 games, beta=0.95, gamma=0.8,
@@ -193,7 +193,7 @@ instance CollectParams EvalWeights where
           ewCenterBAtts     = tme 52 35,
           ewCenterRAtts     = tme 14 22,	-- DSPSA ...
           ewCenterQAtts     = tme 13 53,
-          ewCenterKAtts     = tme  2 62,
+          ewCenterKAtts     = tme  7 67,	-- DSPSA...
           ewSpace           = tme  1  0,
           ewAdvAtts         = tme  1 17,
           ewIsolPawns       = tme (-36) (-113),
@@ -203,7 +203,7 @@ instance CollectParams EvalWeights where
           ewEnpHanging      = tme (-19) (-27),
           ewEnpEnPrise      = tme (-29) (-26),
           ewEnpAttacked     = tme  (-2) (-14),
-          ewWepAttacked     = tme 35 73,
+          ewWepAttacked     = tme 39 66,	-- DSPSA...
           ewLastLinePenalty = tme 100 0,
           ewBishopPair      = tme 386 323,
           ewBishopPawns     = tme (-25) (-54),
