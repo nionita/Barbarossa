@@ -266,8 +266,8 @@ materDiff p !ew mide = mad mide (ewMaterialDiff ew) md
 -- We calculate the king opennes here, as we have all we need
 -- We also give a bonus for a king beeing near pawn(s)
 kingPlace :: EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
-kingPlace ep p !ew mide = made (madm (mad (mad (mad mide (ewKingPawn2 ew) kpa2)
-                                              (ewKingPawn1 ew) kpa1)
+kingPlace ep p !ew mide = made (madm (mad (mad (mad mide (ewKingThreat2 ew) kpa2)
+                                               (ewKingThreat1 ew) kpa1)
                                          (ewKingOpen ew) ko)
                                     (ewKingPlaceCent ew) kcd)
                               (ewKingPlacePwns ew) kpd
