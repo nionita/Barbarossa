@@ -41,11 +41,12 @@ useTTinPv   = False	-- retrieve from TT in PV?
 minPvDepth  = 2		-- from this depth we use alpha beta search
 
 -- Parameters for late move reduction:
-lmrInitLv, lmrInitLim, lmrLevMin, lmrLevMax :: Int
-lmrInitLv   = 8
-lmrInitLim  = 8500
-lmrLevMin   = 0
-lmrLevMax   = 15
+lmrInitLv, lmrInitLim, lmrLevMin, lmrLevMax, lmrNoDepth :: Int
+lmrInitLv  = 8
+lmrInitLim = 8500
+lmrLevMin  = 0
+lmrLevMax  = 15
+lmrNoDepth = 1
 
 -- The late move reduction is variable and regulated by the number of re-searches
 -- Lower levels (towards 0) means less reductions, higher - more
@@ -890,8 +891,8 @@ genAndSort nst mttmv a b d = do
 {-# INLINE reduceLmr #-}
 reduceLmr :: Bool -> Bool -> Int -> Int -> Int -> Int
 reduceLmr nearmatea spec d lmrlev w
-    | spec || d <= maxFutilDepth || nearmatea = d
-    | otherwise                               = max 1 $ d - lmrArr!(lmrlev, w)
+    | spec || d <= lmrNoDepth || nearmatea = d
+    | otherwise                            = max 1 $ d - lmrArr!(lmrlev, w)
 
 -- Adjust the LMR related parameters in the state
 moreLMR :: Bool -> Int -> Search ()
