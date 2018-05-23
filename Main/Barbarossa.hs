@@ -42,7 +42,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.5.0"
-progVerSuff = "abd3-2"
+progVerSuff = "lmr1p-2"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -106,7 +106,9 @@ initContext opts = do
     ha <- newCache 1	-- it will take the minimum number of entries
     hc <- newCurSe
     hi <- newHist
-    let paramList = stringToParams $ concat $ intersperse "," $ optParams opts
+    let paramList
+            | null $ optParams opts = []
+            | otherwise             = stringToParams $ concat $ intersperse "," $ optParams opts
     (parc, evs) <- makeEvalState (optConfFile opts) paramList progVersion progVerSuff
     let chg = Chg {
             working = False,
@@ -869,7 +871,7 @@ data UciGUIOptionType = UGOTRange String String
 guiUciOptions :: [(String, String, String, UciGUIOptionType)]
 guiUciOptions = [
         ("Hash",    "spin", "16", UGOTRange "16" "1024"),	-- hash size in MB
-        ("Threads", "spin",  "1", UGOTRange  "1"   "16")	-- number of threads
+        ("Threads", "spin",  "2", UGOTRange  "1"   "16")	-- number of threads
     ]
 
 sendOption :: (String, String, String, UciGUIOptionType) -> CtxIO ()

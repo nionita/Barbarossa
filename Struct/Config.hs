@@ -20,13 +20,16 @@ colParams :: CollectParams p => [(String, Double)] -> p
 colParams = foldr npColParm npColInit
 
 readParam :: String -> Maybe (String, Double)
-readParam s = let (ns, vs) = span (/= '=') s
-              in case vs of
-                     ('=' : rs) -> case reads (strip rs) of
-                                       (v, ""):[] -> Just (strip ns, v)
-                                       _          -> Nothing	-- did not read
-                     _         -> Nothing	-- did not contain '='
+readParam s
+    = let (ns, vs) = span (/= '=') s
+      in case vs of
+             ('=' : rs) -> case reads (strip rs) of
+                               (v, ""):[] -> Just (strip ns, v)
+                               _          -> error $ err1 rs
+             _          -> error $ err2 vs
     where strip = filter (not . isSpace)
+          err1 x = "readParam: cannot read " ++ strip x ++ " as a double"
+          err2 x = "readParam: line does not contain '=': " ++ x
 
 type Setter a = Double -> a -> a
 

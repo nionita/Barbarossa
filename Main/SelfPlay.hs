@@ -194,6 +194,7 @@ filterFile opts = do
 
 matchFile :: Options -> String -> CtxIO (Int, Int, Int)
 matchFile opts dir = do
+    liftIO $ setCurrentDirectory dir
     ctx <- ask
     let logFileName = "selfplay-" ++ show (startSecond ctx) ++ ".log"
     startLogger logFileName
@@ -221,10 +222,12 @@ matchFile opts dir = do
                     when (not ispos) $ loopCount (skipLines hi m) ()
                 Nothing -> return ()
             (eval1, eval2) <- liftIO $ do
-                setCurrentDirectory dir
-                (_, eval1) <- liftIO $ makeEvalState (Just id1) [] "progver" "progsuf"
-                (_, eval2) <- liftIO $ makeEvalState (Just id2) [] "progver" "progsuf"
+                (_, eval1) <- makeEvalState (Just id1) [] "progver" "progsuf"
+                (_, eval2) <- makeEvalState (Just id2) [] "progver" "progsuf"
                 return (eval1, eval2)
+            when debug $ do
+                ctxLog LogInfo $ "Player 1 config: " ++ show eval1
+                ctxLog LogInfo $ "Player 2 config: " ++ show eval2
             let act = playEveryGame (optDepth opts) hi ho (optNFens opts) (id1, eval1) (id2, eval2)
             wdl <- loopCount act (0, 0, 0)
             liftIO $ do
