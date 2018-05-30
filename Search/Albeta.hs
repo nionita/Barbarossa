@@ -610,7 +610,7 @@ pvZeroW !nst !b !d = do
                                         NullMoveThreat s -> newTKiller pos d s
                                         _                -> NoKiller
                             !nsti = resetNSt (pathFromScore "low limit" bGrain) kill1 edges nst'
-                        nstf <- pvZLoop b d prune redu nsti
+                        nstf <- pvZLoop b d prune nsti
                         let s = cursc nstf
                         whenAbort s $ do
                             checkFailHard "pvZLoop" bGrain b (pathScore s)
@@ -998,14 +998,14 @@ pvSLoop b d p = goDefe
               if cut then return s'
                      else go phase s' es
 
-pvZLoop :: Int -> Int -> Bool -> Bool -> NodeState -> Search NodeState
-pvZLoop b d p redu = goDefe
+pvZLoop :: Int -> Int -> Bool -> NodeState -> Search NodeState
+pvZLoop b d p = goDefe
     where goDefe s = go True  s { moves = [] } (moves s)
           goRest s = go False s { defer = [] } (reverse $ defer s)
           go True  !s [] = goRest s
           go False !s [] = return s
           go phase !s (e:es) = do
-              (!cut, !s') <- pvInnerLoopZ b d phase p s e redu
+              (!cut, !s') <- pvInnerLoopZ b d phase p s e
               if cut then return s'
                      else go phase s' es
 

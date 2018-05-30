@@ -871,7 +871,7 @@ data UciGUIOptionType = UGOTRange String String
 guiUciOptions :: [(String, String, String, UciGUIOptionType)]
 guiUciOptions = [
         ("Hash",    "spin", "16", UGOTRange "16" "1024"),	-- hash size in MB
-        ("Threads", "spin",  "2", UGOTRange  "1"   "16")	-- number of threads
+        ("Threads", "spin",  "2", UGOTRange  "1"    "2")	-- number of threads
     ]
 
 sendOption :: (String, String, String, UciGUIOptionType) -> CtxIO ()
