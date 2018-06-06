@@ -337,8 +337,8 @@ pvInnerRoot b d nst e = timeToAbort (True, nst) $ do
                 newNode d
                 modify $ \s -> s { absdp = absdp s + 1 }
                 s <- case exd of
-                         Exten exd' spc -> do
-                             when (exd' == 0 && not spc) $ do
+                         Exten exd' _ _ -> do
+                             when (canPruneMove (cpos nst) e) $ do
                                  sdiff <- lift scoreDiff
                                  updateFutil sdiff	-- e
                              xchangeFutil
@@ -652,7 +652,8 @@ pvInnerLoop :: Int 	-- current beta
             -> Search (Bool, NodeState)
 pvInnerLoop b d prune nst e = timeToAbort (True, nst) $ do
          -- What about TT & killer moves???
-         if prune && movno nst > 1 && canPruneMove (cpos nst) e
+         let !canPrune = canPruneMove (cpos nst) e
+         if prune && movno nst > 1 && canPrune
             then do
                 let !nst1 = nst { movno = movno nst + 1 }
                 return (False, nst1)
@@ -664,10 +665,10 @@ pvInnerLoop b d prune nst e = timeToAbort (True, nst) $ do
                        newNode d
                        modify $ \s -> s { absdp = absdp s + 1 }
                        s <- case exd of
-                           Exten exd' spc -> do
-                               when (exd' == 0 && not spc) $ do	-- not quite ok here
-                                   sdiff <- lift scoreDiff	-- cause spc has a slighty
-                                   updateFutil sdiff	-- e	-- different meaning...
+                           Exten exd' _ _ -> do
+                               when canPrune $ do
+                                   sdiff <- lift scoreDiff
+                                   updateFutil sdiff	-- e
                                xchangeFutil
                                s <- pvInnerLoopExten b d exd' (deepNSt nst)
                                xchangeFutil
@@ -690,7 +691,8 @@ pvInnerLoopZ :: Int 	-- current beta
             -> Search (Bool, NodeState)
 pvInnerLoopZ b d prune nst e redu = timeToAbort (True, nst) $ do
          -- What about TT & killer moves???
-         if prune && canPruneMove (cpos nst) e
+         let !canPrune = canPruneMove (cpos nst) e
+         if prune && canPrune
             then do
                 let !nst1 = nst { movno = movno nst + 1 }
                 return (False, nst1)
@@ -703,21 +705,16 @@ pvInnerLoopZ b d prune nst e redu = timeToAbort (True, nst) $ do
                        newNode d
                        modify $ \s -> s { absdp = absdp s + 1 }
                        s <- case exd of
-                         Exten exd' spc -> do
-                             if spc
-                                then do
-                                    xchangeFutil
-                                    s <- pvInnerLoopExtenZ b d spc exd' (deepNSt $ resetSpc nst) redu
-                                    xchangeFutil
-                                    return s
-                                else do
-                                    when (exd' == 0) $ do
-                                        sdiff <- lift scoreDiff
-                                        updateFutil sdiff	-- e
-                                    xchangeFutil
-                                    s <- pvInnerLoopExtenZ b d spc exd' (deepNSt nst) redu
-                                    xchangeFutil
-                                    return s
+                         Exten exd' cap nolmr -> do
+                             when canPrune $ do
+                                 sdiff <- lift scoreDiff
+                                 updateFutil sdiff	-- e
+                             xchangeFutil
+                             s <- if cap
+                                     then pvInnerLoopExtenZ b d True exd' (deepNSt $ resetSpc nst) redu
+                                     else pvInnerLoopExtenZ b d nolmr exd' (deepNSt nst) redu
+                             xchangeFutil
+                             return s
                          Final sco -> return $! pathFromScore "Final" (-sco)
                          Illegal   -> error "Cannot be illegal here"
                        lift undoMove	-- undo the move

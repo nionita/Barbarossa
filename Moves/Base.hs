@@ -32,7 +32,7 @@ import Struct.Context
 import Struct.Status
 import Hash.TransTab
 import Moves.Board
-import Moves.BitBoard (less)
+import Moves.BitBoard (less, uBit)
 import Eval.BasicEval
 import Eval.Eval
 import Moves.ShowMe
@@ -144,11 +144,11 @@ showMyPos p = showTab (black p) (slide p) (kkrq p) (diag p) ++ "================
 
 {-# INLINE uBitSet #-}
 uBitSet :: BBoard -> Int -> Bool
-uBitSet bb sq = bb .&. (1 `unsafeShiftL` sq) /= 0
+uBitSet bb sq = bb .&. uBit sq /= 0
 
 {-# INLINE uBitClear #-}
 uBitClear :: BBoard -> Int -> Bool
-uBitClear bb sq = bb .&. (1 `unsafeShiftL` sq) == 0
+uBitClear bb sq = bb .&. uBit sq == 0
 
 -- Move from a node to a descendent - the real move version
 doRealMove :: Move -> Game DoResult
@@ -176,7 +176,7 @@ doRealMove m = do
                then return Illegal
                else do
                    put s { stack = p' : stack s }
-                   return $ Exten 0 False
+                   return $ Exten 0 False False
 
 -- Move from a node to a descendent - the normal search version
 doMove :: Move -> Game DoResult
@@ -203,8 +203,10 @@ doMove m = do
                    put s { stack = p : stack s }
                    remis <- checkRemisRules p
                    if remis
-                      then return $  Final 0
-                      else return $! Exten (exten pc p) $ moveIsCaptPromo pc m
+                      then return $ Final 0
+                      else if captOrPromo pc m
+                              then return $! Exten (exten pc p) True True
+                              else return $! Exten (exten pc p) False (noLMR pc m)
 
 -- Move from a node to a descendent - the QS search version
 -- Here we do only a restricted check for illegal moves
@@ -253,16 +255,41 @@ countRepetitions s = length f6 - uniq
 undoMove :: Game ()
 undoMove = modify $ \s -> s { stack = tail $ stack s }
 
+-- We extend when last move:
+-- - gives check
+-- - captures last queen
+-- - captures last rook when no queens
 exten :: MyPos -> MyPos -> Int
-exten p1 p2 | inCheck p2             = 1
-            | queens p2 /= 0         = 0
-            | queens p1 /= 0         = 1
-            | rooks  p2 /= 0         = 0
-            | rooks  p1 /= 0         = 1
-            | otherwise              = 0
+exten p1 p2 | inCheck p2     = 1
+            | queens p2 /= 0 = 0
+            | queens p1 /= 0 = 1
+            | rooks  p2 /= 0 = 0
+            | rooks  p1 /= 0 = 1
+            | otherwise      = 0
+
+{--
+-- Parameters for pawn threats
+validThreat, majorThreat :: Bool
+validThreat = True	-- pawn threat must be valid?
+majorThreat = False	-- pawn threat: only majors?
+
+pawnThreat :: MyPos -> MyPos -> Bool
+pawnThreat p1 p2
+    | npa .&. fig == 0 = False
+    | validThreat      = validPawnThreat p1 p2
+    | otherwise        = True
+    where !npa = yoPAttacs p2 `less` myPAttacs p1
+          !fig | majorThreat = me p2 .&. (queens p2 .|. rooks p2)
+               | otherwise   = me p2 `less` pawns p2
+
+-- Valid pawn threat is when the pawn is defended or not attacked
+validPawnThreat :: MyPos -> MyPos -> Bool
+validPawnThreat p1 p2 = mvpaw .&. yoAttacs p2 /= 0 || mvpaw .&. myAttacs p2 == 0
+    where !mvpaw = yo p2 `less` me p1
+--}
 
 -- Tactical positions will be searched complete in quiescent search
--- Currently only when in in check
+-- Currently only when in check
 {-# INLINE tacticalPos #-}
 tacticalPos :: MyPos -> Bool
 tacticalPos = (/= 0) . check
@@ -351,12 +378,15 @@ betaCut good absdp m
             _     -> return ()
     | otherwise = return ()
 
--- Will not be pruned nor LMR reduced
--- Now: only for captures or promotions (but check that with LMR!!!)
-moveIsCaptPromo :: MyPos -> Move -> Bool
-moveIsCaptPromo p m
+-- Captures & promotions
+captOrPromo :: MyPos -> Move -> Bool
+captOrPromo p m
     | moveIsPromo m || moveIsEnPas m = True
     | otherwise                      = moveIsCapture p m
+
+-- Can be LMR reduced, if not captures & promotions
+noLMR :: MyPos -> Move -> Bool
+noLMR = movePassed
 
 -- We will call this function before we do the move
 -- This will spare a heavy operation for pruned moved
@@ -365,6 +395,7 @@ canPruneMove :: MyPos -> Move -> Bool
 canPruneMove p m
     | not (moveIsNormal m) = False
     | moveIsCapture p m    = False
+    | movePassed p m       = False
     | otherwise            = not $ moveChecks p m
 
 -- Score difference obtained by last move, from POV of the moving part
