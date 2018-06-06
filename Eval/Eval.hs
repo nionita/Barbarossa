@@ -248,7 +248,7 @@ attCoef = listArray (0, 272) $ take zeros (repeat 0) ++ [ f x | x <- [0..63] ] +
           maxks = 3800
 
 kingSquare :: BBoard -> BBoard -> Square
-kingSquare kingsb colorp = head $ bbToSquares $ kingsb .&. colorp
+kingSquare kingsb colorp = firstOne $ kingsb .&. colorp
 {-# INLINE kingSquare #-}
 
 ------ Material ------

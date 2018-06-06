@@ -454,7 +454,7 @@ checkFailHard s a b c =
 -- PV Search
 pvSearch :: NodeState -> Int -> Int -> Int -> Search Path
 pvSearch _ !a !b !d | d <= 0 = do
-    v <- pvQSearch a b 0
+    v <- pvQSearch a b 0 True
     checkFailHard "QS" a b v
     return $ pathFromScore ("pvQSearch 1:" ++ show v) v	-- ok: fail hard in QS
 pvSearch nst !a !b !d = do
@@ -521,7 +521,7 @@ pvSearch nst !a !b !d = do
 -- PV Zero Window
 pvZeroW :: NodeState -> Int -> Int -> Bool -> Search Path
 pvZeroW !_ !b !d _ | d <= 0 = do
-    v <- pvQSearch bGrain b 0
+    v <- pvQSearch bGrain b 0 True
     checkFailHard "QS" bGrain b v
     return $ pathFromScore ("pvQSearch 21:" ++ show v) v
     where !bGrain = b - scoreGrain
@@ -976,8 +976,8 @@ trimax a b x
     | otherwise = x
 
 -- PV Quiescent Search
-pvQSearch :: Int -> Int -> Int -> Search Int
-pvQSearch !a !b !c = do
+pvQSearch :: Int -> Int -> Int -> Bool -> Search Int
+pvQSearch !a !b !c front = do
     -- TODO: use e as first move if legal & capture
     -- (hdeep, tp, hsc, e, _) <- reTrieve >> lift ttRead
     (hdeep, tp, hsc, _, _) <- reTrieve >> lift ttRead
@@ -1023,7 +1023,7 @@ pvQSearch !a !b !c = do
                                 when collectFens $ finWithNodes "DELT"
                                 return a
                             else do
-                                edges <- Alt <$> lift genTactMoves
+                                edges <- Alt <$> lift (genTactMoves front)
                                 if noMove edges
                                    then do	-- no more captures
                                        when collectFens $ finWithNodes "NOCA"
@@ -1048,7 +1048,7 @@ pvQInnerLoop !b c !a e = timeToAbort (True, b) $ do
          if r
             then do
                 newNodeQS
-                !sc <- negate <$> pvQSearch (-b) (-a) c
+                !sc <- negate <$> pvQSearch (-b) (-a) c False
                 lift undoMove
                 if sc >= b
                    then return (True, b)
