@@ -206,7 +206,7 @@ doMove m = do
                       then return $ Final 0
                       else if captOrPromo pc m
                               then return $! Exten (exten pc p) True True
-                              else return $! Exten (exten pc p) False (noLMR pc m)
+                              else return $! Exten (exten pc p) False (noLMR pc p)
 
 -- Move from a node to a descendent - the QS search version
 -- Here we do only a restricted check for illegal moves
@@ -384,9 +384,15 @@ captOrPromo p m
     | moveIsPromo m || moveIsEnPas m = True
     | otherwise                      = moveIsCapture p m
 
--- Can be LMR reduced, if not captures & promotions
-noLMR :: MyPos -> Move -> Bool
-noLMR = movePassed
+-- Can't be LMR reduced, if not captures & promotions
+-- Passed pawn moves, new: in opponent half
+noLMR :: MyPos -> MyPos -> Bool
+noLMR p1 p2
+    | pd == 0   = False
+    | otherwise = pd .&. half /= 0
+    where pd = passed p1 `xor` passed p2
+          half | moving p1 == White = 0xFFFFFFFF00000000
+               | otherwise          = 0x00000000FFFFFFFF
 
 -- We will call this function before we do the move
 -- This will spare a heavy operation for pruned moved
