@@ -663,8 +663,9 @@ pvInnerLoop b d zw prune nst e = timeToAbort (True, nst) $ do
                               sdiff <- lift scoreDiff
                               updateFutil sdiff	-- e
                           -- Resetting means we reduce less (only with distance to last capture)
-                          let nst1 | spc       = resetSpc nst
-                                   | otherwise = nst
+                          -- This will be done only for normal window search
+                          let nst1 | spc && not zw = resetSpc nst
+                                   | otherwise     = nst
                           xchangeFutil
                           s <- extenFunc b d spc exd' (deepNSt nst1)
                           xchangeFutil
