@@ -145,14 +145,15 @@ data PVState
       } deriving Show
 
 -- This is a state which reflects the status of alpha beta in a node while going through the edges
+-- If we take out Pvsl & rbmch and make state of pvInnerRoot (NodeState, [Pvls], Int),
+-- we might have a better speed as NodeState will be smaller
 data NodeState
     = NSt {
           crtnt  :: !NodeType,	-- parent node type (actually expected)
           nxtnt  :: !NodeType,	-- expected child node type
           movno  :: !Int,	-- current move number
-          spcno  :: !Int,	-- last move number of a special move
-          albe   :: !Bool,	-- in alpha/beta search (for small depths)
           rbmch  :: !Int,	-- number of changes in root best move
+          albe   :: !Bool,	-- in alpha/beta search (for small depths)
           cursc  :: Path,	-- current alpha value (now plus path & depth)
           killer :: Killer,	-- the current killer moves
           cpos   :: MyPos,	-- current position for this node
@@ -219,12 +220,10 @@ pvsInit = PVState { ronly = pvro00, stats = ssts0, absdp = 0, usedext = 0, abort
                     lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
 nst0 :: NodeState
 nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore "Zero" 0, rbmch = -1,
-             movno = 1, spcno = 1, killer = NoKiller, albe = False, cpos = initPos, pvsl = [] }
-             -- we start with spcno = 1 as we consider the first move as special
-             -- to avoid in any way reducing the tt move
+             movno = 1, killer = NoKiller, albe = False, cpos = initPos, pvsl = [] }
 
 resetNSt :: Path -> Killer -> NodeState -> NodeState
-resetNSt !sc !kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill }
+resetNSt !sc !kill nst = nst { cursc = sc, movno = 1, killer = kill }
 
 pvro00 :: PVReadOnly
 pvro00 = PVReadOnly { draft = 0, albest = False, timeli = False, abmili = 0 }
@@ -663,9 +662,7 @@ pvInnerLoop b d zw prune nst e = timeToAbort (True, nst) $ do
                             sdiff <- lift scoreDiff
                             updateFutil sdiff	-- e
                         xchangeFutil
-                        s <- if spc
-                                then extenFunc b d spc exd' (deepNSt $ resetSpc nst)
-                                else extenFunc b d spc exd' (deepNSt nst)
+                        s <- extenFunc b d spc exd' (deepNSt nst)
                         xchangeFutil
                         return s
                     Final sco -> return $! pathFromScore "Final" (-sco)
@@ -679,9 +676,6 @@ pvInnerLoop b d zw prune nst e = timeToAbort (True, nst) $ do
                     | otherwise = pvInnerLoopExten
           checkFunc | zw        = checkFailOrPVLoopZ
                     | otherwise = checkFailOrPVLoop
-
-resetSpc :: NodeState -> NodeState
-resetSpc nst = nst { spcno = movno nst }
 
 reserveExtension :: Int -> Int -> Search Int
 reserveExtension !uex !exd
@@ -705,7 +699,7 @@ pvInnerLoopExten b d spec !exd nst = do
        else do
            -- Here we must be in a Cut node (will fail low)
            -- and we should have: crtnt = CutNode, nxtnt = AllNode
-           let !d' = reduceLmr (nearmate b) spec d1 (lmrlv old) (movno nst - spcno nst)
+           let !d' = reduceLmr (nearmate b) spec d1 (lmrlv old) (movno nst)
            -- s1 <- pnextlev <$> pvZeroW nst (-a) d1
            s1 <- zeroWithLMR d' d1 (-a) (a+1) nst
            whenAbort s1 $ do
@@ -723,7 +717,7 @@ pvInnerLoopExtenZ b d spec !exd nst = do
     exd' <- reserveExtension (usedext old) exd
     -- late move reduction
     let !d1 = d + exd' - 1	-- this is the normal (unreduced) depth for next search
-        !d' = reduceLmr (nearmate b) spec d1 (lmrlv old) (movno nst - spcno nst)
+        !d' = reduceLmr (nearmate b) spec d1 (lmrlv old) (movno nst)
         !onemB = scoreGrain - b
     zeroWithLMR d' d1 onemB b nst
 
