@@ -657,23 +657,24 @@ pvInnerLoop b d zw prune nst e = timeToAbort (True, nst) $ do
               then do
                   newNode d
                   modify $ \s -> s { absdp = absdp s + 1 }
-                  s <- case exd of
-                    Exten exd' spc -> do
-                        when (exd' == 0 && not spc) $ do
-                            sdiff <- lift scoreDiff
-                            updateFutil sdiff	-- e
-                        xchangeFutil
-                        s <- if spc
-                                then extenFunc b d spc exd' (deepNSt $ resetSpc nst)
-                                else extenFunc b d spc exd' (deepNSt nst)
-                        xchangeFutil
-                        return s
-                    Final sco -> return $! pathFromScore "Final" (-sco)
-                    Illegal   -> error "Cannot be illegal here"
+                  (s, nst1) <- case exd of
+                      Exten exd' spc -> do
+                          when (exd' == 0 && not spc) $ do
+                              sdiff <- lift scoreDiff
+                              updateFutil sdiff	-- e
+                          -- Resetting means we reduce less (only with distance to last capture)
+                          let nst1 | spc       = resetSpc nst
+                                   | otherwise = nst
+                          xchangeFutil
+                          s <- extenFunc b d spc exd' (deepNSt nst1)
+                          xchangeFutil
+                          return (s, nst1)
+                      Final sco -> return (pathFromScore "Final" (-sco), nst)
+                      Illegal   -> error "Cannot be illegal here"
                   lift undoMove	-- undo the move
                   modify $ \s' -> s' { absdp = absdp old, usedext = usedext old }
                   let s' = addToPath e s
-                  checkFunc (stats old) b d e s' nst
+                  checkFunc (stats old) b d e s' nst1
               else return (False, nst)
     where extenFunc | zw        = pvInnerLoopExtenZ
                     | otherwise = pvInnerLoopExten
