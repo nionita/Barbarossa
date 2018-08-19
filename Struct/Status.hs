@@ -7,7 +7,7 @@ module Struct.Status (
     EvalParams(..),
     EvalWeights(..),
     MidEnd(..),
-    mad, madm, made, tme
+    mad
 ) where
 
 import Struct.Struct
@@ -29,28 +29,22 @@ data EvalState = EvalState {
         esEWeights  :: EvalWeights
     } deriving Show
 
+-- Score components: mid game score / end game score
+-- Final score will be weighted between the two, by mean of game phase
 data MidEnd = MidEnd { mid, end :: !Int } deriving Show
 
--- Helper for MidEnd operations:
-{-# INLINE madm #-}
-madm :: MidEnd -> MidEnd -> Int -> MidEnd
-madm !mide0 !mide !v = mide0 { mid = mid mide0 + mid mide * v }
-
-{-# INLINE made #-}
-made :: MidEnd -> MidEnd -> Int -> MidEnd
-made !mide0 !mide !v = mide0 { end = end mide0 + end mide * v }
-
-{-# INLINE mad #-}
-mad :: MidEnd -> MidEnd -> Int -> MidEnd
-mad !mide0 !mide !v = MidEnd { mid = mid mide0 + mid mide * v, end = end mide0 + end mide * v }
-
--- {-# INLINE (<+>) #-}
--- (<+>) :: MidEnd -> MidEnd -> MidEnd
--- mide1 <+> mide2 = MidEnd { mid = mid mide1 + mid mide2, end = end mide1 + end mide2 }
-
-{-# INLINE tme #-}
+-- Helper for MidEnd operations
+-- Easier constructor for MidEnd terms
 tme :: Int -> Int -> MidEnd
 tme a b = MidEnd a b
+
+-- Multiply & Add
+-- The eval score will be accumulated among a few eval factors
+-- This function takes an eval weight and an integer eval factor,
+-- calculates the mid and the end scores, and add them to the accumulator
+{-# INLINE mad #-}
+mad :: MidEnd -> Int -> MidEnd -> MidEnd
+mad !weight !fact !acc = MidEnd { mid = mid acc + mid weight * fact, end = end acc + end weight * fact }
 
 -- This is the parameter record for characteristics evaluation
 data EvalParams
@@ -176,7 +170,7 @@ instance CollectParams EvalWeights where
           ewMaterialDiff    = tme 8 8,
           ewKingSafe        = tme 1 0,
           ewKingOpen        = tme 2 4,
-          ewKingPlaceCent   = tme 8 1,
+          ewKingPlaceCent   = tme 8 0,
           ewKingPlacePwns   = tme 0 4,
           ewKingPawn1       = tme  4 53,
           ewKingPawn2       = tme  2 68,
