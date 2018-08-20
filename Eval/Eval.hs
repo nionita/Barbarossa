@@ -10,6 +10,7 @@ module Eval.Eval (
 
 import Data.Array.Base (unsafeAt)
 import Data.Bits
+-- import Data.Int
 import Data.List (minimumBy)
 import Data.Array.Unboxed
 import Data.Ord (comparing)
@@ -39,6 +40,13 @@ initEvalState sds = EvalState {
 matesc :: Int
 matesc = 20000 - 255	-- warning, this is also defined in Base.hs!!
 
+-- Data used during eval: calculated only once, used multiple times
+type KingProxy = UArray Square Int
+
+data PreCalc = PreCalc {
+        myKingProxy, yoKingProxy :: KingProxy
+    }
+
 {-# INLINE posEval #-}
 posEval :: MyPos -> EvalState -> Int
 posEval p !sti = scc
@@ -59,12 +67,13 @@ normalEval :: MyPos -> EvalState -> Int
 normalEval p !sti = sc
     where ep     = esEParams  sti
           ew     = esEWeights sti
+          pre    = preCalc p
           !gph   = gamePhase p
           !mide1 = materDiff p ew (MidEnd 0 0)
           !mide2 = evalRedundance p ew mide1
           !mide3 = evalRookPawn p ew mide2
           !mide4 = kingSafe p ew mide3
-          !mide5 = kingPlace ep p ew mide4
+          !mide5 = kingPlace ep p ew pre mide4
           !mide6 = lastline p ew mide5
           !mide7 = mobiLity p ew mide6
           !mide8 = centerDiff p ew mide7
@@ -76,7 +85,7 @@ normalEval p !sti = sc
           !midee = isolDiff p ew mided
           !midef = backDiff p ew midee
           !mideg = advPawns p ew midef
-          !mideh = passPawns gph ep p ew mideg
+          !mideh = passPawns gph ep p ew pre mideg
           !sc = ((mid mideh + epMovingMid ep) * gph + (end mideh + epMovingEnd ep) * (256 - gph))
                    `unsafeShiftR` (shift2Cp + 8)
 
@@ -167,23 +176,41 @@ scoreToMate f p mywin = msc
           !wsc = if mywin then sc else -sc
           !msc = mtr + wsc
 
+{--
 squareDistArr :: UArray (Square, Square) Int
 squareDistArr = array ((0,0), (63,63)) [((s1, s2), squareDist s1 s2) | s1 <- [0..63], s2 <- [0..63]]
     where squareDist f t = max (abs (fr - tr)) (abs (fc - tc))
               where (fr, fc) = f `divMod` 8
                     (tr, tc) = t `divMod` 8
-
-squareDistance :: Square -> Square -> Int
-squareDistance = curry (squareDistArr!)
-
-{--
-squareDistance :: Square -> Square -> Int
-squareDistance f t = max (abs (fr - tr)) (abs (fc - tc))
-    where fr = f `unsafeShiftR` 3
-          tr = t `unsafeShiftR` 3
-          fc = f .&. 7
-          tc = t .&. 7
 --}
+
+squareDistance :: Square -> Square -> Int
+-- squareDistance = curry (squareDistArr!)
+squareDistance = unsafeAt . unsafeAt allProxies
+
+allProxies :: Array Int KingProxy
+allProxies = listArray (0, 63) $ map kingProxy [0..63]
+    where kingProxy sq = listArray (0, 63) $ map (sqDist sq) [0..63]
+          sqDist f t = max (abs (fr - tr)) (abs (fc - tc))
+              where fr = f `unsafeShiftR` 3
+                    tr = t `unsafeShiftR` 3
+                    fc = f .&. 7
+                    tc = t .&. 7
+
+-- There must be faster ways to calculate this
+calcKingProxy :: Square -> KingProxy
+calcKingProxy = unsafeAt allProxies
+
+proxyDistance :: KingProxy -> Square -> Int
+proxyDistance = unsafeAt
+
+preCalc :: MyPos -> PreCalc
+preCalc p = PreCalc {
+                myKingProxy = calcKingProxy mks,
+                yoKingProxy = calcKingProxy yks
+            }
+    where mks = kingSquare (kings p) (me p)
+          yks = kingSquare (kings p) (yo p)
 
 -- This center distance should be pre calculated
 centerDistance :: Int -> Int
@@ -274,12 +301,12 @@ materDiff p !ew = mad (ewMaterialDiff ew) md
 -- be in some corner, in endgame it should be near some (passed) pawn(s)
 -- We calculate the king opennes here, as we have all we need
 -- We also give a bonus for a king beeing near pawn(s)
-kingPlace :: EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
-kingPlace ep p !ew = mad (ewKingPawn2     ew) kpa2 .
-                     mad (ewKingPawn1     ew) kpa1 .
-                     mad (ewKingOpen      ew) ko .
-                     mad (ewKingPlaceCent ew) kcd .
-                     mad (ewKingPlacePwns ew) kpd
+kingPlace :: EvalParams -> MyPos -> EvalWeights -> PreCalc -> MidEnd -> MidEnd
+kingPlace ep p !ew pre = mad (ewKingPawn2     ew) kpa2 .
+                         mad (ewKingPawn1     ew) kpa1 .
+                         mad (ewKingOpen      ew) ko .
+                         mad (ewKingPlaceCent ew) kcd .
+                         mad (ewKingPlacePwns ew) kpd
     where !kcd = (mpl - ypl) `unsafeShiftR` epMaterBonusScale ep
           !kpd = (mpi - ypi) `unsafeShiftR` epPawnBonusScale  ep
           !mks = kingSquare (kings p) $ me p
@@ -287,15 +314,15 @@ kingPlace ep p !ew = mad (ewKingPawn2     ew) kpa2 .
           !mkm = materFun yminor yrooks yqueens
           !ykm = materFun mminor mrooks mqueens
           (!mpl, !ypl, !mpi, !ypi)
-              | moving p == White = ( kingMaterBonus yqueens White mpawns mkm mks
-                                    , kingMaterBonus mqueens Black ypawns ykm yks
-                                    , kingPawnsBonus mks mpassed ypassed
-                                    , kingPawnsBonus yks mpassed ypassed
+              | moving p == White = ( kingMaterBonus yqueens White mpawns mkm (myKingProxy pre)
+                                    , kingMaterBonus mqueens Black ypawns ykm (yoKingProxy pre)
+                                    , kingPawnsBonus (myKingProxy pre) mpassed ypassed
+                                    , kingPawnsBonus (yoKingProxy pre) mpassed ypassed
                                     )
-              | otherwise         = ( kingMaterBonus yqueens Black mpawns mkm mks
-                                    , kingMaterBonus mqueens White ypawns ykm yks
-                                    , kingPawnsBonus mks ypassed mpassed
-                                    , kingPawnsBonus yks ypassed mpassed
+              | otherwise         = ( kingMaterBonus yqueens Black mpawns mkm (myKingProxy pre)
+                                    , kingMaterBonus mqueens White ypawns ykm (yoKingProxy pre)
+                                    , kingPawnsBonus (myKingProxy pre) ypassed mpassed
+                                    , kingPawnsBonus (yoKingProxy pre) ypassed mpassed
                                     )
           !mrooks  = popCount $ rooks p .&. me p
           !mqueens = popCount $ queens p .&. me p
@@ -337,25 +364,25 @@ promoB s =       s .&. 7
 
 -- We give bonus also for pawn promotion squares, if the pawn is near enough to promote
 -- Give as parameter bitboards for all pawns, white pawns and black pawns for performance
-kingPawnsBonus :: Square -> BBoard -> BBoard -> Int
-kingPawnsBonus !ksq !wpass !bpass = bonus
+kingPawnsBonus :: KingProxy -> BBoard -> BBoard -> Int
+kingPawnsBonus proxy !wpass !bpass = bonus
     where wns = bbToSquares (wpass `unsafeShiftL` 8)
           bns = bbToSquares (bpass `unsafeShiftR` 8)
-          !bpsqs = sum $ map (pawnBonus . squareDistance ksq) $ wns ++ bns
-          !bqsqs = sum $ map (pawnBonus . squareDistance ksq)
+          !bpsqs = sum $ map (pawnBonus . proxyDistance proxy) $ wns ++ bns
+          !bqsqs = sum $ map (pawnBonus . proxyDistance proxy)
                        $ map promoW (bbToSquares wpass) ++ map promoB (bbToSquares bpass)
           !bonus = bpsqs + bqsqs
 
 -- This is a bonus for the king beeing near one corner
 -- It's bigger when the enemy has more material (only pieces)
 -- and when that corner has a pawn shelter
-kingMaterBonus :: Int -> Color -> BBoard -> Int -> Square -> Int
-kingMaterBonus !qs c !myp !mat !ksq
+kingMaterBonus :: Int -> Color -> BBoard -> Int -> KingProxy -> Int
+kingMaterBonus !qs c !myp !mat proxy
     | qs == 0   = 0
-    | otherwise = kMatBonus c myp mat ksq
+    | otherwise = kMatBonus c myp mat proxy
 
-kMatBonus :: Color -> BBoard -> Int -> Square -> Int
-kMatBonus c !myp !mat !ksq
+kMatBonus :: Color -> BBoard -> Int -> KingProxy -> Int
+kMatBonus c !myp !mat proxy
     | c == White = matFactor mat * prxw
     | otherwise  = matFactor mat * prxb
     where !prxw = prxWA + prxWH
@@ -365,7 +392,7 @@ kMatBonus c !myp !mat !ksq
           !prxBA = (unsafeShiftL (opawns shBA7) 1 + opawns shBA6) * (prxBoQ ba + prxBo bb)
           !prxBH = (unsafeShiftL (opawns shBH7) 1 + opawns shBH6) * (prxBoQ bh + prxBo bg)
           opawns = popCount . (.&. myp)
-          prxBo  = proxyBonus . squareDistance ksq
+          prxBo  = proxyBonus . proxyDistance proxy
           prxBoQ = flip unsafeShiftR 2 . prxBo
           matFactor = unsafeAt matKCArr
           -- The interesting squares and bitboards about king placement
@@ -777,14 +804,14 @@ pawnBloBlack !pa !op !tp = cntPaBlo p1 pa op tp
 ------ Passed pawns ------
 
 -- Every passed pawn will be evaluated separately
-passPawns :: Int -> EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
-passPawns !gph ep p !ew = mad (ewPassPawnLev ew) dpp
+passPawns :: Int -> EvalParams -> MyPos -> EvalWeights -> PreCalc -> MidEnd -> MidEnd
+passPawns !gph ep p !ew pre = mad (ewPassPawnLev ew) dpp
     where !mppbb = passed p .&. me p
           !yppbb = passed p .&. yo p
           !myc = moving p
           !yoc = other myc
-          !mypp = sum $ map (perPassedPawn gph ep p myc) $ bbToSquares mppbb
-          !yopp = sum $ map (perPassedPawn gph ep p yoc) $ bbToSquares yppbb
+          !mypp = sum $ map (perPassedPawn gph ep p myc pre) $ bbToSquares mppbb
+          !yopp = sum $ map (perPassedPawn gph ep p yoc pre) $ bbToSquares yppbb
           !dpp  = mypp - yopp
 
 -- The value of the passed pawn depends answers to this questions:
@@ -792,20 +819,23 @@ passPawns !gph ep p !ew = mad (ewPassPawnLev ew) dpp
 -- - how many squares ahead are blocked by own/opponent pieces?
 -- - how many squares ahead are controlled by own/opponent pieces?
 -- - does it has a rook behind?
-perPassedPawn :: Int -> EvalParams -> MyPos -> Color -> Square -> Int
-perPassedPawn !gph ep p c sq
+perPassedPawn :: Int -> EvalParams -> MyPos -> Color -> PreCalc -> Square -> Int
+perPassedPawn !gph ep p c pre sq
     | attacked && not defended
         && c /= moving p = epPassMin ep	-- but if we have more than one like that?
-    | otherwise          = perPassedPawnOk gph ep p c sq sqbb moi toi moia toia
+    | otherwise          = perPassedPawnOk gph ep p c sq sqbb moi toi moia toia mproxy yproxy
     where !sqbb = 1 `unsafeShiftL` sq
-          (!moi, !toi, !moia, !toia)
-               | moving p == c = (me p, yo p, myAttacs p, yoAttacs p)
-               | otherwise     = (yo p, me p, yoAttacs p, myAttacs p)
+          (!moi, !toi, !moia, !toia, mproxy, yproxy)
+               | moving p == c = (me p, yo p, myAttacs p, yoAttacs p, myKingProxy pre, yoKingProxy pre)
+               | otherwise     = (yo p, me p, yoAttacs p, myAttacs p, yoKingProxy pre, myKingProxy pre)
           !defended = moia .&. sqbb /= 0
           !attacked = toia .&. sqbb /= 0
 
-perPassedPawnOk :: Int -> EvalParams -> MyPos -> Color -> Square -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
-perPassedPawnOk !gph ep p c sq sqbb moi toi moia toia = val
+perPassedPawnOk :: Int -> EvalParams -> MyPos -> Color -> Square
+                -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard
+                -> KingProxy -> KingProxy
+                -> Int
+perPassedPawnOk !gph ep p c sq sqbb moi toi moia toia mproxy yproxy = val
     where (!way, !behind, !asq)
               | c == White = (shadowUp sqbb, shadowDown sqbb, sq+8)
               | otherwise  = (shadowDown sqbb, shadowUp sqbb, sq-8)
@@ -829,10 +859,8 @@ perPassedPawnOk !gph ep p c sq sqbb moi toi moia toia = val
           b0 = -120
           c0 = 410
           !pmax = (a0 * x + b0) * x + c0
-          !myking = kingSquare (kings p) moi
-          !yoking = kingSquare (kings p) toi
-          !mdis = squareDistance myking asq
-          !ydis = squareDistance yoking asq
+          !mdis = proxyDistance mproxy asq
+          !ydis = proxyDistance yproxy asq
           !kingprx = (kdDist (mdis - ydis) * epPassKingProx ep * (256 - gph)) `unsafeShiftR` 8
           !val1 = (pmax * (128 - kingprx) * (128 - epPassBlockO ep * mblo)) `unsafeShiftR` 14
           !val2 = (val1 * (128 - epPassBlockA ep * yblo)) `unsafeShiftR` 7
