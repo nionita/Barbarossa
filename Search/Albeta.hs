@@ -807,7 +807,8 @@ checkFailOrPVLoop b d e s nst = whenAbort (True, nst) $ do
                    lift $ do
                        betaCut True (absdp sst) e -- not really a cut, but good move here
                        let de = max d $ pathDepth s
-                       ttStore de 1 (pathScore s) e 0	-- best move so far (score is lower limit)
+                       when (absdp sst <= 4 || de >= 3)
+                           $ ttStore de 1 (pathScore s) e 0	-- best so far (score is lower limit)
                    let nnt  = nextNodeType (nxtnt nst)
                        nst1 = nst { cursc = s, nxtnt = nnt, movno = mn+1, rbmch = 2 }
                    return (False, nst1)
