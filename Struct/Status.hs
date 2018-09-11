@@ -82,6 +82,8 @@ data EvalWeights
           ewMobilityBishop  :: !MidEnd,
           ewMobilityRook    :: !MidEnd,
           ewMobilityQueen   :: !MidEnd,
+          ewUndefendedPcs   :: !MidEnd,
+          ewAllAttSquares   :: !MidEnd,
           ewCenterPAtts     :: !MidEnd,
           ewCenterNAtts     :: !MidEnd,
           ewCenterBAtts     :: !MidEnd,
@@ -182,6 +184,8 @@ instance CollectParams EvalWeights where
           ewMobilityBishop  = tme 53 33,
           ewMobilityRook    = tme 16 34,	-- DSPSA ...
           ewMobilityQueen   = tme  2 11,
+          ewUndefendedPcs   = tme (-24) 0,
+          ewAllAttSquares   = tme  2  0,
           ewCenterPAtts     = tme 73 57,
           ewCenterNAtts     = tme 48 37,
           ewCenterBAtts     = tme 52 35,
@@ -243,6 +247,10 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
         ("end.mobilityRook",   setEndMobilityRook),
         ("mid.mobilityQueen",  setMidMobilityQueen),
         ("end.mobilityQueen",  setEndMobilityQueen),
+        ("mid.undefendedPcs",  setMidUndefendedPcs),
+        ("end.undefendedPcs",  setEndUndefendedPcs),
+        ("mid.allAttSquares",  setMidAllAttSquares),
+        ("end.allAttSquares",  setEndAllAttSquares),
         ("mid.centerPAtts",    setMidCenterPAtts),
         ("end.centerPAtts",    setEndCenterPAtts),
         ("mid.centerNAtts",    setMidCenterNAtts),
@@ -326,6 +334,10 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
           setEndMobilityRook    v' ew' = ew' { ewMobilityRook    = (ewMobilityRook    ew') { end = round v' }}
           setMidMobilityQueen   v' ew' = ew' { ewMobilityQueen   = (ewMobilityQueen   ew') { mid = round v' }}
           setEndMobilityQueen   v' ew' = ew' { ewMobilityQueen   = (ewMobilityQueen   ew') { end = round v' }}
+          setMidUndefendedPcs   v' ew' = ew' { ewUndefendedPcs   = (ewUndefendedPcs   ew') { mid = round v' }}
+          setEndUndefendedPcs   v' ew' = ew' { ewUndefendedPcs   = (ewUndefendedPcs   ew') { end = round v' }}
+          setMidAllAttSquares   v' ew' = ew' { ewAllAttSquares   = (ewAllAttSquares   ew') { mid = round v' }}
+          setEndAllAttSquares   v' ew' = ew' { ewAllAttSquares   = (ewAllAttSquares   ew') { end = round v' }}
           setMidCenterPAtts     v' ew' = ew' { ewCenterPAtts     = (ewCenterPAtts     ew') { mid = round v' }}
           setEndCenterPAtts     v' ew' = ew' { ewCenterPAtts     = (ewCenterPAtts     ew') { end = round v' }}
           setMidCenterNAtts     v' ew' = ew' { ewCenterNAtts     = (ewCenterNAtts     ew') { mid = round v' }}
