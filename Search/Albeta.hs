@@ -77,10 +77,6 @@ futMinVal = 30
 futDecayB = 13
 futDecayW = (1 `unsafeShiftL` futDecayB) - 1
 
--- Parameters for quiescent search:
-qsMaxChess :: Int
-qsMaxChess = 2		-- max number of chess for a quiet search path
-
 -- Parameters for null move pruning
 nulMargin, nulSubmrg, nulTrig :: Int
 nulMargin = 1		-- margin to search the null move (over beta) (in scoreGrain units!)
@@ -103,8 +99,7 @@ iidNewDepth :: Int -> Int
 iidNewDepth = subtract 1
 
 -- Parameter for quiescenst search
-inEndlessCheck, qsDeltaMargin :: Int
-inEndlessCheck = -scoreGrain	-- there is a risk to be left in check
+qsDeltaMargin :: Int
 qsDeltaMargin  = 100
 
 type Search a = CState PVState Game a
@@ -448,7 +443,7 @@ insertToPvs d p ps@(q:qs)
 -- PV Search
 pvSearch :: NodeState -> Int -> Int -> Int -> Search Path
 pvSearch _ !a !b !d | d <= 0 = do
-    v <- pvQSearch a b 0 True
+    v <- pvQSearch a b True
     return $ pathFromScore ("pvQSearch 1:" ++ show v) v	-- ok: fail hard in QS
 pvSearch nst !a !b !d = do
     let !inPv = crtnt nst == PVNode
@@ -510,7 +505,7 @@ pvSearch nst !a !b !d = do
 -- PV Zero Window
 pvZeroW :: NodeState -> Int -> Int -> Bool -> Search Path
 pvZeroW !_ !b !d _ | d <= 0 = do
-    v <- pvQSearch bGrain b 0 True
+    v <- pvQSearch bGrain b True
     return $ pathFromScore ("pvQSearch 21:" ++ show v) v
     where !bGrain = b - scoreGrain
 pvZeroW !nst !b !d redu = do
@@ -944,8 +939,8 @@ trimax a b x
     | otherwise = x
 
 -- PV Quiescent Search
-pvQSearch :: Int -> Int -> Int -> Bool -> Search Int
-pvQSearch !a !b !c front = do
+pvQSearch :: Int -> Int -> Bool -> Search Int
+pvQSearch !a !b front = do
     -- TODO: use e as first move if legal & capture
     -- (hdeep, tp, hsc, e, _) <- reTrieve >> lift ttRead
     (hdeep, tp, hsc, _, _) <- reTrieve >> lift ttRead
@@ -967,17 +962,14 @@ pvQSearch !a !b !c front = do
                   edges <- Alt <$> lift genEscapeMoves
                   if noMove edges
                      then return $! trimax a b (-mateScore)
-                     else if c >= qsMaxChess
-                             then do
-                                 when collectFens $ finWithNodes "ENDL"
-                                 return $! trimax a b inEndlessCheck
-                             else do
-                                 -- for check extensions in case of very few moves (1 or 2):
-                                 -- if 1 move: extend 1 (same depth)
-                                 -- if 2 moves: no extension
-                                 let !esc = lenmax2 $ unalt edges
-                                     !nc = c + esc - 1
-                                 pvQLoop b nc a edges
+                     else do
+                        let stp = staticScore pos
+                        !dcut <- lift $ qsDelta $ a - stp - qsDeltaMargin
+                        if dcut
+                           then do
+                               when collectFens $ finWithNodes "DELT"
+                               return a
+                           else pvQLoop b a edges
               else do
                   let stp = staticScore pos
                   if stp >= b
@@ -997,33 +989,31 @@ pvQSearch !a !b !c front = do
                                        when collectFens $ finWithNodes "NOCA"
                                        return $! trimax a b stp
                                    else if stp > a
-                                           then pvQLoop b c stp edges
-                                           else pvQLoop b c a   edges
-    where lenmax2 (_:_:_) = 2
-          lenmax2 _       = 1	-- we know here it is not empty
+                                           then pvQLoop b stp edges
+                                           else pvQLoop b a   edges
 
-pvQLoop :: Int -> Int -> Int -> Alt Move -> Search Int
-pvQLoop b c = go
+pvQLoop :: Int -> Int -> Alt Move -> Search Int
+pvQLoop b = go
     where go !s (Alt [])     = return s
           go !s (Alt (e:es)) = do
-              (!cut, !s') <- pvQInnerLoop b c s e
+              (!cut, !s') <- pvQInnerLoop b s e
               if cut then return s'
                      else go s' $ Alt es
 
-pvQInnerLoop :: Int -> Int -> Int -> Move -> Search (Bool, Int)
-pvQInnerLoop !b c !a e = timeToAbort (True, b) $ do
-         r <- lift $ doQSMove e
-         if r
-            then do
-                newNodeQS
-                !sc <- negate <$> pvQSearch (-b) (-a) c False
-                lift undoMove
-                if sc >= b
-                   then return (True, b)
-                   else if sc > a
-                           then return (False, sc)
-                           else return (False, a)
-            else return (False, a)
+pvQInnerLoop :: Int -> Int -> Move -> Search (Bool, Int)
+pvQInnerLoop !b !a e = timeToAbort (True, b) $ do
+    r <- lift $ doQSMove e
+    if r
+       then do
+           newNodeQS
+           !sc <- negate <$> pvQSearch (-b) (-a) False
+           lift undoMove
+           if sc >= b
+              then return (True, b)
+              else if sc > a
+                      then return (False, sc)
+                      else return (False, a)
+       else return (False, a)
 
 {-# INLINE finWithNodes #-}
 finWithNodes :: String -> Search ()
