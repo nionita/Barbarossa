@@ -7,12 +7,14 @@ module Moves.History (
 import Control.Monad.ST.Unsafe (unsafeIOToST)
 import Control.Monad.ST
 import Data.Bits
+import Data.List (unfoldr)
 import Data.Ord (comparing)
 import qualified Data.Vector.Algorithms.Heap as H	-- Intro sort was slower
 import qualified Data.Vector.Unboxed.Mutable as V
 import qualified Data.Vector.Unboxed         as U
 import Data.Int
 import Data.Word
+import System.Random
 
 import Struct.Struct
 
@@ -47,8 +49,18 @@ adr' m = squares * moveHisAdr m + toSquare m
 ofs' :: Move -> Int
 ofs' m = bloff * moveHisOfs m
 
+-- Produce small random numbers to initialize the new history
+smallVals :: RandomGen g => g -> [Word32]
+smallVals g = concatMap chop $ randoms g
+    where chop w = unfoldr f (w, 16)
+          f :: (Word32, Int) -> Maybe (Word32, (Word32, Int))
+          f (_, 0) = Nothing
+          f (w, k) = Just (w .&. 3, (w `unsafeShiftR` 2, k-1))
+
 newHist :: IO History
-newHist = V.replicate vsize 0
+newHist = do
+    g <- newStdGen
+    U.thaw $ U.fromList $ map fromIntegral $ take vsize $ smallVals g
 
 {-# INLINE histw #-}
 histw :: Int -> Int32
