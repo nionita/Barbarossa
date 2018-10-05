@@ -24,6 +24,11 @@ import Moves.Fen (initPos)
 absurd :: String -> Game ()
 absurd s = logmes $ "Absurd: " ++ s	-- used for messages when assertions fail
 
+assert :: Bool -> String -> a -> a
+assert cond message value
+    | cond = value
+    | otherwise = error $ "Assertion failed: " ++ message
+
 collectFens :: Bool
 collectFens = True
 
@@ -760,7 +765,7 @@ checkFailOrPVLoop :: SStats -> Int -> Int -> Move -> Path
 checkFailOrPVLoop xstats b d e s nst = whenAbort (True, nst) $ do
     sst <- get
     let mn = movno nst
-    if pathScore s <= pathScore (cursc nst)
+    if pathScore s < pathScore (cursc nst) || pathScore s < b && not (pathExact s)
        then do
            let nst1 = nst { movno = mn+1, killer = newKiller d s nst }
            return (False, nst1)
@@ -779,12 +784,26 @@ checkFailOrPVLoop xstats b d e s nst = whenAbort (True, nst) $ do
                 let csc = s { pathScore = b }
                     nst1 = nst { cursc = csc }
                 return (True, nst1)
-              else do	-- means: > a && < b
-                  lift $ do
+              else do	-- means: >= a && < b, s is an exact score
+                  -- _ <- assert (pathScore s >= pathScore (cursc nst))
+                  --             ("s: " ++ show s ++ ", a: " ++ show (cursc nst)) $ return ()
+                  -- _ <- assert (pathExact s) (show s ++ ", b = " ++ show b) $ return ()
+                  -- _ <- assert (pathExact s || pathExact (cursc nst))
+                  --             ("s: " ++ show s ++ ", a = " ++ show (cursc nst))
+                  --             $ return ()
+                  -- Now we can have equal scores but can choose which path we want
+                  -- If increase: update position score in TT
+                  let betterScore = pathScore s > pathScore (cursc nst)
+                  when betterScore $ lift $ do
                       let typ = 2	-- score is exact
                       ttStore de typ (pathScore s) e nodes'
-                      betaCut True (absdp sst) e -- not really a cut, but good move here
-                  let nst1 = nst { cursc = s, nxtnt = nextNodeType (nxtnt nst), movno = mn+1 }
+                  -- Move is good anyway
+                  lift $ betaCut True (absdp sst) e -- not really a cut, but good move here
+                  -- Here we can have preferences
+                  let nst1 | betterScore || pathDepth s > pathDepth (cursc nst)
+                               = nst { cursc = s, nxtnt = nextNodeType (nxtnt nst), movno = mn+1 }
+                           | otherwise
+                               = nst { nxtnt = nextNodeType (nxtnt nst), movno = mn+1 }
                   return (False, nst1)
 
 -- For zero window
