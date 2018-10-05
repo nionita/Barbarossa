@@ -182,17 +182,16 @@ data Path
     = Path {
          pathScore :: !Int,
          pathDepth :: !Int,
-         pathExact :: !Bool,
          pathMoves :: Seq Move
       } deriving Show
 
 staleMate, matedPath :: Path
-staleMate = Path { pathScore = 0, pathDepth = 0, pathMoves = Seq [], pathExact = True }
-matedPath = Path { pathScore = -mateScore, pathDepth = 0, pathMoves = Seq [], pathExact = True }
+staleMate = Path { pathScore = 0, pathDepth = 0, pathMoves = Seq [] }
+matedPath = Path { pathScore = -mateScore, pathDepth = 0, pathMoves = Seq [] }
 
 -- Making a path from a plain score:
-pathFromScore :: Int -> Bool -> Path
-pathFromScore s ex = Path { pathScore = s, pathDepth = 0, pathMoves = Seq [], pathExact = ex }
+pathFromScore :: Int -> Path
+pathFromScore s = Path { pathScore = s, pathDepth = 0, pathMoves = Seq [] }
 
 -- Add a move to a path:
 addToPath :: Move -> Path -> Path
@@ -218,7 +217,7 @@ pvsInit = PVState { ronly = pvro00, stats = ssts0, absdp = 0, usedext = 0, abort
                     futme = futIniVal, futyo = futIniVal,
                     lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
 nst0 :: NodeState
-nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore 0 False, rbmch = -1,
+nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore 0, rbmch = -1,
              movno = 1, spcno = 1, killer = NoKiller, albe = False, cpos = initPos, pvsl = [] }
              -- we start with spcno = 1 as we consider the first move as special
              -- to avoid in any way reducing the tt move
@@ -291,7 +290,7 @@ pvRootSearch a b d lastpath rmvs aspir = do
                 else case lastpath of
                          Seq []    -> return rmvs	-- does this happen? - check to simplify!
                          Seq (e:_) -> return $ Alt $ e : delete e (unalt rmvs)
-    let !nsti = nst0 { cursc = pathFromScore a False, cpos = pos }
+    let !nsti = nst0 { cursc = pathFromScore a, cpos = pos }
     nstf <- pvLoop (pvInnerRoot b d) nsti edges
     abrt <- gets abort
     reportStats
@@ -346,7 +345,7 @@ pvInnerRoot b d nst e = timeToAbort (True, nst) $ do
                              s <- pvInnerRootExten b d exd' (deepNSt nst)
                              xchangeFutil
                              return s
-                         Final sco -> return $! pathFromScore (-sco) True
+                         Final sco -> return $! pathFromScore (-sco)
                          Illegal   -> error "Cannot be illegal here"
                 -- undo the move if it was legal
                 lift undoMove
@@ -457,7 +456,7 @@ pvSearch :: NodeState -> Int -> Int -> Int -> Search Path
 pvSearch _ !a !b !d | d <= 0 = do
     v <- pvQSearch a b 0
     checkFailHard "QS" a b v
-    return $ pathFromScore v (a == alpha0)	-- ok: fail hard in QS
+    return $ pathFromScore v	-- ok: fail hard in QS
 pvSearch nst !a !b !d = do
     let !inPv = crtnt nst == PVNode
         ab    = albe nst
@@ -476,8 +475,7 @@ pvSearch nst !a !b !d = do
          || tp == 0 && hsc <= a	-- we will fail low
        )
        then do
-           let ttpath = Path { pathScore = trimax a b hsc, pathDepth = hdeep,
-                               pathMoves = Seq [e], pathExact = tp == 2 }
+           let ttpath = Path { pathScore = trimax a b hsc, pathDepth = hdeep, pathMoves = Seq [e] }
            -- we will treat the beta cut here too, if it happens
            when (tp == 1 || tp == 2 && hsc > a) $ do
                adp <- gets absdp
@@ -498,7 +496,7 @@ pvSearch nst !a !b !d = do
                 -- futility pruning:
                 prune <- isPruneFutil d a True (staticScore pos)
                 -- Loop thru the moves
-                let !nsti = resetNSt (pathFromScore a False) NoKiller nst'
+                let !nsti = resetNSt (pathFromScore a) NoKiller nst'
                 nstf <- pvSLoop b d False prune nsti edges
                 let s = cursc nstf
                 whenAbort s $ do
@@ -524,15 +522,14 @@ pvZeroW :: NodeState -> Int -> Int -> Search Path
 pvZeroW !_ !b !d | d <= 0 = do
     v <- pvQSearch bGrain b 0
     checkFailHard "QS" bGrain b v
-    return $ pathFromScore v False
+    return $ pathFromScore v
     where !bGrain = b - scoreGrain
 pvZeroW !nst !b !d = do
     -- Check if we have it in TT
     (hdeep, tp, hsc, e, nodes') <- reTrieve >> lift ttRead
     if hdeep >= d && (tp == 2 || tp == 1 && hsc >= b || tp == 0 && hsc < b)
        then do
-           let ttpath = Path { pathScore = trimax bGrain b hsc, pathDepth = hdeep,
-                               pathMoves = Seq [e], pathExact = tp == 2 }
+           let ttpath = Path { pathScore = trimax bGrain b hsc, pathDepth = hdeep, pathMoves = Seq [e] }
            -- we will treat the beta cut here too, if it happens
            when (tp == 1 || tp == 2 && hsc >= b) $ do
                adp <- gets absdp
@@ -542,9 +539,9 @@ pvZeroW !nst !b !d = do
            when (hdeep < 0) reFail
            pos <- lift getPos
            nmhigh <- nullMoveFailsHigh pos nst b d
-           whenAbort (pathFromScore b False) $ do
+           whenAbort (pathFromScore b) $ do
                case nmhigh of
-                 NullMoveHigh -> return $ pathFromScore b False
+                 NullMoveHigh -> return $ pathFromScore b
                  _ -> do
                    -- Use the TT move as best move
                    let mttmv = if hdeep > 0 then Just e else Nothing
@@ -560,7 +557,7 @@ pvZeroW !nst !b !d = do
                         let kill1 = case nmhigh of
                                         NullMoveThreat s -> newTKiller pos d s
                                         _                -> NoKiller
-                            !nsti = resetNSt (pathFromScore bGrain False) kill1 nst'
+                            !nsti = resetNSt (pathFromScore bGrain) kill1 nst'
                         nstf <- pvSLoop b d True prune nsti edges
                         let s = cursc nstf
                         whenAbort s $ do
@@ -669,7 +666,7 @@ pvInnerLoop b d zw prune nst e = timeToAbort (True, nst) $ do
                           s <- extenFunc b d spc exd' (deepNSt nst1)
                           xchangeFutil
                           return (s, nst1)
-                      Final sco -> return (pathFromScore (-sco) True, nst)
+                      Final sco -> return (pathFromScore (-sco), nst)
                       Illegal   -> error "Cannot be illegal here"
                   lift undoMove	-- undo the move
                   modify $ \s' -> s' { absdp = absdp old, usedext = usedext old }
