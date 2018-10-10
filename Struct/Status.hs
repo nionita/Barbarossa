@@ -72,8 +72,8 @@ data EvalWeights
           ewKingOpen        :: !MidEnd,
           ewKingPlaceCent   :: !MidEnd,
           ewKingPlacePwns   :: !MidEnd,
-          ewKingPawn1       :: !MidEnd,
-          ewKingPawn2       :: !MidEnd,
+          ewKingPawn        :: !MidEnd,
+          ewKingThreat      :: !MidEnd,
           ewRookHOpen       :: !MidEnd,
           ewRookOpen        :: !MidEnd,
           ewRookConn        :: !MidEnd,
@@ -169,11 +169,11 @@ instance CollectParams EvalWeights where
     npColInit = EvalWeights {
           ewMaterialDiff    = tme 8 8,
           ewKingSafe        = tme 1 0,
-          ewKingOpen        = tme 2 4,
-          ewKingPlaceCent   = tme 8 0,
-          ewKingPlacePwns   = tme 0 4,
-          ewKingPawn1       = tme  4 53,
-          ewKingPawn2       = tme  2 68,
+          ewKingOpen        = tme 4 1,		-- DSPSA...
+          ewKingPlaceCent   = tme 8 1,		-- old value
+          ewKingPlacePwns   = tme 1 4,		-- DSPSA...
+          ewKingPawn        = tme 3 50,		-- manually
+          ewKingThreat      = tme 0 300,	-- manually
           ewRookHOpen       = tme 162 182,	-- DSPSA with Adadelta
           ewRookOpen        = tme 205 178,	-- 20k steps, depth 4,
           ewRookConn        = tme  89  59,	-- 2 games, beta=0.95, gamma=0.8,
@@ -187,7 +187,7 @@ instance CollectParams EvalWeights where
           ewCenterBAtts     = tme 52 35,
           ewCenterRAtts     = tme 14 22,	-- DSPSA ...
           ewCenterQAtts     = tme 13 53,
-          ewCenterKAtts     = tme  2 62,
+          ewCenterKAtts     = tme  7 67,	-- DSPSA...
           ewSpace           = tme  1  0,
           ewAdvAtts         = tme  1 17,
           ewIsolPawns       = tme (-36) (-113),
@@ -197,7 +197,7 @@ instance CollectParams EvalWeights where
           ewEnpHanging      = tme (-19) (-27),
           ewEnpEnPrise      = tme (-29) (-26),
           ewEnpAttacked     = tme  (-2) (-14),
-          ewWepAttacked     = tme 35 73,
+          ewWepAttacked     = tme 39 66,	-- DSPSA...
           ewLastLinePenalty = tme 100 0,
           ewBishopPair      = tme 386 323,
           ewBishopPawns     = tme (-25) (-54),
@@ -223,10 +223,10 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
         ("end.kingPlaceCent",  setEndKingPlaceCent),
         ("mid.kingPlacePwns",  setMidKingPlacePwns),
         ("end.kingPlacePwns",  setEndKingPlacePwns),
-        ("mid.kingPawn1",      setMidKingPawn1),
-        ("end.kingPawn1",      setEndKingPawn1),
-        ("mid.kingPawn2",      setMidKingPawn2),
-        ("end.kingPawn2",      setEndKingPawn2),
+        ("mid.kingThreat1",    setMidKingThreat1),
+        ("end.kingThreat1",    setEndKingThreat1),
+        ("mid.kingThreat2",    setMidKingThreat2),
+        ("end.kingThreat2",    setEndKingThreat2),
         ("mid.rookHOpen",      setMidRookHOpen),
         ("end.rookHOpen",      setEndRookHOpen),
         ("mid.rookOpen",       setMidRookOpen),
@@ -306,10 +306,10 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
           setEndKingPlaceCent   v' ew' = ew' { ewKingPlaceCent   = (ewKingPlaceCent   ew') { end = round v' }}
           setMidKingPlacePwns   v' ew' = ew' { ewKingPlacePwns   = (ewKingPlacePwns   ew') { mid = round v' }}
           setEndKingPlacePwns   v' ew' = ew' { ewKingPlacePwns   = (ewKingPlacePwns   ew') { end = round v' }}
-          setMidKingPawn1       v' ew' = ew' { ewKingPawn1       = (ewKingPawn1       ew') { mid = round v' }}
-          setEndKingPawn1       v' ew' = ew' { ewKingPawn1       = (ewKingPawn1       ew') { end = round v' }}
-          setMidKingPawn2       v' ew' = ew' { ewKingPawn2       = (ewKingPawn2       ew') { mid = round v' }}
-          setEndKingPawn2       v' ew' = ew' { ewKingPawn2       = (ewKingPawn2       ew') { end = round v' }}
+          setMidKingThreat1     v' ew' = ew' { ewKingPawn        = (ewKingPawn        ew') { mid = round v' }}
+          setEndKingThreat1     v' ew' = ew' { ewKingPawn        = (ewKingPawn        ew') { end = round v' }}
+          setMidKingThreat2     v' ew' = ew' { ewKingThreat      = (ewKingThreat      ew') { mid = round v' }}
+          setEndKingThreat2     v' ew' = ew' { ewKingThreat      = (ewKingThreat      ew') { end = round v' }}
           setMidRookHOpen       v' ew' = ew' { ewRookHOpen       = (ewRookHOpen       ew') { mid = round v' }}
           setEndRookHOpen       v' ew' = ew' { ewRookHOpen       = (ewRookHOpen       ew') { end = round v' }}
           setMidRookOpen        v' ew' = ew' { ewRookOpen        = (ewRookOpen        ew') { mid = round v' }}

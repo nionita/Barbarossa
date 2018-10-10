@@ -275,8 +275,8 @@ materDiff p !ew = mad (ewMaterialDiff ew) md
 -- We calculate the king opennes here, as we have all we need
 -- We also give a bonus for a king beeing near pawn(s)
 kingPlace :: EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
-kingPlace ep p !ew = mad (ewKingPawn2     ew) kpa2 .
-                     mad (ewKingPawn1     ew) kpa1 .
+kingPlace ep p !ew = mad (ewKingPawn      ew) kpa .
+                     mad (ewKingThreat    ew) ktr .
                      mad (ewKingOpen      ew) ko .
                      mad (ewKingPlaceCent ew) kcd .
                      mad (ewKingPlacePwns ew) kpd
@@ -320,16 +320,16 @@ kingPlace ep p !ew = mad (ewKingPawn2     ew) kpa2 .
                                  in r + q*q
           own = comb yrooks yqueens mwb mwr
           adv = comb mrooks mqueens ywb ywr
-          pmkpa = popCount (myKAttacs p .&. paw)
-          pykpa = popCount (yoKAttacs p .&. paw)
-          !kpa1 = mkpa1 - ykpa1
-          !kpa2 = mkpa2 - ykpa2
-          (mkpa1, mkpa2) | pmkpa == 0 = (0, 0)
-                         | pmkpa == 1 = (1, 0)
-                         | otherwise  = (0, 1)
-          (ykpa1, ykpa2) | pykpa == 0 = (0, 0)
-                         | pykpa == 1 = (1, 0)
-                         | otherwise  = (0, 1)
+          -- King on pawns: more is better (now linear)
+          pmkpa = popCount (myKAttacs p .&. pawns p)
+          pykpa = popCount (yoKAttacs p .&. pawns p)
+          !kpa = pmkpa - pykpa
+          -- Threat by king:
+          -- pawn & pieces attacked by king and not defended by a pawn
+          -- (Idea from Stockfish, but linear)
+          pmktr = popCount (myKAttacs p .&. yo p `less` yoPAttacs p)
+          pyktr = popCount (yoKAttacs p .&. me p `less` myPAttacs p)
+          !ktr = pmktr - pyktr
 
 promoW, promoB :: Square -> Square
 promoW s = 56 + (s .&. 7)
@@ -665,8 +665,8 @@ enPrise p !ew = mad (ewEnpHanging  ew) ha .
           !ha = popCount haP + 3 * popCount haM + 5 * popCount haR + 9 * popCount haQ
           !ep =                3 * popCount epM + 5 * popCount epR + 9 * popCount epQ
           !at = popCount atP + 3 * popCount atM + 5 * popCount atR + 9 * popCount atQ
-          !wp1 = popCount$ (meP `less` myPAttacs p) .&. yoAttacs p	-- my weak attacked pawns
-          !wp2 = popCount$ (yo p .&. pawns p `less` yoPAttacs p) .&. myAttacs p	-- your weak attacked pawns
+          !wp1 = popCount $ (meP `less` myPAttacs p) .&. yoAttacs p	-- my weak attacked pawns
+          !wp2 = popCount $ (yo p .&. pawns p `less` yoPAttacs p) .&. myAttacs p	-- your weak attacked pawns
           !wp = wp2 - wp1
 
 ------ Last Line ------
