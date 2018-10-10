@@ -169,9 +169,9 @@ instance CollectParams EvalWeights where
     npColInit = EvalWeights {
           ewMaterialDiff    = tme 8 8,
           ewKingSafe        = tme 1 0,
-          ewKingOpen        = tme 4 1,		-- DSPSA...
+          ewKingOpen        = tme 2 4,		-- old value
           ewKingPlaceCent   = tme 8 1,		-- old value
-          ewKingPlacePwns   = tme 1 4,		-- DSPSA...
+          ewKingPlacePwns   = tme 0 4,		-- old value
           ewKingPawn        = tme 3 50,		-- manually
           ewKingThreat      = tme 0 300,	-- manually
           ewRookHOpen       = tme 162 182,	-- DSPSA with Adadelta
@@ -187,7 +187,7 @@ instance CollectParams EvalWeights where
           ewCenterBAtts     = tme 52 35,
           ewCenterRAtts     = tme 14 22,	-- DSPSA ...
           ewCenterQAtts     = tme 13 53,
-          ewCenterKAtts     = tme  7 67,	-- DSPSA...
+          ewCenterKAtts     = tme  2 62,	-- DSPSA...
           ewSpace           = tme  1  0,
           ewAdvAtts         = tme  1 17,
           ewIsolPawns       = tme (-36) (-113),
@@ -197,7 +197,7 @@ instance CollectParams EvalWeights where
           ewEnpHanging      = tme (-19) (-27),
           ewEnpEnPrise      = tme (-29) (-26),
           ewEnpAttacked     = tme  (-2) (-14),
-          ewWepAttacked     = tme 39 66,	-- DSPSA...
+          ewWepAttacked     = tme 35 73,	-- old value
           ewLastLinePenalty = tme 100 0,
           ewBishopPair      = tme 386 323,
           ewBishopPawns     = tme (-25) (-54),

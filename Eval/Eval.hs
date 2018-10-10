@@ -310,11 +310,11 @@ kingPlace ep p !ew = mad (ewKingPawn      ew) kpa .
           materFun m r q = (m * epMaterMinor ep + r * epMaterRook ep + q * epMaterQueen ep)
                                `unsafeShiftR` epMaterScale ep
           !ko = adv - own
-          mwb = popCount $ bAttacs paw mks `less` paw
-          mwr = popCount $ rAttacs paw mks `less` paw
-          ywb = popCount $ bAttacs paw yks `less` paw
-          ywr = popCount $ rAttacs paw yks `less` paw
-          paw = pawns p
+          mwb = popCount $ bAttacs (pawns p) mks .&. nopawns
+          mwr = popCount $ rAttacs (pawns p) mks .&. nopawns
+          ywb = popCount $ bAttacs (pawns p) yks .&. nopawns
+          ywr = popCount $ rAttacs (pawns p) yks .&. nopawns
+          nopawns = complement $ pawns p
           comb !oR !oQ !wb !wr = let r = oR * wr
                                      q = oQ * (wb + wr)
                                  in r + q*q
@@ -324,11 +324,10 @@ kingPlace ep p !ew = mad (ewKingPawn      ew) kpa .
           pmkpa = popCount (myKAttacs p .&. pawns p)
           pykpa = popCount (yoKAttacs p .&. pawns p)
           !kpa = pmkpa - pykpa
-          -- Threat by king:
-          -- pawn & pieces attacked by king and not defended by a pawn
-          -- (Idea from Stockfish, but linear)
-          pmktr = popCount (myKAttacs p .&. yo p `less` yoPAttacs p)
-          pyktr = popCount (yoKAttacs p .&. me p `less` myPAttacs p)
+          -- Threat by king only pieces:
+          -- pieces attacked by king and not defended by a pawn
+          pmktr = popCount (myKAttacs p .&. yo p .&. nopawns `less` yoPAttacs p)
+          pyktr = popCount (yoKAttacs p .&. me p .&. nopawns `less` myPAttacs p)
           !ktr = pmktr - pyktr
 
 promoW, promoB :: Square -> Square
