@@ -389,52 +389,56 @@ pvInnerRootExten b d !exd nst = do
 
 checkFailOrPVRoot :: SStats -> Int -> Int -> Move -> Path -> NodeState -> Search (Bool, NodeState)
 checkFailOrPVRoot xstats b d e s nst = whenAbort (True, nst) $ do
-         sst <- get
-         let mn = movno nst
-             a  = pathScore $ cursc nst
-             !nodes0 = sNodes xstats + sRSuc xstats
-             !nodes1 = sNodes (stats sst) + sRSuc (stats sst)
-             !nodes' = nodes1 - nodes0
-             pvg     = Pvsl s nodes'	-- the good
-             de = max d $ pathDepth s
-         if d == 1	-- we shouln't get abort here...
-            then do
-                 let typ = 2
-                 lift $ ttStore de typ (pathScore s) e nodes'
-                 let xpvslg = insertToPvs d pvg (pvsl nst)	-- the good
-                 -- Do not count the changes in draft 1 (they were wrong anyway,
-                 -- as we do not update cursc here and search all root moves)
-                 --    rch | pathScore s > a = rbmch nst + 1
-                 --        | otherwise       = rbmch nst
-                 return (False, nst {movno = mn + 1, pvsl = xpvslg })
-            else if pathScore s <= a
-                    then do	-- failed low
-                        let xpvslb = insertToPvs d pvg (pvsl nst)
-                            nst1   = nst { movno = mn + 1, pvsl = xpvslb, killer = newKiller d s nst }
-                        return (False, nst1)
-                    else if pathScore s >= b
-                            then do
-                              -- what when a root move fails high? We are in aspiration
-                              lift $ do
-                                  let typ = 1	-- beta cut (score is lower limit) with move e
-                                  ttStore de typ b e nodes'
-                                  betaCut True (absdp sst) e
-                              let xpvslg = insertToPvs d pvg (pvsl nst)	-- the good
-                                  csc = s { pathScore = b }
-                                  nst1 = nst { cursc = csc, pvsl = xpvslg, rbmch = rbmch nst + 1 }
-                              return (True, nst1)
-                            else do	-- means: > a && < b
-                              let sc = pathScore s
-                                  pa = unseq $ pathMoves s
-                              informPV sc (draft $ ronly sst) pa
-                              lift $ do
-                                  let typ = 2	-- best move so far (score is exact)
-                                  ttStore de typ sc e nodes'
-                                  betaCut True (absdp sst) e	-- not really cut, but good move
-                              let xpvslg = insertToPvs d pvg (pvsl nst)	-- the good
-                                  nst1 = nst { cursc = s, nxtnt = nextNodeType (nxtnt nst),
-                                               movno = mn + 1, pvsl = xpvslg, rbmch = rbmch nst + 1 }
-                              return (False, nst1)
+  sst <- get
+  let mn = movno nst
+      a  = pathScore $ cursc nst
+      !nodes0 = sNodes xstats + sRSuc xstats
+      !nodes1 = sNodes (stats sst) + sRSuc (stats sst)
+      !nodes' = nodes1 - nodes0
+      pvg     = Pvsl s nodes'	-- the good
+      de = max d $ pathDepth s
+  if d == 1	-- we shouln't get abort here...
+     then do
+         let typ = 2
+         lift $ ttStore de typ (pathScore s) e nodes'
+         -- Do not count the changes in draft 1 (they were wrong anyway,
+         -- as we do not update cursc here and search all root moves)
+         return (False, nst {movno = mn + 1, pvsl = insertToPvs d pvg (pvsl nst)})
+     -- else if pathScore s < a || pathScore s < b && not (pathExact s)
+     else if pathScore s < a || not (pathExact s)
+             then do	-- failed low
+                 let nst1 = nst { movno = mn + 1, pvsl = insertToPvs d pvg (pvsl nst),
+                                  killer = newKiller d s nst }
+                 return (False, nst1)
+             else if pathScore s >= b
+                     then do
+                       -- what when a root move fails high? We are in aspiration
+                       lift $ do
+                           let typ = 1	-- beta cut (score is lower limit) with move e
+                           ttStore de typ b e nodes'
+                           betaCut True (absdp sst) e
+                       let csc = s { pathScore = b }
+                           nst1 = nst { cursc = csc, pvsl = insertToPvs d pvg (pvsl nst),
+                                        rbmch = rbmch nst + 1 }
+                       return (True, nst1)
+                     else do	-- means: >= a && < b, s is exact, and we can choose
+                       let betterScore = pathScore s > a
+                           betterMove  = betterScore || pathDepth s > a
+                       when betterMove $ informPV (pathScore s) (draft $ ronly sst)
+                                             $ unseq $ pathMoves s
+                       when betterScore $ lift $ do
+                         let typ = 2	-- best move so far (score is exact)
+                         ttStore de typ (pathScore s) e nodes'
+                       -- Move is good anyway
+                       lift $ betaCut True (absdp sst) e	-- not really cut, but good move
+                       -- Here we prefer deeper paths
+                       let nst1 | betterMove
+                                  = nst { cursc = s, nxtnt = nextNodeType (nxtnt nst),
+                                          movno = mn + 1, pvsl = insertToPvs d pvg (pvsl nst),
+                                          rbmch = rbmch nst + 1 }
+                                | otherwise
+                                  = nst { movno = mn + 1, pvsl = insertToPvs d pvg (pvsl nst) }
+                       return (False, nst1)
 
 insertToPvs :: Int -> Pvsl -> [Pvsl] -> [Pvsl]
 insertToPvs _ p [] = [p]
@@ -462,7 +466,7 @@ pvSearch :: NodeState -> Int -> Int -> Int -> Search Path
 pvSearch _ !a !b !d | d <= 0 = do
     v <- pvQSearch a b 0
     checkFailHard "QS" a b v
-    return $ pathFromScore v (a == alpha0)	-- ok: fail hard in QS
+    return $ pathFromScore v True	-- ok: fail hard in QS
 pvSearch nst !a !b !d = do
     let !inPv = crtnt nst == PVNode
         ab    = albe nst
@@ -481,8 +485,8 @@ pvSearch nst !a !b !d = do
          || tp == 0 && hsc <= a	-- we will fail low
        )
        then do
-           let ttpath = Path { pathScore = trimax a b hsc, pathDepth = hdeep,
-                               pathMoves = Seq [e], pathExact = tp == 2 }
+           let ttpath = trimaxPath a b $ Path { pathScore = hsc, pathDepth = hdeep,
+                                                pathMoves = Seq [e], pathExact = tp == 2 }
            -- we will treat the beta cut here too, if it happens
            when (tp == 1 || tp == 2 && hsc > a) $ do
                adp <- gets absdp
@@ -536,8 +540,8 @@ pvZeroW !nst !b !d = do
     (hdeep, tp, hsc, e, nodes') <- reTrieve >> lift ttRead
     if hdeep >= d && (tp == 2 || tp == 1 && hsc >= b || tp == 0 && hsc < b)
        then do
-           let ttpath = Path { pathScore = trimax bGrain b hsc, pathDepth = hdeep,
-                               pathMoves = Seq [e], pathExact = tp == 2 }
+           let ttpath = trimaxPath bGrain b $ Path { pathScore = hsc, pathDepth = hdeep,
+                                                     pathMoves = Seq [e], pathExact = False }
            -- we will treat the beta cut here too, if it happens
            when (tp == 1 || tp == 2 && hsc >= b) $ do
                adp <- gets absdp
@@ -767,44 +771,37 @@ checkFailOrPVLoop xstats b d e s nst = whenAbort (True, nst) $ do
     let mn = movno nst
     if pathScore s < pathScore (cursc nst) || pathScore s < b && not (pathExact s)
        then do
-           let nst1 = nst { movno = mn+1, killer = newKiller d s nst }
-           return (False, nst1)
+         let nst1 = nst { movno = mn+1, killer = newKiller d s nst }
+         return (False, nst1)
        else do
-           let nodes0 = sNodes xstats
-               nodes1 = sNodes $ stats sst
-               !nodes' = nodes1 - nodes0
-               !de = max d $ pathDepth s
-           if pathScore s >= b
-              then do
-                lift $ do
-                    let typ = 1	-- best move is e and is beta cut (score is lower limit)
-                    ttStore de typ b e nodes'
-                    betaCut True (absdp sst) e -- anounce a beta move (for example, update history)
-                incBeta mn
-                let csc = s { pathScore = b }
-                    nst1 = nst { cursc = csc }
-                return (True, nst1)
-              else do	-- means: >= a && < b, s is an exact score
-                  -- _ <- assert (pathScore s >= pathScore (cursc nst))
-                  --             ("s: " ++ show s ++ ", a: " ++ show (cursc nst)) $ return ()
-                  -- _ <- assert (pathExact s) (show s ++ ", b = " ++ show b) $ return ()
-                  -- _ <- assert (pathExact s || pathExact (cursc nst))
-                  --             ("s: " ++ show s ++ ", a = " ++ show (cursc nst))
-                  --             $ return ()
-                  -- Now we can have equal scores but can choose which path we want
-                  -- If increase: update position score in TT
-                  let betterScore = pathScore s > pathScore (cursc nst)
-                  when betterScore $ lift $ do
-                      let typ = 2	-- score is exact
-                      ttStore de typ (pathScore s) e nodes'
-                  -- Move is good anyway
-                  lift $ betaCut True (absdp sst) e -- not really a cut, but good move here
-                  -- Here we can have preferences
-                  let nst1 | betterScore || pathDepth s > pathDepth (cursc nst)
-                               = nst { cursc = s, nxtnt = nextNodeType (nxtnt nst), movno = mn+1 }
-                           | otherwise
-                               = nst { nxtnt = nextNodeType (nxtnt nst), movno = mn+1 }
-                  return (False, nst1)
+         let nodes0 = sNodes xstats
+             nodes1 = sNodes $ stats sst
+             !nodes' = nodes1 - nodes0
+             !de = max d $ pathDepth s
+         if pathScore s >= b
+            then do
+              lift $ do
+                let typ = 1	-- best move is e and is beta cut (score is lower limit)
+                ttStore de typ b e nodes'
+                betaCut True (absdp sst) e -- anounce a beta move (for example, update history)
+              incBeta mn
+              let csc = s { pathScore = b }
+                  nst1 = nst { cursc = csc }
+              return (True, nst1)
+            else do	-- means: >= a && < b
+              -- We can choose when exact
+              let betterScore = pathScore s > pathScore (cursc nst)
+              when betterScore $ lift $ do
+                let typ = 2	-- score is exact
+                ttStore de typ (pathScore s) e nodes'
+              -- Move is good anyway
+              lift $ betaCut True (absdp sst) e -- not really a cut, but good move here
+              -- Here we prefer deeper paths
+              let nst1 | betterScore || pathDepth s > pathDepth (cursc nst)
+                         = nst { cursc = s, nxtnt = nextNodeType (nxtnt nst), movno = mn+1 }
+                       | otherwise
+                         = nst { movno = mn+1 }
+              return (False, nst1)
 
 -- For zero window
 checkFailOrPVLoopZ :: SStats -> Int -> Int -> Move -> Path
@@ -934,7 +931,11 @@ varFutVal :: Search Int
 varFutVal = max futMinVal <$> gets futme
 
 trimaxPath :: Int -> Int -> Path -> Path
-trimaxPath a b x = x { pathScore = trimax a b (pathScore x) }
+trimaxPath a b path
+    | s < a     = path { pathScore = a, pathExact = False }
+    | s > b     = path { pathScore = b, pathExact = False }
+    | otherwise = path
+    where s = pathScore path
 
 trimax :: Int -> Int -> Int -> Int
 trimax a b x
