@@ -10,7 +10,7 @@ module Moves.Base (
     doRealMove, doMove, doQSMove, doNullMove, undoMove,
     genMoves, genTactMoves, genEscapeMoves, canPruneMove,
     tacticalPos, zugZwang, isMoveLegal, isKillCand, isTKillCand,
-    betaCut, ttRead, ttStore, curNodes, isTimeout, informCtx,
+    betaCut, ttRead, ttStore, curNodes, isTimeout,
     mateScore, scoreDiff, qsDelta,
     draftStats,
     finNode, countRepetitions,
@@ -359,7 +359,7 @@ scoreDiff = do
         _         -> return 0
 
 logMes :: String -> Game ()
-logMes s = lift $ talkToContext . LogMes $ s
+logMes s = lift $ ctxLog LogInfo s
 
 {-# INLINE isTimeout #-}
 isTimeout :: Int -> Game Bool
@@ -390,17 +390,6 @@ tkFinishedSearch :: Int -> Game ()
 tkFinishedSearch i = do
     c <- gets curse
     liftIO $ finishedSearch c i
-
-{-# INLINE informCtx #-}
-informCtx :: Comm -> Game ()
-informCtx = lift . talkToContext
-
-talkToContext :: Comm -> CtxIO ()
-talkToContext (LogMes s)       = ctxLog LogInfo s
-talkToContext (BestMv a b c d) = informGui a b c d
-talkToContext (CurrMv a b)     = informGuiCM a b
-talkToContext (InfoStr s)      = informGuiString s
-talkToContext (Nodes n)        = informGuiNodes n
 
 timeFromContext :: CtxIO Int
 timeFromContext = do

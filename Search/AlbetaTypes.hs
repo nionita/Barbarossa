@@ -2,7 +2,6 @@
 
 module Search.AlbetaTypes (
     DoResult(..),
-    Comm(..),
     ABControl(..),
     SStats(..),
     ssts0, formatStats, addStats,
@@ -25,12 +24,6 @@ data ABControl = ABC {
 data DoResult = Exten !Int !Bool	-- return mit extension & special
               | Final !Int	-- return with a final score (probably draw)
               | Illegal		-- illegal move
-
-data Comm = LogMes String
-          | BestMv Int Int Int64 [Move]
-          | CurrMv Move Int
-          | InfoStr String
-          | Nodes Int64
 
 -- Data type for search statistics:
 data SStats = SStats {

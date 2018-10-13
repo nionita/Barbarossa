@@ -231,11 +231,11 @@ theInformer ichan = forever $ do
     s <- liftIO $ readChan ichan
     chg <- readChanging
     when (working chg) $ case s of
-        InfoS s'   -> answer $ infos s'
-        InfoD _    -> answer $ formInfoDepth s
-        InfoCM _ _ -> answer $ formInfoCM s
-        InfoN _    -> return ()	-- this should no happen here
-        _          -> answer $ formInfo s
+        InfoS s'    -> answer $ infos s'
+        InfoD _     -> answer $ formInfoDepth s
+        InfoCM _ _  -> answer $ formInfoCM s
+        InfoN _ _ _ -> answer $ formInfoN s
+        _           -> answer $ formInfo s
 
 -- There is a thread which reads only nodes statistics and best move information
 -- add them together and send them to the informer
@@ -255,7 +255,9 @@ theStater ichan schan a@(StaterState acc) = do
         Info d t n p s -> do
             liftIO $ writeChan ichan $ Info d t (acc + n) p s
             theStater ichan schan $! StaterState $ acc + n
-        InfoN n        -> theStater ichan schan $! StaterState $ acc + n
+        InfoN t n f    -> do
+            when f $ liftIO $ writeChan ichan $ InfoN t (acc + n) True
+            theStater ichan schan $! StaterState $ acc + n
         InfoR          -> theStater ichan schan (StaterState 0)
         _              -> theStater ichan schan a
 
@@ -797,6 +799,15 @@ formInfo itg = "info"
                      x -> " nps " ++ show (infoNodes itg `div` fromIntegral x * 1000)
           esc = scoreToExtern (infoScore itg) (length pv)
           pv  = infoPv itg
+
+formInfoN :: InfoToGui -> String
+formInfoN itg = "info"
+    ++ " time " ++ show (infoTime itg)
+    ++ " nodes " ++ show (infoNodes itg)
+    ++ nps'
+    where nps' = case infoTime itg of
+                     0 -> ""
+                     x -> " nps " ++ show (infoNodes itg `div` fromIntegral x * 1000)
 
 data ExternScore = Score Int | Mate Int
 

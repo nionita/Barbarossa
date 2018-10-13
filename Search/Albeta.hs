@@ -17,6 +17,7 @@ import Data.Maybe (fromMaybe)
 import Search.CStateMonad
 import Search.AlbetaTypes
 import Struct.Struct
+import Struct.Context
 import Moves.BaseTypes
 import Moves.Base
 import Moves.Fen (initPos)
@@ -308,9 +309,9 @@ pvRootSearch a b d lastpath rmvs aspir = do
         p = unseq pm
     sst <- get
     let mn = ismain (ronly sst)
-    if mn
+    if mn && not (abort sst)
        then informPV sc (draft $ ronly sst) p
-       else informNs
+       else informNs mn	-- If mn here: it was also abort
     -- Root is pv node, cannot fail low, except when aspiration fails!
     if sc <= a	-- failed low or timeout when searching PV
          then do
@@ -470,7 +471,7 @@ checkFailOrPVRoot xstats b d e s nst = whenAbort (True, nst) $ do
                                   pa = unseq $ pathMoves s
                               if ismain $ ronly sst
                                  then informPV sc (draft $ ronly sst) pa
-                                 else informNs
+                                 else informNs False
                               lift $ do
                                   let typ = 2	-- best move so far (score is exact)
                                   ttStore de typ sc e nodes'
@@ -1277,24 +1278,24 @@ killerToList (TwoKillers e1 e2) = [e1, e2]
 
 --- Communication to the outside - some convenience functions ---
 informCM :: Move -> Int -> Game ()
-informCM a b = informCtx (CurrMv a b)
+informCM a b = lift $ informGuiCM a b
 
 informStr :: String -> Game ()
-informStr s = informCtx (InfoStr s)
+informStr s = lift $ informGuiString s
 
 logmes :: String -> Game ()
-logmes s = informCtx (LogMes s)
+logmes s = lift $ ctxLog LogInfo s
 
 informPV :: Int -> Int -> [Move] -> Search ()
 informPV s d es = do
     ss <- gets stats
     lift $ do
         n <- curNodes $ sNodes ss
-        informCtx (BestMv s d n es)
+        lift $ informGui s d n es
 
-informNs :: Search ()
-informNs = do
+informNs :: Bool -> Search ()
+informNs f = do
     ss <- gets stats
     lift $ do
         n <- curNodes $ sNodes ss
-        informCtx (Nodes n)
+        lift $ informGuiNodes n f

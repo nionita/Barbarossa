@@ -28,7 +28,11 @@ data InfoToGui = Info {
                     infoScore :: Int
                 }
                 | InfoD { infoDepth :: Int }
-                | InfoN { infoNodes :: Int64 }
+                | InfoN {
+                    infoTime :: Int,
+                    infoNodes :: Int64,
+                    infoFinal :: Bool
+                }
                 | InfoCM {
                     infoMove :: Move,
                     infoCurMove :: Int
@@ -166,10 +170,16 @@ informGui sc depth nds path = do
              }
     liftIO $ writeChan (nodsta ctx) gi
 
-informGuiNodes :: Int64 -> CtxIO ()
-informGuiNodes n = do
+informGuiNodes :: Int64 -> Bool -> CtxIO ()
+informGuiNodes n f = do
     ctx <- ask
-    let gi = InfoN { infoNodes = n }
+    t <- if f
+            then do
+                chg <- readChanging
+                currt <- lift $ currMilli $ startSecond ctx
+                return $ currt - srchStrtMs chg
+            else return 0
+    let gi = InfoN { infoTime = t, infoNodes = n, infoFinal = f }
     liftIO $ writeChan (nodsta ctx) gi
 
 informGuiReset :: CtxIO ()
