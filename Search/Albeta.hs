@@ -41,11 +41,12 @@ useTTinPv :: Bool
 useTTinPv   = False	-- retrieve from TT in PV?
 
 -- Parameters for late move reduction:
-lmrInitLv, lmrInitLim, lmrLevMin, lmrLevMax :: Int
-lmrInitLv   = 8
-lmrInitLim  = 8500
-lmrLevMin   = 0
-lmrLevMax   = 15
+lmrInitLv, lmrInitLim, lmrLevMin, lmrLevMax, lmrNoDepth :: Int
+lmrInitLv  = 8
+lmrInitLim = 8500
+lmrLevMin  = 0
+lmrLevMax  = 15
+lmrNoDepth = 1
 
 -- The late move reduction is variable and regulated by the number of re-searches
 -- Lower levels (towards 0) means less reductions, higher - more
@@ -364,7 +365,7 @@ pvInnerRootExten b d !exd nst = do
        else do
            -- no futility pruning & no LMR for root moves!
            -- Here we expect to fail low
-           s1 <- pnextlev <$> pvZeroW nst (-a) d1 True
+           s1 <- pnextlev <$> pvZeroW nst (-a) d1
            whenAbort s1 $
                if pathScore s1 <= a -- we failed low as expected
                   then return s1
@@ -486,7 +487,7 @@ pvSearch nst !a !b !d = do
                 prune <- isPruneFutil d a True (staticScore pos)
                 -- Loop thru the moves
                 let !nsti = resetNSt (pathFromScore "low limit" a) NoKiller nst'
-                nstf <- pvSLoop b d prune nsti edges
+                nstf <- pvSLoop b d False prune nsti edges
                 let s = cursc nstf
                 whenAbort s $
                     if movno nstf == 1
@@ -503,12 +504,12 @@ pvSearch nst !a !b !d = do
                            return s
 
 -- PV Zero Window
-pvZeroW :: NodeState -> Int -> Int -> Bool -> Search Path
-pvZeroW !_ !b !d _ | d <= 0 = do
+pvZeroW :: NodeState -> Int -> Int -> Search Path
+pvZeroW !_ !b !d | d <= 0 = do
     v <- pvQSearch bGrain b True
     return $ pathFromScore ("pvQSearch 21:" ++ show v) v
     where !bGrain = b - scoreGrain
-pvZeroW !nst !b !d redu = do
+pvZeroW !nst !b !d = do
     -- Check if we have it in TT
     (hdeep, tp, hsc, e, nodes') <- reTrieve >> lift ttRead
     if hdeep >= d && (tp == 2 || tp == 1 && hsc >= b || tp == 0 && hsc < b)
@@ -543,7 +544,7 @@ pvZeroW !nst !b !d redu = do
                                         NullMoveThreat s -> newTKiller pos d s
                                         _                -> NoKiller
                             !nsti = resetNSt (pathFromScore "low limit" bGrain) kill1 nst'
-                        nstf <- pvZLoop b d prune redu nsti edges
+                        nstf <- pvSLoop b d True prune nsti edges
                         let s = cursc nstf
                         whenAbort s $
                             if movno nstf == 1
@@ -577,8 +578,8 @@ nullMoveFailsHigh pos nst b d
                xchangeFutil
                let nst' = deepNSt nst
                val <- if v > b + bigDiff
-                         then fmap pnextlev $ pvZeroW nst' (-nma) d2 True
-                         else fmap pnextlev $ pvZeroW nst' (-nma) d1 True
+                         then fmap pnextlev $ pvZeroW nst' (-nma) d2
+                         else fmap pnextlev $ pvZeroW nst' (-nma) d1
                lift undoMove	-- undo null move
                xchangeFutil
                if pathScore val >= nmb
@@ -604,103 +605,61 @@ nmDArr1, nmDArr2 :: UArray Int Int
 nmDArr1 = listArray (0, 20) [ 0, 0, 0, 0, 0, 1, 2, 3, 4, 4, 5, 6, 7, 7, 8, 9, 9, 10, 11, 11, 12 ]
 nmDArr2 = listArray (0, 20) [ 0, 0, 0, 0, 0, 0, 1, 2, 3, 3, 4, 5, 6, 6, 7, 8, 8,  9, 10, 10, 11 ]
 
-pvSLoop :: Int -> Int -> Bool -> NodeState -> Alt Move -> Search NodeState
-pvSLoop b d p = go
+pvSLoop :: Int -> Int -> Bool -> Bool -> NodeState -> Alt Move -> Search NodeState
+pvSLoop b d zw p = go
     where go !s (Alt []) = return s
           go !s (Alt (e:es)) = do
-              (!cut, !s') <- pvInnerLoop b d p s e
+              (!cut, !s') <- pvInnerLoop b d zw p s e
               if cut then return s'
                      else go s' $ Alt es
 
-pvZLoop :: Int -> Int -> Bool -> Bool -> NodeState -> Alt Move -> Search NodeState
-pvZLoop b d p redu = go
-    where go !s (Alt []) = return s
-          go !s (Alt (e:es)) = do
-              (!cut, !s') <- pvInnerLoopZ b d p s e redu
-              if cut then return s'
-                     else go s' $ Alt es
-
--- This is the inner loop of the PV search, executed at every level (except root) once per possible move
+-- This is the unified inner loop of the PV & ZW search, executed at every level (except root)
+-- once per possible move
 -- See the parameter
 -- Returns: flag if it was a beta cut and new status
 pvInnerLoop :: Int 	-- current beta
             -> Int	-- current search depth
+            -> Bool	-- zero window search?
             -> Bool	-- prune?
             -> NodeState 	-- node status
             -> Move	-- move to search
             -> Search (Bool, NodeState)
-pvInnerLoop b d prune nst e = timeToAbort (True, nst) $ do
-         -- What about TT & killer moves???
-         let !canPrune = canPruneMove (cpos nst) e
-         if prune && movno nst > 1 && canPrune
-            then do
-                let !nst1 = nst { movno = movno nst + 1 }
-                return (False, nst1)
-            else do
-                old <- get
-                exd <- lift $ doMove e	-- do the move
-                if legalResult exd
-                   then do
-                       newNode d
-                       modify $ \s -> s { absdp = absdp s + 1 }
-                       s <- case exd of
-                           Exten exd' _ _ -> do
-                               when canPrune $ do
-                                   sdiff <- lift scoreDiff
-                                   updateFutil sdiff	-- e
-                               xchangeFutil
-                               s <- pvInnerLoopExten b d exd' (deepNSt nst)
-                               xchangeFutil
-                               return s
-                           Final sco -> return $! pathFromScore "Final" (-sco)
-                           Illegal   -> error "Cannot be illegal here"
-                       lift undoMove	-- undo the move
-                       modify $ \s' -> s' { absdp = absdp old, usedext = usedext old }
-                       let s' = addToPath e s
-                       checkFailOrPVLoop b d e s' nst
-                   else return (False, nst)
-
--- This part for the zero window search
-pvInnerLoopZ :: Int 	-- current beta
-            -> Int	-- current search depth
-            -> Bool	-- prune?
-            -> NodeState 	-- node status
-            -> Move	-- move to search
-            -> Bool	-- reduce in LMR?
-            -> Search (Bool, NodeState)
-pvInnerLoopZ b d prune nst e redu = timeToAbort (True, nst) $ do
-         -- What about TT & killer moves???
-         let !canPrune = canPruneMove (cpos nst) e
-         if prune && canPrune
-            then do
-                let !nst1 = nst { movno = movno nst + 1 }
-                return (False, nst1)
-            else do
-                old <- get
-                exd <- lift $ doMove e	-- do the move
-                -- even the legality could be checked before, maybe much cheaper
-                if legalResult exd
-                   then do
-                       newNode d
-                       modify $ \s -> s { absdp = absdp s + 1 }
-                       s <- case exd of
-                         Exten exd' cap nolmr -> do
-                             when canPrune $ do
-                                 sdiff <- lift scoreDiff
-                                 updateFutil sdiff	-- e
-                             xchangeFutil
-                             s <- if cap
-                                     then pvInnerLoopExtenZ b d True exd' (deepNSt $ resetSpc nst) redu
-                                     else pvInnerLoopExtenZ b d nolmr exd' (deepNSt nst) redu
-                             xchangeFutil
-                             return s
-                         Final sco -> return $! pathFromScore "Final" (-sco)
-                         Illegal   -> error "Cannot be illegal here"
-                       lift undoMove	-- undo the move
-                       modify $ \s' -> s' { absdp = absdp old, usedext = usedext old }
-                       let s' = addToPath e s
-                       checkFailOrPVLoopZ b d e s' nst
-                   else return (False, nst)
+pvInnerLoop b d zw prune nst e = timeToAbort (True, nst) $ do
+    let !canPrune = canPruneMove (cpos nst) e
+    if prune && (zw || movno nst > 1) && canPrune
+       then do
+           let !nst1 = nst { movno = movno nst + 1 }
+           return (False, nst1)
+       else do
+           old <- get
+           !exd <- lift $ doMove e	-- do the move
+           if legalResult exd
+              then do
+                  newNode d
+                  modify $ \s -> s { absdp = absdp s + 1 }
+                  (s, nst1) <- case exd of
+                      Exten exd' cap nolmr -> do
+                          when canPrune $ do
+                              sdiff <- lift scoreDiff
+                              updateFutil sdiff	-- e
+                          -- Resetting means we reduce less (only with distance to last capture)
+                          let nst1 | cap       = resetSpc nst
+                                   | otherwise = nst
+                          xchangeFutil
+                          s <- extenFunc b d (cap || nolmr) exd' (deepNSt nst1)
+                          xchangeFutil
+                          return (s, nst1)
+                      Final sco -> return (pathFromScore "Final" (-sco), nst)
+                      Illegal   -> error "Cannot be illegal here"
+                  lift undoMove	-- undo the move
+                  modify $ \s' -> s' { absdp = absdp old, usedext = usedext old }
+                  let s' = addToPath e s
+                  checkFunc b d e s' nst1
+              else return (False, nst)
+    where extenFunc | zw        = pvInnerLoopExtenZ
+                    | otherwise = pvInnerLoopExten
+          checkFunc | zw        = checkFailOrPVLoopZ
+                    | otherwise = checkFailOrPVLoop
 
 resetSpc :: NodeState -> NodeState
 resetSpc nst = nst { spcno = movno nst }
@@ -712,8 +671,8 @@ reserveExtension !uex !exd
         modify $ \s -> s { usedext = usedext s + exd }
         return exd
 
-pvInnerLoopExten :: Int -> Int -> Int -> NodeState -> Search Path
-pvInnerLoopExten b d !exd nst = do
+pvInnerLoopExten :: Int -> Int -> Bool -> Int -> NodeState -> Search Path
+pvInnerLoopExten b d spec !exd nst = do
     old <- get
     exd' <- reserveExtension (usedext old) exd
     let !inPv = crtnt nst == PVNode
@@ -721,52 +680,46 @@ pvInnerLoopExten b d !exd nst = do
         a     = pathScore $ cursc nst
     if inPv || d <= minPvDepth
        then do
-          -- Set albe only when not in PV and not already set (to spare a copy)
-          let nst' = if not (inPv || albe nst) then nst { albe = True } else nst
-          pnextlev <$> pvSearch nst' (-b) (-a) d1
+           -- Set albe only when not in PV and not already set (to spare a copy)
+           let nst' = if not (inPv || albe nst) then nst { albe = True } else nst
+           pnextlev <$> pvSearch nst' (-b) (-a) d1
        else do
-          -- Here we must be in a Cut node (will fail low)
-          -- and we should have: crtnt = CutNode, nxtnt = AllNode
-          s1 <- pnextlev <$> pvZeroW nst (-a) d1 True
-          whenAbort s1 $
-              if pathScore s1 <= a
-                 then return s1	-- failed low (as expected) or aborted
-                 else do
-                     -- we didn't fail low and need re-search: full window
-                     let nst1 = nst { crtnt = PVNode, nxtnt = PVNode }
-                     pnextlev <$> pvSearch nst1 (-b) (-a) d1
+           -- Here we must be in a Cut node (will fail low)
+           -- and we should have: crtnt = CutNode, nxtnt = AllNode
+           let !d' = reduceLmr (nearmate b) spec d1 (lmrlv old) (movno nst - spcno nst)
+           -- s1 <- pnextlev <$> pvZeroW nst (-a) d1
+           s1 <- zeroWithLMR d' d1 (-a) (a+1) nst	-- HERE: a+1 ??? Should be: a + scoreGrain
+           whenAbort s1 $
+               if pathScore s1 <= a
+                  then return s1	-- failed low (as expected) or aborted
+                  else do
+                      -- we didn't fail low and need re-search: full window
+                      let nst1 = nst { crtnt = PVNode, nxtnt = PVNode }
+                      pnextlev <$> pvSearch nst1 (-b) (-a) d1
 
 -- For zero window
-pvInnerLoopExtenZ :: Int -> Int -> Bool -> Int -> NodeState -> Bool -> Search Path
-pvInnerLoopExtenZ b d spec !exd nst redu = do
+pvInnerLoopExtenZ :: Int -> Int -> Bool -> Int -> NodeState -> Search Path
+pvInnerLoopExtenZ b d spec !exd nst = do
     old  <- get
     exd' <- reserveExtension (usedext old) exd
     -- late move reduction
     let !d1 = d + exd' - 1	-- this is the normal (unreduced) depth for next search
-        !d' = if redu
-                 then reduceLmr (nearmate b) spec d1 (lmrlv old) (movno nst - spcno nst)
-                 else d1
-    let !onemB = scoreGrain - b
-    if not redu || d' == d1
+        !d' = reduceLmr (nearmate b) spec d1 (lmrlv old) (movno nst - spcno nst)
+        !onemB = scoreGrain - b
+    zeroWithLMR d' d1 onemB b nst
+
+zeroWithLMR :: Int -> Int -> Int -> Int -> NodeState -> Search Path
+zeroWithLMR !d' !d1 !onemB !b nst =
+    if d' == d1
        then do
            moreLMR True 1	-- more LMR
-           pnextlev <$> pvZeroW nst onemB d' redu
+           pnextlev <$> pvZeroW nst onemB d'
        else do
            incRedu
            nds0 <- gets $ sNodes . stats
-           !sr <- pnextlev <$> pvZeroW nst onemB d' True
+           !sr <- pnextlev <$> pvZeroW nst onemB d'
            nds1 <- gets $ sNodes . stats
            let nodre = nds1 - nds0
-           !s1 <- if lmrDebug
-                     then pnextlev <$> pvZeroW nst onemB d1 False
-                     else return sr
-           nds2 <- gets $ sNodes . stats
-           let nodnr = nds2 - nds1
-           when lmrDebug $ do
-               incReBe (nodnr - nodre)	-- so many nodes we spare by reducing
-               when (pathScore sr < b && pathScore s1 >= b) $ do
-                   incReMi	-- LMR missed the point
-                   when collectFens $ lift $ finNode "LMRM" 0
            whenAbort sr $
                if pathScore sr < b
                   then do
@@ -778,7 +731,7 @@ pvInnerLoopExtenZ b d spec !exd nst redu = do
                     moreLMR False d'	-- less LMR
                     -- Now we expect to fail high, i.e. exchange the crt/nxt node type
                     let nst1 = nst { crtnt = nxtnt nst, nxtnt = crtnt nst }
-                    sf <- pnextlev <$> pvZeroW nst1 onemB d1 True
+                    sf <- pnextlev <$> pvZeroW nst1 onemB d1
                     whenAbort sf $ do
                         when (pathScore sf >= b) $ moreLMR False d1
                         return sf
@@ -860,8 +813,8 @@ genAndSort nst mttmv a b d = do
 {-# INLINE reduceLmr #-}
 reduceLmr :: Bool -> Bool -> Int -> Int -> Int -> Int
 reduceLmr nearmatea spec d lmrlev w
-    | spec || d <= 1 || nearmatea = d
-    | otherwise                   = max 1 $ d - lmrArr!(lmrlev, w)
+    | spec || d <= lmrNoDepth || nearmatea = d
+    | otherwise                            = max 1 $ d - lmrArr!(lmrlev, w)
 
 -- Adjust the LMR related parameters in the state
 moreLMR :: Bool -> Int -> Search ()
@@ -1028,7 +981,7 @@ bestMoveFromIID nst a b d
           = do s <- pvSearch nst a b d'
                return $! unseq $ pathMoves s
     | nt == CutNode && (d >= minIIDCut || (d >= minIIDCutNK && killer nst == NoKiller))
-          = do s <- pvZeroW nst b d' False
+          = do s <- pvZeroW nst b d'
                return $! unseq $ pathMoves s
     | otherwise =  return []
     where d' = min maxIIDDepth (iidNewDepth d)
