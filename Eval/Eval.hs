@@ -466,7 +466,9 @@ mobDiff :: MyPos -> BBoard -> BBoard -> BBoard -> BBoard -> EvalWeights -> MidEn
 mobDiff p mylr yolr mypb yopb ew = mad (ewMobilityKnight ew) n .
                                    mad (ewMobilityBishop ew) b .
                                    mad (ewMobilityRook   ew) r .
-                                   mad (ewMobilityQueen  ew) q
+                                   mad (ewMobilityQueen  ew) q .
+                                   mad (ewUndefendedPcs  ew) u .
+                                   mad (ewAllAttSquares  ew) a
     where !myPMA = me p .&. pawns p .&. (mylr .|. mypb)
           !yoPMA = yo p .&. pawns p .&. (yolr .|. yopb)
           !myMA  = complement $ myPMA .|. (kings p .&. me p) .|. yoPAttacs p
@@ -483,6 +485,12 @@ mobDiff p mylr yolr mypb yopb ew = mad (ewMobilityKnight ew) n .
           !b = myB - yoB
           !r = myR - yoR
           !q = myQ - yoQ
+          !myu = min 3 $ popCount $ me p .&. complement (kings p .|. myAttacs p)
+          !you = min 3 $ popCount $ yo p .&. complement (kings p .|. yoAttacs p)
+          !u = myu - you
+          !mya = popCount $ myAttacs p
+          !yoa = popCount $ yoAttacs p
+          !a = mya - yoa
 
 ------ Center control ------
 
