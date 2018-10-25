@@ -14,6 +14,7 @@ import Data.Int
 import Data.List (delete)
 import Data.Maybe (fromMaybe)
 
+import Eval.BasicEval
 import Search.CStateMonad
 import Search.AlbetaTypes
 import Struct.Struct
@@ -103,9 +104,10 @@ iidNewDepth :: Int -> Int
 iidNewDepth = subtract 1
 
 -- Parameter for quiescenst search
-inEndlessCheck, qsDeltaMargin :: Int
+inEndlessCheck, qsDeltaMargin, qsBetaMargin :: Int
 inEndlessCheck = -scoreGrain	-- there is a risk to be left in check
 qsDeltaMargin  = 100
+qsBetaMargin   = 0
 
 type Search a = CState PVState Game a
 
@@ -939,8 +941,8 @@ trimaxPath a b x = x { pathScore = trimax a b (pathScore x) }
 
 trimax :: Int -> Int -> Int -> Int
 trimax a b x
-    | x < a     = a
-    | x > b     = b
+    | x <= a    = a
+    | x >= b    = b
     | otherwise = x
 
 -- PV Quiescent Search
@@ -961,7 +963,7 @@ pvQSearch !a !b !c front = do
        else do
            -- TODO: use hsc here too, when possible
            when (hdeep < 0) reFail
-           pos <- lift $ getPos
+           !pos <- lift $ getPos
            if tacticalPos pos
               then do
                   edges <- Alt <$> lift genEscapeMoves
@@ -980,30 +982,28 @@ pvQSearch !a !b !c front = do
                                  pvQLoop b nc a edges
               else do
                   let stp = staticScore pos
-                  if stp >= b
+                  if stp >= b + qsBetaMargin
                      then do
                          when collectFens $ finWithNodes "BETA"
                          return b
-                     else do
-                         !dcut <- lift $ qsDelta $ a - stp - qsDeltaMargin
-                         if dcut
-                            then do
-                                when collectFens $ finWithNodes "DELT"
-                                return a
-                            else do
-                                edges <- Alt <$> lift (genTactMoves front)
-                                if noMove edges
-                                   then do	-- no more captures
-                                       when collectFens $ finWithNodes "NOCA"
-                                       return $! trimax a b stp
-                                   else if stp > a
-                                           then pvQLoop b c stp edges
-                                           else pvQLoop b c a   edges
+                     else if qsDelta pos $! a - stp - qsDeltaMargin
+                             then do
+                                 when collectFens $ finWithNodes "DELT"
+                                 return a
+                             else do
+                                 edges <- Alt <$> lift (genTactMoves front)
+                                 if noMove edges
+                                    then do	-- no more captures
+                                        when collectFens $ finWithNodes "NOCA"
+                                        return $! trimax a b stp
+                                    else if stp > a
+                                            then pvQLoop b c stp edges
+                                            else pvQLoop b c a   edges
     where lenmax2 (_:_:_) = 2
           lenmax2 _       = 1	-- we know here it is not empty
 
 pvQLoop :: Int -> Int -> Int -> Alt Move -> Search Int
-pvQLoop b c = go
+pvQLoop !b !c = go
     where go !s (Alt [])     = return s
           go !s (Alt (e:es)) = do
               (!cut, !s') <- pvQInnerLoop b c s e
@@ -1011,7 +1011,7 @@ pvQLoop b c = go
                      else go s' $ Alt es
 
 pvQInnerLoop :: Int -> Int -> Int -> Move -> Search (Bool, Int)
-pvQInnerLoop !b c !a e = timeToAbort (True, b) $ do
+pvQInnerLoop !b !c !a e = timeToAbort (True, b) $ do
          r <- lift $ doQSMove e
          if r
             then do
@@ -1024,6 +1024,18 @@ pvQInnerLoop !b c !a e = timeToAbort (True, b) $ do
                            then return (False, sc)
                            else return (False, a)
             else return (False, a)
+
+qsDelta :: MyPos -> Int -> Bool
+qsDelta !p !a
+    | matPiece White Bishop >= a = False
+    | matPiece White Queen  <  a = True
+    | otherwise                  = qsAttacks
+    where qsAttacks = let !ua = yo p .&. myAttacs p	-- under attack!
+                      in if ua .&. queens p /= 0
+                            then False
+                            else if matPiece White Rook < a
+                                    then True
+                                    else ua .&. rooks p == 0
 
 {-# INLINE finWithNodes #-}
 finWithNodes :: String -> Search ()

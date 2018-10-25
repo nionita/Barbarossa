@@ -11,7 +11,7 @@ module Moves.Base (
     genMoves, genTactMoves, genEscapeMoves, canPruneMove,
     tacticalPos, zugZwang, isMoveLegal, isKillCand, isTKillCand,
     betaCut, ttRead, ttStore, curNodes, isTimeout, informCtx,
-    mateScore, scoreDiff, qsDelta,
+    mateScore, scoreDiff,
     draftStats,
     finNode, countRepetitions,
     showMyPos, logMes,
@@ -33,7 +33,6 @@ import Struct.Status
 import Hash.TransTab
 import Moves.Board
 import Moves.BitBoard (less, uBit)
-import Eval.BasicEval
 import Eval.Eval
 import Moves.ShowMe
 import Moves.History
@@ -321,24 +320,6 @@ finNode str nodes =
         let (p:_) = stack s	-- we never saw an empty stack error until now
             fen = posToFen p
         logMes $ str ++ " Score: " ++ show (staticScore p) ++ " Fen: " ++ fen
-
--- {-# INLINE qsDelta #-}
-qsDelta :: Int -> Game Bool
-qsDelta !a = do
-    p <- getPos
-    if matPiece White Bishop >= a
-       then return False
-       else if matPiece White Queen < a
-               then return True
-               else do
-                   let !ua = yo p .&. myAttacs p	-- under attack!
-                   if ua .&. queens p /= 0	-- TODO: need to check also pawns on 7th!
-                      then return False
-                      else if matPiece White Rook < a
-                              then return True
-                              else if ua .&. rooks p /= 0
-                                      then return False
-                                      else return True
 
 {-# INLINE ttRead #-}
 ttRead :: Game (Int, Int, Int, Move, Int64)
