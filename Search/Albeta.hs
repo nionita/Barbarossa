@@ -61,6 +61,10 @@ varImp lev w = round $ go 0 lev w
           go !lv !b !i | i <= b    = lv
                        | otherwise = go (lv+1) (b*1.2) (i-b)
 
+-- Razoring
+razorMargin :: Int
+razorMargin = 400
+
 -- Parameters for futility pruning:
 maxFutilDepth :: Int
 maxFutilDepth = 3
@@ -479,40 +483,46 @@ pvSearch nst !a !b !d = do
            when (hdeep < 0) reFail
            -- Here: when ab we should do null move search
            pos <- lift getPos
-           -- Use the found TT move as best move
-           let mttmv = if hdeep > 0 then Just e else Nothing
-               nst'  = nst { cpos = pos }
-           edges <- genAndSort nst' mttmv a b d
-           if noMove edges
-              then return $ failHardNoValidMove a b pos
+           -- Razoring
+           if d <= 1 && staticScore pos <= a - razorMargin
+              then do
+                  v <- pvQSearch a b 0 True
+                  return $ pathFromScore ("pvQSearch 1a:" ++ show v) v	-- ok: fail hard in QS
               else do
-                nodes0 <- gets (sNodes . stats)
-                -- futility pruning:
-                prune <- isPruneFutil d a True (staticScore pos)
-                -- Loop thru the moves
-                let !nsti = resetNSt (pathFromScore "low limit" a) NoKiller nst'
-                nstf <- pvSLoop b d prune nsti edges
-                let s = cursc nstf
-                whenAbort s $
-                    if movno nstf == 1
-                       then return $ failHardNoValidMove a b pos
-                       else do
-                           let de = max d $ pathDepth s
-                           nodes1 <- gets (sNodes . stats)
-                           lift $ do
-                               let !deltan = nodes1 - nodes0
-                                   mvs = pathMoves s
-                                   mv | nullSeq mvs = head $ unalt edges	-- not null - on "else" of noMove
-                                      | otherwise   = head $ unseq mvs
-                               ttStore de (rbmch nstf) (pathScore s) mv deltan
-                           return s
+                  -- Use the found TT move as best move
+                  -- Here we could take the TT value instead of static score, if we had fail soft
+                  let mttmv = if hdeep > 0 then Just e else Nothing
+                      nst'  = nst { cpos = pos }
+                  edges <- genAndSort nst' mttmv a b d
+                  if noMove edges
+                     then return $ failHardNoValidMove a b pos
+                     else do
+                       nodes0 <- gets (sNodes . stats)
+                       -- futility pruning:
+                       prune <- isPruneFutil d a True (staticScore pos)
+                       -- Loop thru the moves
+                       let !nsti = resetNSt (pathFromScore "low limit" a) NoKiller nst'
+                       nstf <- pvSLoop b d prune nsti edges
+                       let s = cursc nstf
+                       whenAbort s $
+                           if movno nstf == 1
+                              then return $ failHardNoValidMove a b pos
+                              else do
+                                  let de = max d $ pathDepth s
+                                  nodes1 <- gets (sNodes . stats)
+                                  lift $ do
+                                      let !deltan = nodes1 - nodes0
+                                          mvs = pathMoves s
+                                          mv | nullSeq mvs = head $ unalt edges	-- not null - on "else" of noMove
+                                             | otherwise   = head $ unseq mvs
+                                      ttStore de (rbmch nstf) (pathScore s) mv deltan
+                                  return s
 
 -- PV Zero Window
 pvZeroW :: NodeState -> Int -> Int -> Bool -> Search Path
 pvZeroW !_ !b !d _ | d <= 0 = do
-    v <- pvQSearch bGrain b 0 True
+    v <- pvQSearch (b - scoreGrain) b 0 True
     return $ pathFromScore ("pvQSearch 21:" ++ show v) v
-    where !bGrain = b - scoreGrain
 pvZeroW !nst !b !d redu = do
     -- Check if we have it in TT
     (hdeep, tp, hsc, e, nodes') <- reTrieve >> lift ttRead
@@ -528,41 +538,48 @@ pvZeroW !nst !b !d redu = do
        else do
            when (hdeep < 0) reFail
            pos <- lift getPos
-           nmhigh <- nullMoveFailsHigh pos nst b d
-           whenAbort (pathFromScore "Aborted" b) $
-               case nmhigh of
-                 NullMoveHigh -> return $ pathFromScore "NullMoveHigh" b
-                 _ -> do
-                   -- Use the TT move as best move
-                   let mttmv = if hdeep > 0 then Just e else Nothing
-                       nst' = nst { cpos = pos }
-                   edges <- genAndSort nst' mttmv bGrain b d
-                   if noMove edges
-                      then return $ failHardNoValidMove bGrain b pos
-                      else do
-                        !nodes0 <- gets (sNodes . stats)
-                        -- futility pruning:
-                        prune <- isPruneFutil d bGrain False (staticScore pos)
-                        -- Loop thru the moves
-                        let kill1 = case nmhigh of
-                                        NullMoveThreat s -> newTKiller pos d s
-                                        _                -> NoKiller
-                            !nsti = resetNSt (pathFromScore "low limit" bGrain) kill1 nst'
-                        nstf <- pvZLoop b d prune redu nsti edges
-                        let s = cursc nstf
-                        whenAbort s $
-                            if movno nstf == 1
-                               then return $ failHardNoValidMove bGrain b pos
-                               else do
-                                   let !de = max d $ pathDepth s
-                                   !nodes1 <- gets (sNodes . stats)
-                                   lift $ do
-                                       let !deltan = nodes1 - nodes0
-                                           mvs = pathMoves s
-                                           mv | nullSeq mvs = head $ unalt edges	-- not null - on "else" of noMove
-                                              | otherwise   = head $ unseq mvs
-                                       ttStore de (rbmch nstf) (pathScore s) mv deltan
-                                   return s
+           -- Razoring
+           if d <= 1 && staticScore pos <= bGrain - razorMargin
+              then do
+                  v <- pvQSearch bGrain b 0 True
+                  return $ pathFromScore ("pvQSearch 21a:" ++ show v) v
+              else do
+                  nmhigh <- nullMoveFailsHigh pos nst b d
+                  whenAbort (pathFromScore "Aborted" b) $
+                      case nmhigh of
+                        NullMoveHigh -> return $ pathFromScore "NullMoveHigh" b
+                        _ -> do
+                          -- Use the TT move as best move
+                          -- Here we could take the TT value instead of static score, with fail soft
+                          let mttmv = if hdeep > 0 then Just e else Nothing
+                              nst' = nst { cpos = pos }
+                          edges <- genAndSort nst' mttmv bGrain b d
+                          if noMove edges
+                             then return $ failHardNoValidMove bGrain b pos
+                             else do
+                               !nodes0 <- gets (sNodes . stats)
+                               -- futility pruning:
+                               prune <- isPruneFutil d bGrain False (staticScore pos)
+                               -- Loop thru the moves
+                               let kill1 = case nmhigh of
+                                               NullMoveThreat s -> newTKiller pos d s
+                                               _                -> NoKiller
+                                   !nsti = resetNSt (pathFromScore "low limit" bGrain) kill1 nst'
+                               nstf <- pvZLoop b d prune redu nsti edges
+                               let s = cursc nstf
+                               whenAbort s $
+                                   if movno nstf == 1
+                                      then return $ failHardNoValidMove bGrain b pos
+                                      else do
+                                          let !de = max d $ pathDepth s
+                                          !nodes1 <- gets (sNodes . stats)
+                                          lift $ do
+                                              let !deltan = nodes1 - nodes0
+                                                  mvs = pathMoves s
+                                                  mv | nullSeq mvs = head $ unalt edges	-- not null - on "else" of noMove
+                                                     | otherwise   = head $ unseq mvs
+                                              ttStore de (rbmch nstf) (pathScore s) mv deltan
+                                          return s
     where !bGrain = b - scoreGrain
 
 data NullMoveResult = NoNullMove | NullMoveHigh | NullMoveLow | NullMoveThreat Path

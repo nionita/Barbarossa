@@ -11,7 +11,7 @@ module Moves.Base (
     genMoves, genTactMoves, genEscapeMoves, canPruneMove,
     tacticalPos, zugZwang, isMoveLegal, isKillCand, isTKillCand,
     betaCut, ttRead, ttStore, curNodes, isTimeout, informCtx,
-    mateScore, scoreDiff, qsDelta,
+    mateScore, scoreDiff, qsDelta, isImproving,
     draftStats,
     finNode, countRepetitions,
     showMyPos, logMes,
@@ -404,6 +404,15 @@ scoreDiff = do
     case stack s of
         (p1:p2:_) -> return $! negate (staticScore p1 + staticScore p2)
         _         -> return 0
+
+-- Is eval improving compared to grandfather?
+-- I.e. static score of current position is at least as static score of position 2 moves before
+isImproving :: Game Bool
+isImproving = do
+    s <- get
+    case stack s of
+        (pc:_:pp:_) -> return $! staticScore pc >= staticScore pp
+        _           -> return True
 
 logMes :: String -> Game ()
 logMes s = lift $ talkToContext . LogMes $ s
