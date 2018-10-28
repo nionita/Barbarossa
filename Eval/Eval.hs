@@ -825,8 +825,8 @@ perPassedPawnOk !gph ep p c sq sqbb moi toi moia toia = val
           !kingprx = (kdDist (mdis - ydis) * epPassKingProx ep * (256 - gph)) `unsafeShiftR` 8
           !val1 = (pmax * (1024 - kingprx) * (1024 - epPassBlockO ep * mblo)) `unsafeShiftR` 20
           !val2 = (val1 * (1024 - epPassBlockA ep * yblo)) `unsafeShiftR` 10
-          !val  = (val2 * (128 + epPassMyCtrl ep * myctrl) * (128 - epPassYoCtrl ep * yoctrl))
-                    `unsafeShiftR` 14
+          !val  = (val2 * (1024 + epPassMyCtrl ep * myctrl) * (1024 - epPassYoCtrl ep * yoctrl))
+                    `unsafeShiftR` 20
 
 kdDistArr :: UArray Int Int  --  -7 -6 -5 -4 -3 -2 -1  0  1  2  3  4  5  6  7
 kdDistArr = listArray (0, 14) $ [-4,-3,-3,-3,-2,-2,-1, 0, 1, 2, 2, 3, 3, 3, 4]

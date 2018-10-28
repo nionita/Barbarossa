@@ -132,8 +132,8 @@ instance CollectParams EvalParams where
                     epPassBlockO = 88,
                     epPassBlockA = 136,
                     epPassMin    = 30,
-                    epPassMyCtrl = 6,
-                    epPassYoCtrl = 7
+                    epPassMyCtrl = 48,
+                    epPassYoCtrl = 56
                 }
     npColParm = collectEvalParams
     npSetParm = id
