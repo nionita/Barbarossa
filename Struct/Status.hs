@@ -117,6 +117,29 @@ data EvalWeights
           ewPassPawnLev     :: !MidEnd
       } deriving Show
 
+{- Optimization with SPRTop, results after 24242 games
+
+selfplay: C:/astra/SelfPlay-prk.exe
+playdir: C:/Learn/dspsa
+ipgnfile: C:/astra/open-moves/open-moves.fen
+depth: 4
+games: 32
+sprtgames: 1000
+totalgames: 50000
+stepconst: 64
+elo0: 0
+elo1: 20
+alpha: 0.33
+beta: 0.33
+
+[params]
+epPassKingProx:  118, 8
+epPassBlockO: 89, 32
+epPassBlockA: 134, 32
+epPassMyCtrl: 44, 16
+epPassYoCtrl: 57, 16
+ -}
+
 instance CollectParams EvalParams where
     type CollectFor EvalParams = EvalParams
     npColInit = EvalParams {
@@ -128,12 +151,12 @@ instance CollectParams EvalParams where
                     epMaterScale = 1,
                     epMaterBonusScale = 5,
                     epPawnBonusScale  = 1,
-                    epPassKingProx    = 120,	-- rescale
-                    epPassBlockO = 88,
-                    epPassBlockA = 136,
+                    epPassKingProx    = 107,	-- rescale
+                    epPassBlockO = 131,
+                    epPassBlockA = 208,
                     epPassMin    = 30,
-                    epPassMyCtrl = 48,
-                    epPassYoCtrl = 56
+                    epPassMyCtrl = 37,
+                    epPassYoCtrl = 24
                 }
     npColParm = collectEvalParams
     npSetParm = id
