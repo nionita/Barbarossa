@@ -170,6 +170,33 @@ collectEvalParams (s, v) ep = lookApply s v ep [
           setEpPassMyCtrl      v' ep' = ep' { epPassMyCtrl      = round v' }
           setEpPassYoCtrl      v' ep' = ep' { epPassYoCtrl      = round v' }
 
+{- DSPSA with this config:
+selfplay: C:/astra/SelfPlay-rih.exe
+playdir: C:/Learn/dspsa
+ipgnfile: C:/astra/open-moves/open-moves.fen
+depth: 4
+games: 16
+laststep: 10
+msteps: 1000
+
+[weights]
+kingPawn1: 4, 53, 16
+kingPawn2: 2, 68, 16
+centerPAtts: 73, 57, 16
+isolPawns: -36, -113, 16
+isolPassed: -63, -143, 16
+backPawns: -108, -141, 16
+backPOpen: -21,  -27, 16
+wepAttacked: 35, 73, 16
+bishopPawns: -25, -54, 16
+rookPawn: -44, -32, 16
+advPawn5: 14, 106, 16
+advPawn6: 352, 333, 16
+pawnBlockP: -112, -92, 16
+pawnBlockO: -23, -26, 16
+pawnBlockA: -19, -69, 16
+ -}
+
 instance CollectParams EvalWeights where
     type CollectFor EvalWeights = EvalWeights
     npColInit = EvalWeights {
@@ -178,8 +205,8 @@ instance CollectParams EvalWeights where
           ewKingOpen        = tme 2 4,
           ewKingPlaceCent   = tme 8 1,
           ewKingPlacePwns   = tme 0 4,
-          ewKingPawn1       = tme  4 53,
-          ewKingPawn2       = tme  2 68,
+          ewKingPawn1       = tme (-8) 45,
+          ewKingPawn2       = tme 11 69,
           ewRookHOpen       = tme 162 182,	-- DSPSA with Adadelta
           ewRookOpen        = tme 205 178,	-- 20k steps, depth 4,
           ewRookConn        = tme  89  59,	-- 2 games, beta=0.95, gamma=0.8,
@@ -188,7 +215,7 @@ instance CollectParams EvalWeights where
           ewMobilityBishop  = tme 53 33,
           ewMobilityRook    = tme 16 34,	-- DSPSA ...
           ewMobilityQueen   = tme  2 11,
-          ewCenterPAtts     = tme 73 57,
+          ewCenterPAtts     = tme 61 40,
           ewCenterNAtts     = tme 48 37,
           ewCenterBAtts     = tme 52 35,
           ewCenterRAtts     = tme 14 22,	-- DSPSA ...
@@ -196,24 +223,24 @@ instance CollectParams EvalWeights where
           ewCenterKAtts     = tme  2 62,
           ewSpace           = tme  1  0,
           ewAdvAtts         = tme  1 17,
-          ewIsolPawns       = tme (-36) (-113),
-          ewIsolPassed      = tme (-63) (-143),
-          ewBackPawns       = tme (-108) (-141),
-          ewBackPOpen       = tme (-21)  (-27),
+          ewIsolPawns       = tme (-51) (-101),
+          ewIsolPassed      = tme (-71) (-154),
+          ewBackPawns       = tme (-100) (-136),
+          ewBackPOpen       = tme (-31)  (-29),
           ewEnpHanging      = tme (-19) (-27),
           ewEnpEnPrise      = tme (-29) (-26),
           ewEnpAttacked     = tme  (-2) (-14),
-          ewWepAttacked     = tme 35 73,
+          ewWepAttacked     = tme 47 67,
           ewLastLinePenalty = tme 100 0,
           ewBishopPair      = tme 386 323,
-          ewBishopPawns     = tme (-25) (-54),
+          ewBishopPawns     = tme (-33) (-50),
           ewRedundanceRook  = tme (-27) (-51),	-- DSPSA ...
-          ewRookPawn        = tme (-44) (-32),
-          ewAdvPawn5        = tme   14 106,
-          ewAdvPawn6        = tme  352 333,
-          ewPawnBlockP      = tme (-112) (-92),
-          ewPawnBlockO      = tme  (-23) (-26),
-          ewPawnBlockA      = tme  (-19) (-69),
+          ewRookPawn        = tme (-43) (-22),
+          ewAdvPawn5        = tme   7 106,
+          ewAdvPawn6        = tme  365 333,
+          ewPawnBlockP      = tme (-122) (-85),
+          ewPawnBlockO      = tme  (-44) (-39),
+          ewPawnBlockA      = tme  (-23) (-75),
           ewPassPawnLev     = tme 2 8
         }
     npColParm = collectEvalWeights
