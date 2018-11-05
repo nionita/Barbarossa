@@ -952,11 +952,12 @@ pvQSearch !a !b !c front = do
     -- tp == 1 => score >= hsc, so if hsc > a then we improved
     -- tp == 0 => score <= hsc, so if hsc <= asco then we fail low and
     --    can terminate the search
+    -- But: when we are in "pv" we should not accept inexact scores!
     if hdeep >= 0 && (
-            tp == 2		-- exact score: always good
-         || tp == 1 && hsc >= b	-- we will fail high
+         tp == 2 || b - a == scoreGrain && (		-- exact score: always good
+         tp == 1 && hsc >= b	-- we will fail high
          || tp == 0 && hsc <= a	-- we will fail low
-       )
+       ))
        then reSucc 1 >> return (trimax a b hsc)
        else do
            -- TODO: use hsc here too, when possible
