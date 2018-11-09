@@ -985,19 +985,24 @@ pvQSearch !a !b !c front = do
                          when collectFens $ finWithNodes "BETA"
                          return b
                      else do
+                         -- let asc | hdeep >= 0 && tp == 0 && hsc < stp = hsc
+                         --         | otherwise                          = stp
+                         -- !dcut <- lift $ qsDelta $ a - asc - qsDeltaMargin
                          !dcut <- lift $ qsDelta $ a - stp - qsDeltaMargin
                          if dcut
                             then do
                                 when collectFens $ finWithNodes "DELT"
                                 return a
                             else do
+                                let csc | hdeep >= 0 && tp == 1 && hsc > stp = hsc
+                                        | otherwise                          = stp
                                 edges <- Alt <$> lift (genTactMoves front)
                                 if noMove edges
                                    then do	-- no more captures
                                        when collectFens $ finWithNodes "NOCA"
-                                       return $! trimax a b stp
-                                   else if stp > a
-                                           then pvQLoop b c stp edges
+                                       return $! trimax a b csc
+                                   else if csc > a
+                                           then pvQLoop b c csc edges
                                            else pvQLoop b c a   edges
     where lenmax2 (_:_:_) = 2
           lenmax2 _       = 1	-- we know here it is not empty
