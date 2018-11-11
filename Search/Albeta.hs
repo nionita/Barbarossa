@@ -952,7 +952,7 @@ pvQSearch !a !b !c front = do
     -- tp == 1 => score >= hsc, so if hsc > a then we improved
     -- tp == 0 => score <= hsc, so if hsc <= asco then we fail low and
     --    can terminate the search
-    if hdeep >= 0 && (
+    if hdeep >= 0 && b - a > scoreGrain && (
             tp == 2		-- exact score: always good
          || tp == 1 && hsc >= b	-- we will fail high
          || tp == 0 && hsc <= a	-- we will fail low
