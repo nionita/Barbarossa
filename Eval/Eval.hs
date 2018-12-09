@@ -213,7 +213,12 @@ fadd (Flc f1 q1) (Flc f2 q2) = Flc (f1+f2) (q1+q2)
 ksSide :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
 ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
     | myq == 0  = 0
-    | otherwise = mattacs
+    | otherwise = ksSideQ yop yok myp myn myb myr myq myk mya
+
+ksSideQ :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
+ksSideQ yop yok myp myn myb myr myq myk mya
+    | c == 0    = 0
+    | otherwise = katScore yop yok mya c q
     where qual a p
               | yoka == 0 = Flc 0 0
               | y == 1    = Flc 1 p
@@ -230,16 +235,17 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
           !qq = qual myq 8
           !qk = qual myk 2
           !(Flc c q) = fadd qp $ fadd qn $ fadd qb $ fadd qr $ fadd qq qk
-          !mattacs
-              | c == 0 = 0
-              | otherwise = fromIntegral $ attCoef `unsafeAt` ixt
-              -- where !freey = popCount $ yok `less` (mya .|. yop)
-              --       !conce = popCount $ yok .&. mya
-              -- This is equivalent to:
-              where !freco = popCount $ yok `less` (yop `less` mya)
-                    !ixm = c * q `unsafeShiftR` 2
-                    !ixt = ixm + c + ksShift - freco
-                    ksShift = 13
+
+-- This will be inlined and produces well optimized code
+katScore :: BBoard -> BBoard -> BBoard -> Int -> Int -> Int
+katScore yop yok mya c q = fromIntegral $ attCoef `unsafeAt` ixt
+    where -- where !freey = popCount $ yok `less` (mya .|. yop)
+          --       !conce = popCount $ yok .&. mya
+          -- This is equivalent to:
+          freco = popCount $ yok `less` (yop `less` mya)
+          ixm = c * q `unsafeShiftR` 2
+          ixt = ixm + c + ksShift - freco
+          ksShift = 13
 
 -- We take the maximum of 272 because:
 -- Quali max: 8 * (1 + 2 + 2 + 4 + 8 + 2) = 168
