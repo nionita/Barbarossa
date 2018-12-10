@@ -238,7 +238,7 @@ ksSideQ yop yok myp myn myb myr myq myk mya
 
 -- This will be inlined and produces well optimized code
 katScore :: BBoard -> BBoard -> BBoard -> Int -> Int -> Int
-katScore yop yok mya c q = fromIntegral $ attCoef `unsafeAt` ixt
+katScore yop yok mya c q = min maxks $ ixt * (ixt + 1)
     where -- where !freey = popCount $ yok `less` (mya .|. yop)
           --       !conce = popCount $ yok .&. mya
           -- This is equivalent to:
@@ -246,18 +246,6 @@ katScore yop yok mya c q = fromIntegral $ attCoef `unsafeAt` ixt
           ixm = c * q `unsafeShiftR` 2
           ixt = ixm + c + ksShift - freco
           ksShift = 13
-
--- We take the maximum of 272 because:
--- Quali max: 8 * (1 + 2 + 2 + 4 + 8 + 2) = 168
--- Flag max: 6
--- 6 * 168 / 4 + 6 + 13 = 272
-attCoef :: UArray Int Int32
-attCoef = listArray (0, 272) $ take zeros (repeat 0) ++ [ f x | x <- [0..63] ] ++ repeat (f 63)
-    where -- Without the scaling, f will take max value of 4000 for 63
-          f :: Int -> Int32
-          f x = let y = fromIntegral x :: Double
-                in round $ maxks * (2.92968750 - 0.03051758*y)*y*y / 4000
-          zeros = 8
           maxks = 3800
 
 kingSquare :: BBoard -> BBoard -> Square
