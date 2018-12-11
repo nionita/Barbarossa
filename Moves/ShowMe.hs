@@ -5,6 +5,8 @@ import Data.Bits
 import Data.List
 import Data.Word
 
+import Struct.Struct
+
 -- Help functions (good for debug)
 printBB :: Word64 -> IO ()
 printBB = putStr . showBB
@@ -42,6 +44,13 @@ showTab w1 w2 w3 w4 = go w1 w2 w3 w4 8
                        ++ go (next x) (next y) (next z) (next t) (n-1)
           byte u = fromIntegral $ u `shiftR` 56
           next u = u `shift` 8
+
+showMyPos :: MyPos -> String
+showMyPos p = showTab (black p) (slide p) (kkrq p) (diag p) ++ "================ " ++ mc ++ "\n"
+    where mc = "last move: " ++ (show $ mmove p) ++ ", " ++ if moving p == White then "w" else "b"
+
+showStack :: Int -> [MyPos] -> String
+showStack n = concatMap showMyPos . take n
 
 printTab :: Word64 -> Word64 -> Word64 -> Word64 -> IO ()
 printTab w1 w2 w3 w4 = putStr $ showTab w1 w2 w3 w4

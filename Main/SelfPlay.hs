@@ -32,6 +32,7 @@ import Moves.Base
 import Moves.Fen
 import Moves.Notation
 import Moves.History
+import Moves.Board (inCheck)
 import Search.CStateMonad (execCState)
 import Eval.FileParams (makeEvalState)
 -- import Eval.Eval	-- not yet needed
@@ -460,7 +461,7 @@ autoPlayToEnd d pos = do
                               sfin' <- execCState (doRealMove m) (crtStatus chg)
                               let p = head $ stack sfin'
                               if sc == 19999	-- mate in 1
-                                 then if tacticalPos p
+                                 then if inCheck p
                                          then do
                                              let r = if moving p == White then -1 else 1
                                              ctxLog LogInfo $ "Mate (" ++ show r ++ ")"
@@ -534,7 +535,7 @@ playGame d pos (ide1, eval1) (ide2, eval2) = do
                               -- Using length path here could be a problem
                               -- in case of a TT cut which is on path
                               if | sc == mateScore && length path == 1	-- mate in 1
-                                   -> if tacticalPos p
+                                   -> if inCheck p
                                          then do
                                              ctxLog LogInfo $ "Mate (" ++ id1 ++ " wins)"
                                              return $ GameWin id1 "Mate"

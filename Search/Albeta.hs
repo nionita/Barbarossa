@@ -20,6 +20,7 @@ import Struct.Struct
 import Moves.BaseTypes
 import Moves.Base
 import Moves.Fen (initPos)
+import Moves.Board (inCheck)
 
 absurd :: String -> Game ()
 absurd s = logmes $ "Absurd: " ++ s	-- used for messages when assertions fail
@@ -565,7 +566,7 @@ data NullMoveResult = NoNullMove | NullMoveHigh | NullMoveLow | NullMoveThreat P
 
 nullMoveFailsHigh :: MyPos -> NodeState -> Int -> Int -> Search NullMoveResult
 nullMoveFailsHigh pos nst b d
-    | d < 2 || tacticalPos pos || zugZwang pos		-- no null move at d < 2
+    | d < 2 || inCheck pos || zugZwang pos		-- no null move at d < 2
       || crtnt nst == AllNode = return NoNullMove	-- no null move in all nodes
     | otherwise = do
         let v = staticScore pos
@@ -880,7 +881,7 @@ varFutVal :: Search Int
 varFutVal = max futMinVal <$> gets futme
 
 failHardNoValidMove :: Int -> Int -> MyPos -> Path
-failHardNoValidMove a b pos = trimaxPath a b $ if tacticalPos pos then matedPath else staleMate
+failHardNoValidMove a b pos = trimaxPath a b $ if inCheck pos then matedPath else staleMate
 
 trimaxPath :: Int -> Int -> Path -> Path
 trimaxPath a b x = x { pathScore = trimax a b (pathScore x) }
@@ -910,7 +911,7 @@ pvQSearch !a !b front = do
            -- TODO: use hsc here too, when possible
            when (hdeep < 0) reFail
            pos <- lift $ getPos
-           if tacticalPos pos
+           if inCheck pos
               then do
                   edges <- Alt <$> lift genEscapeMoves
                   if noMove edges

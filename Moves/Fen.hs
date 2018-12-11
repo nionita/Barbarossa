@@ -86,8 +86,8 @@ fenFromString fen = zipWith ($) fenfuncs fentails
 
 updatePos :: MyPos -> MyPos
 updatePos !p = p {
-                  occup = toccup, me = tme, yo = tyo, kings   = tkings,
-                  pawns = tpawns, knights = tknights, queens  = tqueens,
+                  occup = toccup, me = tme, yo = tyo, kings  = tkings,
+                  pawns = tpawns, knights = tknights, queens = tqueens,
                   rooks = trooks, bishops = tbishops, passed = tpassed,
                   lazyBits = lzb
                }
@@ -144,7 +144,7 @@ posLazy !co !ocp !tblack !tpawns !tknights !tbishops !trooks !tqueens !tkings
           !twhAttacs = twhPAtt .|. twhNAtt .|. twhBAtt .|. twhRAtt .|. twhQAtt .|. twhKAtt
           !tblAttacs = tblPAtt .|. tblNAtt .|. tblBAtt .|. tblRAtt .|. tblQAtt .|. tblKAtt
           !white = ocp `less` tblack
-          !whcheck = white   .&. tkings .&. tblAttacs
+          !whcheck = white  .&. tkings .&. tblAttacs
           !blcheck = tblack .&. tkings .&. twhAttacs
           !tcheck = whcheck .|. blcheck
 

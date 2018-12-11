@@ -6,7 +6,7 @@ module Moves.Board (
     castKingRookOk, castQueenRookOk,
     genMoveCast, genMoveNCapt, genMovePromo, genMoveFCheck, genMoveCaptWL,
     genMoveNCaptToCheck,
-    updatePos, checkOk, moveChecks,
+    updatePos, checkOk, leftInCheck, moveChecks,
     legalMove, alternateMoves,
     doFromToMove, reverseMoving
     ) where
@@ -34,7 +34,7 @@ isCheck p Black | check p .&. black p == 0 = False
 
 {-# INLINE inCheck #-}
 inCheck :: MyPos -> Bool
-inCheck = (/= 0) . check
+inCheck p = check p .&. me p /= 0
 
 {--
 goPromo :: MyPos -> Move -> Bool
@@ -164,7 +164,7 @@ findChecking !pos = concat [ pChk, nChk, bChk, rChk, qbChk, qrChk ]
 -- Generate move when in check
 genMoveFCheck :: MyPos -> [Move]
 genMoveFCheck !p
-    | null chklist        = error "genMoveFCheck"
+    | null chklist        = error $ "genMoveFCheck:\n" ++ showMyPos p
     | null $ tail chklist = r1 ++ kGen ++ r2	-- simple check
     | otherwise           = kGen		-- double check, only king moves help
     where chklist = findChecking p
@@ -327,6 +327,26 @@ castQueenRookOk !p Black = epcas p .&. b56 /= 0 where b56 = uBit 56
 checkOk :: MyPos -> Bool
 checkOk p = yo p .&. kings p .&. myAttacs p == 0
 
+-- When we make the move to arrive in a new position, we want to check legality
+-- of the move (the generator delivers pseudo-legal moves)
+-- This is the first calculation we do on the new position, so we don't have the
+-- new attacks, and this is the method to check if the king of the moving color
+-- was left in check
+-- Params:
+-- - the position after the move
+-- - the starting square of the move
+{-# INLINE leftInCheck #-}
+leftInCheck :: MyPos -> Square -> Bool
+leftInCheck p sq
+    -- | uBit sq .&. mkbb == 0       = False	-- moving the king should be always legal
+    | uBit sq .&. mkbb == 0       = bAttacs (occup p) ksq .&. me p .&. (bishops p .|. queens p) /= 0
+                                 || rAttacs (occup p) ksq .&. me p .&. (rooks   p .|. queens p) /= 0
+    | getAlignedDiag sq mkbb /= 0 = bAttacs (occup p) ksq .&. me p .&. (bishops p .|. queens p) /= 0
+    | getAlignedRoCo sq mkbb /= 0 = rAttacs (occup p) ksq .&. me p .&. (rooks   p .|. queens p) /= 0
+    | otherwise                   = False
+    where mkbb = kings p .&. yo p	-- moving king bitboard (the moving side is already reverted)
+          ksq  = firstOne mkbb
+
 data ChangeAccum = CA !ZKey !Int
 
 -- Accumulate a set of changes in MyPos (except BBoards) due to setting a piece on a square
@@ -434,16 +454,18 @@ alternateMoves p m1 m2
 -- but we must treat special moves (en-passant, castle and promotion) differently,
 -- because they are more complex
 -- This legality is still incomplete, as it does not take pinned pieces into consideration
+-- Now, when in check, reject all
 legalMove :: MyPos -> Move -> Bool
 legalMove p m
-    | moveColor m /= mc   = False
-    | me p `uTestBit` dst = False
+    | inCheck p           = False	-- reject TT & killers when in check
+    | moveColor m /= mc   = False	-- wrong color
+    | me p `uTestBit` dst = False	-- destination is occupied by me
     | Busy col fig <- tabla p src,
       col == mc,
       fig == movePiece m =
          if moveIsNormal m
-            then canMove fig p src dst
-            else specialMoveIsLegal p m
+            then canMove fig p src dst	-- figure can move like that
+            else specialMoveIsLegal p m	-- special move legality check
     | otherwise = False
     where src = fromSquare m
           dst = toSquare m
@@ -466,7 +488,8 @@ canMove Pawn p src dst
     | otherwise = pAttacs col src `uTestBit` dst
     where col = moving p
           pw = uBit src
-canMove fig p src dst = fAttacs src fig (occup p) `uTestBit` dst
+canMove King p src dst = kAttacs src `uTestBit` dst && not (yoAttacs p `uTestBit` dst)
+canMove fig p src dst  = fAttacs src fig (occup p) `uTestBit` dst
 
 -- See http://stackoverflow.com/questions/47981/how-do-you-set-clear-and-toggle-a-single-bit-in-c-c
 -- I combined "Checking a bit" with "Changing the nth bit to x"
@@ -495,7 +518,7 @@ doFromToMove :: Move -> MyPos -> MyPos
 doFromToMove m !p | moveIsNormal m
     = updatePos p {
           black = tblack, slide = tslide, kkrq  = tkkrq,  diag  = tdiag,
-          epcas = tepcas, zobkey = tzobkey, mater = tmater
+          epcas = tepcas, zobkey = tzobkey, mater = tmater, mmove = Just m
       }
     where src = fromSquare m
           dst = toSquare m
@@ -533,7 +556,7 @@ doFromToMove m !p | moveIsNormal m
 doFromToMove m !p | moveIsEnPas m
     = updatePos p {
           black = tblack, slide = tslide, kkrq  = tkkrq,  diag  = tdiag,
-          epcas = tepcas, zobkey = tzobkey, mater = tmater
+          epcas = tepcas, zobkey = tzobkey, mater = tmater, mmove = Just m
       }
     where src = fromSquare m
           dst = toSquare m
@@ -557,7 +580,7 @@ doFromToMove m !p | moveIsEnPas m
 doFromToMove m !p | moveIsCastle m
     = updatePos p {
           black = tblack, slide = tslide, kkrq  = tkkrq,  diag  = tdiag,
-          epcas = tepcas, zobkey = tzobkey, mater = tmater
+          epcas = tepcas, zobkey = tzobkey, mater = tmater, mmove = Just m
       }
     where src = fromSquare m
           dst = toSquare m
@@ -592,7 +615,7 @@ doFromToMove m !p | moveIsCastle m
 doFromToMove m !p | moveIsPromo m
     = updatePos p0 {
           black = tblack, slide = tslide, kkrq = tkkrq, diag = tdiag,
-          epcas = tepcas, zobkey = tzobkey, mater = tmater
+          epcas = tepcas, zobkey = tzobkey, mater = tmater, mmove = Just m
       }
     where col = moving p	-- the new coding does not have correct fromSquare in promotion
           srank = if col == White then 6 else 1
@@ -618,7 +641,7 @@ doFromToMove m !p | moveIsPromo m
 doFromToMove _ _ = error "doFromToMove: wrong move type"
 
 reverseMoving :: MyPos -> MyPos
-reverseMoving p = updatePos p { epcas = tepcas, zobkey = z }
+reverseMoving p = updatePos p { epcas = tepcas, zobkey = z, mmove = Nothing }
     where tepcas = moveAndClearEp $ epcas p
           !epcl = epClrZob $ epcas p
           !zk = zobkey p `xor` epcl
@@ -819,7 +842,8 @@ perCaptFieldWL pos mypc advdefence sq mvlst
     | otherwise = let mvlst1 = foldr (perCaptWL pos myAttRec False pcto valto sq) mvlst  reAgrsqs
                   in           foldr (perCaptWL pos myAttRec True  pcto valto sq) mvlst1 prAgrsqs
     where !myAttRec = theAttacs pos sq
-          myattacs = mypc .&. atAtt myAttRec
+          myattacs | hanging   = mypc .&. atAtt myAttRec
+                   | otherwise = mypc .&. atAtt myAttRec `less` kings pos
           Busy _ pcto = tabla pos sq
           valto = seeValue pcto
           hanging = not (advdefence `testBit` sq)

@@ -9,7 +9,7 @@ module Moves.Base (
     posToState, getPos, posNewSearch,
     doRealMove, doMove, doQSMove, doNullMove, undoMove,
     genMoves, genTactMoves, genEscapeMoves, canPruneMove,
-    tacticalPos, zugZwang, isMoveLegal, isKillCand, isTKillCand,
+    zugZwang, isMoveLegal, isKillCand, isTKillCand,
     betaCut, ttRead, ttStore, curNodes, isTimeout, informCtx,
     mateScore, scoreDiff, qsDelta,
     draftStats,
@@ -138,10 +138,6 @@ checkGenMove p m@(Move w)
                             ++ showHex w (" in pos\n" ++ showMyPos p)
 --}
 
-showMyPos :: MyPos -> String
-showMyPos p = showTab (black p) (slide p) (kkrq p) (diag p) ++ "================ " ++ mc ++ "\n"
-    where mc = if moving p == White then "w" else "b"
-
 {-# INLINE uBitSet #-}
 uBitSet :: BBoard -> Int -> Bool
 uBitSet bb sq = bb .&. uBit sq /= 0
@@ -161,7 +157,7 @@ doRealMove m = do
         -- Capturing one king?
         kc = kings pc `uBitSet` toSquare m1
         p' = doFromToMove m1 pc
-        cok = checkOk p'
+        -- cok = checkOk p'
     -- If the move is real and one of those conditions occur,
     -- then we are really in trouble...
     if (il || kc)
@@ -172,7 +168,8 @@ doRealMove m = do
            logMes $ "Stack:\n" ++ showStack 3 (stack s)
            -- After an illegal result there must be no undo!
            return Illegal
-       else if not cok
+       -- else if not cok
+       else if leftInCheck p' (fromSquare m)
                then return Illegal
                else do
                    put s { stack = p' : stack s }
@@ -197,7 +194,8 @@ doMove m = do
            logMes $ "Stack:\n" ++ showStack 3 (stack s)
            -- After an illegal result there must be no undo!
            return Illegal
-       else if not $ checkOk p
+       -- else if not $ checkOk p
+       else if leftInCheck p (fromSquare m)
                then return Illegal
                else do
                    put s { stack = p : stack s }
@@ -218,7 +216,8 @@ doQSMove m = do
     let (pc:_) = stack s	-- we never saw an empty stack error until now
         sts = posEval p (evalst s)
         p   = doFromToMove m pc { staticScore = sts }
-    if not $ checkOk p
+    -- if not $ checkOk p
+    if leftInCheck p (fromSquare m)
        then return False
        else do
            put s { stack = p : stack s }
@@ -287,12 +286,6 @@ validPawnThreat :: MyPos -> MyPos -> Bool
 validPawnThreat p1 p2 = mvpaw .&. yoAttacs p2 /= 0 || mvpaw .&. myAttacs p2 == 0
     where !mvpaw = yo p2 `less` me p1
 --}
-
--- Tactical positions will be searched complete in quiescent search
--- Currently only when in check
-{-# INLINE tacticalPos #-}
-tacticalPos :: MyPos -> Bool
-tacticalPos = (/= 0) . check
 
 {-# INLINE zugZwang #-}
 zugZwang :: MyPos -> Bool
@@ -413,9 +406,6 @@ isTimeout :: Int -> Game Bool
 isTimeout msx = do
     curr <- lift timeFromContext
     return $! msx < curr
-
-showStack :: Int -> [MyPos] -> String
-showStack n = concatMap showMyPos . take n
 
 talkToContext :: Comm -> CtxIO ()
 talkToContext (LogMes s)       = ctxLog LogInfo s
