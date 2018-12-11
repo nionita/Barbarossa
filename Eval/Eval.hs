@@ -212,10 +212,10 @@ fadd (Flc f1 q1) (Flc f2 q2) = Flc (f1+f2) (q1+q2)
 
 ksSide :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
 ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
+    | myq  == 0 = cyokt * cyokt * cyokt
     | yokt == 0 = 0
-    | myq == 0  = cyokt * cyokt * cyokt
     | otherwise = ksSideQ yop yok myp myn myb myr myq myk mya
-    where yokt = yok .&. mya
+    where yokt  = yok .&. mya
           cyokt = popCount yokt
 
 -- c == 0 is already covered in ksSide through yokt == 0, i.e. no king area attack
@@ -223,32 +223,32 @@ ksSideQ :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard ->
 ksSideQ yop yok myp myn myb myr myq myk mya = katScore yop yok mya c q
     where qual a p
               | yoka == 0 = Flc 0 0
-              | y == 1    = Flc 1 p
-              | y == 2    = Flc 1 (p `unsafeShiftL` 1)
-              | y == 3    = Flc 1 (p `unsafeShiftL` 2)
-              | otherwise = Flc 1 (p `unsafeShiftL` 3)
-              where !yoka = yok .&. a
+              | otherwise = Flc 1 (p * y)
+              where yoka = yok .&. a
                     y = popCount yoka
-          -- qualWeights = [1, 2, 2, 4, 8, 2]
-          !qp = qual myp 1
-          !qn = qual myn 2
-          !qb = qual myb 2
-          !qr = qual myr 4
-          !qq = qual myq 9
-          !qk = qual myk 3
-          !(Flc c q) = fadd qp $ fadd qn $ fadd qb $ fadd qr $ fadd qq qk
+          -- !qp = qual myp 1
+          -- !qn = qual myn 2
+          -- !qb = qual myb 2
+          -- !qr = qual myr 4
+          -- !qq = qual myq 8
+          -- !qk = qual myk 2
+          -- !(Flc c q) = fadd qp $ fadd qn $ fadd qb $ fadd qr $ fadd qq qk
+          -- This foldr is nice inlined and produces similar code to the manual one above
+          !(Flc c q) = foldr (fadd . uncurry qual) (Flc 0 0)
+                             $ zip [myp, myn, myb, myr, myq, myk] qualWeights
+          qualWeights =            [  1,   2,   2,   4,   8,   2]
 
 -- This will be inlined and produces well optimized code
 katScore :: BBoard -> BBoard -> BBoard -> Int -> Int -> Int
-katScore yop yok mya c q = min maxks $ ixt * (ixt + 1)
+katScore yop yok mya c q = min maxks $ ixt * ixt
     where -- where !freey = popCount $ yok `less` (mya .|. yop)
           --       !conce = popCount $ yok .&. mya
           -- This is equivalent to:
-          freco = popCount $ yok `less` (yop `less` mya)
+          freco = popCount $ yok .&. (complement yop .|. mya)
           ixm = c * q `unsafeShiftR` 2
           ixt = ixm + c + ksShift - freco
           ksShift = 13
-          maxks = 3800
+          maxks = 4000
 
 kingSquare :: BBoard -> BBoard -> Square
 kingSquare kingsb colorp = firstOne $ kingsb .&. colorp
