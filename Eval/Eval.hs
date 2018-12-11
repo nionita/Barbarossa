@@ -212,13 +212,15 @@ fadd (Flc f1 q1) (Flc f2 q2) = Flc (f1+f2) (q1+q2)
 
 ksSide :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
 ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
-    | myq == 0  = 0
+    | yokt == 0 = 0
+    | myq == 0  = cyokt * cyokt * cyokt
     | otherwise = ksSideQ yop yok myp myn myb myr myq myk mya
+    where yokt = yok .&. mya
+          cyokt = popCount yokt
 
+-- c == 0 is already covered in ksSide through yokt == 0, i.e. no king area attack
 ksSideQ :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
-ksSideQ yop yok myp myn myb myr myq myk mya
-    | c == 0    = 0
-    | otherwise = katScore yop yok mya c q
+ksSideQ yop yok myp myn myb myr myq myk mya = katScore yop yok mya c q
     where qual a p
               | yoka == 0 = Flc 0 0
               | y == 1    = Flc 1 p
@@ -232,8 +234,8 @@ ksSideQ yop yok myp myn myb myr myq myk mya
           !qn = qual myn 2
           !qb = qual myb 2
           !qr = qual myr 4
-          !qq = qual myq 8
-          !qk = qual myk 2
+          !qq = qual myq 9
+          !qk = qual myk 3
           !(Flc c q) = fadd qp $ fadd qn $ fadd qb $ fadd qr $ fadd qq qk
 
 -- This will be inlined and produces well optimized code
