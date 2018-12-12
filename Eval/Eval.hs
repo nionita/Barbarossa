@@ -785,15 +785,15 @@ passPawns !gph ep p !ew mide = mad mide (ewPassPawnLev ew) dpp
 -- - does it has a rook behind?
 perPassedPawn :: Int -> EvalParams -> MyPos -> Color -> Square -> Int
 perPassedPawn !gph ep p c sq
-    | attacked && not defended
+    | attd && not defd
         && c /= moving p = epPassMin ep	-- but if we have more than one like that?
     | otherwise          = perPassedPawnOk gph ep p c sq sqbb moi toi moia toia
     where !sqbb = 1 `unsafeShiftL` sq
           (!moi, !toi, !moia, !toia)
                | moving p == c = (me p, yo p, myAttacs p, yoAttacs p)
                | otherwise     = (yo p, me p, yoAttacs p, myAttacs p)
-          !defended = moia .&. sqbb /= 0
-          !attacked = toia .&. sqbb /= 0
+          !defd = moia .&. sqbb /= 0
+          !attd = toia .&. sqbb /= 0
 
 perPassedPawnOk :: Int -> EvalParams -> MyPos -> Color -> Square -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
 perPassedPawnOk !gph ep p c sq sqbb moi toi moia toia = val

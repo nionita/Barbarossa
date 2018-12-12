@@ -9,7 +9,7 @@ module Moves.Base (
     posToState, getPos, posNewSearch,
     doRealMove, doMove, doQSMove, doNullMove, undoMove,
     genMoves, genTactMoves, genEscapeMoves, canPruneMove,
-    zugZwang, isMoveLegal, isKillCand, isTKillCand,
+    zugZwang, isKillCand, isTKillCand,
     betaCut, ttRead, ttStore, curNodes, isTimeout, informCtx,
     mateScore, scoreDiff, qsDelta,
     draftStats,
@@ -32,6 +32,7 @@ import Struct.Context
 import Struct.Status
 import Hash.TransTab
 import Moves.Board
+import Moves.Fen (testAttacksCalculation)
 import Moves.BitBoard (less, uBit)
 import Eval.BasicEval
 import Eval.Eval
@@ -169,7 +170,7 @@ doRealMove m = do
            -- After an illegal result there must be no undo!
            return Illegal
        -- else if not cok
-       else if leftInCheck p' (fromSquare m)
+       else if leftInCheck p'
                then return Illegal
                else do
                    put s { stack = p' : stack s }
@@ -195,9 +196,11 @@ doMove m = do
            -- After an illegal result there must be no undo!
            return Illegal
        -- else if not $ checkOk p
-       else if leftInCheck p (fromSquare m)
+       else if leftInCheck p
                then return Illegal
                else do
+                   testAttacks p
+                   -- debugAttacks p
                    put s { stack = p : stack s }
                    remis <- checkRemisRules p
                    if remis
@@ -205,6 +208,29 @@ doMove m = do
                       else if captOrPromo pc m
                               then return $! Exten (exten pc p) True True
                               else return $! Exten (exten pc p) False (noLMR pc m)
+
+debugAttacks :: MyPos -> Game ()
+debugAttacks p = do
+    logMes $ "Debug position:\n" ++ showMyPos p
+    logMes "Logbook:"
+    forM_ (logbook p) $ \l -> logMes l
+
+testAttacks :: MyPos -> Game ()
+testAttacks p = do
+    let mae = testAttacksCalculation p
+    case mae of
+        Nothing     -> return ()
+        Just (c, f, d, sbs) -> do
+            s <- get
+            logMes $ "Wrong attack calculation"
+            logMes $ "Correct:\n" ++ showBB c
+            logMes $ "Wrong:\n" ++ showBB f
+            logMes $ "Difference:\n" ++ showBB d
+            logMes $ "Difference per square:"
+            forM_ sbs $ \(sq, bb) -> logMes ("Square " ++ show sq ++ ":\n" ++ showBB bb)
+            logMes $ "In position:\n" ++ showMyPos p
+            -- logMes $ "Stack:\n" ++ showStack 2 (stack s)
+            forM_ (take 2 (stack s)) debugAttacks
 
 -- Move from a node to a descendent - the QS search version
 -- Here we do only a restricted check for illegal moves
@@ -217,7 +243,7 @@ doQSMove m = do
         sts = posEval p (evalst s)
         p   = doFromToMove m pc { staticScore = sts }
     -- if not $ checkOk p
-    if leftInCheck p (fromSquare m)
+    if leftInCheck p
        then return False
        else do
            put s { stack = p : stack s }
@@ -290,10 +316,6 @@ validPawnThreat p1 p2 = mvpaw .&. yoAttacs p2 /= 0 || mvpaw .&. myAttacs p2 == 0
 {-# INLINE zugZwang #-}
 zugZwang :: MyPos -> Bool
 zugZwang p = me p `less` (kings p .|. pawns p) == 0
-
-{-# INLINE isMoveLegal #-}
-isMoveLegal :: MyPos -> Move -> Bool
-isMoveLegal = legalMove
 
 -- Why not just like isTKillCand?
 {-# INLINE isKillCand #-}

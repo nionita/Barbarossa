@@ -4,8 +4,7 @@ module Moves.Moves (
     fAttacs,
     pMovs,
     kAttacs, qAttacs, rAttacs, bAttacs, nAttacs,
-    pAll1Moves, pAll2Moves,
-    getAlignedDiag, getAlignedRoCo
+    pAll1Moves, pAll2Moves
     ) where
 
 import Data.Array.Base
@@ -145,15 +144,4 @@ fAttacs sq Rook   !oc = rAttacs oc sq
 fAttacs sq Queen  !oc = qAttacs oc sq
 fAttacs sq King   _   = kAttacs    sq
 fAttacs sq Knight _   = nAttacs    sq
-fAttacs _  _      _  = 0	-- this would be for pawn, which is calculated different
-
--- We want to know if 2 squares are aligned on a diagonal or line/column
--- Tipically we have the square (Int) and a bitboard with some pieces (for example kings
--- or sliders)
-alignedDiag, alignedRoCo :: UArray Int BBoard
-alignedDiag = listArray (0, 63) $ map (bAttacs 0) [0..63]
-alignedRoCo = listArray (0, 63) $ map (rAttacs 0) [0..63]
-
-getAlignedDiag, getAlignedRoCo :: Int -> BBoard -> BBoard
-getAlignedDiag s bb = (alignedDiag `unsafeAt` s) .&. bb
-getAlignedRoCo s bb = (alignedRoCo `unsafeAt` s) .&. bb
+fAttacs _  _      _   = 0	-- this would be for pawn, which is calculated different

@@ -1,8 +1,16 @@
 {-# LANGUAGE BangPatterns #-}
 module Moves.Fen (
-    posFromFen, initPos, updatePos, setPiece
+    posFromFen, initPos, updatePos, setPiece, testAttacksCalculation
     ) where
 
+import Data.Array.IArray
+import Data.Array.MArray
+import Data.Array.Unsafe (unsafeFreeze)
+import Data.Array.Base (unsafeAt)
+import Control.Monad (when, forM_)
+import Control.Monad.ST (ST, runST)
+import Data.STRef
+import Data.Array.ST
 import Data.Bits
 import Data.Char
 import Data.List (tails)
@@ -12,6 +20,7 @@ import Struct.Struct
 import Moves.Moves
 import Moves.BitBoard
 import Moves.Pattern
+import Moves.ShowMe
 import Eval.BasicEval
 import Hash.Zobrist
 
@@ -45,7 +54,7 @@ initPos :: MyPos
 initPos = posFromFen startFen
 
 posFromFen :: String -> MyPos
-posFromFen fen = updatePos p { epcas = x, zobkey = zk }
+posFromFen fen = updatePos Nothing p { epcas = x, zobkey = zk }
     where fen1:fen2:fen3:fen4:fen5:_ = fenFromString fen
           p  = fenToTable fen1
           x  = fyInit . castInit . epInit $ epcas0
@@ -84,14 +93,20 @@ fenFromString fen = zipWith ($) fenfuncs fentails
           getFenHalf = headOrDefault "0"
           getFenMvNo = headOrDefault "0"
 
-updatePos :: MyPos -> MyPos
-updatePos !p = p {
+updatePos :: Maybe BBoard -> MyPos -> MyPos
+updatePos mbb !p = p {
                   occup = toccup, me = tme, yo = tyo, kings  = tkings,
                   pawns = tpawns, knights = tknights, queens = tqueens,
                   rooks = trooks, bishops = tbishops, passed = tpassed,
-                  lazyBits = lzb
+                  attacks = tattacks, attacked = tattacked, lazyBits = lzb, logbook = tlog
                }
-    where !toccup = kkrq p .|. diag p
+    where (tattacks, tattacked, tlog) = case mbb of
+              Just cha -> updateAttacks (slide p)
+                              toccup twpawns tbpawns tknights tbishops trooks tqueens tkings
+                              cha (attacks p) (attacked p)
+              Nothing ->  recalcAttacks toccup
+                              twpawns tbpawns tknights tbishops trooks tqueens tkings
+          !toccup = kkrq p .|. diag p
           !tkings = kkrq p .&. diag p `less` slide p
           !twhite = toccup `less` black p
           (!tme, !tyo) | moving p == White = (twhite, black p)
@@ -147,6 +162,99 @@ posLazy !co !ocp !tblack !tpawns !tknights !tbishops !trooks !tqueens !tkings
           !whcheck = white  .&. tkings .&. tblAttacs
           !blcheck = tblack .&. tkings .&. twhAttacs
           !tcheck = whcheck .|. blcheck
+
+-- Just to test the incremental attacks update
+-- Not an exhaustive test
+testAttacksCalculation :: MyPos -> Maybe (BBoard, BBoard, BBoard, [(Square, BBoard)])
+testAttacksCalculation p
+    | myAttacs p /= myatts = Just (myAttacs p, myatts, diffs, froms)
+    | otherwise            = Nothing
+    where myatts = bbToSquaresBB (unsafeAt $ attacks p) $ me p
+          diffs = myAttacs p `xor` myatts
+          froms = map (\s -> (s, (attacked p `unsafeAt` s) .&. me p)) $ bbToSquares diffs
+
+recalcAttacks :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard
+              -> (MaArray, MaArray, [String])
+recalcAttacks toccup twpawns tbpawns tknights tbishops trooks tqueens tkings
+    = (rattacks, rattacked, [])
+    where nlist = map (\s -> (s, nAttacs s))        $ bbToSquares tknights
+          klist = map (\s -> (s, kAttacs s))        $ bbToSquares tkings
+          pwist = map (\s -> (s, pAttacs White s))  $ bbToSquares twpawns
+          pbist = map (\s -> (s, pAttacs Black s))  $ bbToSquares tbpawns
+          blist = map (\s -> (s, bAttacs toccup s)) $ bbToSquares tbishops
+          rlist = map (\s -> (s, rAttacs toccup s)) $ bbToSquares trooks
+          qlist = map (\s -> (s, rAttacs toccup s
+                             .|. bAttacs toccup s)) $ bbToSquares tqueens
+          rattacks = zeroArray // concat [nlist, klist, pwist, pbist, blist, rlist, qlist]
+          rattacked = calcAttacked rattacks
+          zeroArray = listArray (0, 63) $ repeat 0
+
+-- Recompute the whole attacked array
+calcAttacked :: MaArray -> MaArray
+calcAttacked arr
+    = runSTUArray $ do
+        tarr <- newArray (0, 63) 0
+        forM_ (assocs arr) $ \(s, bb) -> when (bb /= 0) $ do
+            let sb = uBit s
+            forM_ (bbToSquares bb) $ \d -> do
+                v <- readArray tarr d
+                writeArray tarr d (v .|. sb)
+        return tarr
+
+-- Update the attacks/attacked arrays
+-- cha is the bitboard of added/removed pieces during the move
+-- out is the array of attacks from every square
+-- ins is the array of attackedBy to every square
+updateAttacks :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard
+              -> BBoard -> BBoard -> BBoard -> MaArray -> MaArray
+              -> (MaArray, MaArray, [String])
+updateAttacks tslide toccup twpawns tbpawns tknights tbishops trooks tqueens tkings cha out ins
+    = runST $ do
+        logRef <- newSTRef []
+        let logger s = modifySTRef logRef $ \l -> s : l
+        -- logger $ "Occup:\n" ++ showBB toccup
+        logger $ "Move BB:\n" ++ showBB cha
+        -- The new out & ins (take a copy)
+        nout <- (thaw out) :: ST s (STUArray s Int BBoard)
+        nins <- (thaw ins) :: ST s (STUArray s Int BBoard)
+        -- These squares are blocked/deblocked by adding/removing the pieces
+        let blckd = tslide .&. bbToSquaresBB (unsafeAt ins) cha
+            arebb = cha .|. blckd	-- for those we need an attack recalculation
+            pcfs = [
+                     (twpawns,  pAttacs White),
+                     (tbpawns,  pAttacs Black),
+                     (tknights, nAttacs),
+                     (tbishops, bAttacs toccup),
+                     (trooks,   rAttacs toccup),
+                     (tqueens,  qAttacs toccup),
+                     (tkings,   kAttacs),
+                     (complement toccup, const 0)	-- no attacks from empty leaved squares
+                   ]
+        logger $ "Arebb:\n" ++ showBB arebb
+        -- For every piece type existing in the attack recalculation bitboard...
+        forM_ pcfs $ \(bb, func) -> do
+            -- and every piece of that type
+            forM_ (bbToSquares $ arebb .&. bb) $ \sq -> do
+                let oatc = out `unsafeAt` sq	-- old attacks from that square
+                    natc = func sq		-- new attacks from that square
+                writeArray nout sq natc
+                logger $ "New attacks from square " ++ show sq ++ ":\n" ++ showBB natc
+                let sqbb = uBit sq
+                    ains = natc `less` oatc	-- added attackedBy from this square
+                forM_ (bbToSquares ains) $ \s -> do
+                    obb <- readArray nins s
+                    writeArray nins s (obb .|. sqbb)	-- add sq to the attackedBy of s
+                    logger $ "Add " ++ show sq ++ " to attacked of " ++ show s
+                let sqdd = complement sqbb
+                    dins = oatc `less` natc	-- deleted attackedBy from this square
+                forM_ (bbToSquares dins) $ \s -> do
+                    obb <- readArray nins s
+                    writeArray nins s (obb .&. sqdd)	-- delete sq from the attackedBy of s
+                    logger $ "Remove " ++ show sq ++ " from attacked of " ++ show s
+        noutf <- unsafeFreeze nout
+        ninsf <- unsafeFreeze nins
+        finlog <- readSTRef logRef
+        return (noutf, ninsf, reverse finlog)
 
 -- Passed pawns: only with bitboard operations
 whitePassed :: BBoard -> BBoard -> BBoard

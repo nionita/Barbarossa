@@ -20,7 +20,7 @@ import Struct.Struct
 import Moves.BaseTypes
 import Moves.Base
 import Moves.Fen (initPos)
-import Moves.Board (inCheck)
+import Moves.Board (inCheck, legalMove)
 
 absurd :: String -> Game ()
 absurd s = logmes $ "Absurd: " ++ s	-- used for messages when assertions fail
@@ -803,7 +803,7 @@ genAndSort nst mttmv a b d = do
                               then bestMoveFromIID nst a b d	-- it will do nothing for AllNode
                               else return []		-- if not null
     lift $ do
-        let kl = filter (isMoveLegal (cpos nst)) $ killerToList (killer nst)
+        let kl = filter (legalMove (cpos nst)) $ killerToList (killer nst)
         esp <- genMoves d
         let es = bestFirst path kl esp
         return $ Alt es

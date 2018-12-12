@@ -332,20 +332,14 @@ checkOk p = yo p .&. kings p .&. myAttacs p == 0
 -- This is the first calculation we do on the new position, so we don't have the
 -- new attacks, and this is the method to check if the king of the moving color
 -- was left in check
--- Params:
--- - the position after the move
--- - the starting square of the move
 {-# INLINE leftInCheck #-}
-leftInCheck :: MyPos -> Square -> Bool
-leftInCheck p sq
-    -- | uBit sq .&. mkbb == 0       = False	-- moving the king should be always legal
-    | uBit sq .&. mkbb == 0       = bAttacs (occup p) ksq .&. me p .&. (bishops p .|. queens p) /= 0
-                                 || rAttacs (occup p) ksq .&. me p .&. (rooks   p .|. queens p) /= 0
-    | getAlignedDiag sq mkbb /= 0 = bAttacs (occup p) ksq .&. me p .&. (bishops p .|. queens p) /= 0
-    | getAlignedRoCo sq mkbb /= 0 = rAttacs (occup p) ksq .&. me p .&. (rooks   p .|. queens p) /= 0
-    | otherwise                   = False
-    where mkbb = kings p .&. yo p	-- moving king bitboard (the moving side is already reverted)
-          ksq  = firstOne mkbb
+leftInCheck :: MyPos -> Bool
+leftInCheck p
+    =  me p .&. (bishops p .|. queens p) /= 0
+       && bAttacs (occup p) ksq .&. me p .&. (bishops p .|. queens p) /= 0
+    || me p .&. (rooks   p .|. queens p) /= 0
+       && rAttacs (occup p) ksq .&. me p .&. (rooks   p .|. queens p) /= 0
+    where ksq = firstOne $ kings p .&. yo p
 
 data ChangeAccum = CA !ZKey !Int
 
@@ -516,7 +510,7 @@ epSetZob = zobEP . (.&. 0x7)
 -- Copy one square to another and clear the source square
 doFromToMove :: Move -> MyPos -> MyPos
 doFromToMove m !p | moveIsNormal m
-    = updatePos p {
+    = updatePos (Just (srcbb .|. dstbb)) p {
           black = tblack, slide = tslide, kkrq  = tkkrq,  diag  = tdiag,
           epcas = tepcas, zobkey = tzobkey, mater = tmater, mmove = Just m
       }
@@ -554,7 +548,7 @@ doFromToMove m !p | moveIsNormal m
                                  ++ "resulting pos:\n"
                                  ++ showTab tblack tslide tkkrq tdiag
 doFromToMove m !p | moveIsEnPas m
-    = updatePos p {
+    = updatePos (Just (uBit src .|. uBit dst .|. bdel)) p {
           black = tblack, slide = tslide, kkrq  = tkkrq,  diag  = tdiag,
           epcas = tepcas, zobkey = tzobkey, mater = tmater, mmove = Just m
       }
@@ -578,7 +572,7 @@ doFromToMove m !p | moveIsEnPas m
                                 accumMoving p
                             ]
 doFromToMove m !p | moveIsCastle m
-    = updatePos p {
+    = updatePos (Just (srcbb .|. uBit dst .|. uBit csr .|. uBit cds)) p {
           black = tblack, slide = tslide, kkrq  = tkkrq,  diag  = tdiag,
           epcas = tepcas, zobkey = tzobkey, mater = tmater, mmove = Just m
       }
@@ -613,7 +607,7 @@ doFromToMove m !p | moveIsCastle m
                                 accumMoving p
                             ]
 doFromToMove m !p | moveIsPromo m
-    = updatePos p0 {
+    = updatePos (Just (uBit src .|. dstbb)) p0 {
           black = tblack, slide = tslide, kkrq = tkkrq, diag = tdiag,
           epcas = tepcas, zobkey = tzobkey, mater = tmater, mmove = Just m
       }
@@ -641,7 +635,7 @@ doFromToMove m !p | moveIsPromo m
 doFromToMove _ _ = error "doFromToMove: wrong move type"
 
 reverseMoving :: MyPos -> MyPos
-reverseMoving p = updatePos p { epcas = tepcas, zobkey = z, mmove = Nothing }
+reverseMoving p = updatePos Nothing p { epcas = tepcas, zobkey = z, mmove = Nothing }
     where tepcas = moveAndClearEp $ epcas p
           !epcl = epClrZob $ epcas p
           !zk = zobkey p `xor` epcl
@@ -759,7 +753,7 @@ data SEEPars = SEEPars {
 -- the source square of the first capture, the destination of the captures
 -- and the value of the first captured piece
 seeMoveValue :: MyPos -> Attacks -> Square -> Square -> Int -> Int
-seeMoveValue pos !attacks sqfirstmv sqto gain0 = v
+seeMoveValue pos !attrec sqfirstmv sqto gain0 = v
     where v = go sp0 [gain0]
           go :: SEEPars -> [Int] -> Int
           go seepars acc =
@@ -790,7 +784,7 @@ seeMoveValue pos !attacks sqfirstmv sqto gain0 = v
           !mayXRay = pawns pos .|. bishops pos .|. rooks pos .|. queens pos  -- could be calc.
           posXRay = xrayAttacs pos sqto  -- only once, as it is per pos (but it's cheap anyway)
           !moved0 = uBit sqfirstmv
-          attacs0 = newAttacs sqto moved0 attacks
+          attacs0 = newAttacs sqto moved0 attrec
           (!from0, !valfrom) = chooseAttacker pos (atAtt attacs0 .&. yo pos)
           sp0 = SEEPars { seeGain = gain0, seeVal = valfrom, seeAtts = atAtt attacs0,
                           seeFrom = from0, seeMovd = moved0, seeDefn = yo pos, seeAgrs = me pos,
@@ -865,7 +859,7 @@ approximateEasyCapts = True	-- when capturing a better piece: no SEE, it is alwa
 
 perCaptWL :: MyPos -> Attacks -> Bool -> Piece -> Int -> Square -> Square
           -> ([LMove], [LMove]) -> ([LMove], [LMove])
-perCaptWL !pos !attacks promo vict !gain0 !sq !sqfa (wsqs, lsqs)
+perCaptWL !pos !attrec promo vict !gain0 !sq !sqfa (wsqs, lsqs)
     | promo = ((moveToLMove Pawn vict $ makePromo Queen sqfa sq) : wsqs, lsqs)
     | approx || adv <= gain0 = (ss:wsqs, lsqs)
     | otherwise = (wsqs, ss:lsqs)
@@ -873,7 +867,7 @@ perCaptWL !pos !attacks promo vict !gain0 !sq !sqfa (wsqs, lsqs)
           approx = approximateEasyCapts && gain0 >= v0
           Busy _ attc = tabla pos sqfa
           v0  = seeValue attc
-          adv = seeMoveValue pos attacks sqfa sq v0
+          adv = seeMoveValue pos attrec sqfa sq v0
 
 -- Captures of hanging pieces are always winning
 addHanging :: MyPos -> Piece -> Square -> Square -> ([LMove], [LMove]) -> ([LMove], [LMove])

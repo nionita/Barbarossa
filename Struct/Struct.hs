@@ -21,6 +21,7 @@ import Data.Array.Base
 import Data.Char (ord, chr)
 import Data.Word
 import Data.Bits
+-- import qualified Data.Vector.Unboxed as U
 import Numeric
 
 -- The very basic data types used in the modules
@@ -49,6 +50,8 @@ data MyPos = MyPos {
     mater :: !Int,		-- material balance
     mmove :: Maybe Move,	-- move leading to this position
     staticScore :: Int,		-- lazy, not always needed
+    attacks, attacked :: MaArray,	-- BBoard arrays for attacks
+    logbook :: [String],		-- used for debugging
     lazyBits :: LazyBits	-- lazy of course
     }
 
@@ -202,15 +205,17 @@ emptyPos = MyPos {
         zobkey = 0, mater = 0, mmove = Nothing,
         me = 0, yo = 0, occup = 0, kings = 0, pawns = 0,
         queens = 0, rooks = 0, bishops = 0, knights = 0,
-        staticScore = 0, passed = 0, lazyBits = leb
+        staticScore = 0, passed = 0, lazyBits = leb,
+        attacks = zeroArray, attacked = zeroArray, logbook = []
     }
     where leb = LazyBits {
-        _myAttacs = 0, _yoAttacs = 0, _check = 0,
-        _myPAttacs = 0, _myNAttacs = 0, _myBAttacs = 0, _myRAttacs = 0,
-        _myQAttacs = 0, _myKAttacs = 0,
-        _yoPAttacs = 0, _yoNAttacs = 0, _yoBAttacs = 0, _yoRAttacs = 0,
-        _yoQAttacs = 0, _yoKAttacs = 0
-        }
+                  _myAttacs = 0, _yoAttacs = 0, _check = 0,
+                  _myPAttacs = 0, _myNAttacs = 0, _myBAttacs = 0, _myRAttacs = 0,
+                  _myQAttacs = 0, _myKAttacs = 0,
+                  _yoPAttacs = 0, _yoNAttacs = 0, _yoBAttacs = 0, _yoRAttacs = 0,
+                  _yoQAttacs = 0, _yoKAttacs = 0
+                }
+          zeroArray = listArray (0, 63) $ repeat 0
 
 -- Stuff related to 50 moves rule
 {-# INLINE isReversible #-}
