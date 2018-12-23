@@ -33,7 +33,7 @@ import Moves.Board (posFromFen, initPos)
 import Moves.History
 import Moves.Notation
 import Search.CStateMonad (runCState)
-import Eval.FileParams (makeEvalState)
+import Eval.FileParams (makeEvalRO)
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -123,7 +123,7 @@ initContext opts = do
     hi <- newHist
     let paramList = stringToParams $ concat $ intersperse "," $ optParams opts
     -- putStrLn "Before eval state"
-    (parc, evs) <- makeEvalState (optConfFile opts) paramList "progver" "progsuf"
+    (parc, evs) <- makeEvalRO (optConfFile opts) paramList "progver" "progsuf"
     -- putStrLn "eval state:"
     -- putStrLn $ show evs
     let chg = Chg {
@@ -257,7 +257,7 @@ serverMode fi n = do
             putStrLn $ "Accepting request from host " ++ host
             (params, _) <- accumLines False h (== endOfParams) (:) []
             let paramList = stringToParams $ concat $ intersperse "," params
-            (_, evs) <- makeEvalState Nothing paramList "progver" "progsuf"	-- no config file
+            (_, evs) <- makeEvalRO Nothing paramList "progver" "progsuf"	-- no config file
             return (h, evs)
         agr <- parallelAgregate ts (agregMVar $ Just es)
         liftIO $ hPutStrLn h $ serverPrefix ++ show (agrCumErr agr) ++ " " ++ show (agrCumNds agr)
@@ -322,7 +322,7 @@ makeMovePos crts mh fenLine = do
                        putStrLn $ "Illegal move"
                    return Nothing
 
-agregAll :: Maybe EvalState -> [(Move, MyState)] -> CtxIO Agreg
+agregAll :: Maybe EvalRO -> [(Move, MyState)] -> CtxIO Agreg
 agregAll mest = case mest of
     Nothing -> foldM agregPos mempty
     Just es -> foldM agregPos mempty . map (\(m, ms) -> (m, ms { evalst = es }))
@@ -332,7 +332,7 @@ agregPos agr (m, mystate) = do
     (e, s) <- runCState (searchTestPos m) mystate
     return $! aggregateError agr e (nodes $ stats s)
 
-agregMVar :: Maybe EvalState -> MVar Agreg -> [(Move, MyState)] -> CtxIO ()
+agregMVar :: Maybe EvalRO -> MVar Agreg -> [(Move, MyState)] -> CtxIO ()
 agregMVar mest mvar mss = do
     myd <- liftIO $ myThreadId
     liftIO $ putStrLn $ "Thread " ++ show myd ++ " started"
@@ -539,7 +539,7 @@ data TestPos = TP ABPos [ABPos]
 -- 2. derivate by hand for the parameters
 -- 3. Write AD functions for eval
 -- For now we choose: 1 and 1 (the simplest resolution)
-objFunc :: Int -> EvalState -> [Double] -> [TestPos] -> (Double, [Double])
+objFunc :: Int -> EvalRO -> [Double] -> [TestPos] -> (Double, [Double])
 objFunc n est pars tps = (v, ds)
     where vds = map f tps
           v = sum $ map fst vds

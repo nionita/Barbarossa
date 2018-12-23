@@ -3,7 +3,7 @@
 
 module Struct.Status (
     MyState(..),
-    EvalState(..),
+    EvalRO(..),
     EvalParams(..),
     EvalWeights(..),
     MidEnd(..),
@@ -21,10 +21,10 @@ data MyState = MyState {
         hash   :: Cache,	-- transposition table
         hist   :: History,	-- history table
         mstats :: SStats,	-- per move search statistics
-        evalst :: EvalState	-- eval status (parameter & statistics)
+        evalst :: EvalRO	-- eval status (parameter & statistics)
     }
 
-data EvalState = EvalState {
+data EvalRO = EvalRO {
         esEParams   :: EvalParams,
         esEWeights  :: EvalWeights
     } deriving Show

@@ -63,7 +63,7 @@ getPos = gets (head . stack)
 informCtx :: Comm -> Game ()
 informCtx = lift . talkToContext
 
-posToState :: MyPos -> Cache -> History -> EvalState -> MyState
+posToState :: MyPos -> Cache -> History -> EvalRO -> MyState
 posToState p c h e = MyState {
                        stack = [p''],
                        hash = c,
@@ -158,7 +158,6 @@ doRealMove m = do
         -- Capturing one king?
         kc = kings pc `uBitSet` toSquare m1
         p' = doFromToMove m1 pc
-        -- cok = checkOk p'
     -- If the move is real and one of those conditions occur,
     -- then we are really in trouble...
     if (il || kc)
@@ -169,7 +168,6 @@ doRealMove m = do
            logMes $ "Stack:\n" ++ showStack 3 (stack s)
            -- After an illegal result there must be no undo!
            return Illegal
-       -- else if not cok
        else if leftInCheck p'
                then return Illegal
                else do
@@ -195,11 +193,10 @@ doMove m = do
            logMes $ "Stack:\n" ++ showStack 3 (stack s)
            -- After an illegal result there must be no undo!
            return Illegal
-       -- else if not $ checkOk p
        else if leftInCheck p
                then return Illegal
                else do
-                   testAttacks p
+                   -- testAttacks p
                    -- debugAttacks p
                    put s { stack = p : stack s }
                    remis <- checkRemisRules p
@@ -242,7 +239,6 @@ doQSMove m = do
     let (pc:_) = stack s	-- we never saw an empty stack error until now
         sts = posEval p (evalst s)
         p   = doFromToMove m pc { staticScore = sts }
-    -- if not $ checkOk p
     if leftInCheck p
        then return False
        else do

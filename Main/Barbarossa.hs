@@ -32,7 +32,7 @@ import Moves.Board (posFromFen, initPos)
 import Moves.History
 import Search.CStateMonad (execCState)
 import Search.AlbetaTypes
-import Eval.FileParams (makeEvalState)
+import Eval.FileParams (makeEvalRO)
 
 -- Name, author, version and suffix:
 progName, progVersion, progVerSuff, progAuthor :: String
@@ -104,7 +104,7 @@ initContext opts = do
     let paramList
             | null $ optParams opts = []
             | otherwise             = stringToParams $ concat $ intersperse "," $ optParams opts
-    (parc, evs) <- makeEvalState (optConfFile opts) paramList progVersion progVerSuff
+    (parc, evs) <- makeEvalRO (optConfFile opts) paramList progVersion progVerSuff
     let chg = Chg {
             working = False,
             compThread = Nothing,
@@ -342,7 +342,7 @@ doPosition fen mvs = do
           fenColor = movingColor fen
           myCol = if even (length mvs) then fenColor else other fenColor
 
-stateFromFen :: Pos -> Cache -> History -> EvalState -> (Maybe Int, MyState)
+stateFromFen :: Pos -> Cache -> History -> EvalRO -> (Maybe Int, MyState)
 stateFromFen StartPos  c h es = (Just 1,  posToState initPos c h es)
 stateFromFen (Pos fen) c h es = (Nothing, posToState (posFromFen fen) c h es)
 

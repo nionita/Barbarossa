@@ -1,5 +1,5 @@
 module Eval.FileParams (
-    makeEvalState,
+    makeEvalRO,
     fileToState
   ) where
 
@@ -7,35 +7,35 @@ module Eval.FileParams (
 import Data.List (tails, intersperse)
 import System.Directory
 
-import Struct.Status(EvalState)
+import Struct.Status(EvalRO)
 import Struct.Config
-import Eval.Eval (initEvalState)
+import Eval.Eval (initEvalRO)
 
 -- Opens a parameter file for eval, read it and create an eval state
-makeEvalState :: Maybe FilePath -> [(String, Double)] -> String -> String -> IO (FilePath, EvalState)
-makeEvalState argfile assigns pver psuff = do
-    -- putStrLn $ "makeEvalState: " ++ show argfile
+makeEvalRO :: Maybe FilePath -> [(String, Double)] -> String -> String -> IO (FilePath, EvalRO)
+makeEvalRO argfile assigns pver psuff = do
+    -- putStrLn $ "makeEvalRO: " ++ show argfile
     case argfile of
         Just afn -> do	-- config file as argument
             fex <- doesFileExist afn
-            if fex then filState afn afn assigns else error $ "makeEvalState: no such file: " ++ afn
+            if fex then filState afn afn assigns else error $ "makeEvalRO: no such file: " ++ afn
         Nothing  -> go $ configFileNames pver psuff
-    where defState = return ("", initEvalState assigns)
+    where defState = return ("", initEvalRO assigns)
           go [] = defState
           go (f:fs) = do
              fex <- doesFileExist f
              if fex then filState f "" assigns else go fs
 
-filState :: FilePath -> String -> [(String, Double)] -> IO (String, EvalState)
+filState :: FilePath -> String -> [(String, Double)] -> IO (String, EvalRO)
 filState fn ident ass = do
     est <- fileToState fn ass
     return (ident, est)
 
-fileToState :: FilePath -> [(String, Double)] -> IO EvalState
+fileToState :: FilePath -> [(String, Double)] -> IO EvalRO
 fileToState fn ass = do
     fCont <- readFile fn
     -- putStrLn $ "This is the file " ++ fn ++ ":" ++ fCont
-    let ies = initEvalState $ ass ++ fileToParams fCont
+    let ies = initEvalRO $ ass ++ fileToParams fCont
     -- putStrLn $ "This is state: " ++ show ies
     return ies
 

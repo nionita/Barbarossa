@@ -34,7 +34,7 @@ import Moves.Notation
 import Moves.History
 import Moves.Board (inCheck)
 import Search.CStateMonad (execCState)
-import Eval.FileParams (makeEvalState)
+import Eval.FileParams (makeEvalRO)
 -- import Eval.Eval	-- not yet needed
 import Uci.UciGlue
 
@@ -137,7 +137,7 @@ initContext opts = do
     ha <- newCache 1	-- it will take the minimum number of entries
     hi <- newHist
     let paramList = stringToParams $ concat $ intersperse "," $ optParams opts
-    (parc, evs) <- makeEvalState (optConfFile opts) paramList "progver" "progsuf"
+    (parc, evs) <- makeEvalRO (optConfFile opts) paramList "progver" "progsuf"
     let chg = Chg {
             working = False,
             compThread = Nothing,
@@ -223,8 +223,8 @@ matchFile opts dir = do
                     when (not ispos) $ loopCount (skipLines hi m) ()
                 Nothing -> return ()
             (eval1, eval2) <- liftIO $ do
-                (_, eval1) <- makeEvalState (Just id1) [] "progver" "progsuf"
-                (_, eval2) <- makeEvalState (Just id2) [] "progver" "progsuf"
+                (_, eval1) <- makeEvalRO (Just id1) [] "progver" "progsuf"
+                (_, eval2) <- makeEvalRO (Just id2) [] "progver" "progsuf"
                 return (eval1, eval2)
             when debug $ do
                 ctxLog LogInfo $ "Player 1 config: " ++ show eval1
@@ -346,8 +346,8 @@ oracleAndFeats depth hi _ho mn k () = do	-- not functional yet
            return (True, ())
 
 playEveryGame :: Int -> Handle -> Handle -> Maybe Int
-              -> (String, EvalState)	-- "player" 1
-              -> (String, EvalState)	-- "player" 2
+              -> (String, EvalRO)	-- "player" 1
+              -> (String, EvalRO)	-- "player" 2
               -> Int
               -> (Int, Int, Int)
               -> CtxIO (Bool, (Int, Int, Int))
@@ -485,7 +485,7 @@ autoPlayToEnd d pos = do
 --  0: remis
 -- +1: white wins
 -- -1: black wins
-playGame :: Int -> MyPos -> (String, EvalState) -> (String, EvalState) -> CtxIO GameResult
+playGame :: Int -> MyPos -> (String, EvalRO) -> (String, EvalRO) -> CtxIO GameResult
 playGame d pos (ide1, eval1) (ide2, eval2) = do
     ctxLog LogInfo $ "Setup new game between " ++ ide1 ++ " and " ++ ide2
     chg <- readChanging

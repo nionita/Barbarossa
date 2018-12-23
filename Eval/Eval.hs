@@ -4,10 +4,11 @@
 {-# LANGUAGE TypeFamilies #-}
 
 module Eval.Eval (
-    initEvalState,
+    initEvalRO,
     posEval
 ) where
 
+import Control.Monad.Trans.State.Strict
 import Data.Array.Base (unsafeAt)
 import Data.Bits
 import Data.List (minimumBy)
@@ -31,23 +32,30 @@ granCoarseM   = complement (granCoarse - 1)
 shift2Cp      = 3	-- we have 2^shift2Cp units per centipawn
 -----------------------------------------------
 
-initEvalState :: [(String, Double)] -> EvalState
-initEvalState sds = EvalState {
+initEvalRO :: [(String, Double)] -> EvalRO
+initEvalRO sds = EvalRO {
         esEParams  = npSetParm (colParams sds :: CollectFor EvalParams),
         esEWeights = npSetParm (colParams sds :: CollectFor EvalWeights)
     }
+
+data EvalState
+    = EvalState {
+          evalro :: EvalRO
+      }
+
+type Eval = State EvalState
 
 matesc :: Int
 matesc = 20000 - 255	-- warning, this is also defined in Base.hs!!
 
 {-# INLINE posEval #-}
-posEval :: MyPos -> EvalState -> Int
+posEval :: MyPos -> EvalRO -> Int
 posEval p !sti = scc
     where !sce = evalDispatch p sti
           !scl = min matesc $ max (-matesc) sce
           !scc = if granCoarse > 0 then (scl + granCoarse2) .&. granCoarseM else scl
 
-evalDispatch :: MyPos -> EvalState -> Int
+evalDispatch :: MyPos -> EvalRO -> Int
 evalDispatch p !sti
     | pawns p == 0 = evalNoPawns p sti
     | pawns p .&. me p == 0 ||
@@ -56,7 +64,7 @@ evalDispatch p !sti
       Just r <- pawnEndGame p = r
     | otherwise    = normalEval p sti
 
-normalEval :: MyPos -> EvalState -> Int
+normalEval :: MyPos -> EvalRO -> Int
 normalEval p !sti = sc
     where ep     = esEParams  sti
           ew     = esEWeights sti
@@ -89,7 +97,7 @@ gamePhase p = g
           ns = popCount $ knights p
           !g = qs * 39 + rs * 20 + (bs + ns) * 12	-- opening: 254, end: 0
 
-evalSideNoPawns :: MyPos -> EvalState -> Int
+evalSideNoPawns :: MyPos -> EvalRO -> Int
 evalSideNoPawns p !sti
     | npwin && insufficient = 0
     | npwin && lessRook p   = nsc `div` 4
@@ -103,7 +111,7 @@ evalSideNoPawns p !sti
           majorcnt  = popCount $ (queens p .|. rooks p) .&. npside
 
 -- These evaluation function distiguishes between some known finals with no pawns
-evalNoPawns :: MyPos -> EvalState -> Int
+evalNoPawns :: MyPos -> EvalRO -> Int
 evalNoPawns p !sti = sc
     where !sc | onlykings   = 0
               | kmk || knnk = 0		-- one minor or two knights

@@ -6,7 +6,7 @@ module Moves.Board (
     castKingRookOk, castQueenRookOk,
     genMoveCast, genMoveNCapt, genMovePromo, genMoveFCheck, genMoveCaptWL,
     genMoveNCaptToCheck,
-    updatePos, checkOk, leftInCheck, moveChecks,
+    updatePos, leftInCheck, moveChecks,
     legalMove, alternateMoves,
     doFromToMove, reverseMoving
     ) where
@@ -322,10 +322,6 @@ castKingRookOk !p Black = epcas p .&. b63 /= 0 where b63 = uBit 63
 castQueenRookOk :: MyPos -> Color -> Bool
 castQueenRookOk !p White = epcas p .&.  b0 /= 0 where b0 = 1 
 castQueenRookOk !p Black = epcas p .&. b56 /= 0 where b56 = uBit 56
-
-{-# INLINE checkOk #-}
-checkOk :: MyPos -> Bool
-checkOk p = yo p .&. kings p .&. myAttacs p == 0
 
 -- When we make the move to arrive in a new position, we want to check legality
 -- of the move (the generator delivers pseudo-legal moves)
