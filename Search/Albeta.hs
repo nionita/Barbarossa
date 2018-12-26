@@ -948,11 +948,15 @@ pvQSearch :: Int -> Int -> Int -> Bool -> Search Int
 pvQSearch !a !b !c front = do
     -- TODO: use e as first move if legal & capture
     -- (hdeep, tp, hsc, e, _) <- reTrieve >> lift ttRead
-    (hdeep, tp, hsc, _, _) <- reTrieve >> lift ttRead
+    -- Retrieve and use TT really only in non PV case
+    (hdeep, tp, hsc, _, _)
+        <- if b - a == scoreGrain
+              then reTrieve >> lift ttRead
+              else return (-1, 0, 0, Move 0, 0)
     -- tp == 1 => score >= hsc, so if hsc > a then we improved
     -- tp == 0 => score <= hsc, so if hsc <= asco then we fail low and
     --    can terminate the search
-    if hdeep >= 0 && b - a > scoreGrain && (
+    if hdeep >= 0 && (
             tp == 2		-- exact score: always good
          || tp == 1 && hsc >= b	-- we will fail high
          || tp == 0 && hsc <= a	-- we will fail low
@@ -960,7 +964,7 @@ pvQSearch !a !b !c front = do
        then reSucc 1 >> return (trimax a b hsc)
        else do
            -- TODO: use hsc here too, when possible
-           when (hdeep < 0) reFail
+           when (hdeep < 0 && b - a /= scoreGrain) reFail
            pos <- lift $ getPos
            if tacticalPos pos
               then do
