@@ -363,16 +363,16 @@ ttStore !deep !tp !sc !bestm !nds = do
     liftIO $ writeCache (hash s) (zobkey p) deep tp sc bestm nds
 
 -- History heuristic table update when beta cut
-betaCut :: Bool -> Int -> Move -> Game ()
-betaCut good absdp m
+betaCut :: Int -> Move -> Game ()
+betaCut absdp m
     | moveIsCastle m = do
         s <- get
-        liftIO $ toHist (hist s) good m absdp
+        liftIO $ toHist (hist s) m absdp
     | moveIsNormal m = do
         s <- get
         t <- getPos
         case tabla t (toSquare m) of
-            Empty -> liftIO $ toHist (hist s) good m absdp
+            Empty -> liftIO $ toHist (hist s) m absdp
             _     -> return ()
     | otherwise = return ()
 
