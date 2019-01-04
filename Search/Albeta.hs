@@ -91,7 +91,7 @@ useIID :: Bool
 useIID      = True
 
 minIIDPV, minIIDCut, minIIDCutNK, maxIIDDepth :: Int
-minIIDPV    = 5
+minIIDPV    = 3
 minIIDCutNK = 6
 minIIDCut   = 8
 maxIIDDepth = 2
