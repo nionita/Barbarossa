@@ -1,9 +1,5 @@
-{-# LANGUAGE TypeSynonymInstances,
-             MultiParamTypeClasses,
-             BangPatterns,
-             RankNTypes, UndecidableInstances,
-             FlexibleInstances
-             #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE PatternGuards #-}
 
 module Moves.Base (
     posToState, getPos, posNewSearch,
@@ -201,9 +197,8 @@ doMove m = do
                then return Illegal
                else do
                    put s { stack = p : stack s }
-                   remis <- checkRemisRules p
-                   if remis
-                      then return $ Final 0
+                   if checkRemisRules p (stack s)
+                      then return Final
                       else if captOrPromo pc m
                               then return $! Exten (exten pc p) True True
                               else return $! Exten (exten pc p) False (noLMR pc m)
@@ -232,17 +227,14 @@ doNullMove = do
         p   = reverseMoving pc { staticScore = sts }
     put s { stack = p : stack s }
 
-checkRemisRules :: MyPos -> Game Bool
-checkRemisRules p = do
-    s <- get
-    if remis50Moves p
-       then return True
-       else do	-- check repetition rule
-         let revers = map zobkey $ takeWhile isReversible $ stack s
-             equal  = filter (== zobkey p) revers	-- if keys are equal, pos is equal
-         case equal of
-            (_:_:_)    -> return True
-            _          -> return False
+checkRemisRules :: MyPos -> [MyPos] -> Bool
+checkRemisRules p ps
+    | remis50Moves p       = True
+    | not $ isReversible p = False
+    | otherwise            = not $ null $ filter (== zobkey p) $ map zobkey $ takeWhile isReversible ps
+    -- Remarks:
+    -- ps does not contain p
+    -- if keys are equal, pos is equal
 
 -- If we have a few repetitions in the last moves, then we will reduce moves to go
 -- so the time management can allocate more time for next moves
