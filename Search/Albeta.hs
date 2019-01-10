@@ -181,9 +181,9 @@ data Path
          pathOrig  :: String
       } deriving Show
 
-staleMate, matedPath :: Path
-staleMate = Path { pathScore = 0, pathDepth = 0, pathMoves = Seq [], pathOrig = "stale mate" }
-matedPath = Path { pathScore = -mateScore, pathDepth = 0, pathMoves = Seq [], pathOrig = "mated" }
+drawPath, matedPath :: Path
+drawPath  = Path { pathScore = 0, pathDepth = 0, pathMoves = Seq [] }
+matedPath = Path { pathScore = -mateScore, pathDepth = 0, pathMoves = Seq [] }
 
 -- Making a path from a plain score:
 pathFromScore :: String -> Int -> Path
@@ -341,8 +341,8 @@ pvInnerRoot b d nst e = timeToAbort (True, nst) $ do
                              s <- pvInnerRootExten b d exd' (deepNSt nst)
                              xchangeFutil
                              return s
-                         Final sco -> return $! pathFromScore "Final" (-sco)
-                         Illegal   -> error "Cannot be illegal here"
+                         Final   -> return drawPath
+                         Illegal -> error "Cannot be illegal here"
                 -- undo the move if it was legal
                 lift undoMove
                 modify $ \s' -> s' { absdp = absdp old, usedext = usedext old }
@@ -649,8 +649,8 @@ pvInnerLoop b d zw prune nst e = timeToAbort (True, nst) $ do
                           s <- extenFunc b d (cap || nolmr) exd' (deepNSt nst1)
                           xchangeFutil
                           return (s, nst1)
-                      Final sco -> return (pathFromScore "Final" (-sco), nst)
-                      Illegal   -> error "Cannot be illegal here"
+                      Final   -> return (drawPath, nst)
+                      Illegal -> error "Cannot be illegal here"
                   lift undoMove	-- undo the move
                   modify $ \s' -> s' { absdp = absdp old, usedext = usedext old }
                   let s' = addToPath e s
@@ -880,7 +880,7 @@ varFutVal :: Search Int
 varFutVal = max futMinVal <$> gets futme
 
 failHardNoValidMove :: Int -> Int -> MyPos -> Path
-failHardNoValidMove a b pos = trimaxPath a b $ if tacticalPos pos then matedPath else staleMate
+failHardNoValidMove a b pos = trimaxPath a b $ if tacticalPos pos then matedPath else drawPath
 
 trimaxPath :: Int -> Int -> Path -> Path
 trimaxPath a b x = x { pathScore = trimax a b (pathScore x) }
