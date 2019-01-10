@@ -7,7 +7,7 @@ module Struct.Status (
     EvalParams(..),
     EvalWeights(..),
     MidEnd(..),
-    mad, madm, made, tme
+    mad
 ) where
 
 import Struct.Struct
@@ -29,28 +29,22 @@ data EvalState = EvalState {
         esEWeights  :: EvalWeights
     } deriving Show
 
+-- Score components: mid game score / end game score
+-- Final score will be weighted between the two, by mean of game phase
 data MidEnd = MidEnd { mid, end :: !Int } deriving Show
 
--- Helper for MidEnd operations:
-{-# INLINE madm #-}
-madm :: MidEnd -> MidEnd -> Int -> MidEnd
-madm !mide0 !mide !v = mide0 { mid = mid mide0 + mid mide * v }
-
-{-# INLINE made #-}
-made :: MidEnd -> MidEnd -> Int -> MidEnd
-made !mide0 !mide !v = mide0 { end = end mide0 + end mide * v }
-
-{-# INLINE mad #-}
-mad :: MidEnd -> MidEnd -> Int -> MidEnd
-mad !mide0 !mide !v = MidEnd { mid = mid mide0 + mid mide * v, end = end mide0 + end mide * v }
-
--- {-# INLINE (<+>) #-}
--- (<+>) :: MidEnd -> MidEnd -> MidEnd
--- mide1 <+> mide2 = MidEnd { mid = mid mide1 + mid mide2, end = end mide1 + end mide2 }
-
-{-# INLINE tme #-}
+-- Helper for MidEnd operations
+-- Easier constructor for MidEnd terms
 tme :: Int -> Int -> MidEnd
 tme a b = MidEnd a b
+
+-- Multiply & Add
+-- The eval score will be accumulated among a few eval factors
+-- This function takes an eval weight and an integer eval factor,
+-- calculates the mid and the end scores, and add them to the accumulator
+{-# INLINE mad #-}
+mad :: MidEnd -> Int -> MidEnd -> MidEnd
+mad !weight !fact !acc = MidEnd { mid = mid acc + mid weight * fact, end = end acc + end weight * fact }
 
 -- This is the parameter record for characteristics evaluation
 data EvalParams
@@ -176,44 +170,44 @@ instance CollectParams EvalWeights where
           ewMaterialDiff    = tme 8 8,
           ewKingSafe        = tme 1 0,
           ewKingOpen        = tme 2 4,
-          ewKingPlaceCent   = tme 8 1,
+          ewKingPlaceCent   = tme 8 0,
           ewKingPlacePwns   = tme 0 4,
           ewKingPawn1       = tme  4 53,
           ewKingPawn2       = tme  2 68,
-          ewRookHOpen       = tme 162 182,	-- DSPSA with Adadelta
-          ewRookOpen        = tme 205 178,	-- 20k steps, depth 4,
-          ewRookConn        = tme  89  59,	-- 2 games, beta=0.95, gamma=0.8,
-          ewRook7th         = tme 201 161,	-- niu=0.99, eps=1E-6
-          ewMobilityKnight  = tme 50 56,
-          ewMobilityBishop  = tme 53 33,
-          ewMobilityRook    = tme 16 34,	-- DSPSA ...
-          ewMobilityQueen   = tme  2 11,
-          ewCenterPAtts     = tme 73 57,
-          ewCenterNAtts     = tme 48 37,
-          ewCenterBAtts     = tme 52 35,
-          ewCenterRAtts     = tme 14 22,	-- DSPSA ...
-          ewCenterQAtts     = tme 13 53,
-          ewCenterKAtts     = tme  2 62,
+          ewRookHOpen       = tme 161 182,	-- DSPSA with Adadelta
+          ewRookOpen        = tme 204 178,	-- 20k steps, depth 4,
+          ewRookConn        = tme  88  59,	-- 2 games, beta=0.95, gamma=0.8,
+          ewRook7th         = tme 200 161,	-- niu=0.99, eps=1E-6
+          ewMobilityKnight  = tme 49 56,
+          ewMobilityBishop  = tme 52 33,
+          ewMobilityRook    = tme 15 34,	-- DSPSA ...
+          ewMobilityQueen   = tme  1 11,
+          ewCenterPAtts     = tme 72 57,
+          ewCenterNAtts     = tme 47 37,
+          ewCenterBAtts     = tme 51 35,
+          ewCenterRAtts     = tme 13 22,	-- DSPSA ...
+          ewCenterQAtts     = tme 12 53,
+          ewCenterKAtts     = tme  1 62,
           ewSpace           = tme  1  0,
-          ewAdvAtts         = tme  1 17,
-          ewIsolPawns       = tme (-36) (-113),
-          ewIsolPassed      = tme (-63) (-143),
-          ewBackPawns       = tme (-108) (-141),
-          ewBackPOpen       = tme (-21)  (-27),
-          ewEnpHanging      = tme (-19) (-27),
-          ewEnpEnPrise      = tme (-29) (-26),
-          ewEnpAttacked     = tme  (-2) (-14),
-          ewWepAttacked     = tme 35 73,
-          ewLastLinePenalty = tme 100 0,
-          ewBishopPair      = tme 386 323,
-          ewBishopPawns     = tme (-25) (-54),
-          ewRedundanceRook  = tme (-27) (-51),	-- DSPSA ...
-          ewRookPawn        = tme (-44) (-32),
-          ewAdvPawn5        = tme   14 106,
-          ewAdvPawn6        = tme  352 333,
-          ewPawnBlockP      = tme (-112) (-92),
-          ewPawnBlockO      = tme  (-23) (-26),
-          ewPawnBlockA      = tme  (-19) (-69),
+          ewAdvAtts         = tme  0 17,
+          ewIsolPawns       = tme (-35) (-113),
+          ewIsolPassed      = tme (-62) (-143),
+          ewBackPawns       = tme (-107) (-141),
+          ewBackPOpen       = tme (-20)  (-27),
+          ewEnpHanging      = tme (-18) (-27),
+          ewEnpEnPrise      = tme (-28) (-26),
+          ewEnpAttacked     = tme  (-1) (-14),
+          ewWepAttacked     = tme 34 73,
+          ewLastLinePenalty = tme 120 0,
+          ewBishopPair      = tme 385 323,
+          ewBishopPawns     = tme (-24) (-54),
+          ewRedundanceRook  = tme (-26) (-51),	-- DSPSA ...
+          ewRookPawn        = tme (-43) (-32),
+          ewAdvPawn5        = tme   13 106,
+          ewAdvPawn6        = tme  351 333,
+          ewPawnBlockP      = tme (-111) (-92),
+          ewPawnBlockO      = tme  (-22) (-26),
+          ewPawnBlockA      = tme  (-18) (-69),
           ewPassPawnLev     = tme 2 8
         }
     npColParm = collectEvalWeights
