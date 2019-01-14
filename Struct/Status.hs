@@ -214,7 +214,7 @@ instance CollectParams EvalWeights where
           ewPawnBlockP      = tme (-112) (-92),
           ewPawnBlockO      = tme  (-23) (-26),
           ewPawnBlockA      = tme  (-19) (-69),
-          ewPassPawnLev     = tme 2 8
+          ewPassPawnLev     = tme 3 9
         }
     npColParm = collectEvalWeights
     npSetParm = id
