@@ -87,9 +87,6 @@ nulSubAct :: Bool
 nulSubAct = True
 
 -- Parameters for internal iterative deepening
-useIID :: Bool
-useIID      = True
-
 minIIDPV, minIIDCut, minIIDCutNK, maxIIDDepth :: Int
 minIIDPV    = 5
 minIIDCutNK = 6
@@ -785,12 +782,10 @@ newTKiller pos d s
 -- We don't sort the moves here, they have to come sorted from genMoves
 -- But we consider the best move first (TT or IID) and the killers
 genAndSort :: NodeState -> Maybe Move -> Int -> Int -> Int -> Search (Alt Move)
-genAndSort nst mttmv a b d = do
+genAndSort !nst mttmv !a !b !d = do
     path <- case mttmv of
                 Just mv -> return [mv]
-                Nothing -> if useIID
-                              then bestMoveFromIID nst a b d	-- it will do nothing for AllNode
-                              else return []		-- if not null
+                Nothing -> bestMoveFromIID nst a b d	-- it will do nothing for AllNode
     lift $ do
         let kl = filter (isMoveLegal (cpos nst)) $ killerToList (killer nst)
         esp <- genMoves d
@@ -970,13 +965,17 @@ finWithNodes s = do
 {-# INLINE bestMoveFromIID #-}
 bestMoveFromIID :: NodeState -> Int -> Int -> Int -> Search [Move]
 bestMoveFromIID nst a b d
-    | nt == PVNode  && d >= minIIDPV
-          = do s <- pvSearch nst a b d'
-               return $! unseq $ pathMoves s
-    | nt == CutNode && (d >= minIIDCut || (d >= minIIDCutNK && killer nst == NoKiller))
-          = do s <- pvZeroW nst b d'
-               return $! unseq $ pathMoves s
-    | otherwise =  return []
+    | nt == AllNode = return []
+    | nt == CutNode
+          = if d >= minIIDCut || (d >= minIIDCutNK && killer nst == NoKiller)
+               then do s <- pvZeroW nst b d'
+                       return $! unseq $ pathMoves s
+               else return []
+    | otherwise -- => PVNode
+          = if d >= minIIDPV
+               then do s <- pvSearch nst a b d'
+                       return $! unseq $ pathMoves s
+               else return []
     where d' = min maxIIDDepth (iidNewDepth d)
           nt = crtnt nst
 
