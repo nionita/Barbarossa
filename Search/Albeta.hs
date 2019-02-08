@@ -1074,13 +1074,28 @@ incReBe n = modStat $ \s -> s { sReBe = sReBe s + n }
 incReMi :: Search ()
 incReMi = modStat $ \s -> s { sReMi = sReMi s + 1 }
 
-{-# SPECIALIZE bestFirst :: [Move] -> [Move] -> ([Move], [Move]) -> [Move] #-}
-bestFirst :: Eq e => [e] -> [e] -> ([e], [e]) -> [e]
+bestFirst :: [Move] -> [Move] -> ([Move], [Move]) -> [Move]
 bestFirst path kl (es1, es2)
-    | null path = es1 ++ kl ++ delall es2 kl
-    | otherwise = e : delete e es1 ++ kl ++ delall es2 (e : kl)
-    where delall = foldr delete
-          (e:_)  = path
+    | null path = es1 ++ kl ++ chainUniqFilters kl es2
+    | otherwise = e : uniqFilter e es1 ++ kl ++ chainUniqFilters (e : kl) es2
+    where (e:_)  = path
+
+-- When filtering the TT & killer moves from the generated ones
+-- we use delete, which has a bit of an inefficiency because
+-- it does not assume anything about the list
+-- But out move list consists of unique moves, which maybe could
+-- accelerate a bit the filtering
+uniqFilter :: Move -> [Move] -> [Move]
+uniqFilter !e = go
+    where go [] = []
+          go (m:ms) | m == e    = ms
+                    | otherwise = m : go ms
+
+-- Here we chain the filters for more moves (composition)
+chainUniqFilters :: [Move] -> [Move] -> [Move]
+-- chainUniqFilters []     ms = ms
+-- chainUniqFilters (k:ks) ms = (foldr (\m f -> uniqFilter m . f) (uniqFilter k) ks) ms
+chainUniqFilters = foldr (\m f -> uniqFilter m . f) id
 
 pushKiller :: Move -> Killer -> Killer
 pushKiller !e NoKiller = OneKiller e
