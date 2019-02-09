@@ -182,12 +182,15 @@ data Path
       } deriving Show
 
 staleMate, matedPath :: Path
-staleMate = Path { pathScore = 0, pathDepth = 0, pathMoves = Seq [], pathOrig = "stale mate" }
-matedPath = Path { pathScore = -mateScore, pathDepth = 0, pathMoves = Seq [], pathOrig = "mated" }
+staleMate = Path { pathScore = 0, pathDepth = 20, pathMoves = Seq [], pathOrig = "stale mate" }
+matedPath = Path { pathScore = -mateScore, pathDepth = 20, pathMoves = Seq [], pathOrig = "mated" }
 
 -- Making a path from a plain score:
 pathFromScore :: String -> Int -> Path
 pathFromScore ori s = Path { pathScore = s, pathDepth = 0, pathMoves = Seq [], pathOrig = ori }
+
+finalPath :: Int -> Path
+finalPath s = Path { pathScore = s, pathDepth = 20, pathMoves = Seq [], pathOrig = "Final" }
 
 -- Add a move to a path:
 addToPath :: Move -> Path -> Path
@@ -341,7 +344,7 @@ pvInnerRoot b d nst e = timeToAbort (True, nst) $ do
                              s <- pvInnerRootExten b d exd' (deepNSt nst)
                              xchangeFutil
                              return s
-                         Final sco -> return $! pathFromScore "Final" (-sco)
+                         Final sco -> return $! finalPath (-sco)
                          Illegal   -> error "Cannot be illegal here"
                 -- undo the move if it was legal
                 lift undoMove
@@ -649,7 +652,7 @@ pvInnerLoop b d zw prune nst e = timeToAbort (True, nst) $ do
                           s <- extenFunc b d (cap || nolmr) exd' (deepNSt nst1)
                           xchangeFutil
                           return (s, nst1)
-                      Final sco -> return (pathFromScore "Final" (-sco), nst)
+                      Final sco -> return (finalPath (-sco), nst)
                       Illegal   -> error "Cannot be illegal here"
                   lift undoMove	-- undo the move
                   modify $ \s' -> s' { absdp = absdp old, usedext = usedext old }
