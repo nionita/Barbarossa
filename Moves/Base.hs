@@ -7,22 +7,23 @@
 
 module Moves.Base (
     posToState, getPos, posNewSearch,
-    doRealMove, doMove, undoMove, genMoves, genTactMoves, canPruneMove,
-    tacticalPos, isMoveLegal, isKillCand, isTKillCand,
-    betaCut, doNullMove, ttRead, ttStore, curNodes, chooseMove, isTimeout, informCtx,
+    doRealMove, doMove, doQSMove, doNullMove, undoMove,
+    genMoves, genTactMoves, genEscapeMoves, canPruneMove,
+    tacticalPos, zugZwang, isMoveLegal, isKillCand, isTKillCand,
+    betaCut, ttRead, ttStore, curNodes, isTimeout, informCtx,
     mateScore, scoreDiff, qsDelta,
     draftStats,
-    finNode,
+    finNode, countRepetitions,
     showMyPos, logMes,
     nearmate
 ) where
 
 import Data.Bits
 import Data.Int
+import Data.List (nub)
 import Control.Monad.State
 import Control.Monad.Reader (ask)
 -- import Numeric
-import System.Random
 
 import Moves.BaseTypes
 import Search.AlbetaTypes
@@ -31,6 +32,7 @@ import Struct.Context
 import Struct.Status
 import Hash.TransTab
 import Moves.Board
+import Moves.BitBoard (less, uBit)
 import Eval.BasicEval
 import Eval.Eval
 import Moves.ShowMe
@@ -42,20 +44,15 @@ nearmate :: Int -> Bool
 nearmate i = i >= mateScore - 255 || i <= -mateScore + 255
 
 -- Some options and parameters:
--- debug :: Bool
--- debug = False
-scoreDiffEqual :: Int
-scoreDiffEqual = 4 -- under this score difference moves are considered to be equal (choose random)
-
 printEvalInt :: Int64
 printEvalInt   = 2 `shiftL` 12 - 1	-- if /= 0: print eval info every so many nodes
 
 mateScore :: Int
 mateScore = 20000
 
-curNodes :: Game Int64
 {-# INLINE curNodes #-}
-curNodes = gets (sNodes . mstats)
+curNodes :: Int64 -> Game Int64
+curNodes n = (n + ) <$> gets (sNodes . mstats)
 
 {-# INLINE getPos #-}
 getPos :: Game MyPos
@@ -71,10 +68,9 @@ posToState p c h e = MyState {
                        hash = c,
                        hist = h,
                        mstats = ssts0,
-                       gstats = ssts0,
                        evalst = e
                    }
-    where stsc = evalState (posEval p) e
+    where stsc = posEval p e
           p'' = p { staticScore = stsc }
 
 posNewSearch :: MyState -> MyState
@@ -83,38 +79,41 @@ posNewSearch p = p { hash = newGener (hash p) }
 draftStats :: SStats -> Game ()
 draftStats dst = do
     s <- get
-    put s { mstats = addStats (mstats s) dst, gstats = addStats (gstats s) dst }
-
--- Loosing captures after non-captures?
-loosingLast :: Bool
-loosingLast = True
+    put s { mstats = addStats (mstats s) dst }
 
 genMoves :: Int -> Game ([Move], [Move])
 genMoves d = do
     p <- getPos
-    if isCheck p $ moving p
+    if inCheck p
        then return (genMoveFCheck p, [])
        else do
             h <- gets hist
             let l0 = genMoveCast p
                 l1 = genMovePromo p
                 (l2w, l2l) = genMoveCaptWL p
-                l3' = genMoveNCapt p
-                l3 = histSortMoves d h l3'
-            return $! if loosingLast
-                         then (l1 ++ l2w, l0 ++ l3 ++ l2l)
-                         else (l1 ++ l2w ++ l2l, l0 ++ l3)
+                l3 = histSortMoves d h $ genMoveNCapt p
+            -- Loosing captures after non-captures
+            return (l1 ++ l2w, l0 ++ l3 ++ l2l)
 
--- Generate only tactical moves, i.e. promotions, captures & check escapes
-genTactMoves :: Game [Move]
-genTactMoves = do
+-- Generate only tactical moves, i.e. promotions & captures
+-- Needed only in QS, when we know we are not in check
+-- In the frontier nodes (i.e. first level QS) we generate
+-- also checking quiet moves with non-negative SEE
+genTactMoves :: Bool -> Game [Move]
+genTactMoves front = do
     p <- getPos
-    if isCheck p $ moving p
-       then return $ genMoveFCheck p
-       else do
-           let l1  = genMovePromo p
-               l2w = fst $ genMoveCaptWL p
-           return $ l1 ++ l2w
+    let l1  = genMovePromo p
+        l2w = fst $ genMoveCaptWL p
+        l3  = genMoveNCaptToCheck p
+    if front
+       then return $ l1 ++ l2w ++ l3
+       else return $ l1 ++ l2w
+
+-- Generate only escape moves: needed only in QS when we know we have to escape
+genEscapeMoves :: Game [Move]
+genEscapeMoves = do
+    p <- getPos
+    return $ genMoveFCheck p
 
 {--
 checkGenMoves :: MyPos -> [Move] -> [Move]
@@ -139,22 +138,17 @@ checkGenMove p m@(Move w)
                             ++ showHex w (" in pos\n" ++ showMyPos p)
 --}
 
--- massert :: String -> Game Bool -> Game ()
--- massert s mb = do
---     b <- mb
---     if b then return () else error s
-
 showMyPos :: MyPos -> String
 showMyPos p = showTab (black p) (slide p) (kkrq p) (diag p) ++ "================ " ++ mc ++ "\n"
     where mc = if moving p == White then "w" else "b"
 
 {-# INLINE uBitSet #-}
 uBitSet :: BBoard -> Int -> Bool
-uBitSet bb sq = bb .&. (1 `unsafeShiftL` sq) /= 0
+uBitSet bb sq = bb .&. uBit sq /= 0
 
 {-# INLINE uBitClear #-}
 uBitClear :: BBoard -> Int -> Bool
-uBitClear bb sq = bb .&. (1 `unsafeShiftL` sq) == 0
+uBitClear bb sq = bb .&. uBit sq == 0
 
 -- Move from a node to a descendent - the real move version
 doRealMove :: Move -> Game DoResult
@@ -182,18 +176,18 @@ doRealMove m = do
                then return Illegal
                else do
                    put s { stack = p' : stack s }
-                   return $ Exten 0 False
+                   return $ Exten 0 False False
 
--- Move from a node to a descendent - the search version
-doMove :: Move -> Bool -> Game DoResult
-doMove m qs = do
+-- Move from a node to a descendent - the normal search version
+doMove :: Move -> Game DoResult
+doMove m = do
     s <- get
     let (pc:_) = stack s	-- we never saw an empty stack error until now
         -- Moving a non-existent piece?
         il  = occup pc `uBitClear` fromSquare m
         -- Capturing one king?
         kc  = kings pc `uBitSet` toSquare m
-        sts = evalState (posEval p) (evalst s)
+        sts = posEval p (evalst s)
         p   = doFromToMove m pc { staticScore = sts }
     if (il || kc)
        then do
@@ -207,18 +201,34 @@ doMove m qs = do
                then return Illegal
                else do
                    put s { stack = p : stack s }
-                   remis <- if qs then return False else checkRemisRules p
+                   remis <- checkRemisRules p
                    if remis
                       then return $ Final 0
-                      else do
-                          let dext = if inCheck p then 1 else 0
-                          return $! Exten dext $ moveIsCaptPromo pc m
+                      else if captOrPromo pc m
+                              then return $! Exten (exten pc p) True True
+                              else return $! Exten (exten pc p) False (noLMR pc m)
+
+-- Move from a node to a descendent - the QS search version
+-- Here we do only a restricted check for illegal moves
+-- It does not check for remis, so it can't return Final
+-- It does not check for extensions a.s.o.
+doQSMove :: Move -> Game Bool
+doQSMove m = do
+    s <- get
+    let (pc:_) = stack s	-- we never saw an empty stack error until now
+        sts = posEval p (evalst s)
+        p   = doFromToMove m pc { staticScore = sts }
+    if not $ checkOk p
+       then return False
+       else do
+           put s { stack = p : stack s }
+           return True
 
 doNullMove :: Game ()
 doNullMove = do
     s <- get
     let (pc:_) = stack s	-- we never saw an empty stack error until now
-        sts = evalState (posEval p) (evalst s)
+        sts = posEval p (evalst s)
         p   = reverseMoving pc { staticScore = sts }
     put s { stack = p : stack s }
 
@@ -234,40 +244,74 @@ checkRemisRules p = do
             (_:_:_)    -> return True
             _          -> return False
 
+-- If we have a few repetitions in the last moves, then we will reduce moves to go
+-- so the time management can allocate more time for next moves
+countRepetitions :: MyState -> Int
+countRepetitions s = length f6 - uniq
+    where uniq = length $ nub $ map zobkey f6
+          f6   = take 6 $ stack s
+
 {-# INLINE undoMove #-}
 undoMove :: Game ()
 undoMove = modify $ \s -> s { stack = tail $ stack s }
 
+-- We extend when last move:
+-- - gives check
+-- - captures last queen
+-- - captures last rook when no queens
+exten :: MyPos -> MyPos -> Int
+exten p1 p2 | inCheck p2     = 1
+            | queens p2 /= 0 = 0
+            | queens p1 /= 0 = 1
+            | rooks  p2 /= 0 = 0
+            | rooks  p1 /= 0 = 1
+            | otherwise      = 0
+
+{--
+-- Parameters for pawn threats
+validThreat, majorThreat :: Bool
+validThreat = True	-- pawn threat must be valid?
+majorThreat = False	-- pawn threat: only majors?
+
+pawnThreat :: MyPos -> MyPos -> Bool
+pawnThreat p1 p2
+    | npa .&. fig == 0 = False
+    | validThreat      = validPawnThreat p1 p2
+    | otherwise        = True
+    where !npa = yoPAttacs p2 `less` myPAttacs p1
+          !fig | majorThreat = me p2 .&. (queens p2 .|. rooks p2)
+               | otherwise   = me p2 `less` pawns p2
+
+-- Valid pawn threat is when the pawn is defended or not attacked
+validPawnThreat :: MyPos -> MyPos -> Bool
+validPawnThreat p1 p2 = mvpaw .&. yoAttacs p2 /= 0 || mvpaw .&. myAttacs p2 == 0
+    where !mvpaw = yo p2 `less` me p1
+--}
+
 -- Tactical positions will be searched complete in quiescent search
--- Currently only when in in check
+-- Currently only when in check
 {-# INLINE tacticalPos #-}
 tacticalPos :: MyPos -> Bool
 tacticalPos = (/= 0) . check
+
+{-# INLINE zugZwang #-}
+zugZwang :: MyPos -> Bool
+zugZwang p = me p `less` (kings p .|. pawns p) == 0
 
 {-# INLINE isMoveLegal #-}
 isMoveLegal :: MyPos -> Move -> Bool
 isMoveLegal = legalMove
 
 -- Why not just like isTKillCand?
--- Also: if not normal, it is useless, as now it is not recognized as legal...
 {-# INLINE isKillCand #-}
 isKillCand :: MyPos -> Move -> Move -> Bool
 isKillCand p mm ym
     | toSquare mm == toSquare ym = False
     | otherwise                  = not $ moveIsCapture p ym
 
--- If not normal, it is useless, as now it is not recognized as legal...
 {-# INLINE isTKillCand #-}
 isTKillCand :: MyPos -> Move -> Bool
 isTKillCand p mm = not $ moveIsCapture p mm
-
--- Static evaluation function
--- This does not detect mate or stale mate, it only returns the calculated
--- static score from a position which has already to be valid
--- Mate/stale mate has to be detected by search!
--- {-# INLINE staticVal #-}
--- staticVal :: Game Int
--- staticVal = staticScore <$> getPos
 
 {-# INLINE finNode #-}
 finNode :: String -> Int64 -> Game ()
@@ -276,33 +320,25 @@ finNode str nodes =
         s <- get
         let (p:_) = stack s	-- we never saw an empty stack error until now
             fen = posToFen p
-            -- mv = case tail $ words fen of
-            --          mv':_ -> mv'
-            --          _     -> error "Wrong fen in finNode"
-        logMes $ str ++ " Fen: " ++ fen
-        -- logMes $ "Eval info " ++ mv ++ ":"
-        --               ++ concatMap (\(n, v) -> " " ++ n ++ "=" ++ show v)
-        --                            (("score", staticScore p) : weightPairs (staticFeats p))
+        logMes $ str ++ " Score: " ++ show (staticScore p) ++ " Fen: " ++ fen
 
-{--
-materVal :: Game Int
-materVal = do
-    t <- getPos
-    let !m = mater t
-    return $! case moving t of
-                   White -> m
-                   _     -> -m
---}
-
-{-# INLINE qsDelta #-}
-qsDelta :: Game Int
-qsDelta = do
+-- {-# INLINE qsDelta #-}
+qsDelta :: Int -> Game Bool
+qsDelta !a = do
     p <- getPos
-    if yo p .&. queens p .&. myAttacs p /= 0
-       then return $! matPiece White Queen
-       else if yo p .&. rooks p .&. myAttacs p /= 0
-           then return $! matPiece White Rook
-           else return $! matPiece White Bishop
+    if matPiece White Bishop >= a
+       then return False
+       else if matPiece White Queen < a
+               then return True
+               else do
+                   let !ua = yo p .&. myAttacs p	-- under attack!
+                   if ua .&. queens p /= 0	-- TODO: need to check also pawns on 7th!
+                      then return False
+                      else if matPiece White Rook < a
+                              then return True
+                              else if ua .&. rooks p /= 0
+                                      then return False
+                                      else return True
 
 {-# INLINE ttRead #-}
 ttRead :: Game (Int, Int, Int, Move, Int64)
@@ -340,12 +376,15 @@ betaCut good absdp m
             _     -> return ()
     | otherwise = return ()
 
--- Will not be pruned nor LMR reduced
--- Now: only for captures or promotions (but check that with LMR!!!)
-moveIsCaptPromo :: MyPos -> Move -> Bool
-moveIsCaptPromo p m
+-- Captures & promotions
+captOrPromo :: MyPos -> Move -> Bool
+captOrPromo p m
     | moveIsPromo m || moveIsEnPas m = True
     | otherwise                      = moveIsCapture p m
+
+-- Can be LMR reduced, if not captures & promotions
+noLMR :: MyPos -> Move -> Bool
+noLMR = movePassed
 
 -- We will call this function before we do the move
 -- This will spare a heavy operation for pruned moved
@@ -354,6 +393,7 @@ canPruneMove :: MyPos -> Move -> Bool
 canPruneMove p m
     | not (moveIsNormal m) = False
     | moveIsCapture p m    = False
+    | movePassed p m       = False
     | otherwise            = not $ moveChecks p m
 
 -- Score difference obtained by last move, from POV of the moving part
@@ -364,26 +404,6 @@ scoreDiff = do
     case stack s of
         (p1:p2:_) -> return $! negate (staticScore p1 + staticScore p2)
         _         -> return 0
-
--- Choose between almost equal (root) moves
-chooseMove :: Bool -> [(Int, [Move])] -> Game (Int, [Move])
-chooseMove True pvs = return $ if null pvs then error "Empty choose!" else head pvs
-chooseMove _    pvs = case pvs of
-    p1 : [] -> return p1
-    p1 : ps -> do
-         let equal = p1 : takeWhile inrange ps
-             minscore = fst p1 - scoreDiffEqual
-             inrange x = fst x >= minscore
-             len = length equal
-         logMes $ "Choose from: " ++ show pvs
-         logMes $ "Choose length: " ++ show len
-         logMes $ "Choose equals: " ++ show equal
-         if len == 1
-            then return p1
-            else do
-               r <- liftIO $ getStdRandom (randomR (0, len - 1))
-               return $! equal !! r
-    []      -> return (0, [])	-- just for Wall
 
 logMes :: String -> Game ()
 logMes s = lift $ talkToContext . LogMes $ s

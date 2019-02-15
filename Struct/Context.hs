@@ -56,14 +56,6 @@ data Context = Ctx {
         change :: MVar Changing         -- the changing context
     }
 
--- Information about previuos best move and changes
--- to be used in time management
-data PrevMvInfo = PrevMvInfo {
-        pmiBestSc  :: Int,	-- score of best move
-        pmiChanged :: Int,	-- number of changes in best move
-        pmiBMSoFar :: [Move]	-- all best moves seen so far
-    }
-
 -- Time management parameters
 data TimeParams = TimeParams {
                       tpIniFact, tpMaxFact,
@@ -106,13 +98,15 @@ data Changing = Chg {
         forGui     :: Maybe InfoToGui,  -- info for gui
         srchStrtMs :: Int,              -- search start time (milliseconds)
         myColor    :: Color,            -- our play color
-        prvMvInfo  :: Maybe PrevMvInfo	-- not in the first draft
+        totBmCh    :: Int,		-- all BM changes in this search
+        lastChDr   :: Int,		-- last draft which changed root BM
+        lmvScore   :: Maybe Int		-- last move score
     }
 
 type CtxIO = ReaderT Context IO
 
 -- Result of a search
-type IterResult = ([Move], Int, [Move], Bool, MyState)
+type IterResult = ([Move], Int, [Move], Bool, MyState, Int)
 
 readChanging :: CtxIO Changing
 readChanging = do

@@ -6,7 +6,7 @@ module Search.AlbetaTypes (
     ABControl(..),
     SStats(..),
     ssts0, formatStats, addStats,
-    lmrDebug, nulDebug
+    nulDebug
 ) where
 
 import Data.Int
@@ -22,7 +22,7 @@ data ABControl = ABC {
         stoptime  :: Int
     } deriving Show
 
-data DoResult = Exten !Int !Bool	-- return mit extension & special
+data DoResult = Exten !Int !Bool !Bool	-- return mit extension, iscapt & canlmr
               | Final !Int	-- return with a final score (probably draw)
               | Illegal		-- illegal move
 
@@ -55,14 +55,13 @@ addStats a b = SStats {
     sReSe = sReSe a + sReSe b, sReNo = sReNo a + sReNo b
     }
 
-lmrDebug, nulDebug :: Bool
-lmrDebug = False
+nulDebug :: Bool
 nulDebug = False
 
 formatStats :: SStats -> [String]
 formatStats sst = [
-       "Nodes: " ++ show (sNodes sst) ++ ", in QS: " ++ show (sNodesQS sst)
-            ++ " (QS%: " ++ show (100 * sNodesQS sst `div` sNodes sst) ++ ")",
+       "Nodes: " ++ show (sNodes sst) ++ ", in QS: " ++ show (sNodesQS sst) ++ " (QS%: "
+            ++ show (if sNodes sst == 0 then 0 else 100 * sNodesQS sst `div` sNodes sst) ++ ")",
        "Retrieve: " ++ show (sRetr sst) ++ ", not found: " ++ show (sRFal sst)
             ++ ", found usable: " ++ show (sRFnd sst)
             ++ ", found not usable: " ++ show (sRetr sst - (sRFal sst + sRFnd sst))
@@ -73,12 +72,6 @@ formatStats sst = [
             ++ ", move 4+: " ++ show (sBM4p sst) ++ " (move 1%: "
             ++ show (if sBeta sst == 0 then 0 else 100 * sBM1 sst `div` sBeta sst) ++ ")"
     ] ++
-       if lmrDebug
-          then [
-              "Reduced: " ++ show (sRedu sst) ++ ", Re-benefits: " ++ show (sReBe sst)
-                  ++ ", Re-Searched: " ++ show (sReSe sst) ++ ", Re-waste: " ++ show (sReNo sst)
-                  ++ ", missed: " ++ show (sReMi sst) ++ ", net benefit: "
-                  ++ show (sReBe sst - sReNo sst) ]
-          else if nulDebug
-                  then [ "Null moves: " ++ show (sReBe sst) ++ ", Low: " ++ show (sReMi sst) ]
-                  else [ "Reduced: " ++ show (sRedu sst) ++ ", Re-Searched: " ++ show (sReSe sst) ]
+          if nulDebug
+             then [ "Null moves: " ++ show (sReBe sst) ++ ", Low: " ++ show (sReMi sst) ]
+             else [ "Reduced: " ++ show (sRedu sst) ++ ", Re-Searched: " ++ show (sReSe sst) ]
