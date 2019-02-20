@@ -573,7 +573,7 @@ iterativeDeepening depth = do
               --    putStrLn $ "In iter deep go: " ++ show d
               --    hFlush stdout
               (path, sc, rmvsf, _timint, sfin, _) <- bestMoveCont d 0 sini lsc lpv rmvs
-              if null path
+              if null path && d > 1
                  then return (Just sc, path)
                  else go (d+1) sfin (Just sc) path rmvsf
 

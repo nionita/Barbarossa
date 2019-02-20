@@ -38,7 +38,7 @@ import Eval.FileParams (makeEvalState)
 progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
-progVersion = "0.5.0"
+progVersion = "0.6.0"
 progVerSuff = "i1811"
 
 data Options = Options {

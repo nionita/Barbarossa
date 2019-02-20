@@ -1,18 +1,18 @@
 Name:                Barbarossa
-Version:             0.5.0
+Version:             0.6.0
 Synopsis:            UCI chess engine written in Haskell
 License:             BSD3
 License-file:        LICENSE
 Author:              Nicu Ionita
 Maintainer:          nicu.ionita@acons.at
-Copyright:           Nicu Ionita 2013 - 2016
+Copyright:           Nicu Ionita 2013 - 2019
 Category:            Game
 Build-type:          Simple
 Cabal-version:       >=1.8
 
 Flag sse42
   Description:	Enable SSE4.2 support
-  Default:	False
+  Default:	True
 
 Flag ddump
   Description:  Enable ddumps
