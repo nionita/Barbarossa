@@ -68,8 +68,8 @@ maxFutilDepth = 3
 
 -- Futility margins
 futilMargins :: Int -> Int -> Int
-futilMargins 1 s = s
-futilMargins d s = s `unsafeShiftL` (d-1)
+futilMargins d s | d > 1 = s `unsafeShiftL` (d-1)
+futilMargins _ s         = s
 
 -- Score statistics parameters for variable futility
 futIniVal, futMinVal, futDecayB, futDecayW :: Int
@@ -622,7 +622,7 @@ pvInnerLoop :: Int 	-- current beta
             -> Move	-- move to search
             -> Search (Bool, NodeState)
 pvInnerLoop b d zw prune nst e = timeToAbort (True, nst) $ do
-    let !canPrune = canPruneMove (cpos nst) e
+    let canPrune = canPruneMove (cpos nst) e
     if prune && (zw || movno nst > 1) && canPrune
        then do
            let !nst1 = nst { movno = movno nst + 1 }
@@ -853,12 +853,15 @@ pvLoop f s (Alt (e:es)) = do
 --    lower (experiemnts, tune!) Maybe this is also depth dependent
 isPruneFutil :: Int -> Int -> Bool -> Int -> Search Bool
 isPruneFutil d a pv v
-    | nearmate a              = return False
-    | pv && d > maxFutilDepth = return False
-    | d > maxFutilDepth + 1   = return False	-- for zero window searches we allow higher futility depth
+    -- for zero window searches we allow higher futility depth
+    -- same when our score is big enough
+    | d' > maxFutilDepth || nearmate a = return False
     | otherwise = do
         m <- varFutVal	-- variable futility value
-        return $! v + futilMargins d m <= a
+        return $! v + futilMargins d' m <= a
+    where d' | not pv || a > moreFutilScore = d - 1
+             | otherwise                    = d
+          moreFutilScore = 100
 
 updateFutil :: Int -> Search ()
 updateFutil sd = do
