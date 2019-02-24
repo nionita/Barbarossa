@@ -684,8 +684,7 @@ pvInnerLoopExten b d spec !exd nst = do
            -- Here we must be in a Cut node (will fail low)
            -- and we should have: crtnt = CutNode, nxtnt = AllNode
            let !d' = reduceLmr (nearmate b) spec d1 (lmrlv old) (movno nst - spcno nst)
-           -- HERE: a+1 ??? Should be: a + scoreGrain
-           s1 <- zeroWithLMR d' d1 (-a) (a+1) nst
+           s1 <- zeroWithLMR d' d1 (a + scoreGrain) nst
            whenAbort s1 $
                if pathScore s1 <= a
                   then return s1	-- failed low (as expected) or aborted
@@ -702,11 +701,11 @@ pvInnerLoopExtenZ b d spec !exd nst = do
     -- late move reduction
     let !d1 = d + exd' - 1	-- this is the normal (unreduced) depth for next search
         !d' = reduceLmr (nearmate b) spec d1 (lmrlv old) (movno nst - spcno nst)
-        !onemB = scoreGrain - b
-    zeroWithLMR d' d1 onemB b nst
+    zeroWithLMR d' d1 b nst
 
-zeroWithLMR :: Int -> Int -> Int -> Int -> NodeState -> Search Path
-zeroWithLMR !d' !d1 !onemB !b nst =
+zeroWithLMR :: Int -> Int -> Int -> NodeState -> Search Path
+zeroWithLMR !d' !d1 !b nst = do
+    let !onemB = scoreGrain - b
     if d' == d1
        then do
            moreLMR True 1	-- more LMR
