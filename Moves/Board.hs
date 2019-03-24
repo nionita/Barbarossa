@@ -682,50 +682,43 @@ data Attacks = Attacks {
 -- which is more heavy, and then updated with newAttacs incrementally, which is cheaper
 theAttacs :: MyPos -> Square -> Attacks
 theAttacs pos sq = axx
-    where !occ = occup pos
-          !b = bishops pos
-          !r = rooks pos
-          !q = queens pos
-          !n = knights pos
-          !k = kings pos
-          !p = pawns pos
-          !white = occ `less` black pos
+    where occ = occup pos
+          b = bishops pos
+          r = rooks pos
+          q = queens pos
+          n = knights pos
+          k = kings pos
+          p = pawns pos
           !bq  = b .|. q                -- bishops & queens
           !rq  = r .|. q                -- rooks & queens
-          !rst =   nAttacs     sq .&. n
-               .|. kAttacs     sq .&. k
-               .|. (pAttacs White sq .&. black pos .|. pAttacs Black sq .&. white) .&. p
-          !bqa = bAttacs occ sq .&. bq
-          !rqa = rAttacs occ sq .&. rq
-          !ats = bqa .|. rqa .|. rst    -- these are all attackers
+          !ats = attacked pos `unsafeAt` sq	-- all attackers
+          !rst = ats .&. (n .|. k .|. p)
           !axx = Attacks ats occ bq rq rst      -- this is result and state for the next step
  
 newAttacs :: Square -> BBoard -> Attacks -> Attacks
 newAttacs sq !moved !atts = axx
     where !mvc = complement moved
-          !occ = atOcc atts .&. mvc     -- reduce occupacy
+          !occ = atOcc atts .&. mvc     -- reduce occupancy
           !bq  = atBQ  atts .&. mvc     -- reduce bishops & queens
           !rq  = atRQ  atts .&. mvc     -- reduce rooks & queens
           !rst = atRst atts .&. mvc     -- reduce pawns, knights & kings
-          !bqa = bAttacs occ sq .&. bq  -- new bishops & queens can arise because reduced occupacy
-          !rqa = rAttacs occ sq .&. rq  -- new rooks & queens can arise because reduced occupacy
+          !bqa = bAttacs occ sq .&. bq  -- new bishops & queens can arise because reduced occupancy
+          !rqa = rAttacs occ sq .&. rq  -- new rooks & queens can arise because reduced occupancy
           !ats = bqa .|. rqa .|. rst    -- these are all new attackers
           !axx = Attacks ats occ bq rq rst      -- this is result and state for the next step
 
-slideAttacs :: Square -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard
-slideAttacs sq b r q occ = bAttacs occ sq .&. (b .|. q)
-                       .|. rAttacs occ sq .&. (r .|. q)
-
 xrayAttacs :: MyPos -> Square -> Bool
 xrayAttacs pos sq = sa1 /= sa0
-    where sa1 = slideAttacs sq (bishops pos) (rooks pos) (queens pos) (occup pos)
-          sa0 = slideAttacs sq (bishops pos) (rooks pos) (queens pos) 0
+    where sa1 = (attacked pos `unsafeAt` sq) .&. (bishops pos .|. rooks pos .|. queens pos)
+          sa0 = (emptyBAttacs `unsafeAt` sq) .&. (bishops pos .|. queens pos)
+            .|. (emptyRAttacs `unsafeAt` sq) .&. (rooks   pos .|. queens pos)
 
 unimax :: Int -> [Int] -> Int
 unimax = foldl' (\a g -> min g (-a))
 
-usePosXRay :: Bool
+usePosXRay, useMayXRay :: Bool
 usePosXRay = False
+useMayXRay = True
 
 data SEEPars = SEEPars {
                    seeGain, seeVal :: !Int,
@@ -762,11 +755,14 @@ seeMoveValue pos !attrec sqfirstmv sqto gain0 = v
                            then if posXRay && seeFrom seepars .&. mayXRay /= 0
                                    then go seepars2 acc'
                                    else go seepars1 acc'
-                           else if seeFrom seepars .&. mayXRay /= 0
-                                   then go seepars2 acc'
+                           else if useMayXRay
+                                   then if seeFrom seepars .&. mayXRay /= 0
+                                           then go seepars2 acc'
+                                           else go seepars1 acc'
                                    else go seepars1 acc'
-          !mayXRay = pawns pos .|. bishops pos .|. rooks pos .|. queens pos  -- could be calc.
-          posXRay = xrayAttacs pos sqto  -- only once, as it is per pos (but it's cheap anyway)
+          !mayXRay | useMayXRay = pawns pos .|. bishops pos .|. rooks pos .|. queens pos  -- could be
+                   | otherwise  = 0
+          posXRay = xrayAttacs pos sqto  -- calculated only once, as it is per pos (but it's cheap anyway)
           !moved0 = uBit sqfirstmv
           attacs0 = newAttacs sqto moved0 attrec
           (!from0, !valfrom) = chooseAttacker pos (atAtt attacs0 .&. yo pos)
@@ -774,15 +770,15 @@ seeMoveValue pos !attrec sqfirstmv sqto gain0 = v
                           seeFrom = from0, seeMovd = moved0, seeDefn = yo pos, seeAgrs = me pos,
                           seeAttsRec = attacs0 }
 
--- This function can produce illegal captures with the king!
+-- This function can produce illegal captures with the king ??
+-- This should be fixed now (see perCaptFieldWL comment below)
 genMoveCaptWL :: MyPos -> ([Move], [Move])
 genMoveCaptWL !pos = (map f $ sort ws, map f $ sort ls)
-    where !capts = myAttacs pos .&. yo pos
+    where capts = myAttacs pos .&. yo pos
           epcs  = genEPCapts pos
-          c     = moving pos
-          (ws, ls) = foldr (perCaptFieldWL pos (me pos) (yoAttacs pos)) (lepcs,[]) $ bbToSquares capts
+          (ws, ls) = foldr (perCaptFieldWL pos (me pos) (yoAttacs pos)) (lepcs, []) $ bbToSquares capts
           lepcs = map (moveToLMove Pawn Pawn) epcs
-          f = moveAddColor c . lmoveToMove
+          f = moveAddColor (moving pos) . lmoveToMove
 
 type LMove = Word32
 
@@ -809,7 +805,7 @@ genEPCapts :: MyPos -> [Move]
 genEPCapts !pos
     | epBB == 0 = []
     | otherwise = map (\s -> makeEnPas s dst) $ bbToSquares srcBB
-    where !epBB = epcas pos .&. epMask
+    where epBB  = epcas pos .&. epMask
           dst   = head $ bbToSquares epBB	-- safe because epBB /= 0
           srcBB = pAttacs (other $ moving pos) dst .&. me pos .&. pawns pos
 
@@ -820,11 +816,12 @@ perCaptFieldWL pos mypc advdefence sq mvlst
     | otherwise = let mvlst1 = foldr (perCaptWL pos myAttRec False pcto valto sq) mvlst  reAgrsqs
                   in           foldr (perCaptWL pos myAttRec True  pcto valto sq) mvlst1 prAgrsqs
     where !myAttRec = theAttacs pos sq
+          -- Avoid illegal capture with the king if not hanging
           myattacs | hanging   = mypc .&. atAtt myAttRec
                    | otherwise = mypc .&. atAtt myAttRec `less` kings pos
           Busy _ pcto = tabla pos sq
           valto = seeValue pcto
-          hanging = not (advdefence `testBit` sq)
+          hanging = not (advdefence `uBitSet` sq)
           prAgrsqs = bbToSquares prPawns
           reAgrsqs = bbToSquares reAtts
           (prPawns, reAtts)
