@@ -33,7 +33,7 @@ import Struct.Status
 import Hash.TransTab
 import Moves.Board
 import Moves.Fen (testAttacksCalculation)
-import Moves.BitBoard (less, uBit)
+import Moves.BitBoard
 import Eval.BasicEval
 import Eval.Eval
 import Moves.ShowMe
@@ -138,14 +138,6 @@ checkGenMove p m@(Move w)
           wrong mes = Left $ "checkGenMove: " ++ mes ++ " for move "
                             ++ showHex w (" in pos\n" ++ showMyPos p)
 --}
-
-{-# INLINE uBitSet #-}
-uBitSet :: BBoard -> Int -> Bool
-uBitSet bb sq = bb .&. uBit sq /= 0
-
-{-# INLINE uBitClear #-}
-uBitClear :: BBoard -> Int -> Bool
-uBitClear bb sq = bb .&. uBit sq == 0
 
 -- Move from a node to a descendent - the real move version
 doRealMove :: Move -> Game DoResult

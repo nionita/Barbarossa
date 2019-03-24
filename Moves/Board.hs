@@ -24,18 +24,29 @@ import Eval.BasicEval
 import Hash.Zobrist
 import Moves.Fen
 
--- Is color c in check in position p?
-{-# INLINE isCheck #-}
-isCheck :: MyPos -> Color -> Bool
-isCheck p White | check p .&. white == 0 = False
-                | otherwise              = True
-    where !white = occup p `less` black p
-isCheck p Black | check p .&. black p == 0 = False
-                | otherwise                = True
+-- When we make the move to arrive in a new position, we want to check legality
+-- of the move (the generator delivers pseudo-legal moves)
+-- This is the first calculation we do on the new position, so we don't have the
+-- new attacks, and this is the method to check if the king of the moving color
+-- was left in check
+{-# INLINE leftInCheck #-}
+leftInCheck :: MyPos -> Bool
+leftInCheck p = atts .&. me p /= 0
+    where atts = unsafeAt (attacked p) $ firstOne $ kings p .&. yo p
 
 {-# INLINE inCheck #-}
 inCheck :: MyPos -> Bool
-inCheck p = check p .&. me p /= 0
+inCheck p = atts .&. yo p /= 0
+    where atts = unsafeAt (attacked p) $ firstOne $ kings p .&. me p
+
+-- Is color c in check in position p?
+{-# INLINE isCheck #-}
+isCheck :: MyPos -> Color -> Bool
+isCheck p c = unsafeAt (attacked p) ksq .&. them /= 0
+    where (us, them) | c == White = (white, black p)
+                     | otherwise  = (black p, white)
+          white = occup p `less` black p
+          ksq = firstOne $ kings p .&. us
 
 {--
 goPromo :: MyPos -> Move -> Bool
@@ -127,16 +138,20 @@ moveChecksDirect !p !m
 -- This one can be further optimised by using two bitboard arrays
 -- for the attacks on empty table
 moveChecksIndirect :: MyPos -> Move -> Bool
-moveChecksIndirect !p !m = ba .&. bq /= 0 || ra .&. rq /= 0
+moveChecksIndirect !p !m
+    =  (eba .&. bq /= 0) && (ba .&. bq /= 0)
+    || (era .&. rq /= 0) && (ra .&. rq /= 0)
     where !ksq = firstOne $ kings p .&. yo p
           !b   = bishops p .&. me p
           !r   = rooks p   .&. me p
           !q   = queens p  .&. me p
           !bq  = b .|. q
           !rq  = r .|. q
-          !fb  = uBit $ fromSquare m
-          !tb  = uBit $ toSquare m
-          !occ = (occup p .|. tb) `less` fb
+          !eba = emptyBAttacs `unsafeAt` ksq
+          !era = emptyRAttacs `unsafeAt` ksq
+          fb   = uBit $ fromSquare m
+          tb   = uBit $ toSquare m
+          occ  = (occup p .|. tb) `less` fb
           ba   = bAttacs occ ksq
           ra   = rAttacs occ ksq
 
@@ -258,20 +273,16 @@ beatOrBlock f !p sq = (beat, block)
 {-# INLINE findLKA #-}
 findLKA :: Piece -> Square -> Int -> BBoard
 findLKA Queen !ksq !psq
-    | bAttacs 0 ksq .&. bpsq /= 0 = findLKA0 Bishop ksq psq
-    | otherwise                   = findLKA0 Rook   ksq psq
+    | emptyBAttacs `unsafeAt` ksq .&. bpsq /= 0 = findLKA0 Bishop ksq psq
+    | otherwise                                 = findLKA0 Rook   ksq psq
     where !bpsq = uBit psq
 findLKA pt !ksq !psq = findLKA0 pt ksq psq
 
 findLKA0 :: Piece -> Square -> Int -> BBoard
 findLKA0 pt ksq psq
-    | pt == Bishop = go bAttacs
-    | pt == Rook   = go rAttacs
+    | pt == Bishop = (emptyBAttacs `unsafeAt` ksq) .&. (emptyBAttacs `unsafeAt` psq)
+    | pt == Rook   = (emptyRAttacs `unsafeAt` ksq) .&. (emptyRAttacs `unsafeAt` psq)
     | otherwise    = 0	-- it will not be called with other pieces
-    where go f = bb
-              where !kp = f 0 ksq
-                    !pk = f 0 psq
-                    !bb = kp .&. pk
 
 genMoveNCaptToCheck :: MyPos -> [Move]
 genMoveNCaptToCheck p = genMoveNCaptDirCheck p ++ genMoveNCaptIndirCheck p
@@ -334,20 +345,6 @@ castKingRookOk !p Black = epcas p .&. b63 /= 0 where b63 = uBit 63
 castQueenRookOk :: MyPos -> Color -> Bool
 castQueenRookOk !p White = epcas p .&.  b0 /= 0 where b0 = 1 
 castQueenRookOk !p Black = epcas p .&. b56 /= 0 where b56 = uBit 56
-
--- When we make the move to arrive in a new position, we want to check legality
--- of the move (the generator delivers pseudo-legal moves)
--- This is the first calculation we do on the new position, so we don't have the
--- new attacks, and this is the method to check if the king of the moving color
--- was left in check
-{-# INLINE leftInCheck #-}
-leftInCheck :: MyPos -> Bool
-leftInCheck p
-    =  me p .&. (bishops p .|. queens p) /= 0
-       && bAttacs (occup p) ksq .&. me p .&. (bishops p .|. queens p) /= 0
-    || me p .&. (rooks   p .|. queens p) /= 0
-       && rAttacs (occup p) ksq .&. me p .&. (rooks   p .|. queens p) /= 0
-    where ksq = firstOne $ kings p .&. yo p
 
 data ChangeAccum = CA !ZKey !Int
 
@@ -459,9 +456,9 @@ alternateMoves p m1 m2
 -- Now, when in check, reject all
 legalMove :: MyPos -> Move -> Bool
 legalMove p m
-    | inCheck p           = False	-- reject TT & killers when in check
-    | moveColor m /= mc   = False	-- wrong color
-    | me p `uTestBit` dst = False	-- destination is occupied by me
+    | inCheck p          = False	-- reject TT & killers when in check
+    | moveColor m /= mc  = False	-- wrong color
+    | me p `uBitSet` dst = False	-- destination is occupied by me
     | Busy col fig <- tabla p src,
       col == mc,
       fig == movePiece m =
@@ -481,17 +478,17 @@ specialMoveIsLegal _ _ = False
 
 {-# INLINE moveIsCapture #-}
 moveIsCapture :: MyPos -> Move -> Bool
-moveIsCapture p m = occup p .&. (uBit (toSquare m)) /= 0
+moveIsCapture p m = occup p `uBitSet` toSquare m
 
 canMove :: Piece -> MyPos -> Square -> Square -> Bool
 canMove Pawn p src dst
     | (src - dst) .&. 0x7 == 0 = elem dst $
          map snd $ pAll1Moves col pw (occup p) ++ pAll2Moves col pw (occup p)
-    | otherwise = pAttacs col src `uTestBit` dst
+    | otherwise = pAttacs col src `uBitSet` dst
     where col = moving p
           pw = uBit src
-canMove King p src dst = kAttacs src `uTestBit` dst && not (yoAttacs p `uTestBit` dst)
-canMove fig p src dst  = fAttacs src fig (occup p) `uTestBit` dst
+canMove King p src dst = kAttacs src `uBitSet` dst && not (yoAttacs p `uBitSet` dst)
+canMove fig p src dst  = fAttacs src fig (occup p) `uBitSet` dst
 
 -- See http://stackoverflow.com/questions/47981/how-do-you-set-clear-and-toggle-a-single-bit-in-c-c
 -- I combined "Checking a bit" with "Changing the nth bit to x"

@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE RankNTypes #-}
 module Moves.Fen (
     posFromFen, initPos, updatePos, setPiece, testAttacksCalculation
     ) where
@@ -93,18 +94,55 @@ fenFromString fen = zipWith ($) fenfuncs fentails
           getFenHalf = headOrDefault "0"
           getFenMvNo = headOrDefault "0"
 
+-- Passed pawns: only with bitboard operations
+whitePassed :: BBoard -> BBoard -> BBoard
+whitePassed !wp !bp = wpa
+    where !bpL = bbLeft bp
+          !bpR = bbRight bp
+          !wb0 = bpR .|. bpL .|. bp .|. wp
+          !sha = shadowDown wb0	-- erase
+          !wpa = wp `less` sha
+
+blackPassed :: BBoard -> BBoard -> BBoard
+blackPassed !wp !bp = bpa
+    where !wpL = bbLeft wp
+          !wpR = bbRight wp
+          !wb0 = wpR .|. wpL .|. wp .|. bp
+          !sha = shadowUp wb0	-- erase
+          !bpa = bp `less` sha
+
+-- Set a piece on a square of the board
+setPiece :: Square -> Color -> Piece -> MyPos -> MyPos
+setPiece sq c f !p
+    = p { black = setCond (c == Black) $ black p,
+          slide = setCond (isSlide f)  $ slide p,
+          kkrq  = setCond (isKkrq f)   $ kkrq p,
+          diag  = setCond (isDiag f)   $ diag p,
+          zobkey = nzob, mater = nmat }
+    where setCond cond = if cond then (.|. bsq) else (.&. nbsq)
+          nzob = zobkey p `xor` zold `xor` znew
+          nmat = mater p - mold + mnew
+          (!zold, !mold) = case tabla p sq of
+                             Empty      -> (0, 0)
+                             Busy co fo -> (zobPiece co fo sq, matPiece co fo)
+          !znew = zobPiece c f sq
+          !mnew = matPiece c f
+          bsq = uBit sq
+          !nbsq = complement bsq
+
+-- Update the rest of position representation according to the basic representation
 updatePos :: Maybe BBoard -> MyPos -> MyPos
 updatePos mbb !p = p {
-                  occup = toccup, me = tme, yo = tyo, kings  = tkings,
-                  pawns = tpawns, knights = tknights, queens = tqueens,
-                  rooks = trooks, bishops = tbishops, passed = tpassed,
-                  attacks = tattacks, attacked = tattacked, lazyBits = lzb, logbook = tlog
-               }
+        occup = toccup, me = tme, yo = tyo, kings  = tkings,
+        pawns = tpawns, knights = tknights, queens = tqueens,
+        rooks = trooks, bishops = tbishops, passed = tpassed,
+        attacks = tattacks, attacked = tattacked, lazyBits = lzb, logbook = tlog
+    }
     where (tattacks, tattacked, tlog) = case mbb of
               Just cha -> updateAttacks (slide p)
                               toccup twpawns tbpawns tknights tbishops trooks tqueens tkings
                               cha (attacks p) (attacked p)
-              Nothing ->  recalcAttacks toccup
+              Nothing  -> recalcAttacks toccup
                               twpawns tbpawns tknights tbishops trooks tqueens tkings
           !toccup = kkrq p .|. diag p
           !tkings = kkrq p .&. diag p `less` slide p
@@ -119,17 +157,15 @@ updatePos mbb !p = p {
           !twpawns = tpawns .&. twhite
           !tbpawns = tpawns .&. black p
           !tpassed = whitePassed twpawns tbpawns .|. blackPassed twpawns tbpawns
-          -- Further ideas:
-          -- 1. The old method could be faster for afew pawns! Tests!!
-          -- 2. This is necessary only after a pawn move, otherwise passed remains the same
-          -- 3. Unify updatePos: one function with basic fields as parameter and eventually
-          --    the old position, then everything in one go - should avoid copying
-          lzb = posLazy (moving p) toccup (black p) tpawns tknights tbishops trooks tqueens tkings
+          -- For passed pawns calculation:
+          -- Now that we know what was changed (mbb) we can check if some pawn was touched
+          -- and recalculate only when true
+          lzb = posLazy (moving p) tattacks toccup (black p) tpawns tknights tbishops trooks tqueens tkings
 
-posLazy :: Color -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> LazyBits
-posLazy !co !ocp !tblack !tpawns !tknights !tbishops !trooks !tqueens !tkings
+posLazy :: Color -> MaArray -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> LazyBits
+posLazy !co tattacks !ocp !tblack !tpawns !tknights !tbishops !trooks !tqueens !tkings
     | co == White = LazyBits {
-                      _check = tcheck,
+                      -- _check = tcheck,
                       _myPAttacs = twhPAtt, _myNAttacs = twhNAtt, _myBAttacs = twhBAtt,
                       _myRAttacs = twhRAtt, _myQAttacs = twhQAtt, _myKAttacs = twhKAtt,
                       _yoPAttacs = tblPAtt, _yoNAttacs = tblNAtt, _yoBAttacs = tblBAtt,
@@ -137,41 +173,32 @@ posLazy !co !ocp !tblack !tpawns !tknights !tbishops !trooks !tqueens !tkings
                       _myAttacs  = twhAttacs, _yoAttacs = tblAttacs
                   }
     | otherwise   = LazyBits {
-                      _check = tcheck,
+                      -- _check = tcheck,
                       _myPAttacs = tblPAtt, _myNAttacs = tblNAtt, _myBAttacs = tblBAtt,
                       _myRAttacs = tblRAtt, _myQAttacs = tblQAtt, _myKAttacs = tblKAtt,
                       _yoPAttacs = twhPAtt, _yoNAttacs = twhNAtt, _yoBAttacs = twhBAtt,
                       _yoRAttacs = twhRAtt, _yoQAttacs = twhQAtt, _yoKAttacs = twhKAtt,
                       _myAttacs  = tblAttacs, _yoAttacs = twhAttacs
                   }
-    where !twhPAtt = bbToSquaresBB (pAttacs White) $ tpawns .&. white
-          !twhNAtt = bbToSquaresBB nAttacs $ tknights .&. white
-          !twhBAtt = bbToSquaresBB (bAttacs ocp) $ tbishops .&. white
-          !twhRAtt = bbToSquaresBB (rAttacs ocp) $ trooks .&. white
-          !twhQAtt = bbToSquaresBB (qAttacs ocp) $ tqueens .&. white
-          !twhKAtt = kAttacs $ firstOne $ tkings .&. white
-          !tblPAtt = bbToSquaresBB (pAttacs Black) $ tpawns .&. tblack
-          !tblNAtt = bbToSquaresBB nAttacs $ tknights .&. tblack
-          !tblBAtt = bbToSquaresBB (bAttacs ocp) $ tbishops .&. tblack
-          !tblRAtt = bbToSquaresBB (rAttacs ocp) $ trooks .&. tblack
-          !tblQAtt = bbToSquaresBB (qAttacs ocp) $ tqueens .&. tblack
-          !tblKAtt = kAttacs $ firstOne $ tkings .&. tblack
+    where !twhPAtt = bbToSquaresBB f $ tpawns .&. white
+          !twhNAtt = bbToSquaresBB f $ tknights .&. white
+          !twhBAtt = bbToSquaresBB f $ tbishops .&. white
+          !twhRAtt = bbToSquaresBB f $ trooks .&. white
+          !twhQAtt = bbToSquaresBB f $ tqueens .&. white
+          !twhKAtt = f $ firstOne $ tkings .&. white
+          !tblPAtt = bbToSquaresBB f $ tpawns .&. tblack
+          !tblNAtt = bbToSquaresBB f $ tknights .&. tblack
+          !tblBAtt = bbToSquaresBB f $ tbishops .&. tblack
+          !tblRAtt = bbToSquaresBB f $ trooks .&. tblack
+          !tblQAtt = bbToSquaresBB f $ tqueens .&. tblack
+          !tblKAtt = f $ firstOne $ tkings .&. tblack
           !twhAttacs = twhPAtt .|. twhNAtt .|. twhBAtt .|. twhRAtt .|. twhQAtt .|. twhKAtt
           !tblAttacs = tblPAtt .|. tblNAtt .|. tblBAtt .|. tblRAtt .|. tblQAtt .|. tblKAtt
           !white = ocp `less` tblack
-          !whcheck = white  .&. tkings .&. tblAttacs
-          !blcheck = tblack .&. tkings .&. twhAttacs
-          !tcheck = whcheck .|. blcheck
-
--- Just to test the incremental attacks update
--- Not an exhaustive test
-testAttacksCalculation :: MyPos -> Maybe (BBoard, BBoard, BBoard, [(Square, BBoard)])
-testAttacksCalculation p
-    | myAttacs p /= myatts = Just (myAttacs p, myatts, diffs, froms)
-    | otherwise            = Nothing
-    where myatts = bbToSquaresBB (unsafeAt $ attacks p) $ me p
-          diffs = myAttacs p `xor` myatts
-          froms = map (\s -> (s, (attacked p `unsafeAt` s) .&. me p)) $ bbToSquares diffs
+          -- !whcheck = white  .&. tkings .&. tblAttacs
+          -- !blcheck = tblack .&. tkings .&. twhAttacs
+          -- !tcheck = whcheck .|. blcheck
+          f = unsafeAt tattacks
 
 recalcAttacks :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard
               -> (MaArray, MaArray, [String])
@@ -210,8 +237,7 @@ updateAttacks :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBo
               -> (MaArray, MaArray, [String])
 updateAttacks tslide toccup twpawns tbpawns tknights tbishops trooks tqueens tkings cha out ins
     = runST $ do
-        logRef <- newSTRef []
-        let logger s = modifySTRef logRef $ \l -> s : l
+        (logger, getlog) <- loggingUtilities
         -- logger $ "Occup:\n" ++ showBB toccup
         logger $ "Move BB:\n" ++ showBB cha
         -- The new out & ins (take a copy)
@@ -253,41 +279,31 @@ updateAttacks tslide toccup twpawns tbpawns tknights tbishops trooks tqueens tki
                     logger $ "Remove " ++ show sq ++ " from attacked of " ++ show s
         noutf <- unsafeFreeze nout
         ninsf <- unsafeFreeze nins
-        finlog <- readSTRef logRef
-        return (noutf, ninsf, reverse finlog)
+        finlog <- getlog
+        return (noutf, ninsf, finlog)
 
--- Passed pawns: only with bitboard operations
-whitePassed :: BBoard -> BBoard -> BBoard
-whitePassed !wp !bp = wpa
-    where !bpL = bbLeft bp
-          !bpR = bbRight bp
-          !wb0 = bpR .|. bpL .|. bp .|. wp
-          !sha = shadowDown wb0	-- erase
-          !wpa = wp `less` sha
+-- Just to test the incremental attacks update
+-- Not an exhaustive test
+testAttacksCalculation :: MyPos -> Maybe (BBoard, BBoard, BBoard, [(Square, BBoard)])
+testAttacksCalculation p
+    | myAttacs p /= myatts = Just (myAttacs p, myatts, diffs, froms)
+    | otherwise            = Nothing
+    where myatts = bbToSquaresBB (unsafeAt $ attacks p) $ me p
+          diffs = myAttacs p `xor` myatts
+          froms = map (\s -> (s, (attacked p `unsafeAt` s) .&. me p)) $ bbToSquares diffs
 
-blackPassed :: BBoard -> BBoard -> BBoard
-blackPassed !wp !bp = bpa
-    where !wpL = bbLeft wp
-          !wpR = bbRight wp
-          !wb0 = wpR .|. wpL .|. wp .|. bp
-          !sha = shadowUp wb0	-- erase
-          !bpa = bp `less` sha
+-- Used for debugging the attacks/attacked updates, normally disabled
+logUpdateAttacks :: Bool
+logUpdateAttacks = False
 
--- Set a piece on a square of the table
-setPiece :: Square -> Color -> Piece -> MyPos -> MyPos
-setPiece sq c f !p
-    = p { black = setCond (c == Black) $ black p,
-          slide = setCond (isSlide f)  $ slide p,
-          kkrq  = setCond (isKkrq f)   $ kkrq p,
-          diag  = setCond (isDiag f)   $ diag p,
-          zobkey = nzob, mater = nmat }
-    where setCond cond = if cond then (.|. bsq) else (.&. nbsq)
-          nzob = zobkey p `xor` zold `xor` znew
-          nmat = mater p - mold + mnew
-          (!zold, !mold) = case tabla p sq of
-                             Empty      -> (0, 0)
-                             Busy co fo -> (zobPiece co fo sq, matPiece co fo)
-          !znew = zobPiece c f sq
-          !mnew = matPiece c f
-          bsq = uBit sq
-          !nbsq = complement bsq
+loggingUtilities :: forall s. ST s (String -> ST s (), ST s [String])
+loggingUtilities
+    | logUpdateAttacks = do
+        logRef <- newSTRef []
+        let logger = \s -> modifySTRef logRef $ \l -> s : l
+            getlog = reverse <$> readSTRef logRef
+        return (logger, getlog)
+    | otherwise = do
+        let logger = \_ -> return ()
+            getlog = return []
+        return (logger, getlog)

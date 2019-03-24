@@ -2,7 +2,7 @@
 module Moves.BitBoard (
     lsb, bbToSquares, less, firstOne,
     bbToSquaresBB,
-    shadowDown, shadowUp, uTestBit, uBit
+    shadowDown, shadowUp, uBitSet, uBitClear, uBit
     -- exactOne,
     -- bbFoldr
 ) where
@@ -68,10 +68,14 @@ extractSquare b = let lsbb = lsb b
 
 -- Because the normal Bits operations are all safe
 -- we define here the unsafe versions specialized for BBoard
-{-# INLINE uTestBit #-}
-uTestBit :: BBoard -> Int -> Bool
-uTestBit w b = let bb = 1 `unsafeShiftL` b
-               in w .&. bb /= 0
+{-# INLINE uBitSet #-}
+uBitSet :: BBoard -> Int -> Bool
+uBitSet bb sq = bb .&. uBit sq /= 0
+
+{-# INLINE uBitClear #-}
+uBitClear :: BBoard -> Int -> Bool
+uBitClear bb sq = bb .&. uBit sq == 0
+
 
 {-# INLINE uBit #-}
 uBit :: Square -> BBoard

@@ -4,7 +4,8 @@ module Moves.Moves (
     fAttacs,
     pMovs,
     kAttacs, qAttacs, rAttacs, bAttacs, nAttacs,
-    pAll1Moves, pAll2Moves
+    pAll1Moves, pAll2Moves,
+    emptyBAttacs, emptyRAttacs
     ) where
 
 import Data.Array.Base
@@ -51,6 +52,10 @@ sliderMoves genSlider genSlMask sBits sMagic = SlMoves { database = bdb, sqmagic
 rookMoves, bishopMoves :: SlMoves
 rookMoves = sliderMoves genRook genRookMask rBits rMagic
 bishopMoves = sliderMoves genBishop genBishopMask bBits bMagic
+
+emptyBAttacs, emptyRAttacs :: DbArray
+emptyBAttacs = listArray (0, 63) $ map (bAttacs 0) [0..63]
+emptyRAttacs = listArray (0, 63) $ map (rAttacs 0) [0..63]
 
 {-# INLINE smoves #-}
 smoves :: SlMoves -> BBoard -> Square -> BBoard

@@ -11,7 +11,7 @@ module Struct.Struct (
          moveHisAdr, moveHisOfs,
          makeCastleFor, makePromo, moveFromTo, showWord64,
          activatePromo, fromColRow, checkCastle, checkEnPas, toString,
-         myAttacs, yoAttacs, check,
+         myAttacs, yoAttacs, -- check,
          myPAttacs, myNAttacs, myBAttacs, myRAttacs, myQAttacs, myKAttacs,
          yoPAttacs, yoNAttacs, yoBAttacs, yoRAttacs, yoQAttacs, yoKAttacs
     ) where
@@ -43,30 +43,35 @@ data TabCont = Empty
              deriving (Eq, Show)
 
 data MyPos = MyPos {
-    black, slide, kkrq, diag, epcas :: !BBoard, -- These fields completely represents of a position
-    zobkey :: !ZKey,				-- the hash key
-    me, yo, occup, kings, pawns :: !BBoard,	-- heavy used bitboards computed for efficiency
-    queens, rooks, bishops, knights, passed :: !BBoard,
-    mater :: !Int,		-- material balance
-    mmove :: Maybe Move,	-- move leading to this position
-    staticScore :: Int,		-- lazy, not always needed
-    attacks, attacked :: MaArray,	-- BBoard arrays for attacks
-    logbook :: [String],		-- used for debugging
-    lazyBits :: LazyBits	-- lazy of course
+        -- 6 fields for basic position representation + hash key:
+        black, slide, kkrq, diag, epcas :: !BBoard,
+        zobkey :: !ZKey,
+        -- further 10 fields for heavily used bitboards:
+        me, yo, occup, kings, pawns :: !BBoard,
+        queens, rooks, bishops, knights, passed :: !BBoard,
+        -- further fields we need in every position:
+        mater :: !Int,		-- material balance
+        attacks, attacked :: MaArray,	-- BBoard arrays for attacks
+        mmove :: Maybe Move,	-- move leading to this position
+        staticScore :: Int,		-- lazy, not always needed
+        logbook :: [String],	-- used for debugging
+        lazyBits :: LazyBits	-- lazy of course
     }
 
 data LazyBits = LazyBits {
-    _myAttacs, _yoAttacs, _check :: !BBoard,		-- my & yours attacs, check
+    -- _myAttacs, _yoAttacs, _check :: !BBoard,		-- my & yours attacs, check
+    _myAttacs, _yoAttacs :: !BBoard,		-- my & yours attacs, check
     _myPAttacs, _myNAttacs, _myBAttacs, _myRAttacs, _myQAttacs, _myKAttacs :: !BBoard,
     _yoPAttacs, _yoNAttacs, _yoBAttacs, _yoRAttacs, _yoQAttacs, _yoKAttacs :: !BBoard
     }
     deriving Eq
 
-myAttacs, yoAttacs, check :: MyPos -> BBoard
+-- myAttacs, yoAttacs, check :: MyPos -> BBoard
+myAttacs, yoAttacs :: MyPos -> BBoard
 myPAttacs, myNAttacs, myBAttacs, myRAttacs, myQAttacs, myKAttacs :: MyPos -> BBoard
 yoPAttacs, yoNAttacs, yoBAttacs, yoRAttacs, yoQAttacs, yoKAttacs :: MyPos -> BBoard
 
-check     = _check     . lazyBits
+-- check     = _check     . lazyBits
 myAttacs  = _myAttacs  . lazyBits
 myPAttacs = _myPAttacs . lazyBits
 myNAttacs = _myNAttacs . lazyBits
@@ -84,7 +89,7 @@ yoKAttacs = _yoKAttacs . lazyBits
 
 {-# INLINE myAttacs #-}
 {-# INLINE yoAttacs #-}
-{-# INLINE check #-}
+-- {-# INLINE check #-}
 {-# INLINE myPAttacs #-}
 {-# INLINE myNAttacs #-}
 {-# INLINE myBAttacs #-}
@@ -118,7 +123,7 @@ instance Show MyPos where
             (passed, "passed"),
             (myAttacs, "myAttacs"),
             (yoAttacs, "yoAttacs"),
-            (check, "check"),
+            -- (check, "check"),
             (myPAttacs, "myPAttacs"),
             (myNAttacs, "myNAttacs"),
             (myBAttacs, "myBAttacs"),
@@ -209,7 +214,7 @@ emptyPos = MyPos {
         attacks = zeroArray, attacked = zeroArray, logbook = []
     }
     where leb = LazyBits {
-                  _myAttacs = 0, _yoAttacs = 0, _check = 0,
+                  _myAttacs = 0, _yoAttacs = 0, -- _check = 0,
                   _myPAttacs = 0, _myNAttacs = 0, _myBAttacs = 0, _myRAttacs = 0,
                   _myQAttacs = 0, _myKAttacs = 0,
                   _yoPAttacs = 0, _yoNAttacs = 0, _yoBAttacs = 0, _yoRAttacs = 0,

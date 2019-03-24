@@ -312,13 +312,13 @@ pawn1 p f r []
                | otherwise     = sqdst + 8
           src2 | fcol == White = src1  - 8
                | otherwise     = src1  + 8
-          msqsrc = if target `uTestBit` src1
+          msqsrc = if target `uBitSet` src1
                       then Just src1
-                      else if occup p `uTestBit` src1
+                      else if occup p `uBitSet` src1
                               then Nothing
                               else if src2 < 0 || src2 > 63
                                       then Nothing
-                                      else if target `uTestBit` src2
+                                      else if target `uBitSet` src2
                                               then Just src2
                                               else Nothing
 pawn1 _ _ _ cs = Left $ cs ++ ": expect +, #, = or end of string"
@@ -339,13 +339,13 @@ pawn1Q p f r (c:cs)
                | otherwise     = sqdst + 8
           src2 | fcol == White = src1  - 8
                | otherwise     = src1  + 8
-          msqsrc = if target `uTestBit` src1
+          msqsrc = if target `uBitSet` src1
                       then Just src1
-                      else if occup p `uTestBit` src1
+                      else if occup p `uBitSet` src1
                               then Nothing
                               else if src2 < 0 || src2 > 63
                                       then Nothing
-                                      else if target `uTestBit` src2
+                                      else if target `uBitSet` src2
                                               then Just src2
                                               else Nothing
 pawn1Q _ _ _ cs = Left $ cs ++ ": expect promotion piece, then +, # or end of string"
