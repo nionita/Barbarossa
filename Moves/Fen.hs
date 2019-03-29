@@ -7,7 +7,7 @@ module Moves.Fen (
 import Data.Array.IArray
 import Data.Array.MArray
 import Data.Array.Unsafe (unsafeFreeze)
-import Data.Array.Base (unsafeAt)
+import Data.Array.Base (unsafeAt, unsafeRead, unsafeWrite)
 import Control.Monad (when, forM_)
 import Control.Monad.ST (ST, runST)
 import Data.STRef
@@ -120,14 +120,14 @@ setPiece sq c f !p
           diag  = setCond (isDiag f)   $ diag p,
           zobkey = nzob, mater = nmat }
     where setCond cond = if cond then (.|. bsq) else (.&. nbsq)
-          nzob = zobkey p `xor` zold `xor` znew
-          nmat = mater p - mold + mnew
+          !nzob = zobkey p `xor` zold `xor` znew
+          !nmat = mater p - mold + mnew
           (!zold, !mold) = case tabla p sq of
                              Empty      -> (0, 0)
                              Busy co fo -> (zobPiece co fo sq, matPiece co fo)
           !znew = zobPiece c f sq
           !mnew = matPiece c f
-          bsq = uBit sq
+          !bsq = uBit sq
           !nbsq = complement bsq
 
 -- Update the rest of position representation according to the basic representation
@@ -217,6 +217,7 @@ recalcAttacks toccup twpawns tbpawns tknights tbishops trooks tqueens tkings
           zeroArray = listArray (0, 63) $ repeat 0
 
 -- Recompute the whole attacked array
+-- Optimisation: GHC did detect the correct strictness
 calcAttacked :: MaArray -> MaArray
 calcAttacked arr
     = runSTUArray $ do
@@ -224,14 +225,17 @@ calcAttacked arr
         forM_ (assocs arr) $ \(s, bb) -> when (bb /= 0) $ do
             let sb = uBit s
             forM_ (bbToSquares bb) $ \d -> do
-                v <- readArray tarr d
-                writeArray tarr d (v .|. sb)
+                v <- unsafeRead tarr d
+                unsafeWrite tarr d (v .|. sb)
         return tarr
 
 -- Update the attacks/attacked arrays
 -- cha is the bitboard of added/removed pieces during the move
 -- out is the array of attacks from every square
 -- ins is the array of attackedBy to every square
+--
+-- Optimisation: there is no need currently to set explicit strictness in let or monad
+-- GHC did find the strict expressions
 updateAttacks :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard
               -> BBoard -> BBoard -> BBoard -> MaArray -> MaArray
               -> (MaArray, MaArray, [String])
@@ -258,24 +262,26 @@ updateAttacks tslide toccup twpawns tbpawns tknights tbishops trooks tqueens tki
                    ]
         logger $ "Arebb:\n" ++ showBB arebb
         -- For every piece type existing in the attack recalculation bitboard...
+        -- Alternativey we could just take every square and analyse what piece is on it
+        -- It should not be very much variation here I guess... But only tests can say
         forM_ pcfs $ \(bb, func) -> do
             -- and every piece of that type
             forM_ (bbToSquares $ arebb .&. bb) $ \sq -> do
                 let oatc = out `unsafeAt` sq	-- old attacks from that square
                     natc = func sq		-- new attacks from that square
-                writeArray nout sq natc
+                unsafeWrite nout sq natc
                 logger $ "New attacks from square " ++ show sq ++ ":\n" ++ showBB natc
                 let sqbb = uBit sq
                     ains = natc `less` oatc	-- added attackedBy from this square
                 forM_ (bbToSquares ains) $ \s -> do
-                    obb <- readArray nins s
-                    writeArray nins s (obb .|. sqbb)	-- add sq to the attackedBy of s
+                    obb <- unsafeRead nins s
+                    unsafeWrite nins s (obb .|. sqbb)	-- add sq to the attackedBy of s
                     logger $ "Add " ++ show sq ++ " to attacked of " ++ show s
                 let sqdd = complement sqbb
                     dins = oatc `less` natc	-- deleted attackedBy from this square
                 forM_ (bbToSquares dins) $ \s -> do
-                    obb <- readArray nins s
-                    writeArray nins s (obb .&. sqdd)	-- delete sq from the attackedBy of s
+                    obb <- unsafeRead nins s
+                    unsafeWrite nins s (obb .&. sqdd)	-- delete sq from the attackedBy of s
                     logger $ "Remove " ++ show sq ++ " from attacked of " ++ show s
         noutf <- unsafeFreeze nout
         ninsf <- unsafeFreeze nins

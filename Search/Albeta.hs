@@ -396,7 +396,7 @@ checkFailOrPVRoot xstats b d e s nst = whenAbort (True, nst) $ do
                  -- as we do not update cursc here and search all root moves)
                  --    rch | pathScore s > a = rbmch nst + 1
                  --        | otherwise       = rbmch nst
-                 return (False, nst {movno = mn + 1, pvsl = xpvslg })
+                 return (False, nst { movno = mn + 1, pvsl = xpvslg })
             else if pathScore s <= a
                     then do	-- failed low
                         let xpvslb = insertToPvs d pvg (pvsl nst)
