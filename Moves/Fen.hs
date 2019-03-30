@@ -248,6 +248,16 @@ updateAttacks tslide toccup twpawns tbpawns tknights tbishops trooks tqueens tki
         nout <- (thaw out) :: ST s (STUArray s Int BBoard)
         nins <- (thaw ins) :: ST s (STUArray s Int BBoard)
         -- These squares are blocked/deblocked by adding/removing the pieces
+        -- We could use the fact that the board margins are special:
+        -- If a square from the margine is changed, than only sliders from the margin can be affected
+        -- not the interior ones, because the margins are non blocking for interior sliders
+        -- Something like:
+        -- let cham = cha .&. margins
+        --     chai = cha `less` margins
+        --     blkm = tslide .&. margins .&. bbToSquaresBB (unsafeAt ins) cham
+        --     blki = tslide             .&. bbToSquaresBB (unsafeAt ins) chai
+        --     blck = blkm .|. blki
+        --     arebb = blck .|. cha
         let blckd = tslide .&. bbToSquaresBB (unsafeAt ins) cha
             arebb = cha .|. blckd	-- for those we need an attack recalculation
             pcfs = [
