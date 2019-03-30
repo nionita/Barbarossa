@@ -223,10 +223,10 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
         ("end.kingPlaceCent",  setEndKingPlaceCent),
         ("mid.kingPlacePwns",  setMidKingPlacePwns),
         ("end.kingPlacePwns",  setEndKingPlacePwns),
-        ("mid.kingThreat1",    setMidKingThreat1),
-        ("end.kingThreat1",    setEndKingThreat1),
-        ("mid.kingThreat2",    setMidKingThreat2),
-        ("end.kingThreat2",    setEndKingThreat2),
+        ("mid.kingPawn",       setMidKingPawn),
+        ("end.kingPawn",       setEndKingPawn),
+        ("mid.kingThreat",     setMidKingThreat),
+        ("end.kingThreat",     setEndKingThreat),
         ("mid.rookHOpen",      setMidRookHOpen),
         ("end.rookHOpen",      setEndRookHOpen),
         ("mid.rookOpen",       setMidRookOpen),
@@ -306,10 +306,10 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
           setEndKingPlaceCent   v' ew' = ew' { ewKingPlaceCent   = (ewKingPlaceCent   ew') { end = round v' }}
           setMidKingPlacePwns   v' ew' = ew' { ewKingPlacePwns   = (ewKingPlacePwns   ew') { mid = round v' }}
           setEndKingPlacePwns   v' ew' = ew' { ewKingPlacePwns   = (ewKingPlacePwns   ew') { end = round v' }}
-          setMidKingThreat1     v' ew' = ew' { ewKingPawn        = (ewKingPawn        ew') { mid = round v' }}
-          setEndKingThreat1     v' ew' = ew' { ewKingPawn        = (ewKingPawn        ew') { end = round v' }}
-          setMidKingThreat2     v' ew' = ew' { ewKingThreat      = (ewKingThreat      ew') { mid = round v' }}
-          setEndKingThreat2     v' ew' = ew' { ewKingThreat      = (ewKingThreat      ew') { end = round v' }}
+          setMidKingPawn        v' ew' = ew' { ewKingPawn        = (ewKingPawn        ew') { mid = round v' }}
+          setEndKingPawn        v' ew' = ew' { ewKingPawn        = (ewKingPawn        ew') { end = round v' }}
+          setMidKingThreat      v' ew' = ew' { ewKingThreat      = (ewKingThreat      ew') { mid = round v' }}
+          setEndKingThreat      v' ew' = ew' { ewKingThreat      = (ewKingThreat      ew') { end = round v' }}
           setMidRookHOpen       v' ew' = ew' { ewRookHOpen       = (ewRookHOpen       ew') { mid = round v' }}
           setEndRookHOpen       v' ew' = ew' { ewRookHOpen       = (ewRookHOpen       ew') { end = round v' }}
           setMidRookOpen        v' ew' = ew' { ewRookOpen        = (ewRookOpen        ew') { mid = round v' }}
