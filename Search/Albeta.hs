@@ -35,7 +35,7 @@ useAspirWin = False
 scoreGrain, depthForCM, maxDepthExt, minPvDepth :: Int
 scoreGrain  = 4	-- score granularity
 depthForCM  = 7 -- from this depth inform current move
-maxDepthExt = 4 -- maximum depth extension
+maxDepthExt = 8 -- maximum depth extension
 minPvDepth  = 2		-- from this depth we use alpha beta search
 useTTinPv :: Bool
 useTTinPv   = False	-- retrieve from TT in PV?
@@ -911,7 +911,7 @@ qSearch !a !b front = do
               else qsNormal a b (staticScore pos) front
 
 qsInCheck :: Int -> Int -> Int -> Search Int
-qsInCheck !a !b s = do
+qsInCheck !a !b !s = do
     edges <- Alt <$> lift genEscapeMoves
     if noMove edges
        then return $! -mateScore
