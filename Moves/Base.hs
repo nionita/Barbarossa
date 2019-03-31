@@ -175,8 +175,8 @@ doRealMove m = do
                    return $ Exten 0 False False
 
 -- Move from a node to a descendent - the normal search version
-doMove :: Move -> Game DoResult
-doMove m = do
+doMove :: Move -> Int -> Game DoResult
+doMove m d = do
     s <- get
     let (pc:_) = stack s	-- we never saw an empty stack error until now
         -- Moving a non-existent piece?
@@ -200,8 +200,8 @@ doMove m = do
                    if checkRemisRules p (stack s)
                       then return Final
                       else if captOrPromo pc m
-                              then return $! Exten (exten pc p) True True
-                              else return $! Exten (exten pc p) False (noLMR pc m)
+                              then return $! Exten (exten pc p d) True True
+                              else return $! Exten (exten pc p d) False (noLMR pc m)
 
 -- Move from a node to a descendent - the QS search version
 -- Here we do only a restricted check for illegal moves
@@ -251,13 +251,14 @@ undoMove = modify $ \s -> s { stack = tail $ stack s }
 -- - gives check
 -- - captures last queen
 -- - captures last rook when no queens
-exten :: MyPos -> MyPos -> Int
-exten p1 p2 | inCheck p2     = 1
-            | queens p2 /= 0 = 0
-            | queens p1 /= 0 = 1
-            | rooks  p2 /= 0 = 0
-            | rooks  p1 /= 0 = 1
-            | otherwise      = 0
+exten :: MyPos -> MyPos -> Int -> Int
+exten _  _  1                  = 0
+exten p1 p2 _ | inCheck p2     = 1
+              | queens p2 /= 0 = 0
+              | queens p1 /= 0 = 1
+              | rooks  p2 /= 0 = 0
+              | rooks  p1 /= 0 = 1
+              | otherwise      = 0
 
 {--
 -- Parameters for pawn threats
