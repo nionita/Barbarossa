@@ -40,6 +40,10 @@ minPvDepth  = 2		-- from this depth we use alpha beta search
 useTTinPv :: Bool
 useTTinPv   = False	-- retrieve from TT in PV?
 
+-- Parameter for killer moves
+maxKillers :: Int
+maxKillers = 3
+
 -- Parameters for late move reduction:
 lmrInitLv, lmrInitLim, lmrLevMin, lmrLevMax, lmrNoDepth :: Int
 lmrInitLv  = 8
@@ -111,7 +115,7 @@ data Pvsl = Pvsl {
         pvNodes :: !Int64	-- number of nodes in the current search
     } deriving Show
 
-data Killer = NoKiller | OneKiller !Move | TwoKillers !Move !Move deriving (Eq, Show)
+newtype Killer = Killer [Move] deriving Show
 
 -- Read only parameters of the search, so that we can change them programatically
 data PVReadOnly
@@ -145,8 +149,8 @@ data NodeState
           spcno  :: !Int,	-- last move number of a special move
           albe   :: !Bool,	-- in alpha/beta search (for small depths)
           rbmch  :: !Int,	-- number of changes in root best move / score type otherwise
+          killer :: !Killer,	-- the current killer moves
           cursc  :: Path,	-- current alpha value (now plus path & depth)
-          killer :: Killer,	-- the current killer moves
           cpos   :: MyPos,	-- current position for this node
           pvsl   :: [Pvsl]	-- principal variation list (at root) with node statistics
       } deriving Show
@@ -210,12 +214,12 @@ pvsInit = PVState { ronly = pvro00, stats = ssts0, absdp = 0, usedext = 0, abort
                     lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
 nst0 :: NodeState
 nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore 0, rbmch = -1,
-             movno = 1, spcno = 1, killer = NoKiller, albe = False, cpos = initPos, pvsl = [] }
+             movno = 1, spcno = 1, killer = Killer [], albe = False, cpos = initPos, pvsl = [] }
              -- we start with spcno = 1 as we consider the first move as special
              -- to avoid in any way reducing the tt move
 
 resetNSt :: Path -> Killer -> NodeState -> NodeState
-resetNSt !sc !kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, rbmch = 0 }
+resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, rbmch = 0 }
 
 pvro00 :: PVReadOnly
 pvro00 = PVReadOnly { draft = 0, albest = False, timeli = False, abmili = 0 }
@@ -481,7 +485,7 @@ pvSearch nst !a !b !d = do
                 -- futility pruning:
                 !prune <- isPruneFutil d a True (staticScore pos)
                 -- Loop thru the moves
-                let !nsti = resetNSt (pathFromScore a) NoKiller nst'
+                let !nsti = resetNSt (pathFromScore a) (Killer []) nst'
                 !nstf <- pvSLoop b d False prune nsti edges
                 let s = cursc nstf
                 whenAbort s $
@@ -536,7 +540,7 @@ pvZeroW !nst !b !d = do
                         -- Loop thru the moves
                         let kill1 = case nmhigh of
                                         NullMoveThreat s -> newTKiller pos d s
-                                        _                -> NoKiller
+                                        _                -> Killer []
                             !nsti = resetNSt (pathFromScore bGrain) kill1 nst'
                         !nstf <- pvSLoop b d True prune nsti edges
                         let s = cursc nstf
@@ -771,13 +775,13 @@ newKiller d s nst
 
 -- Same as newKiller, but the path begins with the killer move
 -- as it is coming from null move search
--- It is called before a NSt reset, so no neet to consider
+-- It is called before a NSt reset, so no need to consider
 -- previous killer moves
 newTKiller :: MyPos -> Int -> Path -> Killer
 newTKiller pos d s
     | d >= 2, (km:_) <- unseq $ pathMoves s,
-      isTKillCand pos km = OneKiller km
-    | otherwise          = NoKiller
+      isTKillCand pos km = Killer [km]
+    | otherwise          = Killer []
 
 -- We don't sort the moves here, they have to come sorted from genMoves
 -- But we consider the best move first (TT or IID) and the killers
@@ -967,7 +971,7 @@ bestMoveFromIID :: NodeState -> Int -> Int -> Int -> Search [Move]
 bestMoveFromIID nst a b d
     | nt == AllNode = return []
     | nt == CutNode
-          = if d >= minIIDCut || (d >= minIIDCutNK && killer nst == NoKiller)
+          = if d >= minIIDCut || (d >= minIIDCutNK && noKiller (killer nst))
                then do s <- pvZeroW nst b d'
                        return $! unseq $ pathMoves s
                else return []
@@ -978,6 +982,9 @@ bestMoveFromIID nst a b d
                else return []
     where d' = min maxIIDDepth (iidNewDepth d)
           nt = crtnt nst
+
+noKiller :: Killer -> Bool
+noKiller (Killer kl) = null kl
 
 {-# INLINE timeToAbort #-}
 timeToAbort :: a -> Search a -> Search a
@@ -1093,23 +1100,13 @@ uniqFilter !e = go
 
 -- Here we chain the filters for more moves (composition)
 chainUniqFilters :: [Move] -> [Move] -> [Move]
--- chainUniqFilters []     ms = ms
--- chainUniqFilters (k:ks) ms = (foldr (\m f -> uniqFilter m . f) (uniqFilter k) ks) ms
 chainUniqFilters = foldr (\m f -> uniqFilter m . f) id
 
 pushKiller :: Move -> Killer -> Killer
-pushKiller !e NoKiller = OneKiller e
-pushKiller !e ok@(OneKiller e1)
-    | e == e1   = ok
-    | otherwise = TwoKillers e e1
-pushKiller !e tk@(TwoKillers e1 e2)
-    | e == e1 || e == e2 = tk
-    | otherwise          = TwoKillers e e1
+pushKiller e (Killer kl) = Killer $ take maxKillers $ e : uniqFilter e kl
 
 killerToList :: Killer -> [Move]
-killerToList  NoKiller          = []
-killerToList (OneKiller e)      = [e]
-killerToList (TwoKillers e1 e2) = [e1, e2]
+killerToList (Killer kl) = kl
 
 --- Communication to the outside - some convenience functions ---
 informCM :: Move -> Int -> Game ()
