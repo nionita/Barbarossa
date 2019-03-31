@@ -84,13 +84,16 @@ addHist h !ad !p = do
     nh <- if (oh >= lowLimit)
              then return $ oh - p -- we subtract, so that the sort is reverse (big first)
              else do
-                 -- Rescale the whole history
-                 forM_ [0..vsize-1] $ \i -> do
+                 -- Rescale only the history of the relevant side
+                 let (lo, hi) | ad >= hvsize = (hvsize, vsize-1)
+                              | otherwise    = (0, hvsize-1)
+                 forM_ [lo..hi] $ \i -> do
                      o <- V.unsafeRead h i
                      V.unsafeWrite h i (o `unsafeShiftR` 1)
                  return $ (oh `unsafeShiftR` 1) - p
     V.unsafeWrite h ad nh
     where lowLimit = - (1 `unsafeShiftL` 30)
+          hvsize = vsize `unsafeShiftR` 1
 
 -- We use a data structure to allow lazyness for the selection of the next
 -- best move (by history values), because we want to use by every selected move
