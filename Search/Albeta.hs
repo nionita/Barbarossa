@@ -42,7 +42,7 @@ useTTinPv   = False	-- retrieve from TT in PV?
 
 -- Parameter for killer moves
 maxKillers :: Int
-maxKillers = 3
+maxKillers = 2
 
 -- Parameters for late move reduction:
 lmrInitLv, lmrInitLim, lmrLevMin, lmrLevMax, lmrNoDepth :: Int
