@@ -88,8 +88,10 @@ genMoves d = do
                 l1 = genMovePromo p
                 (l2w, l2l) = genMoveCaptWL p
                 l3 = histSortMoves d h $ genMoveNCapt p
-            -- Loosing captures after non-captures
-            return (l1 ++ l2w, l0 ++ l3 ++ l2l)
+            if d <= 5
+               then return (l1 ++ l2w, l0 ++ l3)
+               else return (l1 ++ l2w, l0 ++ l3 ++ l2l)
+               -- Loosing captures after non-captures
 
 -- Generate only tactical moves, i.e. promotions & captures
 -- Needed only in QS, when we know we are not in check
