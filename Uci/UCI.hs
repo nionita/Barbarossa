@@ -303,6 +303,7 @@ findDepth (_ : cms) = findDepth cms
 
 findTime :: Color -> [GoCmds] -> Maybe Int
 findTime _ [] = Nothing
+findTime _ (MoveTime ms : _) = Just ms
 findTime c (Time c1 ms : cms)
     | c == c1   = Just ms
     | otherwise = findTime c cms
@@ -310,6 +311,7 @@ findTime c (_ : cms) = findTime c cms
 
 findTInc :: Color -> [GoCmds] -> Maybe Int
 findTInc _ [] = Nothing
+findTInc _ (MoveTime _ : _) = Just 0
 findTInc c (TInc c1 ms : cms)
     | c == c1   = Just ms
     | otherwise = findTInc c cms
@@ -317,5 +319,6 @@ findTInc c (_ : cms) = findTInc c cms
 
 findMovesToGo :: [GoCmds] -> Maybe Int
 findMovesToGo [] = Nothing
+findMovesToGo (MoveTime _ : _)  = Just 1
 findMovesToGo (MovesToGo m : _) = Just m
 findMovesToGo (_ : cms) = findMovesToGo cms
