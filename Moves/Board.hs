@@ -8,7 +8,7 @@ module Moves.Board (
     genMoveNCaptToCheck,
     updatePos, checkOk, moveChecks,
     legalMove, alternateMoves,
-    doFromToMove, reverseMoving
+    doFromToMove, reverseMoving, quietPositiveSEE
     ) where
 
 import Data.Bits

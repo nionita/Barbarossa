@@ -20,6 +20,8 @@ import Struct.Struct
 import Moves.BaseTypes
 import Moves.Base
 import Moves.Fen (initPos)
+import Moves.Board (quietPositiveSEE)
+import Eval.BasicEval (seeValue)
 
 absurd :: String -> Game ()
 absurd s = logmes $ "Absurd: " ++ s	-- used for messages when assertions fail
@@ -908,11 +910,11 @@ qSearch !a !b front = do
            when (hdeep < 0) reFail
            pos <- lift getPos
            if tacticalPos pos
-              then qsInCheck a b (staticScore pos)
+              then qsInCheck a b (staticScore pos) front
               else qsNormal a b (staticScore pos) front
 
-qsInCheck :: Int -> Int -> Int -> Search Int
-qsInCheck !a !b s = do
+qsInCheck :: Int -> Int -> Int -> Bool -> Search Int
+qsInCheck !a !b s front = do
     edges <- Alt <$> lift genEscapeMoves
     if noMove edges
        then return $! -mateScore
@@ -922,7 +924,7 @@ qsInCheck !a !b s = do
              then do
                  when collectFens $ finWithNodes "DELT"
                  return a
-             else pvQLoop b a edges
+             else pvQLoop True front b a edges
 
 qsNormal :: Int -> Int -> Int -> Bool -> Search Int
 qsNormal !a !b !s front
@@ -942,28 +944,45 @@ qsNormal !a !b !s front
                        when collectFens $ finWithNodes "NOCA"
                        return s
                    else if s > a
-                           then pvQLoop b s edges
-                           else pvQLoop b a edges
+                           then pvQLoop False front b s edges
+                           else pvQLoop False front b a edges
 
-pvQLoop :: Int -> Int -> Alt Move -> Search Int
-pvQLoop !b = go
-    where go !s (Alt [])     = return s
-          go !s (Alt (e:es)) = do
-              !s' <- pvQInnerLoop b s e
-              if s' >= b then return b
-                         else go s' $ Alt es
+pvQLoop :: Bool -> Bool -> Int -> Int -> Alt Move -> Search Int
+pvQLoop chk front !b = go 0
+    where go :: Int -> Int -> Alt Move -> Search Int
+          go !_ !s (Alt [])     = return s
+          go !n !s (Alt (e:es)) = do
+             !s' <- pvQInnerLoop b s (prune n) e
+             if s' >= b then return b
+                        else go (n+1) s' $ Alt es
+          prune = if chk
+                     then if front then \k -> k > 2 else \_ -> True
+                     else \_ -> False
 
 {-# NOINLINE pvQInnerLoop #-}
-pvQInnerLoop :: Int -> Int -> Move -> Search Int
-pvQInnerLoop !b !a e = timeToAbort b $ do
-    r <- lift $ doQSMove e
-    if r
-       then do
-           newNodeQS
-           !s <- negate <$> qSearch (-b) (-a) False
-           lift undoMove
-           return $! if s > a then s else a
-       else return a
+pvQInnerLoop :: Int -> Int -> Bool -> Move -> Search Int
+pvQInnerLoop !b !a prune e = timeToAbort b $ do
+    p <- if prune
+            then do
+                pos <- lift getPos
+                let val  = seeValue $ movePiece e
+                    from = fromSquare e
+                    to   = toSquare e
+                if quietPositiveSEE pos val (from, to)
+                   then return True
+                   else return False
+            else return False
+    if p
+       then return a
+       else do
+           r <- lift $ doQSMove e
+           if r
+              then do
+                  newNodeQS
+                  !s <- negate <$> qSearch (-b) (-a) False
+                  lift undoMove
+                  return $! if s > a then s else a
+              else return a
 
 {-# INLINE finWithNodes #-}
 finWithNodes :: String -> Search ()
