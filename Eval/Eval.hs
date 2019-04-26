@@ -222,13 +222,13 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
               | otherwise = Flc 1 (p `unsafeShiftL` 3)
               where !yoka = yok .&. a
                     y = popCount yoka
-          -- qualWeights = [1, 2, 2, 4, 8, 2]
+          -- qualWeights = [1, 3, 3, 5, 7, 3]
           !qp = qual myp 1
-          !qn = qual myn 2
-          !qb = qual myb 2
-          !qr = qual myr 4
-          !qq = qual myq 8
-          !qk = qual myk 2
+          !qn = qual myn 3
+          !qb = qual myb 3
+          !qr = qual myr 5
+          !qq = qual myq 7
+          !qk = qual myk 3
           !(Flc c q) = fadd qp $ fadd qn $ fadd qb $ fadd qr $ fadd qq qk
           !mattacs
               | c == 0 = 0
@@ -242,17 +242,17 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
                     ksShift = 13
 
 -- We take the maximum of 272 because:
--- Quali max: 8 * (1 + 2 + 2 + 4 + 8 + 2) = 168
+-- Quali max: 8 * (1 + 3 + 3 + 5 + 10 + 3) = 200
 -- Flag max: 6
--- 6 * 168 / 4 + 6 + 13 = 272
+-- 6 * 200 / 4 + 6 + 13 = 319
 attCoef :: UArray Int Int32
-attCoef = listArray (0, 272) $ take zeros (repeat 0) ++ [ f x | x <- [0..63] ] ++ repeat (f 63)
+attCoef = listArray (0, 319) $ take zeros (repeat 0) ++ [ f x | x <- [0..63] ] ++ repeat (f 63)
     where -- Without the scaling, f will take max value of 4000 for 63
           f :: Int -> Int32
           f x = let y = fromIntegral x :: Double
                 in round $ maxks * (2.92968750 - 0.03051758*y)*y*y / 4000
           zeros = 8
-          maxks = 3800
+          maxks = 4200
 
 kingSquare :: BBoard -> BBoard -> Square
 kingSquare kingsb colorp = firstOne $ kingsb .&. colorp
