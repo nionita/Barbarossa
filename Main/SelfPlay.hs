@@ -20,7 +20,7 @@ import System.Directory
 import System.Environment (getArgs)
 import System.FilePath
 import System.IO
-import System.Time
+-- import System.Time
 
 import Struct.Struct
 import Struct.Status
@@ -129,7 +129,7 @@ theOptions = do
 
 initContext :: Options -> IO Context
 initContext opts = do
-    clktm <- getClockTime
+    clktm <- getMyTime
     lchan <- newChan
     wchan <- newChan
     ichan <- newChan
@@ -290,7 +290,7 @@ balancedPos hi ho mn k () = do
                hFlush stdout
            when (k `mod` 100000 == 0) $ do
                ctx <- ask
-               currms <- lift $ currMilli (startSecond ctx)
+               currms <- lift $ currMilli (strttm ctx)
                lift $ do
                    putStrLn $ "Positions completed: " ++ show k ++ " ("
                        ++ show (k `div` currms) ++ " positions per ms)"
@@ -322,7 +322,7 @@ oracleAndFeats depth hi _ho mn k () = do	-- not functional yet
                hFlush stdout
            when (k `mod` 10 == 0) $ do
                ctx <- ask
-               currms <- lift $ currMilli (startSecond ctx)
+               currms <- lift $ currMilli (strttm ctx)
                lift $ do
                    putStrLn $ "Positions completed: " ++ show k ++ " ("
                        ++ show (currms `div` k) ++ " ms per position)"
@@ -363,7 +363,7 @@ playEveryGame depth hi _ho mn (id1, eval1) (id2, eval2) k wdl = do
                hFlush stdout
            when (k `mod` 10 == 0) $ do
                ctx <- ask
-               currms <- lift $ currMilli (startSecond ctx)
+               currms <- lift $ currMilli (strttm ctx)
                lift $ do
                    putStrLn $ "Positions completed: " ++ show k ++ " ("
                        ++ show (currms `div` k) ++ " ms per position)"
@@ -506,7 +506,7 @@ playGame d pos (ide1, eval1) (ide2, eval2) = do
     ctxLog LogInfo $ "Starting position: " ++ posToFen pos
     go (0::Int) (ide1, chg1) (ide2, chg2)
     where go i (id1, chg1) (id2, chg2) = do
-              start  <- asks startSecond
+              start  <- asks strttm
               currms <- lift $ currMilli start
               let j = i + 1
               -- Prepare for chg1 to search:
@@ -581,9 +581,9 @@ iterativeDeepening depth = do
 collectError :: SomeException -> IO ()
 collectError e = handle cannot $ do
     let efname = "Barbarossa_collected_errors.txt"
-    TOD tm _ <- getClockTime
+    tm <- getMyTime
     ef <- openFile efname AppendMode
-    hPutStrLn ef $ show tm ++ " selfplay: " ++ show e
+    hPutStrLn ef $ formatMyTime tm ++ " selfplay: " ++ show e
     hClose ef
     where cannot :: IOException -> IO ()
           cannot _ = return ()

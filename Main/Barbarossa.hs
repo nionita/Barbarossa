@@ -12,12 +12,12 @@ import Data.Array.Unboxed
 import Data.Foldable (foldrM)
 import Data.List (intersperse)
 import Data.Maybe
+import Data.Time.Clock (UTCTime)
 import Data.Typeable
 import System.Console.GetOpt
 import System.Environment (getArgs)
 import System.IO
 import System.Random
-import System.Time
 
 import Struct.Struct
 import Struct.Status
@@ -39,7 +39,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.6.0"
-progVerSuff = "base060"
+progVerSuff = "lts6"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -94,7 +94,7 @@ theOptions = do
 
 initContext :: Options -> IO Context
 initContext opts = do
-    clktm <- getClockTime
+    clktm <- getMyTime
     let llev = optLogging opts
     lchan <- newChan
     wchan  <- newChan
@@ -199,9 +199,9 @@ startWriter :: Bool -> CtxIO ()
 startWriter inter = do
     ctx <- ask
     void $ liftIO $ forkIO
-         $ theWriter inter (writer ctx) (logger ctx) (LogInfo >= loglev ctx) (startSecond ctx)
+         $ theWriter inter (writer ctx) (logger ctx) (LogInfo >= loglev ctx) (strttm ctx)
 
-theWriter :: Bool -> Chan String -> Chan String -> Bool -> Integer -> IO ()
+theWriter :: Bool -> Chan String -> Chan String -> Bool -> UTCTime -> IO ()
 theWriter inter wchan lchan mustlog refs = forever $ do
     s <- readChan wchan
     when inter $ do	-- we write only in intercative mode
@@ -462,7 +462,7 @@ newThread a = do
 startWorking :: Int -> Int -> Int -> Int -> Int -> CtxIO ()
 startWorking tim tpm mtg dpt rept = do
     ctx <- ask
-    currms <- lift $ currMilli (startSecond ctx)
+    currms <- lift $ currMilli (strttm ctx)
     ctxLog DebugUci $ "Start at " ++ show currms
         ++ " to search: " ++ show tim ++ " / " ++ show tpm ++ " / " ++ show mtg
         ++ " - maximal " ++ show dpt ++ " plys"
@@ -514,7 +514,7 @@ searchTheTree draft mdraft timx tim tpm mtg rept lsc lpv rmvs = do
         ctxLog LogInfo $ "Changes in draft " ++ show draft ++ ": " ++ show ch ++ " / " ++ show totch
     modifyChanging $ \c -> c { crtStatus = stfin, totBmCh = totch, lastChDr = ldCh,
                                forGui = Just $ InfoB { infoPv = path, infoScore = sc }}
-    currms <- lift $ currMilli (startSecond ctx)
+    currms <- lift $ currMilli (strttm ctx)
     let (ms, mx) = compTime tim tpm mtg sc rept
         exte = maybe False id $ do
                   los <- lsc
@@ -822,9 +822,9 @@ makeOptionVals UGOTNone = ""
 collectError :: SomeException -> IO ()
 collectError e = handle cannot $ do
     let efname = "Barbarossa_collected_errors.txt"
-    TOD tm _ <- getClockTime
+    tm <- getMyTime
     ef <- openFile efname AppendMode
-    hPutStrLn ef $ show tm ++ " " ++ idName ++ ": " ++ show e
+    hPutStrLn ef $ formatMyTime tm ++ " " ++ idName ++ ": " ++ show e
     hClose ef
     where cannot :: IOException -> IO ()
           cannot _ = return ()

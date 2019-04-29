@@ -23,7 +23,7 @@ Executable Barbarossa
   Build-depends:
       base >= 4.5,
       array,
-      old-time,
+      time,
       containers,
       mtl,
       parsec,
@@ -80,7 +80,7 @@ Executable SelfPlay
   Build-depends:
       base >= 4.5,
       array,
-      old-time,
+      time,
       containers,
       filepath,
       mtl,
