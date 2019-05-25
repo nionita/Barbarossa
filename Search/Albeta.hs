@@ -406,7 +406,7 @@ checkFailOrPVRoot xstats b d e s nst = whenAbort (True, nst) $ do
                               lift $ do
                                   let typ = 1	-- beta cut (score is lower limit) with move e
                                   ttStore de typ b e nodes'
-                                  betaCut True (absdp sst) e
+                                  betaCut (absdp sst) e
                               let xpvslg = insertToPvs d pvg (pvsl nst)	-- the good
                                   csc = s { pathScore = b }
                                   nst1 = nst { cursc = csc, pvsl = xpvslg, rbmch = rbmch nst + 1 }
@@ -418,7 +418,7 @@ checkFailOrPVRoot xstats b d e s nst = whenAbort (True, nst) $ do
                               lift $ do
                                   let typ = 2	-- best move so far (score is exact)
                                   ttStore de typ sc e nodes'
-                                  betaCut True (absdp sst) e	-- not really cut, but good move
+                                  betaCut (absdp sst) e	-- not really cut, but good move
                               let xpvslg = insertToPvs d pvg (pvsl nst)	-- the good
                                   nst1 = nst { cursc = s, nxtnt = nextNodeType (nxtnt nst),
                                                movno = mn + 1, pvsl = xpvslg, rbmch = rbmch nst + 1 }
@@ -467,7 +467,7 @@ pvSearch nst !a !b !d = do
            -- we will treat the beta cut here too, if it happens
            when (tp == 1 || tp == 2 && hsc > a) $ do
                adp <- gets absdp
-               lift $ betaCut True adp e
+               lift $ betaCut adp e
            reSucc nodes' >> return ttpath
        else do
            when (hdeep < 0) reFail
@@ -516,7 +516,7 @@ pvZeroW !nst !b !d = do
            -- we will treat the beta cut here too, if it happens
            when (tp == 1 || tp == 2 && hsc >= b) $ do
                adp <- gets absdp
-               lift $ betaCut True adp e
+               lift $ betaCut adp e
            reSucc nodes' >> return ttpath
        else do
            when (hdeep < 0) reFail
@@ -743,14 +743,14 @@ checkFailOrPVLoop b d e s nst = whenAbort (True, nst) $ do
            return (False, nst1)
        else if pathScore s >= b
                then do
-                 lift $ betaCut True (absdp sst) e -- anounce a beta move (for example, update history)
+                 lift $ betaCut (absdp sst) e -- anounce a beta move (for example, update history)
                  incBeta mn
                  let fhsc = s { pathScore = b }
                      nst1 = nst { cursc = fhsc, movno = mn+1, rbmch = 1 }
                  return (True, nst1)
                else do	-- means: > a && < b
                    lift $ do
-                       betaCut True (absdp sst) e -- not really a cut, but good move here
+                       betaCut (absdp sst) e -- not really a cut, but good move here
                        let de = max d $ pathDepth s
                        ttStore de 1 (pathScore s) e 0	-- best move so far (score is lower limit)
                    let nnt  = nextNodeType (nxtnt nst)
@@ -767,7 +767,7 @@ checkFailOrPVLoopZ b d e s nst = whenAbort (True, nst) $ do
            let nst1 = nst { movno = mn+1, killer = newKiller d s nst }
            return (False, nst1)
        else do	-- here is s >= b: failed high
-           lift $ betaCut True (absdp sst) e -- anounce a beta move (for example, update history)
+           lift $ betaCut (absdp sst) e -- anounce a beta move (for example, update history)
            incBeta mn
            let fhsc = s { pathScore = b }
                nst1 = nst { cursc = fhsc, movno = mn+1, rbmch = 1 }

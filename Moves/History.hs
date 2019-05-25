@@ -6,6 +6,7 @@ module Moves.History (
 
 import Control.Monad.ST.Unsafe (unsafeIOToST)
 import Control.Monad.ST
+import Control.Monad (forM_)
 import Data.Bits
 import Data.List (unfoldr)
 import Data.Ord (comparing)
@@ -27,7 +28,8 @@ squares = 64
 vsize = pieces * squares
 bloff = vsize `div` 2
 
--- Did we play with this layout? Could be some other layout better for cache?
+-- The layout is per color, then per piece type, then per square
+-- This should be more cache friendly for sorting the quiet moves
 {-# INLINE adr #-}
 adr :: Move -> Int
 adr m = ofs' m + adr' m
@@ -62,39 +64,33 @@ newHist = do
     g <- newStdGen
     U.thaw $ U.fromList $ map fromIntegral $ take vsize $ smallVals g
 
+-- History value: exponential
+-- d is absolute depth, root = 1, so that cuts near root count more
+-- For max depth = 20 we assume we will not get absolute depths over 30
+-- (But if yes, we don't know what happens when dm is negative)
 {-# INLINE histw #-}
 histw :: Int -> Int32
 histw !d = 1 `unsafeShiftL` dm
     where !dm = maxd - d
-          maxd = 20
+          maxd = 31
 
-toHist :: History -> Bool -> Move -> Int -> IO ()
-toHist h True  m d = addHist h (adr m) (histw d)
-toHist h False m d = subHist h (adr m) (histw d)
-
-{--
-{-# INLINE valHist #-}
-valHist :: History -> Move -> IO Int32
-valHist !h = V.unsafeRead h . adr
---}
+-- We don't use negative history (i.e. when move did not cut)
+toHist :: History -> Move -> Int -> IO ()
+toHist h m d = addHist h (adr m) (histw d)
 
 addHist :: History -> Int -> Int32 -> IO ()
 addHist h !ad !p = do
-    a <- V.unsafeRead h ad
-    let !u = a - p	-- trick here: we subtract, so that the sort is big to small
-        !v = if u < lowLimit then lowHalf else u
-    V.unsafeWrite h ad v
-    where lowLimit = -1000000000
-          lowHalf  =  -500000000
-
-subHist :: History -> Int -> Int32 -> IO ()
-subHist h !ad !p = do
-    a <- V.unsafeRead h ad
-    let !u = a + p	-- trick here: we add, so that the sort is big to small
-        !v = if u > higLimit then higHalf else u
-    V.unsafeWrite h ad v
-    where higLimit = 1000000000
-          higHalf  =  500000000
+    oh <- V.unsafeRead h ad
+    nh <- if (oh >= lowLimit)
+             then return $ oh - p -- we subtract, so that the sort is reverse (big first)
+             else do
+                 -- Rescale the whole history
+                 forM_ [0..vsize-1] $ \i -> do
+                     o <- V.unsafeRead h i
+                     V.unsafeWrite h i (o `unsafeShiftR` 1)
+                 return $ (oh `unsafeShiftR` 1) - p
+    V.unsafeWrite h ad nh
+    where lowLimit = - (1 `unsafeShiftL` 30)
 
 -- We use a data structure to allow lazyness for the selection of the next
 -- best move (by history values), because we want to use by every selected move
