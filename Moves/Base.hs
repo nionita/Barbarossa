@@ -318,15 +318,15 @@ finNode str nodes =
 qsDelta :: Int -> Game Bool
 qsDelta !a = do
     p <- getPos
-    if matPiece White Bishop >= a
+    if seeValue Bishop >= a
        then return False
-       else if matPiece White Queen < a
+       else if seeValue Queen < a
                then return True
                else do
                    let !ua = yo p .&. myAttacs p	-- under attack!
                    if ua .&. queens p /= 0	-- TODO: need to check also pawns on 7th!
                       then return False
-                      else if matPiece White Rook < a
+                      else if seeValue Rook < a
                               then return True
                               else if ua .&. rooks p /= 0
                                       then return False
