@@ -10,6 +10,10 @@ Category:            Game
 Build-type:          Simple
 Cabal-version:       >=1.8
 
+Flag thr
+  Description:	Enable OS threading
+  Default:	True
+
 Flag sse42
   Description:	Enable SSE4.2 support
   Default:	True
@@ -63,14 +67,15 @@ Executable Barbarossa
       Uci.UciGlue
   GHC-Options: -O2 -Wall
                -funbox-strict-fields
-               -threaded
-               -rtsopts -with-rtsopts=-N3
                -fspec-constr-count=24
                -funfolding-use-threshold=32
                -fno-warn-tabs
   CPP-Options: -DSMSTRICT
   if flag(sse42)
     GHC-Options: -msse4.2
+  if flag(thr)
+    GHC-Options: -threaded
+                 -rtsopts -with-rtsopts=-N2
   if flag(ddump)
     GHC-Options: -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques
                  -ddump-opt-cmm -ddump-asm

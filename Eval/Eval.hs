@@ -818,21 +818,24 @@ perPassedPawnOk !gph ep p c sq sqbb moi toi moia toia = val
           b0 = -120
           c0 = 410
           !pmax = (a0 * x + b0) * x + c0
-          !myking = kingSquare (kings p) moi
-          !yoking = kingSquare (kings p) toi
-          !mdis = squareDistance myking asq
-          !ydis = squareDistance yoking asq
-          !kingprx = (kdDist (mdis - ydis) * epPassKingProx ep * (256 - gph)) `unsafeShiftR` 8
-          !val1 = (pmax * (128 - kingprx) * (128 - epPassBlockO ep * mblo)) `unsafeShiftR` 14
+          !mpkp = pkpBonus $ squareDistance asq $ kingSquare (kings p) moi
+          !ypkp = pkpBonus $ squareDistance asq $ kingSquare (kings p) toi
+          !pkp = ((mpkp - ypkp) * epPassKingProx ep * (256 - gph)) `unsafeShiftR` 8
+          !val1 = (pmax * (128 + pkp) * (128 - epPassBlockO ep * mblo)) `unsafeShiftR` 14
           !val2 = (val1 * (128 - epPassBlockA ep * yblo)) `unsafeShiftR` 7
           !val  = (val2 * (128 + epPassMyCtrl ep * myctrl) * (128 - epPassYoCtrl ep * yoctrl))
                     `unsafeShiftR` 14
 
-kdDistArr :: UArray Int Int  --  -7 -6 -5 -4 -3 -2 -1  0  1  2  3  4  5  6  7
-kdDistArr = listArray (0, 14) $ [-4,-3,-3,-3,-2,-2,-1, 0, 1, 2, 2, 3, 3, 3, 4]
+-- The bonus for the king distance to a passed pawn push square is non-linear: 0 and 1 are very good,
+-- then, from 2, it decreases very sharp
+-- This bonus is applied individual per passed pawn and it is percentual from the passed pawn value
+-- (There is yet another bonus for this term, see kingPawnsBonus)
+kdDistArr :: UArray Int Int  --   0   1   2  3  4  5  6  7
+kdDistArr = listArray (0, 7) $ [ 33, 32, 16, 8, 4, 2, 1, 0 ]
+-- kdDistArr = listArray (0, 7) $ [ 48, 48, 36, 18, 6, 2, 1, 0 ]
 
-kdDist :: Int -> Int
-kdDist = (kdDistArr `unsafeAt`) . (7+)
+pkpBonus :: Int -> Int
+pkpBonus = unsafeAt kdDistArr
 
 
 ------ Advanced pawns, on 6th & 7th rows (not passed) ------
