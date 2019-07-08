@@ -222,13 +222,13 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
               | otherwise = Flc 1 (p `unsafeShiftL` 3)
               where !yoka = yok .&. a
                     y = popCount yoka
-          -- qualWeights = [1, 2, 2, 4, 8, 2]
+          -- qualWeights = [1, 3, 3, 7, 15, 3]
           !qp = qual myp 1
-          !qn = qual myn 2
-          !qb = qual myb 2
-          !qr = qual myr 4
-          !qq = qual myq 8
-          !qk = qual myk 2
+          !qn = qual myn 3
+          !qb = qual myb 3
+          !qr = qual myr 7
+          !qq = qual myq 15
+          !qk = qual myk 3
           !(Flc c q) = fadd qp $ fadd qn $ fadd qb $ fadd qr $ fadd qq qk
           !mattacs
               | c == 0 = 0
@@ -237,22 +237,22 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
               --       !conce = popCount $ yok .&. mya
               -- This is equivalent to:
               where !freco = popCount $ yok `less` (yop `less` mya)
-                    !ixm = c * q `unsafeShiftR` 2
+                    !ixm = c * q `unsafeShiftR` 3
                     !ixt = ixm + c + ksShift - freco
                     ksShift = 13
 
--- We take the maximum of 272 because:
--- Quali max: 8 * (1 + 2 + 2 + 4 + 8 + 2) = 168
+-- We take the maximum of 211 because:
+-- Quali max: 8 * (1 + 3 + 3 + 7 + 15 + 3) = 256
 -- Flag max: 6
--- 6 * 168 / 4 + 6 + 13 = 272
+-- 6 * 112 / 8 + 6 + 13 = 211
 attCoef :: UArray Int Int32
-attCoef = listArray (0, 272) $ take zeros (repeat 0) ++ [ f x | x <- [0..63] ] ++ repeat (f 63)
-    where -- Without the scaling, f will take max value of 4000 for 63
+attCoef = listArray (0, 211) $ take zeros (repeat 0) ++ [ f x | x <- [0..63] ] ++ repeat (f 63)
+    where -- Without the scaling (maxks), f will take max value of 4000 for 63
           f :: Int -> Int32
           f x = let y = fromIntegral x :: Double
                 in round $ maxks * (2.92968750 - 0.03051758*y)*y*y / 4000
           zeros = 8
-          maxks = 3800
+          maxks = 4500
 
 kingSquare :: BBoard -> BBoard -> Square
 kingSquare kingsb colorp = firstOne $ kingsb .&. colorp
