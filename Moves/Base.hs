@@ -11,7 +11,8 @@ module Moves.Base (
     draftStats,
     finNode, countRepetitions,
     showMyPos, logMes,
-    nearmate
+    nearmate,
+    getRootMoveNumber, incrementRootMoveNumber
 ) where
 
 import Data.Bits
@@ -64,13 +65,14 @@ posToState p c h e = MyState {
                        hash = c,
                        hist = h,
                        mstats = ssts0,
-                       evalst = e
+                       evalst = e,
+                       rootmn = 1
                    }
     where stsc = posEval p e
           p'' = p { staticScore = stsc }
 
 posNewSearch :: MyState -> MyState
-posNewSearch p = p { hash = newGener (hash p) }
+posNewSearch p = p { hash = newGener (hash p), rootmn = 1 }
 
 draftStats :: SStats -> Game ()
 draftStats dst = do
@@ -313,6 +315,14 @@ finNode str nodes =
         let (p:_) = stack s	-- we never saw an empty stack error until now
             fen = posToFen p
         logMes $ str ++ " Score: " ++ show (staticScore p) ++ " Fen: " ++ fen
+
+{-# INLINE getRootMoveNumber #-}
+getRootMoveNumber :: Game Int
+getRootMoveNumber = gets rootmn
+
+{-# INLINE incrementRootMoveNumber #-}
+incrementRootMoveNumber :: Game ()
+incrementRootMoveNumber = modify $ \s -> s { rootmn = rootmn s + 1 }
 
 -- {-# INLINE qsDelta #-}
 qsDelta :: Int -> Game Bool
