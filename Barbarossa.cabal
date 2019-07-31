@@ -64,7 +64,7 @@ Executable Barbarossa
   GHC-Options: -O2 -Wall
                -funbox-strict-fields
                -threaded
-               -rtsopts -with-rtsopts=-N3
+               -rtsopts -with-rtsopts=-N1
                -fspec-constr-count=24
                -funfolding-use-threshold=32
                -fno-warn-tabs
@@ -122,7 +122,7 @@ Executable SelfPlay
   GHC-Options: -O2 -Wall
                -funbox-strict-fields
                -threaded
-               -rtsopts -with-rtsopts=-N3
+               -rtsopts -with-rtsopts=-N1
                -fspec-constr-count=24
                -funfolding-use-threshold=32
                -fno-warn-tabs
