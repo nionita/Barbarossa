@@ -91,7 +91,6 @@ data EvalWeights
           ewSpace           :: !MidEnd,
           ewAdvAtts         :: !MidEnd,
           ewIsolPawns       :: !MidEnd,
-          ewIsolPassed      :: !MidEnd,
           ewBackPawns       :: !MidEnd,
           ewBackPOpen       :: !MidEnd,
           ewEnpHanging      :: !MidEnd,
@@ -190,8 +189,7 @@ instance CollectParams EvalWeights where
           ewCenterKAtts     = tme  2 62,	-- DSPSA...
           ewSpace           = tme  1  0,
           ewAdvAtts         = tme  1 17,
-          ewIsolPawns       = tme (-36) (-113),
-          ewIsolPassed      = tme (-63) (-143),
+          ewIsolPawns       = tme (-50) (-128),
           ewBackPawns       = tme (-108) (-141),
           ewBackPOpen       = tme (-21)  (-27),
           ewEnpHanging      = tme (-19) (-27),
@@ -203,11 +201,11 @@ instance CollectParams EvalWeights where
           ewBishopPawns     = tme (-25) (-54),
           ewRedundanceRook  = tme (-27) (-51),	-- DSPSA ...
           ewRookPawn        = tme (-44) (-32),
-          ewAdvPawn5        = tme   14 106,
-          ewAdvPawn6        = tme  352 333,
+          ewAdvPawn5        = tme   14 100,
+          ewAdvPawn6        = tme  334 300,
           ewPawnBlockP      = tme (-112) (-92),
-          ewPawnBlockO      = tme  (-23) (-26),
-          ewPawnBlockA      = tme  (-19) (-69),
+          ewPawnBlockO      = tme  (-21) (-23),
+          ewPawnBlockA      = tme  (-18) (-65),
           ewPassPawnLev     = tme 2 8
         }
     npColParm = collectEvalWeights
@@ -261,8 +259,6 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
         ("end.adversAtts",     setEndAdvAtts),
         ("mid.isolPawns",      setMidIsolPawns),
         ("end.isolPawns",      setEndIsolPawns),
-        ("mid.isolPassed",     setMidIsolPassed),
-        ("end.isolPassed",     setEndIsolPassed),
         ("mid.backPawns",      setMidBackPawns),
         ("end.backPawns",      setEndBackPawns),
         ("mid.backPOpen",      setMidBackPOpen),
@@ -344,8 +340,6 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
           setEndAdvAtts         v' ew' = ew' { ewAdvAtts         = (ewAdvAtts         ew') { end = round v' }}
           setMidIsolPawns       v' ew' = ew' { ewIsolPawns       = (ewIsolPawns       ew') { mid = round v' }}
           setEndIsolPawns       v' ew' = ew' { ewIsolPawns       = (ewIsolPawns       ew') { end = round v' }}
-          setMidIsolPassed      v' ew' = ew' { ewIsolPassed      = (ewIsolPassed      ew') { mid = round v' }}
-          setEndIsolPassed      v' ew' = ew' { ewIsolPassed      = (ewIsolPassed      ew') { end = round v' }}
           setMidBackPawns       v' ew' = ew' { ewBackPawns       = (ewBackPawns       ew') { mid = round v' }}
           setEndBackPawns       v' ew' = ew' { ewBackPawns       = (ewBackPawns       ew') { end = round v' }}
           setMidBackPOpen       v' ew' = ew' { ewBackPOpen       = (ewBackPOpen       ew') { mid = round v' }}

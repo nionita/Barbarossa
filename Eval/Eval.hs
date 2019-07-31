@@ -564,26 +564,19 @@ adversDiff p !ew = mad (ewAdvAtts ew) ad
           ah58 = 0xFFFFFFFF00000000
 
 -------- Isolated pawns --------
-
+-- We treat now the passed pawns the same as the rest
 isolDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-isolDiff p !ew = mad (ewIsolPawns  ew) nd .
-                 mad (ewIsolPassed ew) pd
-    where (!myr, !myp) = isol (pawns p .&. me p) (passed p)
-          (!yor, !yop) = isol (pawns p .&. yo p) (passed p)
-          !nd = myr - yor
-          !pd = myp - yop
+isolDiff p !ew = mad (ewIsolPawns  ew) nd
+    where !myr = isol (pawns p .&. me p)
+          !yor = isol (pawns p .&. yo p)
+          !nd  = myr - yor
 
-isol :: BBoard -> BBoard -> (Int, Int)
-isol ps pp = (ris, pis)
-    where !myp = ps .&. pp
-          !myr = ps `less` myp
-          !myf = bbLeft ps .|. bbRight ps
-          !myu = myf `unsafeShiftL` 8
-          !myd = myf `unsafeShiftR` 8
-          !myc = myf .|. myu .|. myd
-          !nomyc = complement myc
-          !ris = popCount $ myr .&. nomyc
-          !pis = popCount $ myp .&. nomyc
+isol :: BBoard -> Int
+isol ps = popCount $ ps `less` myc
+    where myf = bbLeft ps .|. bbRight ps
+          myu = myf `unsafeShiftL` 8
+          myd = myf `unsafeShiftR` 8
+          myc = myf .|. myu .|. myd
 
 -------- Backward pawns --------
 
@@ -748,27 +741,23 @@ evalRookPawn p !ew = mad (ewRookPawn ew) rps
           !rps = wrp - brp
 
 ------ Blocked pawns ------
-
+-- We include now the passed pawns in this calculation
 pawnBl :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 pawnBl p !ew mide
-    | moving p == White = let (wp, wo, wa) = pawnBloWhite mer mef yof
-                              (bp, bo, ba) = pawnBloBlack yor yof mef
+    | moving p == White = let (wp, wo, wa) = pawnBloWhite mep mef yof
+                              (bp, bo, ba) = pawnBloBlack yop yof mef
                           in mad (ewPawnBlockP ew) (wp-bp) $!
                              mad (ewPawnBlockO ew) (wo-bo) $!
                              mad (ewPawnBlockA ew) (wa-ba) mide
-    | otherwise         = let (wp, wo, wa) = pawnBloWhite yor yof mef
-                              (bp, bo, ba) = pawnBloBlack mer mef yof
+    | otherwise         = let (wp, wo, wa) = pawnBloWhite yop yof mef
+                              (bp, bo, ba) = pawnBloBlack mep mef yof
                           in mad (ewPawnBlockP ew) (bp-wp) $!
                              mad (ewPawnBlockO ew) (bo-wo) $!
                              mad (ewPawnBlockA ew) (ba-wa) mide
     where !mep = pawns p .&. me p	-- my pawns
-          !mes = mep .&. passed p	-- my passed pawns
-          !mer = mep `less` mes		-- my rest pawns
           !yop = pawns p .&. yo p	-- your pawns
-          !yos = yop .&. passed p	-- your passed pawns
-          !yor = yop `less` yos		-- your rest pawns
-          !mef = me p `less` mep	-- my figures
-          !yof = yo p `less` yop	-- your figures
+          !mef = me p `less` pawns p	-- my figures
+          !yof = yo p `less` pawns p	-- your figures
 
 cntPaBlo :: BBoard -> BBoard -> BBoard -> BBoard -> (Int, Int, Int)
 cntPaBlo !ps !op !ofi !afi = (f op, f ofi, f afi)
@@ -852,14 +841,13 @@ kdDist :: Int -> Int
 kdDist = (kdDistArr `unsafeAt`) . (7+)
 
 
------- Advanced pawns, on 6th & 7th rows (not passed) ------
- 
+------ Advanced pawns, on 6th & 7th rows ------
+-- We consider now the passed pawns too
 advPawns :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 advPawns p !ew = mad (ewAdvPawn6 ew) ap6 .
                  mad (ewAdvPawn5 ew) ap5
-    where !apbb  = pawns p `less` passed p
-          !mapbb = apbb .&. me p
-          !yapbb = apbb .&. yo p
+    where !mapbb = pawns p .&. me p
+          !yapbb = pawns p .&. yo p
           (my5, my6, yo5, yo6)
               | moving p == White = (0x000000FF00000000, 0x0000FF0000000000, 0xFF000000, 0xFF0000)
               | otherwise         = (0xFF000000, 0xFF0000, 0x000000FF00000000, 0x0000FF0000000000)
