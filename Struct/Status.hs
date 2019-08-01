@@ -189,7 +189,7 @@ instance CollectParams EvalWeights where
           ewCenterKAtts     = tme  2 62,	-- DSPSA...
           ewSpace           = tme  1  0,
           ewAdvAtts         = tme  1 17,
-          ewIsolPawns       = tme (-50) (-128),
+          ewIsolPawns       = tme (-37) (-126),
           ewBackPawns       = tme (-108) (-141),
           ewBackPOpen       = tme (-21)  (-27),
           ewEnpHanging      = tme (-19) (-27),
@@ -201,11 +201,11 @@ instance CollectParams EvalWeights where
           ewBishopPawns     = tme (-25) (-54),
           ewRedundanceRook  = tme (-27) (-51),	-- DSPSA ...
           ewRookPawn        = tme (-44) (-32),
-          ewAdvPawn5        = tme   14 100,
-          ewAdvPawn6        = tme  334 300,
-          ewPawnBlockP      = tme (-112) (-92),
-          ewPawnBlockO      = tme  (-21) (-23),
-          ewPawnBlockA      = tme  (-18) (-65),
+          ewAdvPawn5        = tme   44 81,
+          ewAdvPawn6        = tme  318 300,
+          ewPawnBlockP      = tme (-97) (-134),
+          ewPawnBlockO      = tme  (-34) (-26),
+          ewPawnBlockA      = tme  (-3) (-69),
           ewPassPawnLev     = tme 2 8
         }
     npColParm = collectEvalWeights
