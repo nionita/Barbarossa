@@ -226,17 +226,10 @@ ksSideQ yop yok myp myn myb myr myq myk mya = katScore yop yok mya c q
               | otherwise = Flc 1 (p * y)
               where yoka = yok .&. a
                     y = popCount yoka
-          -- !qp = qual myp 1
-          -- !qn = qual myn 2
-          -- !qb = qual myb 2
-          -- !qr = qual myr 4
-          -- !qq = qual myq 8
-          -- !qk = qual myk 2
-          -- !(Flc c q) = fadd qp $ fadd qn $ fadd qb $ fadd qr $ fadd qq qk
-          -- This foldr is nice inlined and produces similar code to the manual one above
+          -- This foldr is nice inlined and produces similar code to the manual one
           !(Flc c q) = foldr (fadd . uncurry qual) (Flc 0 0)
                              $ zip [myp, myn, myb, myr, myq, myk] qualWeights
-          qualWeights =            [  1,   2,   2,   4,   8,   2]
+          qualWeights =            [  2,   5,   5,   9,  17,   5]
 
 -- This will be inlined and produces well optimized code
 katScore :: BBoard -> BBoard -> BBoard -> Int -> Int -> Int
@@ -245,10 +238,10 @@ katScore yop yok mya c q = min maxks $ ixt * ixt
           --       !conce = popCount $ yok .&. mya
           -- This is equivalent to:
           freco = popCount $ yok .&. (complement yop .|. mya)
-          ixm = c * q `unsafeShiftR` 2
-          ixt = ixm + c + ksShift - freco
+          ixm = c * c * q `unsafeShiftR` 3
+          ixt = ixm + ksShift - freco
           ksShift = 13
-          maxks = 4000
+          maxks = 3600
 
 kingSquare :: BBoard -> BBoard -> Square
 kingSquare kingsb colorp = firstOne $ kingsb .&. colorp
