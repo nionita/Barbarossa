@@ -238,7 +238,8 @@ katScore yop yok mya c q = min maxks $ ixt * ixt
           --       !conce = popCount $ yok .&. mya
           -- This is equivalent to:
           freco = popCount $ yok .&. (complement yop .|. mya)
-          ixm = c * c * q `unsafeShiftR` 3
+          cm = min 3 c
+          ixm = cm * cm * q `unsafeShiftR` 3
           ixt = ixm + ksShift - freco
           ksShift = 13
           maxks = 3600
