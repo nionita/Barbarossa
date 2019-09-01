@@ -706,17 +706,21 @@ evalRedundance p !ew = mad (ewBishopPawns    ew) pa .
           !bpbd = popCount bbd
           !bpb = bpbl .&. bpbd	-- and here
           !bp  = bpw - bpb
-          !mpal = bpwl * (popCount (pawns p .&. lightSquares) - pawnEven)
-          !mpad = bpwd * (popCount (pawns p .&. darkSquares) - pawnEven)
-          !ypal = bpbl * (popCount (pawns p .&. lightSquares) - pawnEven)
-          !ypad = bpbd * (popCount (pawns p .&. darkSquares) - pawnEven)
+          !mpal | bpwl /= 0 = popCount (pawns p .&. lightSquares .&. me p .&. badBishopArea)
+                | otherwise = 0
+          !mpad | bpwd /= 0 = popCount (pawns p .&. darkSquares .&. me p .&. badBishopArea)
+                | otherwise = 0
+          !ypal | bpbl /= 0 = popCount (pawns p .&. lightSquares .&. yo p .&. badBishopArea)
+                | otherwise = 0
+          !ypad | bpbd /= 0 = popCount (pawns p .&. darkSquares .&. yo p .&. badBishopArea)
+                | otherwise = 0
           !pa = mpal + mpad - ypal - ypad
           !wro = rooks p .&. me p
           !bro = rooks p .&. yo p
           !wrr = popCount wro `unsafeShiftR` 1	-- tricky here: 2, 3 are the same...
           !brr = popCount bro `unsafeShiftR` 1	-- and here
           !rr  = wrr - brr
-          pawnEven = 6
+          badBishopArea = 0x00003C3C3C3C0000
 
 {--
 ------ Knight & Rook correction according to own pawns ------
