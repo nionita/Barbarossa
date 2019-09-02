@@ -39,7 +39,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.6.0"
-progVerSuff = "twot"
+progVerSuff = "twot3"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -564,7 +564,7 @@ searchTheTree draft mdraft timx1 timx tim tpm mtg rept lsc lpv rmvs = do
                    ctxLog DebugUci "in searchTheTree: not working"
                    giveBestMove path -- was stopped
                    return sc
-    where firstMoveTimeReductionFactor = 2
+    where firstMoveTimeReductionFactor = 3
 
 -- The time management changes like this:
 -- We calculate the normal and maximum time to use for this move, as before
