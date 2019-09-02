@@ -179,12 +179,12 @@ instance CollectParams EvalWeights where
           ewRookConn        = tme  89  59,	-- 2 games, beta=0.95, gamma=0.8,
           ewRook7th         = tme 201 161,	-- niu=0.99, eps=1E-6
           ewMobilityKnight  = tme 50 56,
-          ewMobilityBishop  = tme 52 33,	-- DSPSA
+          ewMobilityBishop  = tme 108 (-71),	-- DSPSA 1k
           ewMobilityRook    = tme 16 34,	-- DSPSA ...
           ewMobilityQueen   = tme  2 11,
           ewCenterPAtts     = tme 73 57,
           ewCenterNAtts     = tme 48 37,
-          ewCenterBAtts     = tme 53 35,	-- DSPSA
+          ewCenterBAtts     = tme 71 22,	-- DSPSA 1k
           ewCenterRAtts     = tme 14 22,	-- DSPSA ...
           ewCenterQAtts     = tme 13 53,
           ewCenterKAtts     = tme  2 62,	-- DSPSA...
@@ -199,8 +199,8 @@ instance CollectParams EvalWeights where
           ewEnpAttacked     = tme  (-2) (-14),
           ewWepAttacked     = tme 35 73,	-- old value
           ewLastLinePenalty = tme 100 0,
-          ewBishopPair      = tme 384 322,	-- DSPSA
-          ewBishopPawns     = tme (-25) (-54),	-- -75 / -250 not bad
+          ewBishopPair      = tme 442 328,	-- DSPSA 1k
+          ewBishopPawns     = tme (-35) (-30),	-- DSPSA 1k
           ewRedundanceRook  = tme (-27) (-51),	-- DSPSA ...
           ewRookPawn        = tme (-44) (-32),
           ewAdvPawn5        = tme   14 106,
