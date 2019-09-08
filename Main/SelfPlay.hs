@@ -7,13 +7,11 @@
 
 module Main where
 import Control.Monad.Reader
--- import Control.Monad.State
 import Control.Concurrent
 import Control.Exception
--- import Data.Bits (popCount, (.|.))
+import Data.Foldable (foldrM)
 import Data.List (intersperse)
--- import Data.Monoid
--- import Network
+import Data.Maybe (fromMaybe)
 import Foreign hiding (void)
 import System.Console.GetOpt
 import System.Directory
@@ -27,7 +25,7 @@ import Struct.Status
 import Struct.Context
 import Struct.Config
 import Hash.TransTab
-import Search.AlbetaTypes (ssts0)
+import Search.AlbetaTypes
 import Moves.Base
 import Moves.Fen
 import Moves.Notation
@@ -47,6 +45,7 @@ data Options = Options {
         optParams   :: [String],	-- list of eval parameter assignements
         optNThreads :: Int,		-- number of threads - not used for self play now
         optDepth    :: Int,		-- search depth for self play
+        optNodes    :: Maybe Int,	-- search nodes per move for self play
         optNSkip    :: Maybe Int,	-- number of fens to skip (Nothing = none)
         optNFens    :: Maybe Int,	-- number of fens (Nothing = all)
         optMatch    :: Maybe String,	-- match between configs in the given directory
@@ -62,6 +61,7 @@ defaultOptions = Options {
         optParams   = [],
         optNThreads = 1,
         optDepth    = 1,
+        optNodes    = Nothing,
         optNSkip    = Nothing,
         optNFens    = Nothing,
         optMatch    = Nothing,
@@ -86,6 +86,9 @@ addNThrds ns opt = opt { optNThreads = read ns }
 
 addDepth :: String -> Options -> Options
 addDepth ns opt = opt { optDepth = read ns }
+
+addNodes :: String -> Options -> Options
+addNodes ns opt = opt { optNodes = Just $ read ns }
 
 addNSkip :: String -> Options -> Options
 addNSkip ns opt = opt { optNSkip = Just $ read ns }
@@ -112,6 +115,7 @@ options = [
         Option "i" ["input"]   (ReqArg addIFile "STRING")     "Input (fen) file",
         Option "o" ["output"]  (ReqArg addOFile "STRING")    "Output file",
         Option "d" ["depth"]   (ReqArg addDepth "STRING")  "Search depth",
+        Option "n" ["nodes"]   (ReqArg addNodes "STRING")  "Search nodes budget per move",
         Option "t" ["threads"] (ReqArg addNThrds "STRING")  "Number of threads",
         Option "s" ["skip"]    (ReqArg addNSkip "STRING")      "Number of fens to skip",
         Option "f" ["fens"]    (ReqArg addNFens "STRING")      "Number of fens to play"
@@ -202,7 +206,7 @@ matchFile opts dir = do
     liftIO $ do
         putStrLn $ "Playing games from " ++ optAFenFile opts
         putStrLn $ "Play depth  " ++ show (optDepth opts)
-        putStrLn $ "Results to  " ++ optFOutFile opts
+        putStrLn $ "Play nodes  " ++ show (optNodes opts)
     let mids = (,) <$> optPlayer1 opts <*> optPlayer2 opts
     case mids of
         Nothing -> do
@@ -212,15 +216,7 @@ matchFile opts dir = do
             ctxLog LogInfo $ "Players from directory " ++ dir
             ctxLog LogInfo $ "Player 1 " ++ id1
             ctxLog LogInfo $ "Player 2 " ++ id2
-            (hi, ho) <- liftIO $ do
-                hi <- openFile (optAFenFile opts) ReadMode
-                ho <- openFile (optFOutFile opts) WriteMode
-                return (hi, ho)
-            case optNSkip opts of
-                Just m  -> do
-                    ispos <- skipWithIndex (optAFenFile opts) hi m
-                    when (not ispos) $ loopCount (skipLines hi m) ()
-                Nothing -> return ()
+            fens <- getFens (optAFenFile opts) (fromMaybe 0 (optNSkip opts)) (fromMaybe 1 (optNFens opts))
             (eval1, eval2) <- liftIO $ do
                 (_, eval1) <- makeEvalState (Just id1) [] "progver" "progsuf"
                 (_, eval2) <- makeEvalState (Just id2) [] "progver" "progsuf"
@@ -228,12 +224,22 @@ matchFile opts dir = do
             when debug $ do
                 ctxLog LogInfo $ "Player 1 config: " ++ show eval1
                 ctxLog LogInfo $ "Player 2 config: " ++ show eval2
-            let act = playEveryGame (optDepth opts) hi ho (optNFens opts) (id1, eval1) (id2, eval2)
-            wdl <- loopCount act (0, 0, 0)
-            liftIO $ do
-                hClose ho
-                hClose hi
-            return wdl
+            foldrM (playEveryGame (optDepth opts) (optNodes opts) (id1, eval1) (id2, eval2)) (0, 0, 0) fens
+
+getFenWithRewind :: Handle -> IO String
+getFenWithRewind h = do
+    eof <- hIsEOF h
+    when eof $ hSeek h AbsoluteSeek 0
+    hGetLine h
+
+-- Read a chunk of fens
+getFens :: MonadIO m => String -> Int -> Int -> m [String]
+getFens fileName skip count = liftIO $ do
+    hi <- openFile fileName ReadMode
+    when (skip > 0) $ do
+        ispos <- skipWithIndex fileName hi skip
+        when (not ispos) $ loopCount (skipLines hi skip) ()
+    sequence $ take count $ repeat (getFenWithRewind hi)
 
 -- If the fen file has an index, use it to skip to the wanted line
 -- The index must be created with binary IndexTxt from Bartest
@@ -300,7 +306,7 @@ balancedPos hi ho mn k () = do
            let crts = crtStatus chg
                sini = posToState pos (hash crts) (hist crts) (evalst crts)
            modifyChanging $ \c -> c { crtStatus = sini }
-           (msc, path) <- iterativeDeepening 1
+           (msc, path, _) <- iterativeDeepening 1 Nothing
            case msc of
                Nothing -> return ()
                Just sc -> if null path
@@ -344,43 +350,22 @@ oracleAndFeats depth hi _ho mn k () = do	-- not functional yet
 -}
            return (True, ())
 
-playEveryGame :: Int -> Handle -> Handle -> Maybe Int
-              -> (String, EvalState)	-- "player" 1
-              -> (String, EvalState)	-- "player" 2
-              -> Int
-              -> (Int, Int, Int)
-              -> CtxIO (Bool, (Int, Int, Int))
-playEveryGame depth hi _ho mn (id1, eval1) (id2, eval2) k wdl = do
-    end <- case mn of
-               Nothing -> lift $ hIsEOF hi
-               Just n  -> if k <= n then lift $ hIsEOF hi else return True
-    if end
-       then return (False, wdl)
-       else do
-           fen <- lift $ hGetLine hi
-           when debug $ lift $ do
-               putStrLn $ "Fen: " ++ fen
-               hFlush stdout
-           when (k `mod` 10 == 0) $ do
-               ctx <- ask
-               currms <- lift $ currMilli (startSecond ctx)
-               lift $ do
-                   putStrLn $ "Positions completed: " ++ show k ++ " ("
-                       ++ show (currms `div` k) ++ " ms per position)"
-                   hFlush stdout
-           let pos = posFromFen fen
-           gr1 <- playGame depth pos (id1, eval1) (id2, eval2)
-           gr2 <- playGame depth pos (id2, eval2) (id1, eval1)
-           let wdl1 = scoreGameResult id1 gr1	-- game result from
-               wdl2 = scoreGameResult id1 gr2	-- POV of id1
-               wdla = addGameScores wdl  wdl1
-               wdlb = addGameScores wdla wdl2
-           when debug $ lift $ do
-               putStrLn $ "Rez of auto play: " ++ show gr1 ++ " / " ++ show gr2
-               putStrLn $ "Score so far: " ++ show wdlb
-               hFlush stdout
-           -- lift $ hPutStrLn ho $ show ph ++ " " ++ show sc ++ " " ++ show fts
-           return (True, wdlb)
+-- Every fen is played twice, reversing the colors
+playEveryGame
+    :: Int
+    -> Maybe Int
+    -> (String, EvalState)	-- "player" 1
+    -> (String, EvalState)	-- "player" 2
+    -> String
+    -> (Int, Int, Int)
+    -> CtxIO (Int, Int, Int)
+playEveryGame depth maybeNodes (id1, eval1) (id2, eval2) fen wdl = do
+    let pos = posFromFen fen
+    gr1 <- playGame depth maybeNodes pos (id1, eval1) (id2, eval2)
+    gr2 <- playGame depth maybeNodes pos (id2, eval2) (id1, eval1)
+    let wdl1 = scoreGameResult id1 gr1	-- game result from
+        wdl2 = scoreGameResult id1 gr2	-- POV of id1
+    return $ addGameScores wdl $ addGameScores wdl1 wdl2
 
 -- The logger will be startet anyway, but will open a file
 -- only when it has to write the first message
@@ -396,6 +381,8 @@ startLogger file = do
     void $ liftIO $ forkIO $ catch (theLogger (logger ctx) (LoggerFile file)) collectError
     ctxLog LogInfo "Logger started"
 
+-- Here the logger has a problem: at the end it does not flush the logfile
+-- This is important only for debug (for normal operation there will be no log)
 theLogger :: Chan String -> LoggerState -> IO ()
 theLogger lchan lst = do
     s <- readChan lchan
@@ -443,7 +430,7 @@ autoPlayToEnd d pos = do
     go (0::Int)
     where go i = do
               -- Search to depth:
-              (msc, path) <- iterativeDeepening d
+              (msc, path, _) <- iterativeDeepening d Nothing
               if null path
                  then do
                      when (i>0) $ ctxLog LogError $ "Empty path when playing"
@@ -478,14 +465,36 @@ autoPlayToEnd d pos = do
                                              modifyChanging $ \s -> s { crtStatus = sfin }
                                              go j
 
+-- Status kept for each "player" during a game
+data Player = Player {
+        plName  :: String,
+        plChg   :: Changing,
+        plNodes :: Int
+    }
+
+-- We may play with or without a search nodes budget, the we must be able to
+-- make some operations with ints & maybe ints
+aloNodes :: Maybe Int -> Int -> Maybe Int
+aloNodes Nothing   _  = Nothing
+aloNodes (Just n1) n2 = Just $ n1 + n2
+
+subNodes :: Maybe Int -> Int -> Int
+subNodes Nothing   _  = 0
+subNodes (Just n1) n2 = n1 - n2
+
+stopNodes :: Maybe Int -> Int -> Bool
+stopNodes Nothing _    = False
+stopNodes (Just n1) n2 = n2 >= n1
+
 -- Play the given position to the end using fixed depth with 2 configurations
 -- This function can be used only to optimize eval weights but not time or search parameters
 -- The result score is from White p.o.v.:
 --  0: remis
 -- +1: white wins
 -- -1: black wins
-playGame :: Int -> MyPos -> (String, EvalState) -> (String, EvalState) -> CtxIO GameResult
-playGame d pos (ide1, eval1) (ide2, eval2) = do
+playGame :: Int -> Maybe Int -> MyPos -> (String, EvalState) -> (String, EvalState) -> CtxIO GameResult
+playGame d maybeNodes pos (ide1, eval1) (ide2, eval2) = do
+    ctxLog LogInfo "--------------------------"
     ctxLog LogInfo $ "Setup new game between " ++ ide1 ++ " and " ++ ide2
     chg <- readChanging
     let crts = crtStatus chg
@@ -502,20 +511,26 @@ playGame d pos (ide1, eval1) (ide2, eval2) = do
                      myColor = color1, totBmCh = 0, lastChDr = 0, lmvScore = Nothing }
         chg2 = chg { crtStatus = state2, forGui = Nothing, srchStrtMs = 0,
                      myColor = color2, totBmCh = 0, lastChDr = 0, lmvScore = Nothing }
+        player1 = Player { plName = ide1, plChg = chg1, plNodes = 0 }
+        player2 = Player { plName = ide2, plChg = chg2, plNodes = 0 }
     ctxLog LogInfo $ "Color for " ++ ide1 ++ ": " ++ show color1
     ctxLog LogInfo $ "Starting position: " ++ posToFen pos
-    go (0::Int) (ide1, chg1) (ide2, chg2)
-    where go i (id1, chg1) (id2, chg2) = do
+    go (0::Int) player1 player2
+    where go i player1 player2 = do
               start  <- asks startSecond
               currms <- lift $ currMilli start
               let j = i + 1
               -- Prepare for chg1 to search:
-              modifyChanging $ const chg1 { forGui = Nothing, srchStrtMs = currms,
+              modifyChanging $ const (plChg player1) { forGui = Nothing, srchStrtMs = currms,
                                             totBmCh = 0, lastChDr = 0 }
-              ctxLog LogInfo $ "Real ply " ++ show j ++ " engine " ++ id1
-              -- Search to depth:
-              (msc, path) <- iterativeDeepening d
+              let mbNodes = aloNodes maybeNodes (plNodes player1)
+              ctxLog LogInfo $ "Real ply " ++ show j ++ " engine " ++ plName player1
+                  ++ " (nodes budget: " ++ show mbNodes ++ ")"
+              ctxLog LogInfo $ "Current fen: " ++ posToFen (head . stack . crtStatus . plChg $ player1)
+              -- Search to depth or node budget:
+              (msc, path, nodes) <- iterativeDeepening d mbNodes
               ctxLog LogInfo $ "Real ply " ++ show j ++ " returns " ++ show msc ++ " / " ++ show path
+                  ++ " / " ++ show nodes
               if null path
                  then do
                      ctxLog LogError $ "Empty path when playing"
@@ -526,18 +541,19 @@ playGame d pos (ide1, eval1) (ide2, eval2) = do
                               return $ GameAborted "No score when playing"
                           Just sc -> do
                               let m = head path
-                              ctxLog LogInfo $ "Real move " ++ show j ++ " from " ++ id1 ++ ": " ++ show m
+                              ctxLog LogInfo $ "Real move " ++ show j
+                                            ++ " from " ++ plName player1 ++ ": " ++ show m
                               chg1f <- readChanging
                               s1fin <- execCState (doRealMove m) (crtStatus chg1f)
-                              s2ini <- execCState (doRealMove m) (crtStatus chg2)
+                              s2ini <- execCState (doRealMove m) (crtStatus (plChg player2))
                               let p = head $ stack s1fin
                               -- Using length path here could be a problem
                               -- in case of a TT cut which is on path
                               if | sc == mateScore && length path == 1	-- mate in 1
                                    -> if tacticalPos p
                                          then do
-                                             ctxLog LogInfo $ "Mate (" ++ id1 ++ " wins)"
-                                             return $ GameWin id1 "Mate"
+                                             ctxLog LogInfo $ "Mate (" ++ plName player1 ++ " wins)"
+                                             return $ GameWin (plName player1) "Mate"
                                          else do
                                              ctxLog LogError $ "Mate announced, but not in check!"
                                              return $ GameAborted "Mate announced, but not in check"
@@ -557,24 +573,27 @@ playGame d pos (ide1, eval1) (ide2, eval2) = do
                                       hi <- liftIO newHist
                                       let state2 = s2ini { hist = hi, mstats = ssts0 }
                                           chg1n  = chg1f { crtStatus = s1fin }
-                                          chg2n  = chg2  { crtStatus = state2 }
-                                      go j (id2, chg2n) (id1, chg1n)
+                                          chg2n  = (plChg player2) { crtStatus = state2 }
+                                      go j (player2 { plChg = chg2n })
+                                           (player1 { plChg = chg1n, plNodes = subNodes mbNodes nodes})
 
-iterativeDeepening :: Int -> CtxIO (Maybe Int, [Move])
-iterativeDeepening depth = do
+iterativeDeepening :: Int -> Maybe Int -> CtxIO (Maybe Int, [Move], Int)
+iterativeDeepening depth maybeMaxNodes = do
     --when debug $ lift $ do
     --    putStrLn $ "In iter deep: " ++ show depth
     --    hFlush stdout
     chg <- readChanging
     go 1 (crtStatus chg) Nothing [] []
-    where go d _    lsc lpv _    | d > depth = return (lsc, lpv)
-          go d sini lsc lpv rmvs = do
+    where go d sini lsc lpv rmvs = do
               --when debug $ lift $ do
               --    putStrLn $ "In iter deep go: " ++ show d
               --    hFlush stdout
               (path, sc, rmvsf, _timint, sfin, _) <- bestMoveCont d 0 sini lsc lpv rmvs
-              if null path && d > 1
-                 then return (Just sc, path)
+              let nodes = fromIntegral $ sNodes $ mstats sfin
+              -- We don't want to search less than depth 2, because depth 1 delivers error moves
+              -- by currently not updating the best score
+              if d > 1 && (null path || d >= depth || stopNodes maybeMaxNodes nodes)
+                 then return (Just sc, path, nodes)
                  else go (d+1) sfin (Just sc) path rmvsf
 
 -- Append error info to error file:
