@@ -196,7 +196,7 @@ instance CollectParams EvalWeights where
           ewCenterKAtts     = tme  2 62,
           ewSpace           = tme  1  0,
           ewAdvAtts         = tme  1 17,
-          ewIsolPawns       = tme (-36) (-113),
+          ewIsolPawns       = tme (-53) (-213),	-- Bayes GP, 200 nodes, 120 games, 20 steps
           ewIsolPassed      = tme (-63) (-143),
           ewBackPawns       = tme (-108) (-141),
           ewBackPOpen       = tme (-21)  (-27),
