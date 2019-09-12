@@ -175,9 +175,9 @@ instance CollectParams EvalWeights where
     npColInit = EvalWeights {
           ewMaterialDiff    = tme 8 8,
           ewKingSafe        = tme 1 0,
-          ewKingOpen        = tme 2 4,
-          ewKingPlaceCent   = tme 8 1,
-          ewKingPlacePwns   = tme 0 4,
+          ewKingOpen        = tme 4 0,		-- DSPSA 2k nodes, 2.5k games, 10 steps, last 10
+          ewKingPlaceCent   = tme 8 (-5),	-- DSPSA 2k nodes, 2.5k games, 10 steps, last 10
+          ewKingPlacePwns   = tme (-7) 2,	-- DSPSA 2k nodes, 2.5k games, 10 steps, last 10
           ewKingPawn1       = tme  4 53,
           ewKingPawn2       = tme  2 68,
           ewRookHOpen       = tme 162 182,	-- DSPSA with Adadelta
