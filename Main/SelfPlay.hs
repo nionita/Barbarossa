@@ -9,7 +9,7 @@ module Main where
 import Control.Monad.Reader
 import Control.Concurrent
 import Control.Exception
-import Data.Foldable (foldrM)
+import Data.Foldable (foldlM)
 import Data.List (intersperse)
 import Data.Maybe (fromMaybe)
 import Foreign hiding (void)
@@ -171,8 +171,8 @@ main = do
     case optMatch opts of
        Nothing  -> runReaderT (filterFile opts) ctx
        Just dir -> do
-           wdl <- runReaderT (matchFile  opts dir) ctx
-           putStrLn $ "End result: " ++ show wdl
+           GameScore w d l <- runReaderT (matchFile  opts dir) ctx
+           putStrLn $ "End result: (" ++ show w ++ "," ++ show d ++ "," ++ show l ++ ")"
 
 filterFile :: Options -> CtxIO ()
 filterFile opts = do
@@ -196,7 +196,7 @@ filterFile opts = do
         hClose ho
         hClose hi
 
-matchFile :: Options -> String -> CtxIO (Int, Int, Int)
+matchFile :: Options -> String -> CtxIO GameScore
 matchFile opts dir = do
     liftIO $ setCurrentDirectory dir
     ctx <- ask
@@ -211,7 +211,7 @@ matchFile opts dir = do
     case mids of
         Nothing -> do
             liftIO $ putStrLn "For a match we need 2 configs as players"
-            return (0, 0, 0)
+            return (GameScore 0 0 0)
         Just (id1, id2) -> do
             ctxLog LogInfo $ "Players from directory " ++ dir
             ctxLog LogInfo $ "Player 1 " ++ id1
@@ -224,7 +224,8 @@ matchFile opts dir = do
             when debug $ do
                 ctxLog LogInfo $ "Player 1 config: " ++ show eval1
                 ctxLog LogInfo $ "Player 2 config: " ++ show eval2
-            foldrM (playEveryGame (optDepth opts) (optNodes opts) (id1, eval1) (id2, eval2)) (0, 0, 0) fens
+            foldlM (playEveryGame (optDepth opts) (optNodes opts) (id1, eval1) (id2, eval2))
+                   (GameScore 0 0 0) fens
 
 getFenWithRewind :: Handle -> IO String
 getFenWithRewind h = do
@@ -356,16 +357,16 @@ playEveryGame
     -> Maybe Int
     -> (String, EvalState)	-- "player" 1
     -> (String, EvalState)	-- "player" 2
+    -> GameScore
     -> String
-    -> (Int, Int, Int)
-    -> CtxIO (Int, Int, Int)
-playEveryGame depth maybeNodes (id1, eval1) (id2, eval2) fen wdl = do
+    -> CtxIO GameScore
+playEveryGame depth maybeNodes (id1, eval1) (id2, eval2) wdl fen = do
     let pos = posFromFen fen
     gr1 <- playGame depth maybeNodes pos (id1, eval1) (id2, eval2)
     gr2 <- playGame depth maybeNodes pos (id2, eval2) (id1, eval1)
     let wdl1 = scoreGameResult id1 gr1	-- game result from
         wdl2 = scoreGameResult id1 gr2	-- POV of id1
-    return $ addGameScores wdl $ addGameScores wdl1 wdl2
+    return $! addGameScores wdl $ addGameScores wdl1 wdl2
 
 -- The logger will be startet anyway, but will open a file
 -- only when it has to write the first message
@@ -612,15 +613,17 @@ data GameResult = GameAborted String
                 | GameRemis String
                 deriving Show
 
-scoreGameResult :: String -> GameResult -> (Int, Int, Int)
-scoreGameResult player (GameWin plwin _)
-    | player == plwin = (1, 0, 0)
-    | otherwise       = (0, 0, 1)
-scoreGameResult _ (GameRemis _) = (0, 1, 0)
-scoreGameResult _ _             = (0, 0, 0)
+data GameScore = GameScore !Int !Int !Int
 
-addGameScores :: (Int, Int, Int) -> (Int, Int, Int) -> (Int, Int, Int)
-addGameScores (w1, d1, l1) (w2, d2, l2) = (w1+w2, d1+d2, l1+l2)
+scoreGameResult :: String -> GameResult -> GameScore
+scoreGameResult player (GameWin plwin _)
+    | player == plwin = GameScore 1 0 0
+    | otherwise       = GameScore 0 0 1
+scoreGameResult _ (GameRemis _) = GameScore 0 1 0
+scoreGameResult _ _             = GameScore 0 0 0
+
+addGameScores :: GameScore -> GameScore -> GameScore
+addGameScores (GameScore w1 d1 l1) (GameScore w2 d2 l2) = GameScore (w1+w2) (d1+d2) (l1+l2)
 
 remis3Repetitions :: MyPos -> [MyPos] -> Bool
 remis3Repetitions p ps
