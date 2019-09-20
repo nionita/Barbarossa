@@ -6,7 +6,8 @@ import Control.Concurrent
 import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Data.Int
-import System.Time
+import Data.Time.Clock (UTCTime(..), getCurrentTime, diffUTCTime)
+import Data.Time.Format (formatTime, defaultTimeLocale)
 
 import Struct.Struct
 import Struct.Status
@@ -49,7 +50,7 @@ data Context = Ctx {
         logger :: Chan String,          -- the logger channel
         writer :: Chan String,          -- the writer channel
         inform :: Chan InfoToGui,       -- the gui informer channel
-        strttm :: ClockTime,            -- the program start time
+        strttm :: UTCTime,              -- the program start time
         loglev :: LogLevel,             -- loglevel, only higher messages will be logged
         evpid  :: String,		-- identifier for the eval parameter config
         tipars :: TimeParams,		-- time management parameters
@@ -121,29 +122,37 @@ modifyChanging f = do
 ctxLog :: LogLevel -> String -> CtxIO ()
 ctxLog lev mes = do
     ctx <- ask
-    when (lev >= loglev ctx) $ liftIO $ logging (logger ctx) (startSecond ctx) (levToPrf lev) mes
+    when (lev >= loglev ctx) $ liftIO $ logging (logger ctx) (strttm ctx) (levToPrf lev) mes
 
-startSecond :: Context -> Integer
-startSecond ctx = s
-    where TOD s _ = strttm ctx
-
-logging :: Chan String -> Integer -> String -> String -> IO ()
+logging :: Chan String -> UTCTime -> String -> String -> IO ()
 logging lchan refs prf mes = do
     cms <- currMilli refs
     writeChan lchan $ show cms ++ " [" ++ prf ++ "]: " ++ mes
 
--- Current time in ms since program start
-currMilli :: Integer -> IO Int
-currMilli ref = do
-    TOD s ps   <- liftIO getClockTime
-    return $ fromIntegral $ (s-ref)*1000 + ps `div` 1000000000
+-- A few time related convenience functions
+getMyTime :: IO UTCTime
+getMyTime = getCurrentTime
 
+formatMyTime :: UTCTime -> String
+formatMyTime utc = formatTime defaultTimeLocale "%F %T" utc
+
+startSecond :: Context -> Integer
+startSecond ctx = truncate s
+    where UTCTime _ s = strttm ctx
+
+-- Current time in ms since program start
+currMilli :: UTCTime -> IO Int
+currMilli ref = do
+    utc <- getCurrentTime
+    return $ truncate $ diffUTCTime utc ref * 1000
+
+-- A few functions to communicate with the GUI
 -- Communicate the best path so far
 informGui :: Int -> Int -> Int64 -> [Move] -> CtxIO ()
 informGui sc tief nds path = do
     ctx <- ask
     chg <- readChanging
-    currt <- lift $ currMilli $ startSecond ctx
+    currt <- lift $ currMilli $ strttm ctx
     let gi = Info {
                 infoDepth = tief,
                 infoTime = currt - srchStrtMs chg,

@@ -418,5 +418,5 @@ talkToContext (InfoStr s)      = informGuiString s
 timeFromContext :: CtxIO Int
 timeFromContext = do
     ctx <- ask
-    let refs = startSecond ctx
+    let refs = strttm ctx
     lift $ currMilli refs
