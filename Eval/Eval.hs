@@ -272,16 +272,21 @@ materDiff p !ew mide = mad mide (ewMaterialDiff ew) md
 -- be in some corner, in endgame it should be near some (passed) pawn(s)
 -- We calculate the king opennes here, as we have all we need
 -- We also give a bonus for a king beeing near pawn(s)
+-- Also give a small penalty for king not beeing on a file with or adjacent with some pawn
 kingPlace :: EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
-kingPlace ep p !ew mide = made (madm (mad (mad (mad mide (ewKingPawn2 ew) kpa2)
-                                              (ewKingPawn1 ew) kpa1)
-                                         (ewKingOpen ew) ko)
-                                    (ewKingPlaceCent ew) kcd)
-                              (ewKingPlacePwns ew) kpd
+kingPlace ep p !ew mide = mad (made (madm (mad (mad (mad mide (ewKingPawn2 ew) kpa2)
+                                                    (ewKingPawn1 ew) kpa1)
+                                               (ewKingOpen ew) ko)
+                                          (ewKingPlaceCent ew) kcd)
+                                    (ewKingPlacePwns ew) kpd)
+                              (ewKingOffPawns ew) koff
     where !kcd = (mpl - ypl) `unsafeShiftR` epMaterBonusScale ep
           !kpd = (mpi - ypi) `unsafeShiftR` epPawnBonusScale  ep
           !mks = kingSquare (kings p) $ me p
           !yks = kingSquare (kings p) $ yo p
+          !koff = moff - yoff
+          !moff = kingOffPawns mks (pawns p)
+          !yoff = kingOffPawns yks (pawns p)
           !mkm = materFun yminor yrooks yqueens
           !ykm = materFun mminor mrooks mqueens
           (!mpl, !ypl, !mpi, !ypi)
@@ -400,6 +405,37 @@ pawnBonus = unsafeAt pawnBonusArr
 
 matKCArr :: UArray Int Int   -- 0              5             10
 matKCArr = listArray (0, 63) $ [0, 0, 0, 1, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12] ++ repeat 12
+
+kingOffPawns :: Square -> BBoard -> Int
+kingOffPawns ksq pwns
+    | pwns .&. k3files /= 0 = 0
+    | pwns .&. k5files /= 0 = 1
+    | otherwise             = 2
+    where kf = ksq .&. 7
+          k3files = files3Arr `unsafeAt` kf
+          k5files = files5Arr `unsafeAt` kf
+          files3Arr :: UArray Int BBoard
+          files3Arr = listArray (0, 7) [
+                              fileA .|. fileB,
+                              fileA .|. fileB .|. fileC,
+                              fileB .|. fileC .|. fileD,
+                              fileC .|. fileD .|. fileE,
+                              fileD .|. fileE .|. fileF,
+                              fileE .|. fileF .|. fileG,
+                              fileF .|. fileG .|. fileH,
+                              fileG .|. fileH
+                          ]
+          files5Arr :: UArray Int BBoard
+          files5Arr = listArray (0, 7) [
+                              fileA .|. fileB .|. fileC,
+                              fileA .|. fileB .|. fileC .|. fileD,
+                              fileA .|. fileB .|. fileC .|. fileD .|. fileE,
+                              fileB .|. fileC .|. fileD .|. fileE .|. fileF,
+                              fileC .|. fileD .|. fileE .|. fileF .|. fileG,
+                              fileD .|. fileE .|. fileF .|. fileG .|. fileH,
+                              fileE .|. fileF .|. fileG .|. fileH,
+                              fileF .|. fileG .|. fileH
+                          ]
 
 ------ Rook placement points ------
 
