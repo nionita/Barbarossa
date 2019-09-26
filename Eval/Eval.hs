@@ -287,8 +287,8 @@ kingPlace ep p !ew mide = made (madm (mad (mad (mad mide (ewKingPawn2 ew) kpa2)
           !myweaks = weakPawns (pawns p .&. me p) (myPAttacs p)
           !yoweaks = weakPawns (pawns p .&. yo p) (yoPAttacs p)
           !weakpws = myweaks .|. yoweaks
-          kpb | queens p == 0 = Flc 0 0
-              | otherwise     = kingPawnsBonus mks yks weakpws
+          kpb | queens p == 0 = kingPawnsBonus mks yks weakpws
+              | otherwise     = Flc 0 0
           (!mpl, !ypl)
               | moving p == White = ( kingMaterBonus yqueens White mpawns mkm mks
                                     , kingMaterBonus mqueens Black ypawns ykm yks
@@ -347,8 +347,9 @@ kingPawnsBonus !msq !ysq !weaks = foldl' bonuses (Flc 0 0) $ bbToSquares weaks
                                            yb = ybon + pawnBonus (squareDistance sq ysq)
                                        in Flc mb yb
 
-pawnBonusArr :: UArray Int Int     -- 0    1   2   3   4   5  6  7
-pawnBonusArr = listArray (0, 15) $ [220, 100, 60, 30, 20, 12, 6] ++ repeat 0
+-- This can be from 1 to 7
+pawnBonusArr :: UArray Int Int  -- 0    1   2   3   4   5  6  7
+pawnBonusArr = listArray (0, 7) $ [0, 100, 60, 30, 20, 12, 6, 0]
 
 pawnBonus :: Int -> Int
 pawnBonus = unsafeAt pawnBonusArr
