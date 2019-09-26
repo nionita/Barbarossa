@@ -10,7 +10,7 @@ module Eval.Eval (
 
 import Data.Array.Base (unsafeAt)
 import Data.Bits
-import Data.List (minimumBy)
+import Data.List (minimumBy, foldl')
 import Data.Array.Unboxed
 import Data.Ord (comparing)
 import Data.Int
@@ -274,26 +274,27 @@ materDiff p !ew mide = mad mide (ewMaterialDiff ew) md
 -- We also give a bonus for a king beeing near pawn(s)
 kingPlace :: EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
 kingPlace ep p !ew mide = made (madm (mad (mad (mad mide (ewKingPawn2 ew) kpa2)
-                                              (ewKingPawn1 ew) kpa1)
-                                         (ewKingOpen ew) ko)
-                                    (ewKingPlaceCent ew) kcd)
-                              (ewKingPlacePwns ew) kpd
+                                               (ewKingPawn1 ew) kpa1)
+                                          (ewKingOpen ew) ko)
+                                     (ewKingPlaceCent ew) kcd)
+                               (ewKingPlacePwns ew) kpd
     where !kcd = (mpl - ypl) `unsafeShiftR` epMaterBonusScale ep
-          !kpd = (mpi - ypi) `unsafeShiftR` epPawnBonusScale  ep
+          !kpd | Flc mpi ypi <- kpb = (mpi - ypi) `unsafeShiftR` epPawnBonusScale  ep
           !mks = kingSquare (kings p) $ me p
           !yks = kingSquare (kings p) $ yo p
           !mkm = materFun yminor yrooks yqueens
           !ykm = materFun mminor mrooks mqueens
-          (!mpl, !ypl, !mpi, !ypi)
+          !myweaks = weakPawns (pawns p .&. me p) (myPAttacs p)
+          !yoweaks = weakPawns (pawns p .&. yo p) (yoPAttacs p)
+          !weakpws = myweaks .|. yoweaks
+          kpb | queens p == 0 = Flc 0 0
+              | otherwise     = kingPawnsBonus mks yks weakpws
+          (!mpl, !ypl)
               | moving p == White = ( kingMaterBonus yqueens White mpawns mkm mks
                                     , kingMaterBonus mqueens Black ypawns ykm yks
-                                    , kingPawnsBonus mks mpassed ypassed
-                                    , kingPawnsBonus yks mpassed ypassed
                                     )
               | otherwise         = ( kingMaterBonus yqueens Black mpawns mkm mks
                                     , kingMaterBonus mqueens White ypawns ykm yks
-                                    , kingPawnsBonus mks ypassed mpassed
-                                    , kingPawnsBonus yks ypassed mpassed
                                     )
           !mrooks  = popCount $ rooks p .&. me p
           !mqueens = popCount $ queens p .&. me p
@@ -303,8 +304,6 @@ kingPlace ep p !ew mide = made (madm (mad (mad (mad mide (ewKingPawn2 ew) kpa2)
           !yminor  = popCount $ (bishops p .|. knights p) .&. yo p
           !mpawns  = pawns p .&. me p
           !ypawns  = pawns p .&. yo p
-          !mpassed = passed p .&. me p
-          !ypassed = passed p .&. yo p
           materFun m r q = (m * epMaterMinor ep + r * epMaterRook ep + q * epMaterQueen ep)
                                `unsafeShiftR` epMaterScale ep
           !ko = adv - own
@@ -330,20 +329,29 @@ kingPlace ep p !ew mide = made (madm (mad (mad (mad mide (ewKingPawn2 ew) kpa2)
                          | pykpa == 1 = (1, 0)
                          | otherwise  = (0, 1)
 
+-- We consider weak pawns those which are neither defended by own pawns
+-- nor on the same rank and adjacent with other own pawns
+weakPawns :: BBoard -> BBoard -> BBoard
+weakPawns cpawns apawns = cpawns `less` strong
+    where strong = bbLeft cpawns .|. bbRight cpawns .|. apawns
+
 promoW, promoB :: Square -> Square
 promoW s = 56 + (s .&. 7)
 promoB s =       s .&. 7
 
--- We give bonus also for pawn promotion squares, if the pawn is near enough to promote
--- Give as parameter bitboards for all pawns, white pawns and black pawns for performance
-kingPawnsBonus :: Square -> BBoard -> BBoard -> Int
-kingPawnsBonus !ksq !wpass !bpass = bonus
-    where wns = bbToSquares (wpass `unsafeShiftL` 8)
-          bns = bbToSquares (bpass `unsafeShiftR` 8)
-          !bpsqs = sum $ map (pawnBonus . squareDistance ksq) $ wns ++ bns
-          !bqsqs = sum $ map (pawnBonus . squareDistance ksq)
-                       $ map promoW (bbToSquares wpass) ++ map promoB (bbToSquares bpass)
-          !bonus = bpsqs + bqsqs
+-- When there is no queen on the board, we give a bonus for king beeing near weak pawns
+-- i.e. pawns not defended or not near other own pawns
+kingPawnsBonus :: Square -> Square -> BBoard -> Flc
+kingPawnsBonus !msq !ysq !weaks = foldl' bonuses (Flc 0 0) $ bbToSquares weaks
+    where bonuses (Flc mbon ybon) sq = let mb = mbon + pawnBonus (squareDistance sq msq)
+                                           yb = ybon + pawnBonus (squareDistance sq ysq)
+                                       in Flc mb yb
+
+pawnBonusArr :: UArray Int Int     -- 0    1   2   3   4   5  6  7
+pawnBonusArr = listArray (0, 15) $ [220, 100, 60, 30, 20, 12, 6] ++ repeat 0
+
+pawnBonus :: Int -> Int
+pawnBonus = unsafeAt pawnBonusArr
 
 -- This is a bonus for the king beeing near one corner
 -- It's bigger when the enemy has more material (only pieces)
@@ -389,14 +397,8 @@ kMatBonus c !myp !mat !ksq
 proxyBonusArr :: UArray Int Int    -- 0   1  2  3  4  5  6  7
 proxyBonusArr = listArray (0, 15) $ [55, 20, 8, 4, 3, 2, 1] ++ repeat 0
 
-pawnBonusArr :: UArray Int Int     -- 0    1   2   3   4   5  6  7
-pawnBonusArr = listArray (0, 15) $ [220, 120, 70, 35, 23, 14, 7] ++ repeat 0
-
 proxyBonus :: Int -> Int
 proxyBonus = unsafeAt proxyBonusArr
-
-pawnBonus :: Int -> Int
-pawnBonus = unsafeAt pawnBonusArr
 
 matKCArr :: UArray Int Int   -- 0              5             10
 matKCArr = listArray (0, 63) $ [0, 0, 0, 1, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12] ++ repeat 12

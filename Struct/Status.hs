@@ -128,7 +128,7 @@ instance CollectParams EvalParams where
                     epMaterScale = 1,
                     epMaterBonusScale = 5,
                     epPawnBonusScale  = 1,
-                    epPassKingProx    = 12,	-- max after ~12k Clop games (ELO +23 +- 12)
+                    epPassKingProx    = 13,	-- max after ~12k Clop games (ELO +23 +- 12)
                     epPassBlockO = 11,
                     epPassBlockA = 17,
                     epPassMin    = 30,
