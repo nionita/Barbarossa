@@ -328,11 +328,9 @@ kingPlace ep p !ew mide = made (madm (mad (mad (mad mide (ewKingPawn2 ew) kpa2)
                          | pykpa == 1 = (1, 0)
                          | otherwise  = (0, 1)
 
--- We consider weak pawns those which are neither defended by own pawns
--- nor on the same rank and adjacent with other own pawns
+-- We consider weak pawns those which are not defended by own pawns
 weakPawns :: BBoard -> BBoard -> BBoard
-weakPawns cpawns apawns = cpawns `less` strong
-    where strong = bbLeft cpawns .|. bbRight cpawns .|. apawns
+weakPawns cpawns apawns = cpawns `less` apawns
 
 promoW, promoB :: Square -> Square
 promoW s = 56 + (s .&. 7)
