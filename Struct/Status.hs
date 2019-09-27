@@ -62,7 +62,6 @@ data EvalParams
           epMaterQueen :: !Int,
           epMaterScale :: !Int,
           epMaterBonusScale :: !Int,
-          epPawnBonusScale  :: !Int,
           epPassKingProx    :: !Int,
           epPassBlockO :: !Int,
           epPassBlockA :: !Int,
@@ -77,7 +76,6 @@ data EvalWeights
           ewKingSafe        :: !MidEnd,
           ewKingOpen        :: !MidEnd,
           ewKingPlaceCent   :: !MidEnd,
-          ewKingPlacePwns   :: !MidEnd,
           ewKingPawn1       :: !MidEnd,
           ewKingPawn2       :: !MidEnd,
           ewRookHOpen       :: !MidEnd,
@@ -127,7 +125,6 @@ instance CollectParams EvalParams where
                     epMaterQueen = 13,
                     epMaterScale = 1,
                     epMaterBonusScale = 5,
-                    epPawnBonusScale  = 1,
                     epPassKingProx    = 12,	-- max after ~12k Clop games (ELO +23 +- 12)
                     epPassBlockO = 11,
                     epPassBlockA = 17,
@@ -147,7 +144,6 @@ collectEvalParams (s, v) ep = lookApply s v ep [
         ("epMaterQueen",      setEpMaterQueen),
         ("epMaterScale",      setEpMaterScale),
         ("epMaterBonusScale", setEpMaterBonusScale),
-        ("epPawnBonusScale",  setEpPawnBonusScale),
         ("epPassKingProx",    setEpPassKingProx),
         ("epPassBlockO",      setEpPassBlockO),
         ("epPassBlockA",      setEpPassBlockA),
@@ -162,7 +158,6 @@ collectEvalParams (s, v) ep = lookApply s v ep [
           setEpMaterQueen      v' ep' = ep' { epMaterQueen      = round v' }
           setEpMaterScale      v' ep' = ep' { epMaterScale      = round v' }
           setEpMaterBonusScale v' ep' = ep' { epMaterBonusScale = round v' }
-          setEpPawnBonusScale  v' ep' = ep' { epPawnBonusScale  = round v' }
           setEpPassKingProx    v' ep' = ep' { epPassKingProx    = round v' }
           setEpPassBlockO      v' ep' = ep' { epPassBlockO      = round v' }
           setEpPassBlockA      v' ep' = ep' { epPassBlockA      = round v' }
@@ -177,7 +172,6 @@ instance CollectParams EvalWeights where
           ewKingSafe        = tme 1 0,
           ewKingOpen        = tme 2 4,
           ewKingPlaceCent   = tme 8 1,
-          ewKingPlacePwns   = tme 0 4,
           ewKingPawn1       = tme  4 53,
           ewKingPawn2       = tme  2 68,
           ewRookHOpen       = tme 162 182,	-- DSPSA with Adadelta
@@ -227,8 +221,6 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
         ("end.kingOpen",       setEndKingOpen),
         ("mid.kingPlaceCent",  setMidKingPlaceCent),
         ("end.kingPlaceCent",  setEndKingPlaceCent),
-        ("mid.kingPlacePwns",  setMidKingPlacePwns),
-        ("end.kingPlacePwns",  setEndKingPlacePwns),
         ("mid.kingPawn1",      setMidKingPawn1),
         ("end.kingPawn1",      setEndKingPawn1),
         ("mid.kingPawn2",      setMidKingPawn2),
@@ -310,8 +302,6 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
           setEndKingOpen        v' ew' = ew' { ewKingOpen        = (ewKingOpen        ew') { end = round v' }}
           setMidKingPlaceCent   v' ew' = ew' { ewKingPlaceCent   = (ewKingPlaceCent   ew') { mid = round v' }}
           setEndKingPlaceCent   v' ew' = ew' { ewKingPlaceCent   = (ewKingPlaceCent   ew') { end = round v' }}
-          setMidKingPlacePwns   v' ew' = ew' { ewKingPlacePwns   = (ewKingPlacePwns   ew') { mid = round v' }}
-          setEndKingPlacePwns   v' ew' = ew' { ewKingPlacePwns   = (ewKingPlacePwns   ew') { end = round v' }}
           setMidKingPawn1       v' ew' = ew' { ewKingPawn1       = (ewKingPawn1       ew') { mid = round v' }}
           setEndKingPawn1       v' ew' = ew' { ewKingPawn1       = (ewKingPawn1       ew') { end = round v' }}
           setMidKingPawn2       v' ew' = ew' { ewKingPawn2       = (ewKingPawn2       ew') { mid = round v' }}

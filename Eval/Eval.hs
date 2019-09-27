@@ -273,27 +273,21 @@ materDiff p !ew mide = mad mide (ewMaterialDiff ew) md
 -- We calculate the king opennes here, as we have all we need
 -- We also give a bonus for a king beeing near pawn(s)
 kingPlace :: EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
-kingPlace ep p !ew mide = made (madm (mad (mad (mad mide (ewKingPawn2 ew) kpa2)
-                                              (ewKingPawn1 ew) kpa1)
-                                         (ewKingOpen ew) ko)
-                                    (ewKingPlaceCent ew) kcd)
-                              (ewKingPlacePwns ew) kpd
+kingPlace ep p !ew mide = madm (mad (mad (mad mide (ewKingPawn2 ew) kpa2)
+                                         (ewKingPawn1 ew) kpa1)
+                                    (ewKingOpen ew) ko)
+                               (ewKingPlaceCent ew) kcd
     where !kcd = (mpl - ypl) `unsafeShiftR` epMaterBonusScale ep
-          !kpd = (mpi - ypi) `unsafeShiftR` epPawnBonusScale  ep
           !mks = kingSquare (kings p) $ me p
           !yks = kingSquare (kings p) $ yo p
           !mkm = materFun yminor yrooks yqueens
           !ykm = materFun mminor mrooks mqueens
-          (!mpl, !ypl, !mpi, !ypi)
+          (!mpl, !ypl)
               | moving p == White = ( kingMaterBonus yqueens White mpawns mkm mks
                                     , kingMaterBonus mqueens Black ypawns ykm yks
-                                    , kingPawnsBonus mks mpassed ypassed
-                                    , kingPawnsBonus yks mpassed ypassed
                                     )
               | otherwise         = ( kingMaterBonus yqueens Black mpawns mkm mks
                                     , kingMaterBonus mqueens White ypawns ykm yks
-                                    , kingPawnsBonus mks ypassed mpassed
-                                    , kingPawnsBonus yks ypassed mpassed
                                     )
           !mrooks  = popCount $ rooks p .&. me p
           !mqueens = popCount $ queens p .&. me p
@@ -303,8 +297,6 @@ kingPlace ep p !ew mide = made (madm (mad (mad (mad mide (ewKingPawn2 ew) kpa2)
           !yminor  = popCount $ (bishops p .|. knights p) .&. yo p
           !mpawns  = pawns p .&. me p
           !ypawns  = pawns p .&. yo p
-          !mpassed = passed p .&. me p
-          !ypassed = passed p .&. yo p
           materFun m r q = (m * epMaterMinor ep + r * epMaterRook ep + q * epMaterQueen ep)
                                `unsafeShiftR` epMaterScale ep
           !ko = adv - own
@@ -333,17 +325,6 @@ kingPlace ep p !ew mide = made (madm (mad (mad (mad mide (ewKingPawn2 ew) kpa2)
 promoW, promoB :: Square -> Square
 promoW s = 56 + (s .&. 7)
 promoB s =       s .&. 7
-
--- We give bonus also for pawn promotion squares, if the pawn is near enough to promote
--- Give as parameter bitboards for all pawns, white pawns and black pawns for performance
-kingPawnsBonus :: Square -> BBoard -> BBoard -> Int
-kingPawnsBonus !ksq !wpass !bpass = bonus
-    where wns = bbToSquares (wpass `unsafeShiftL` 8)
-          bns = bbToSquares (bpass `unsafeShiftR` 8)
-          !bpsqs = sum $ map (pawnBonus . squareDistance ksq) $ wns ++ bns
-          !bqsqs = sum $ map (pawnBonus . squareDistance ksq)
-                       $ map promoW (bbToSquares wpass) ++ map promoB (bbToSquares bpass)
-          !bonus = bpsqs + bqsqs
 
 -- This is a bonus for the king beeing near one corner
 -- It's bigger when the enemy has more material (only pieces)
@@ -389,14 +370,8 @@ kMatBonus c !myp !mat !ksq
 proxyBonusArr :: UArray Int Int    -- 0   1  2  3  4  5  6  7
 proxyBonusArr = listArray (0, 15) $ [55, 20, 8, 4, 3, 2, 1] ++ repeat 0
 
-pawnBonusArr :: UArray Int Int     -- 0    1   2   3   4   5  6  7
-pawnBonusArr = listArray (0, 15) $ [220, 120, 70, 35, 23, 14, 7] ++ repeat 0
-
 proxyBonus :: Int -> Int
 proxyBonus = unsafeAt proxyBonusArr
-
-pawnBonus :: Int -> Int
-pawnBonus = unsafeAt pawnBonusArr
 
 matKCArr :: UArray Int Int   -- 0              5             10
 matKCArr = listArray (0, 63) $ [0, 0, 0, 1, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12] ++ repeat 12
@@ -820,19 +795,27 @@ perPassedPawnOk !gph ep p c sq sqbb moi toi moia toia = val
           !pmax = (a0 * x + b0) * x + c0
           !myking = kingSquare (kings p) moi
           !yoking = kingSquare (kings p) toi
+          -- We want the kings to support or stop the pawn
+          -- So we consider touching the way of the pawn as good for the respective king side
+          -- We could allocate a separate parameter for the touch and tune it
           !mdis = squareDistance myking asq
+          !mtouch = popCount (kAttacs myking .&. way) `unsafeShiftR` 1
           !ydis = squareDistance yoking asq
-          !kingprx = (kdDist (mdis - ydis) * epPassKingProx ep * (256 - gph)) `unsafeShiftR` 8
-          !val1 = (pmax * (128 - kingprx) * (128 - epPassBlockO ep * mblo)) `unsafeShiftR` 14
+          !ytouch = popCount (kAttacs yoking .&. way) `unsafeShiftR` 1
+          !kdist = mdis + ytouch - ydis - mtouch
+          !kprx = (kdDist kdist * epPassKingProx ep * (256 - gph)) `unsafeShiftR` 8
+          !val1 = (pmax * (128 - kprx) * (128 - epPassBlockO ep * mblo)) `unsafeShiftR` 14
           !val2 = (val1 * (128 - epPassBlockA ep * yblo)) `unsafeShiftR` 7
           !val  = (val2 * (128 + epPassMyCtrl ep * myctrl) * (128 - epPassYoCtrl ep * yoctrl))
                     `unsafeShiftR` 14
 
-kdDistArr :: UArray Int Int  --  -7 -6 -5 -4 -3 -2 -1  0  1  2  3  4  5  6  7
-kdDistArr = listArray (0, 14) $ [-4,-3,-3,-3,-2,-2,-1, 0, 1, 2, 2, 3, 3, 3, 4]
+-- mdis/ydis can be from 0 to 7, mtouch/ytouch 0 or 1
+-- This means: mdis + ytouch - ydis - mtouch lies between -8 and 8
+kdDistArr :: UArray Int Int  --   -8 -7 -6 -5 -4 -3 -2 -1  0  1  2  3  4  5  6  7  8
+kdDistArr = listArray (0, 16) $ [ -4,-4,-3,-3,-3,-2,-2,-1, 0, 1, 2, 2, 3, 3, 3, 4, 4]
 
 kdDist :: Int -> Int
-kdDist = (kdDistArr `unsafeAt`) . (7+)
+kdDist = (kdDistArr `unsafeAt`) . (8 +)
 
 
 ------ Advanced pawns, on 6th & 7th rows (not passed) ------
