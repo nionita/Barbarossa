@@ -399,7 +399,7 @@ perFenLine dpt fenLine agr = do
     ctxLog LogInfo $ "Ref.Score " ++ refsc ++ " fen " ++ fen
     doPosition (Pos fen) []
     modifyChanging $ \c -> c { working = True }
-    sc <- searchTheTree 1 dpt 0 0 0 0 0 Nothing [] []
+    sc <- searchTheTree 1 dpt 0 0 0 0 0 0 Nothing [] []
     return $ aggregateError agr rsc sc
 
 aggregateError :: Agreg -> Int -> Int -> Agreg
@@ -478,7 +478,7 @@ startWorking tim tpm mtg dpt rept = do
 -- find another scheme, for example with STM
 startSearchThread :: Int -> Int -> Int -> Int -> Int -> CtxIO ()
 startSearchThread tim tpm mtg dpt rept =
-    ctxCatch (void $ searchTheTree 1 dpt 0 tim tpm mtg rept Nothing [] [])
+    ctxCatch (void $ searchTheTree 1 dpt 0 0 tim tpm mtg rept Nothing [] [])
         $ \e -> do
             chg <- readChanging
             let mes = "searchTheTree terminated by exception: " ++ show e
@@ -500,13 +500,13 @@ ctxCatch a f = do
             (\e -> runReaderT (f e) ctx)
 
 -- Search with the given depth
-searchTheTree :: Int -> Int -> Int -> Int -> Int -> Int -> Int -> Maybe Int -> [Move] -> [Move] -> CtxIO Int
-searchTheTree draft mdraft timx tim tpm mtg rept lsc lpv rmvs = do
+searchTheTree :: Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Maybe Int -> [Move] -> [Move] -> CtxIO Int
+searchTheTree draft mdraft timx1 timx tim tpm mtg rept lsc lpv rmvs = do
     ctxLog LogInfo $ "searchTheTree starts draft " ++ show draft
     ctx <- ask
     chg <- readChanging
-    ctxLog LogInfo $ "Time = " ++ show tim ++ " Timx = " ++ show timx
-    (path, sc, rmvsf, timint, stfin, ch) <- bestMoveCont draft timx (crtStatus chg) lsc lpv rmvs
+    ctxLog LogInfo $ "Time = " ++ show tim ++ " Timx1 = " ++ show timx1 ++ " Timx = " ++ show timx
+    (path, sc, rmvsf, timint, stfin, ch) <- bestMoveCont draft timx1 timx (crtStatus chg) lsc lpv rmvs
     let totch = totBmCh chg + ch
         ldCh | ch > 0    = draft
              | otherwise = lastChDr chg
@@ -555,12 +555,16 @@ searchTheTree draft mdraft timx tim tpm mtg rept lsc lpv rmvs = do
            chg' <- readChanging
            if working chg'
                then if mx == 0	-- no time constraint (take original maximum)
-                       then searchTheTree (draft + 1) mdraft 0             tim tpm mtg rept (Just sc) path rmvsf
-                       else searchTheTree (draft + 1) mdraft (start + mxr) tim tpm mtg rept (Just sc) path rmvsf
+                       then searchTheTree (draft+1) mdraft 0 0 tim tpm mtg rept (Just sc) path rmvsf
+                       else do
+                           let mxt  = start + mxr
+                               mxt1 = start + mxr `div` firstMoveTimeReductionFactor
+                           searchTheTree (draft+1) mdraft mxt1 mxt tim tpm mtg rept (Just sc) path rmvsf
                else do
                    ctxLog DebugUci "in searchTheTree: not working"
                    giveBestMove path -- was stopped
                    return sc
+    where firstMoveTimeReductionFactor = 3
 
 -- The time management changes like this:
 -- We calculate the normal and maximum time to use for this move, as before

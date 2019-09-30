@@ -589,7 +589,7 @@ iterativeDeepening depth maybeMaxNodes = do
               --when debug $ lift $ do
               --    putStrLn $ "In iter deep go: " ++ show d
               --    hFlush stdout
-              (path, sc, rmvsf, _timint, sfin, _) <- bestMoveCont d 0 sini lsc lpv rmvs
+              (path, sc, rmvsf, _timint, sfin, _) <- bestMoveCont d 0 0 sini lsc lpv rmvs
               let nodes = fromIntegral $ sNodes $ mstats sfin
               -- We don't want to search less than depth 2, because depth 1 delivers error moves
               -- by currently not updating the best score
