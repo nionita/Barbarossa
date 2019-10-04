@@ -8,8 +8,7 @@ module Struct.Struct (
          fromSquare, toSquare, isSlide, isDiag, isKkrq,
          moveIsNormal, moveIsCastle, moveIsPromo, moveIsEnPas, moveColor, movePiece,
          movePromoPiece, moveEnPasDel, makeEnPas, moveAddColor, moveAddPiece,
-         moveHisAdr, moveHisOfs,
-         makeCastleFor, makePromo, moveFromTo, showWord64,
+         moveHisAdr, makeCastleFor, makePromo, moveFromTo, showWord64,
          activatePromo, fromColRow, checkCastle, checkEnPas, toString,
          myAttacs, yoAttacs, check,
          myPAttacs, myNAttacs, myBAttacs, myRAttacs, myQAttacs, myKAttacs,
@@ -407,15 +406,16 @@ movePiece m@(Move w)
     | otherwise      = error $ "Wrong move type: " ++ showHex w ""
     where r = fromIntegral $ (w `unsafeShiftR` 12) .&. 0x7
 
--- For history purposes: quick 'n' dirty "piece"
+-- For history purposes: calculate the final move adress
+-- HERE: we have tight coupling with the history scheme!
+-- In history we use 8 pieces instead of 6 (so that we can obtain the piece very fast)
+-- Counting the color (bit 15 = 1 for black) we characterize a piece with 4 bit
+-- We have 64 squares for every piece (history schema is: piece to)
+-- Then to calculate the move address we keep the lower 5 bit (to square)
+-- and shift the higher 4 bit 6 to the right (i.e. bit 12 gets to position 6)
 {-# INLINE moveHisAdr #-}
 moveHisAdr :: Move -> Int
-moveHisAdr (Move w) = fromIntegral $ (w `unsafeShiftR` 12) .&. 0x7
-
--- For history purposes: quick 'n' dirty "color"
-{-# INLINE moveHisOfs #-}
-moveHisOfs :: Move -> Int
-moveHisOfs (Move w) = fromIntegral $ w `unsafeShiftR` 15
+moveHisAdr (Move w) = fromIntegral $ (w `unsafeShiftR` 6) .&. 0x3C0 .|. w .&. 0x3F
 
 -- {-# INLINE fromSquare #-}
 fromSquare :: Move -> Square
