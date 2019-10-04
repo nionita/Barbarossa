@@ -39,10 +39,31 @@ smallVals g = concatMap chop $ randoms g
           f (_, 0) = Nothing
           f (w, k) = Just (w .&. 3, (w `unsafeShiftR` 2, k-1))
 
+-- We want to give irreversible moves a better initial history
+-- (Better means more negative, because of the sort trick)
+-- We use a constant vector with all "pawn to" places fixed at a negative score
+iniHist :: [Int32]
+iniHist = runST $ do
+    let uz = U.fromList $ take vsize $ repeat (0 :: Int32)
+    v <- U.unsafeThaw uz
+    let wpMove = moveAddPiece Pawn $ moveFromTo 0 0
+        i = moveHisAdr wpMove
+    go v i
+    let bpMove = moveAddColor Black wpMove
+        j = moveHisAdr bpMove
+    go v j
+    u <- U.unsafeFreeze v
+    return $ U.toList u
+    where go _ i | i >= 64 = return ()
+          go v i = do
+              V.unsafeWrite v i pmInitialValue
+              go v (i+1)
+          pmInitialValue = -4
+
 newHist :: IO History
 newHist = do
     g <- newStdGen
-    U.thaw $ U.fromList $ map fromIntegral $ take vsize $ smallVals g
+    U.thaw $ U.fromList $ zipWith (+) iniHist $ map fromIntegral $ smallVals g
 
 -- History value: exponential
 -- d is absolute depth, root = 1, so that cuts near root count more
