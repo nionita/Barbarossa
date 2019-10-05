@@ -32,16 +32,18 @@ adrs :: [Move] -> [Int]
 adrs = map moveHisAdr
 
 -- Produce small random numbers to initialize the new history
-smallVals :: RandomGen g => g -> [Word32]
-smallVals g = concatMap chop $ randoms g
-    where chop w = unfoldr f (w, 16)
-          f :: (Word32, Int) -> Maybe (Word32, (Word32, Int))
+smallVals :: RandomGen g => g -> Int -> Int32 -> [Int32]
+smallVals g bits offset = concatMap chop $ randoms g
+    where chop w = unfoldr f (w, perWord)
+          f :: (Word32, Int) -> Maybe (Int32, (Word32, Int))
           f (_, 0) = Nothing
-          f (w, k) = Just (w .&. 3, (w `unsafeShiftR` 2, k-1))
+          f (w, k) = Just (offset + fromIntegral (w .&. mask), (w `unsafeShiftR` bits, k-1))
+          perWord = 32 `div` bits
+          mask = 1 `unsafeShiftL` bits - 1
 
--- We want to give irreversible moves a better initial history
--- (Better means more negative, because of the sort trick)
--- We use a constant vector with all "pawn to" places fixed at a negative score
+-- We want to give irreversible moves some initial history
+-- We use a list with all "pawn to" places fixed at score 1
+-- and control in newHist its magnitude and if it will be negative or positive
 iniHist :: [Int32]
 iniHist = runST $ do
     let uz = U.fromList $ take vsize $ repeat (0 :: Int32)
@@ -58,12 +60,19 @@ iniHist = runST $ do
           go v i = do
               V.unsafeWrite v i pmInitialValue
               go v (i+1)
-          pmInitialValue = -4
+          pmInitialValue = 1
 
+-- When we create the new history we add a fixed part from iniHist and a random part
+-- We have weights to combine these parts as well as a general initial level for all
+-- moves which will control how fast the first scaling will take place
+-- This code is not performance critic, as it is executed onye for every real move
 newHist :: IO History
 newHist = do
     g <- newStdGen
-    U.thaw $ U.fromList $ zipWith (+) iniHist $ map fromIntegral $ smallVals g
+    U.thaw $ U.fromList $ zipWith (+) (map (iniLevel *) iniHist) $ smallVals g randomBits zeroLevel
+    where zeroLevel  = 1 `unsafeShiftL` 30
+          randomBits = 2
+          iniLevel   = -1024
 
 -- History value: exponential
 -- d is absolute depth, root = 1, so that cuts near root count more
