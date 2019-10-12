@@ -39,7 +39,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.6.0"
-progVerSuff = "one"
+progVerSuff = "onec"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -211,7 +211,6 @@ theWriter inter wchan lchan mustlog refs = forever $ do
 
 -- The informer is getting structured data
 -- and formats it to a string which is sent to the writer
--- It ignores messages which come while we are not searching
 startInformer :: CtxIO ()
 startInformer = do
     ctx <- ask
@@ -221,15 +220,12 @@ startInformer = do
 theInformer :: Chan InfoToGui -> CtxIO ()
 theInformer ichan = forever $ do
     s <- liftIO $ readChan ichan
-    chg <- readChanging
-    when (working chg) $ toGui s
-
-toGui :: InfoToGui -> CtxIO ()
-toGui s = case s of
-            InfoS s'   -> answer $ infos s'
-            InfoD _    -> answer $ formInfoDepth s
-            InfoCM _ _ -> answer $ formInfoCM s
-            _          -> answer $ formInfo s
+    case s of
+        InfoS s'   -> answer $ infos s'
+        InfoD _    -> answer $ formInfoDepth s
+        InfoCM _ _ -> answer $ formInfoCM s
+        InfoBM m   -> answer $ bestMove m Nothing
+        _          -> answer $ formInfo s
 
 -- The reader is executed by the main thread
 -- It reads commands from the GUI and interprets them
@@ -646,8 +642,9 @@ giveBestMove mvs = do
     -- ctxLog "Info" $ "The moves: " ++ show mvs
     modifyChanging $ \c -> c { working = False, compThread = Nothing, forGui = Nothing }
     if null mvs
-        then answer $ infos "empty pv"
-        else answer $ bestMove (head mvs) Nothing
+        then informGuiString "empty pv"
+        -- else answer $ bestMove (head mvs) Nothing
+        else informGuiB (head mvs)
     cng <- readChanging
     let mst = mstats $ crtStatus cng
     ctxLog LogInfo $ "Search statistics:"

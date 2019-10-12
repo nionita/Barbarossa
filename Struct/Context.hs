@@ -30,6 +30,7 @@ data InfoToGui = Info {
                     infoCurMove :: Int
                 }
                 | InfoS { infoString :: String }
+                | InfoBM { infoMove :: Move }
 
 data LogLevel = DebugSearch | DebugUci | LogInfo | LogWarning | LogError | LogNever
     deriving (Eq, Ord)
@@ -171,4 +172,11 @@ informGuiString :: String -> CtxIO ()
 informGuiString s = do
     ctx <- ask
     let gi = InfoS { infoString = s }
+    liftIO $ writeChan (inform ctx) gi
+
+-- Communicate the best move
+informGuiB :: Move -> CtxIO ()
+informGuiB m = do
+    ctx <- ask
+    let gi = InfoBM { infoMove = m }
     liftIO $ writeChan (inform ctx) gi
