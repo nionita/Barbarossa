@@ -175,8 +175,8 @@ doRealMove m = do
                    return $ Exten 0 False False
 
 -- Move from a node to a descendent - the normal search version
-doMove :: Move -> Game DoResult
-doMove m = do
+doMove :: Move -> Int -> Game DoResult
+doMove m d = do
     s <- get
     let (pc:_) = stack s	-- we never saw an empty stack error until now
         -- Moving a non-existent piece?
@@ -197,11 +197,13 @@ doMove m = do
                then return Illegal
                else do
                    put s { stack = p : stack s }
-                   if checkRemisRules p (stack s)
-                      then return Final
-                      else if captOrPromo pc m
-                              then return $! Exten (exten pc p) True True
-                              else return $! Exten (exten pc p) False (noLMR pc m)
+                   return $! if checkRemisRules p (stack s)
+                                then Final
+                                else let !ex = exten pc p
+                                     in if captOrPromo pc m
+                                        then Exten ex True True
+                                        else let !dd = 2 - ex
+                                             in Exten ex False (d > dd && noLMR pc p m)
 
 -- Move from a node to a descendent - the QS search version
 -- Here we do only a restricted check for illegal moves
@@ -375,8 +377,17 @@ captOrPromo p m
     | otherwise                      = moveIsCapture p m
 
 -- Can be LMR reduced, if not captures & promotions
-noLMR :: MyPos -> Move -> Bool
-noLMR = movePassed
+noLMR :: MyPos -> MyPos -> Move -> Bool
+noLMR p0 p1 m = movePassed p0 m || moveChangesKingAttacks p0 p1
+
+-- When the king attacks increase, do no LMR
+moveChangesKingAttacks :: MyPos -> MyPos -> Bool
+moveChangesKingAttacks p0 p1
+    = queenAttack && (nextKingAttack >= minAttacks) && (nextKingAttack > prevKingAttack)
+    where queenAttack = myKAttacs p1 .&. yoQAttacs p1 /= 0
+          prevKingAttack = popCount $ yoKAttacs p0 .&. myAttacs p0
+          nextKingAttack = popCount $ myKAttacs p1 .&. yoAttacs p1
+          minAttacks = 2
 
 -- We will call this function before we do the move
 -- This will spare a heavy operation for pruned moved
