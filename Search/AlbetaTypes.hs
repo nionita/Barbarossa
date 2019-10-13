@@ -16,7 +16,6 @@ data ABControl = ABC {
         lastscore :: Maybe Int,
         rootmvs   :: [Move],
         window    :: Int,
-        best      :: Bool,
         stoptime  :: Int
     } deriving Show
 

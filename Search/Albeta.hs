@@ -123,27 +123,26 @@ data Killer = NoKiller | OneKiller !Move | TwoKillers !Move !Move deriving (Eq, 
 data PVReadOnly
     = PVReadOnly {
           draft  :: !Int,	-- root search depth
-          albest :: !Bool,	-- always choose the best move (i.e. first)
           timeli :: !Bool,	-- do we have time limit?
           abmili :: !Int	-- abort when after this milisecond
     } deriving Show
 
 -- For variable futility score
-data Futility = Futility { futme, futyo :: !Int } deriving Show
+data Futil = Futil { futme, futyo :: !Int } deriving Show
 
 -- For variable LMR
 data LMR = LMR {
         lmrhi   :: !Int,	-- upper limit of nodes to raise the lmr level
         lmrlv   :: !Int,	-- LMR level
         lmrrs   :: !Int		-- counter for nodes/re-searches, to adapt the LMR level
-    } deriving Show
+     } deriving Show
 
 data PVState
     = PVState {
           ronly   :: PVReadOnly,	-- read only parameters
           stats   :: SStats,	-- search statistics
           pvsl    :: [Pvsl],	-- principal variation list (at root) with node statistics
-          futil   :: !Futility,	-- variable futility scores
+          futil   :: !Futil,	-- variable futility scores
           lmr     :: !LMR,	-- values for LMR
           absdp   :: !Int,	-- absolute depth (root = 0)
           usedext :: !Int,	-- used extension
@@ -234,8 +233,11 @@ nullSeq (Seq es) = null es
 emptySeq :: Seq Move
 emptySeq = Seq []
 
-futInit :: Futility
-futInit = Futility { futme = futIniVal, futyo = futIniVal }
+pathLen :: Seq a -> Int
+pathLen = length . unseq
+
+futInit :: Futil
+futInit = Futil { futme = futIniVal, futyo = futIniVal }
 
 lmrInit :: LMR
 lmrInit = LMR { lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
@@ -253,7 +255,7 @@ resetNSt :: Path -> Killer -> NodeState -> NodeState
 resetNSt !sc !kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, rbmch = 0 }
 
 pvro00 :: PVReadOnly
-pvro00 = PVReadOnly { draft = 0, albest = False, timeli = False, abmili = 0 }
+pvro00 = PVReadOnly { draft = 0, timeli = False, abmili = 0 }
 
 alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int)
 alphaBeta abc = do
@@ -263,8 +265,7 @@ alphaBeta abc = do
         searchReduced a b = pvRootSearch a      b     d lpv rmvs True
         -- We have lastpath as a parameter here (can change after fail low or high)
         searchFull    lp  = pvRootSearch alpha0 beta0 d lp  rmvs False
-        pvro = PVReadOnly { draft = d, albest = best abc,
-                            timeli = stoptime abc /= 0, abmili = stoptime abc }
+        pvro = PVReadOnly { draft = d, timeli = stoptime abc /= 0, abmili = stoptime abc }
         pvs0 = pvsInit { ronly = pvro }	-- :: PVState
     r <- if useAspirWin
          then case lastscore abc of
@@ -413,12 +414,12 @@ checkFailOrPVRoot xstats b d e s nst = whenAbort (True, nst) $ do
     sst <- get
     let mn = movno nst
         a  = pathScore $ cursc nst
+        de = max d $ pathDepth s
         !nodes0 = sNodes xstats + sRSuc xstats
         !nodes1 = sNodes (stats sst) + sRSuc (stats sst)
         !nodes' = nodes1 - nodes0
         pvg     = Pvsl s nodes'	-- the good
-        de = max d $ pathDepth s
-        xpvslg = insertToPvs d pvg (pvsl sst)
+    put sst { pvsl = insertToPvs d pvg (pvsl sst) }
     if d == 1	-- we shouln't get abort here...
        then do
             let typ = 2
@@ -427,12 +428,10 @@ checkFailOrPVRoot xstats b d e s nst = whenAbort (True, nst) $ do
             -- as we do not update cursc here and search all root moves)
             --    rch | pathScore s > a = rbmch nst + 1
             --        | otherwise       = rbmch nst
-            put sst { pvsl = xpvslg }
             return (False, nst { movno = mn + 1 })
        else if pathScore s <= a
                then do	-- failed low
                    let nst1 = nst { movno = mn + 1, killer = newKiller d s nst }
-                   put sst { pvsl = xpvslg }
                    return (False, nst1)
                else if pathScore s >= b
                        then do
@@ -444,7 +443,6 @@ checkFailOrPVRoot xstats b d e s nst = whenAbort (True, nst) $ do
                              betaCut (absdp sst) e
                          let csc = s { pathScore = b }
                              nst1 = nst { cursc = csc, rbmch = rbmch nst + 1 }
-                         put sst { pvsl = xpvslg }
                          return (True, nst1)
                        else do	-- means: > a && < b
                          let sc = pathScore s
@@ -456,25 +454,29 @@ checkFailOrPVRoot xstats b d e s nst = whenAbort (True, nst) $ do
                              betaCut (absdp sst) e	-- not really cut, but good move
                          let nst1 = nst { cursc = s, nxtnt = nextNodeType (nxtnt nst),
                                           movno = mn + 1, rbmch = rbmch nst + 1 }
-                         put sst { pvsl = xpvslg }
                          return (False, nst1)
+
+alwaysBest :: Bool
+alwaysBest = True
 
 insertToPvs :: Int -> Pvsl -> [Pvsl] -> [Pvsl]
 insertToPvs d p = go
     where go [] = [p]
           go ps@(q:qs)
-              | d == 1 && (betters || equals) = p : ps
+              | best && betters               = p : ps
               | pmate && not qmate            = p : ps
-              | not pmate && qmate            = q : go qs
-              | pmate && betters              = p : ps
+              | pmate && shorter              = p : ps
               | bettern || equaln && betters  = p : ps
               | otherwise                     = q : go qs
-              where betters = pathScore (pvPath p) >  pathScore (pvPath q)
-                    equals  = pathScore (pvPath p) == pathScore (pvPath q)
+              where betters = score > pathScore (pvPath q)
                     equaln  = pvNodes p == pvNodes q
                     bettern = pvNodes p > pvNodes q
-                    pmate   = pnearmate $ pvPath p
                     qmate   = pnearmate $ pvPath q
+                    shorter = len < pathLen (pathMoves (pvPath q))
+          pmate = pnearmate $ pvPath p
+          score = pathScore (pvPath p)
+          len   = pathLen (pathMoves (pvPath p))
+          best  = alwaysBest || d == 1
 
 -- PV Search
 pvSearch :: NodeState -> Int -> Int -> Int -> Search Path
@@ -903,13 +905,13 @@ updateFutil sd = do
     let fu = futil s
     put s { futil = expFutSlide sd fu }
 
-expFutSlide :: Int -> Futility -> Futility
-expFutSlide n fut@(Futility{ futme }) = fut { futme = (futme * futDecayW + max 0 n) `unsafeShiftR` futDecayB }
+expFutSlide :: Int -> Futil -> Futil
+expFutSlide n fut@(Futil{ futme }) = fut { futme = (futme * futDecayW + max 0 n) `unsafeShiftR` futDecayB }
 
 xchangeFutil :: Search ()
 xchangeFutil
     = modify $ \s -> s { futil = xchg (futil s) }
-    where xchg Futility {..} = Futility { futme = futyo, futyo = futme }
+    where xchg Futil {..} = Futil { futme = futyo, futyo = futme }
 
 varFutVal :: Search Int
 varFutVal = max futMinVal <$> gets (futme . futil)

@@ -30,11 +30,9 @@ bestMoveCont draft sttime stati lastsc lpv rmvs = do
                 lastscore = lastsc,
                 rootmvs   = rmvs,
                 window    = aspirWindow,
-                best      = False,
                 stoptime  = sttime
-                }
+            }
     ((sc, path, rmvsf, timint, ch), statf) <- SM.runCState (alphaBeta abc) stati
-    -- when (sc == 0) $ return ()
     let n = sNodes $ mstats statf
     informGui sc draft n path
     ctxLog LogInfo $ "score " ++ show sc ++ " path " ++ show path
