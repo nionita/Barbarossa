@@ -113,8 +113,9 @@ alpha0 = minBound + 2000
 beta0  = maxBound - 2000
 
 data Pvsl = Pvsl {
-        pvPath :: Path,		-- pv path
-        pvNodes :: !Int64	-- number of nodes in the current search
+        pvPath  :: Path,	-- pv path
+        pvNodes :: !Int64,	-- number of nodes in the current search
+        pvType  :: !Int		-- 0 - upper limit, 1 - lower limit, 2 -exact
     } deriving Show
 
 data Killer = NoKiller | OneKiller !Move | TwoKillers !Move !Move deriving (Eq, Show)
@@ -316,12 +317,15 @@ pvRootSearch a b d lastpath rmvs aspir = do
     edges <- if null (unalt rmvs)	-- only when d==1, but we could have lastpath from the previous real move
                 then genAndSort nst0 { cpos = pos } Nothing a b d	-- no IID here as d==1
                 else case lastpath of
-                         Seq []    -> return rmvs	-- does this happen? - check to simplify!
+                         Seq []    -> do
+                             lift $ logmes "Empty lastpath"
+                             return rmvs	-- does this happen? - check to simplify!
                          Seq (e:_) -> return $ Alt $ e : delete e (unalt rmvs)
     let !nsti = nst0 { cursc = pathFromScore a, cpos = pos }
     nstf <- pvLoop (pvInnerRoot b d) nsti edges
     abrt <- gets abort
     pvs  <- gets pvsl
+    reportPvs pvs
     reportStats
     let (sc, pm) | d > 1       = (pathScore (cursc nstf), pathMoves (cursc nstf))
                  | ms:_ <- pvs = (pathScore $ pvPath ms,  pathMoves (pvPath ms))
@@ -339,6 +343,16 @@ pvRootSearch a b d lastpath rmvs aspir = do
                 allrmvs = if sc >= b then unalt edges else map pvslToMove pvs
                 xrmvs = Alt $ best' : delete best' allrmvs	-- best on top
             return (sc, Seq p, xrmvs, rbmch nstf)
+
+reportPvs :: [Pvsl] -> Search ()
+reportPvs pvs = lift $ do
+    logmes "Pvs list"
+    forM_ (zip [(1::Int)..] pvs) $ \(i, pv) -> logmes
+        $ "Move " ++ show i
+        ++ " type " ++ show (pvType pv)
+        ++ " score " ++ show (pathScore $ pvPath pv)
+        ++ " nodes " ++ show (pvNodes pv)
+        ++ " moves " ++ show (unseq $ pathMoves $ pvPath pv)
 
 pvslToMove :: Pvsl -> Move
 pvslToMove (Pvsl { pvPath = Path { pathMoves = Seq (m:_)}}) = m
@@ -418,11 +432,11 @@ checkFailOrPVRoot xstats b d e s nst = whenAbort (True, nst) $ do
         !nodes0 = sNodes xstats + sRSuc xstats
         !nodes1 = sNodes (stats sst) + sRSuc (stats sst)
         !nodes' = nodes1 - nodes0
-        pvg     = Pvsl s nodes'	-- the good
-    put sst { pvsl = insertToPvs d pvg (pvsl sst) }
     if d == 1	-- we shouln't get abort here...
        then do
             let typ = 2
+                pvg = Pvsl s nodes' typ
+            put sst { pvsl = insertToPvs pvg (pvsl sst) }
             lift $ ttStore de typ (pathScore s) e nodes'
             -- Do not count the changes in draft 1 (they were wrong anyway,
             -- as we do not update cursc here and search all root moves)
@@ -432,51 +446,63 @@ checkFailOrPVRoot xstats b d e s nst = whenAbort (True, nst) $ do
        else if pathScore s <= a
                then do	-- failed low
                    let nst1 = nst { movno = mn + 1, killer = newKiller d s nst }
+                       typ = 0
+                       pvg = Pvsl s nodes' typ
+                   put sst { pvsl = insertToPvs pvg (pvsl sst) }
                    return (False, nst1)
                else if pathScore s >= b
                        then do
                          lift $ logmes $ "Beta cut in root move, b = " ++ show b
                          -- what when a root move fails high? We are in aspiration
+                         let typ = 1	-- beta cut (score is lower limit) with move e
                          lift $ do
-                             let typ = 1	-- beta cut (score is lower limit) with move e
                              ttStore de typ b e nodes'
                              betaCut (absdp sst) e
                          let csc = s { pathScore = b }
                              nst1 = nst { cursc = csc, rbmch = rbmch nst + 1 }
+                             pvg = Pvsl s nodes' typ
+                         put sst { pvsl = insertToPvs pvg (pvsl sst) }
                          return (True, nst1)
                        else do	-- means: > a && < b
                          let sc = pathScore s
                              pa = unseq $ pathMoves s
                          informPV sc (draft $ ronly sst) pa
+                         let typ = 2	-- best move so far (score is exact)
                          lift $ do
-                             let typ = 2	-- best move so far (score is exact)
                              ttStore de typ sc e nodes'
                              betaCut (absdp sst) e	-- not really cut, but good move
                          let nst1 = nst { cursc = s, nxtnt = nextNodeType (nxtnt nst),
                                           movno = mn + 1, rbmch = rbmch nst + 1 }
+                             pvg = Pvsl s nodes' typ
+                         put sst { pvsl = insertToPvs pvg (pvsl sst) }
                          return (False, nst1)
 
-alwaysBest :: Bool
-alwaysBest = True
-
-insertToPvs :: Int -> Pvsl -> [Pvsl] -> [Pvsl]
-insertToPvs d p = go
+insertToPvs :: Pvsl -> [Pvsl] -> [Pvsl]
+insertToPvs p = go
     where go [] = [p]
           go ps@(q:qs)
-              | best && betters               = p : ps
-              | pmate && not qmate            = p : ps
-              | pmate && shorter              = p : ps
-              | bettern || equaln && betters  = p : ps
+              | betters                       = p : ps
+              | equals && bettert             = p : ps
+              | equals && pmate && shorter    = p : ps
+              | equals && pmated && longer    = p : ps
+              | equals && equalt && bettern   = p : ps
               | otherwise                     = q : go qs
               where betters = score > pathScore (pvPath q)
-                    equaln  = pvNodes p == pvNodes q
+                    equals  = score == pathScore (pvPath q)
+                    bettert = tscore > typeScore (pvType q)
+                    equalt  = tscore == typeScore (pvType q)
                     bettern = pvNodes p > pvNodes q
-                    qmate   = pnearmate $ pvPath q
                     shorter = len < pathLen (pathMoves (pvPath q))
-          pmate = pnearmate $ pvPath p
-          score = pathScore (pvPath p)
-          len   = pathLen (pathMoves (pvPath p))
-          best  = alwaysBest || d == 1
+                    longer  = len > pathLen (pathMoves (pvPath q))
+          score  = pathScore (pvPath p)
+          pmate  = pnearmate (pvPath p) && score > 0
+          pmated = pnearmate (pvPath p) && score < 0
+          len    = pathLen (pathMoves (pvPath p))
+          tscore = typeScore (pvType p)
+          -- We sort type 1 before 2 before 0 when same score
+          typeArr :: UArray Int Int
+          typeArr = listArray (0, 2) [0, 2, 1]
+          typeScore = unsafeAt typeArr
 
 -- PV Search
 pvSearch :: NodeState -> Int -> Int -> Int -> Search Path
