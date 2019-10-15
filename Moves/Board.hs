@@ -102,40 +102,30 @@ srcDests :: (Square -> BBoard) -> Square -> [(Square, Square)]
 srcDests f !s = zip (repeat s) $ bbToSquares $ f s
 
 -- This one should be called only for normal moves
-{-# INLINE moveChecksDirect #-}
+-- {-# INLINE moveChecksDirect #-}
 moveChecks :: MyPos -> Move -> Bool
-moveChecks !p !m = moveChecksDirect p m || moveChecksIndirect p m
+moveChecks !p !m =
+    (fig == Pawn && pAttacs (moving p) t .&. yok /= 0) ||	-- pawn check
+    (fig == Knight && nAttacs t .&. yok /= 0) ||		-- knight check
+    moveChecksSlide p m fig					-- slide check direct/indirect
+    where fig = movePiece m
+          t   = toSquare m
+          yok = kings p .&. yo p
 
-moveChecksDirect :: MyPos -> Move -> Bool
-moveChecksDirect !p !m
-    | fig == Pawn   = pAttacs (moving p) t .&. yok /= 0
-    | fig == Knight = nAttacs t .&. yok /= 0
-    | fig == Bishop = ba .&. yok /= 0
-    | fig == Rook   = ra .&. yok /= 0
-    | fig == Queen  = ba .&. yok /= 0 || ra .&. yok /= 0
-    | otherwise     = False	-- king can't check directly
-    where !fig = movePiece m
-          !t   = toSquare m
-          !yok = kings p .&. yo p
-          occ = occup p
-          ba  = bAttacs occ t
-          ra  = rAttacs occ t
-
--- This one can be further optimised by using two bitboard arrays
--- for the attacks on empty table
-moveChecksIndirect :: MyPos -> Move -> Bool
-moveChecksIndirect !p !m = ba .&. bq /= 0 || ra .&. rq /= 0
+moveChecksSlide :: MyPos -> Move -> Piece -> Bool
+moveChecksSlide !p !m fig =
+    (ba .&. bq /= 0) ||						-- indirect by bishop/queen
+    (ba .&. tb /= 0 && (fig == Bishop || fig == Queen)) ||	-- direct by bishop/queen
+    (ra .&. rq /= 0) ||						-- indirect by rook/queen
+    (ra .&. tb /= 0 && (fig == Rook   || fig == Queen))		-- direct by bishop/queen
     where !ksq = firstOne $ kings p .&. yo p
-          !b   = bishops p .&. me p
-          !r   = rooks p   .&. me p
-          !q   = queens p  .&. me p
-          !bq  = b .|. q
-          !rq  = r .|. q
           !fb  = uBit $ fromSquare m
           !tb  = uBit $ toSquare m
           !occ = (occup p .|. tb) `less` fb
-          ba   = bAttacs occ ksq
-          ra   = rAttacs occ ksq
+          ba = bAttacs occ ksq
+          ra = rAttacs occ ksq
+          bq = (bishops p .|. queens p) .&. me p
+          rq = (rooks   p .|. queens p) .&. me p
 
 -- Because finding the blocking square for a queen check is so hard,
 -- we define a data type and, in case of a queen check, we give also
