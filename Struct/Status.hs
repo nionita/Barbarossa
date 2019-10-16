@@ -180,18 +180,18 @@ instance CollectParams EvalWeights where
           ewKingPlacePwns   = tme 0 4,
           ewKingPawn1       = tme  4 53,
           ewKingPawn2       = tme  2 68,
-          ewRookHOpen       = tme 162 182,	-- DSPSA with Adadelta
-          ewRookOpen        = tme 205 178,	-- 20k steps, depth 4,
-          ewRookConn        = tme  89  59,	-- 2 games, beta=0.95, gamma=0.8,
-          ewRook7th         = tme 201 161,	-- niu=0.99, eps=1E-6
+          ewRookHOpen       = tme 162 183,	-- DSPSA rook1
+          ewRookOpen        = tme 206 179,	-- DSPSA rook1
+          ewRookConn        = tme  89  60,	-- DSPSA rook1
+          ewRook7th         = tme 201 161,	-- DSPSA rook1 confirmed
           ewMobilityKnight  = tme 50 56,
           ewMobilityBishop  = tme 53 33,
-          ewMobilityRook    = tme 16 34,	-- DSPSA ...
+          ewMobilityRook    = tme 15 35,	-- DSPSA rook1
           ewMobilityQueen   = tme  2 11,
           ewCenterPAtts     = tme 73 57,
           ewCenterNAtts     = tme 48 37,
           ewCenterBAtts     = tme 52 35,
-          ewCenterRAtts     = tme 14 22,	-- DSPSA ...
+          ewCenterRAtts     = tme 13 24,	-- DSPSA rook1
           ewCenterQAtts     = tme 13 53,
           ewCenterKAtts     = tme  2 62,
           ewSpace           = tme  1  0,
@@ -207,7 +207,7 @@ instance CollectParams EvalWeights where
           ewLastLinePenalty = tme 100 0,
           ewBishopPair      = tme 386 323,
           ewBishopPawns     = tme (-25) (-54),
-          ewRedundanceRook  = tme (-27) (-51),	-- DSPSA ...
+          ewRedundanceRook  = tme (-27) (-51),	-- DSPSA rook1 confirmed
           ewRookPawn        = tme (-44) (-32),
           ewAdvPawn5        = tme   14 106,
           ewAdvPawn6        = tme  352 333,
