@@ -188,7 +188,7 @@ instance CollectParams EvalWeights where
           ewMobilityBishop  = tme 53 33,
           ewMobilityRook    = tme 16 34,	-- DSPSA ...
           ewMobilityQueen   = tme  2 11,
-          ewCenterPAtts     = tme 73 57,
+          ewCenterPAtts     = tme 68 55,	-- DSPSA pawns
           ewCenterNAtts     = tme 48 37,
           ewCenterBAtts     = tme 52 35,
           ewCenterRAtts     = tme 14 22,	-- DSPSA ...
@@ -196,8 +196,8 @@ instance CollectParams EvalWeights where
           ewCenterKAtts     = tme  2 62,
           ewSpace           = tme  1  0,
           ewAdvAtts         = tme  1 17,
-          ewIsolPawns       = tme (-36) (-113),
-          ewIsolPassed      = tme (-63) (-143),
+          ewIsolPawns       = tme (-36) (-107),	-- DSPSA pawns
+          ewIsolPassed      = tme (-60) (-134),	-- DSPSA pawns
           ewBackPawns       = tme (-108) (-141),
           ewBackPOpen       = tme (-21)  (-27),
           ewEnpHanging      = tme (-19) (-27),
@@ -211,7 +211,7 @@ instance CollectParams EvalWeights where
           ewRookPawn        = tme (-44) (-32),
           ewAdvPawn5        = tme   14 106,
           ewAdvPawn6        = tme  352 333,
-          ewPawnBlockP      = tme (-112) (-92),
+          ewPawnBlockP      = tme (-105) (-86),	-- DSPSA pawns
           ewPawnBlockO      = tme  (-23) (-26),
           ewPawnBlockA      = tme  (-19) (-69),
           ewPassPawnLev     = tme 2 8
