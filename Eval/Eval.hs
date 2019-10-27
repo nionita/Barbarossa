@@ -64,7 +64,7 @@ normalEval p !sti = sc
           !mide1 = materDiff p ew (MidEnd 0 0)
           !mide2 = evalRedundance p ew mide1
           !mide3 = evalRookPawn p ew mide2
-          !mide4 = kingSafe p ew mide3
+          !mide4 = kingSafe ep p ew mide3
           !mide5 = kingPlace ep p ew mide4
           !mide6 = lastline p ew mide5
           !mide7 = mobiLity p ew mide6
@@ -197,62 +197,58 @@ bnMateDistance wbish sq = min (squareDistance sq ocor1) (squareDistance sq ocor2
 ----------------------------------------------------------------------------
 
 ------ King Safety ------
-kingSafe :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-kingSafe p !ew !mide = madm mide (ewKingSafe ew) ksafe
-    where !ksafe = ksSide (yo p) (yoKAttacs p) (myPAttacs p) (myNAttacs p) (myBAttacs p) (myRAttacs p)
-                          (myQAttacs p) (myKAttacs p) (myAttacs p)
-                 - ksSide (me p) (myKAttacs p) (yoPAttacs p) (yoNAttacs p) (yoBAttacs p) (yoRAttacs p)
-                          (yoQAttacs p) (yoKAttacs p) (yoAttacs p)
+kingSafe :: EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
+kingSafe ep p !ew !mide = madm mide (ewKingSafe ew) ksafe
+    where !ksafe = ksSide ep (yoKAttacs p) yoRing
+                          (myPAttacs p) (myNAttacs p) (myBAttacs p) (myRAttacs p)
+                          (myQAttacs p) (myKAttacs p)
+                 - ksSide ep (myKAttacs p) myRing
+                          (yoPAttacs p) (yoNAttacs p) (yoBAttacs p) (yoRAttacs p)
+                          (yoQAttacs p) (yoKAttacs p)
+          -- We extend the king ring so that it has always 9 squares (idea from Stockfish)
+          -- For example as white, when beeing on rank 1, or when beeing on file A or H
+          (myRank1, yoRank1, extMe, extYo) | moving p == White = (row1, row8, up, down)
+                                           | otherwise         = (row8, row1, down, up)
+          myRing = kingRing (kings p .&. me p) myRank1 (myKAttacs p) extMe
+          yoRing = kingRing (kings p .&. yo p) yoRank1 (yoKAttacs p) extYo
+          up    = flip unsafeShiftL 8	-- and here
+          down  = flip unsafeShiftR 8	-- and here
+
+{-# INLINE kingRing #-}
+kingRing :: BBoard -> BBoard -> BBoard -> (BBoard -> BBoard) -> BBoard
+kingRing kBB rank1 katt extend = ring2
+    where ring1 | kBB .&. rank1 /= 0 = katt .|. extend katt
+                | otherwise          = katt
+          ring2 | kBB .&. fileA /= 0 = ring1 .|. right ring1
+                | kBB .&. fileH /= 0 = ring1 .|. left  ring1
+                | otherwise          = ring1
+          left  = flip unsafeShiftR 1	-- all directions from pov of white
+          right = flip unsafeShiftL 1	-- here too
 
 -- To make the sum and count in one pass
-data Flc = Flc !Int !Int
+data Flc = Flc !Int !Int !Int
 
 fadd :: Flc -> Flc -> Flc
-fadd (Flc f1 q1) (Flc f2 q2) = Flc (f1+f2) (q1+q2)
+fadd (Flc f1 q1 i1) (Flc f2 q2 i2) = Flc (f1+f2) (q1+q2) (i1+i2)
 
-ksSide :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
-ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
+ksSide :: EvalParams -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
+ksSide ep !yok !yor !myp !myn !myb !myr !myq !myk
     | myq == 0  = 0
     | otherwise = mattacs
     where qual a p
-              | yoka == 0 = Flc 0 0
-              | y == 1    = Flc 1 p
-              | y == 2    = Flc 1 (p `unsafeShiftL` 1)
-              | y == 3    = Flc 1 (p `unsafeShiftL` 2)
-              | otherwise = Flc 1 (p `unsafeShiftL` 3)
-              where !yoka = yok .&. a
-                    y = popCount yoka
-          -- qualWeights = [1, 2, 2, 4, 8, 2]
-          !qp = qual myp 1
-          !qn = qual myn 2
-          !qb = qual myb 2
-          !qr = qual myr 4
-          !qq = qual myq 8
-          !qk = qual myk 2
-          !(Flc c q) = fadd qp $ fadd qn $ fadd qb $ fadd qr $ fadd qq qk
-          !mattacs
-              | c == 0 = 0
-              | otherwise = fromIntegral $ attCoef `unsafeAt` ixt
-              -- where !freey = popCount $ yok `less` (mya .|. yop)
-              --       !conce = popCount $ yok .&. mya
-              -- This is equivalent to:
-              where !freco = popCount $ yok `less` (yop `less` mya)
-                    !ixm = c * q `unsafeShiftR` 2
-                    !ixt = ixm + c + ksShift - freco
-                    ksShift = 13
-
--- We take the maximum of 272 because:
--- Quali max: 8 * (1 + 2 + 2 + 4 + 8 + 2) = 168
--- Flag max: 6
--- 6 * 168 / 4 + 6 + 13 = 272
-attCoef :: UArray Int Int32
-attCoef = listArray (0, 272) $ take zeros (repeat 0) ++ [ f x | x <- [0..63] ] ++ repeat (f 63)
-    where -- Without the scaling, f will take max value of 4000 for 63
-          f :: Int -> Int32
-          f x = let y = fromIntegral x :: Double
-                in round $ maxks * (2.92968750 - 0.03051758*y)*y*y / 4000
-          zeros = 8
-          maxks = 3800
+              | yoka == 0 = Flc 0 0 0
+              | otherwise = Flc 1 p y
+              where yoka = yor .&. a
+                    y = popCount (yok .&. a)
+          !qp = qual myp $ epKsqPawn   ep
+          !qn = qual myn $ epKsqKnight ep
+          !qb = qual myb $ epKsqBishop ep
+          !qr = qual myr $ epKsqRook   ep
+          !qq = qual myq $ epKsqQueen  ep
+          !qk = qual myk $ epKsqKing   ep
+          !(Flc c q i) = fadd qp $ fadd qn $ fadd qb $ fadd qr $ fadd qq qk
+          ixm = c * q + epKsqCntCoef ep * i
+          !mattacs = ixm * ixm `unsafeShiftR` epKsqScale ep
 
 kingSquare :: BBoard -> BBoard -> Square
 kingSquare kingsb colorp = firstOne $ kingsb .&. colorp
@@ -277,7 +273,7 @@ kingPlace ep p !ew mide = made (madm (mad (mad (mad mide (ewKingPawn2 ew) kpa2)
                                               (ewKingPawn1 ew) kpa1)
                                          (ewKingOpen ew) ko)
                                     (ewKingPlaceCent ew) kcd)
-                              (ewKingPlacePwns ew) kpd
+                               (ewKingPlacePwns ew) kpd
     where !kcd = (mpl - ypl) `unsafeShiftR` epMaterBonusScale ep
           !kpd = (mpi - ypi) `unsafeShiftR` epPawnBonusScale  ep
           !mks = kingSquare (kings p) $ me p

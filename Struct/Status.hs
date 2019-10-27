@@ -57,6 +57,14 @@ data EvalParams
     = EvalParams {
           epMovingMid  :: !Int,
           epMovingEnd  :: !Int,
+          epKsqPawn    :: !Int,
+          epKsqKnight  :: !Int,
+          epKsqBishop  :: !Int,
+          epKsqRook    :: !Int,
+          epKsqQueen   :: !Int,
+          epKsqKing    :: !Int,
+          epKsqCntCoef :: !Int,
+          epKsqScale   :: !Int,
           epMaterMinor :: !Int,
           epMaterRook  :: !Int,
           epMaterQueen :: !Int,
@@ -122,6 +130,14 @@ instance CollectParams EvalParams where
     npColInit = EvalParams {
                     epMovingMid  = 156,		-- SGD with shift 0.8
                     epMovingEnd  = 156,		-- with 5 M positions
+                    epKsqPawn    =   2,		-- Bayes opt with GP
+                    epKsqKnight  =  30,		-- Bayes opt with GP
+                    epKsqBishop  =   9,		-- Bayes opt with GP
+                    epKsqRook    =  80,		-- Bayes opt with GP
+                    epKsqQueen   = 100,		-- Bayes opt with GP
+                    epKsqKing    =  14,		-- Bayes opt with GP
+                    epKsqCntCoef =  83,		-- Bayes opt with GP
+                    epKsqScale   =   9,
                     epMaterMinor = 1,
                     epMaterRook  = 4,
                     epMaterQueen = 13,
@@ -142,6 +158,14 @@ collectEvalParams :: (String, Double) -> EvalParams -> EvalParams
 collectEvalParams (s, v) ep = lookApply s v ep [
         ("epMovingMid",       setEpMovingMid),
         ("epMovingEnd",       setEpMovingEnd),
+        ("epKsqPawn",         setEpKsqPawn),
+        ("epKsqKnight",       setEpKsqKnight),
+        ("epKsqBishop",       setEpKsqBishop),
+        ("epKsqRook",         setEpKsqRook),
+        ("epKsqQueen",        setEpKsqQueen),
+        ("epKsqKing",         setEpKsqKing),
+        ("epKsqCntCoef",      setEpKsqCntCoef),
+        ("epKsqScale",        setEpKsqScale),
         ("epMaterMinor",      setEpMaterMinor),
         ("epMaterRook",       setEpMaterRook),
         ("epMaterQueen",      setEpMaterQueen),
@@ -157,6 +181,14 @@ collectEvalParams (s, v) ep = lookApply s v ep [
     ]
     where setEpMovingMid       v' ep' = ep' { epMovingMid       = round v' }
           setEpMovingEnd       v' ep' = ep' { epMovingEnd       = round v' }
+          setEpKsqPawn         v' ep' = ep' { epKsqPawn         = round v' }
+          setEpKsqKnight       v' ep' = ep' { epKsqKnight       = round v' }
+          setEpKsqBishop       v' ep' = ep' { epKsqBishop       = round v' }
+          setEpKsqRook         v' ep' = ep' { epKsqRook         = round v' }
+          setEpKsqQueen        v' ep' = ep' { epKsqQueen        = round v' }
+          setEpKsqKing         v' ep' = ep' { epKsqKing         = round v' }
+          setEpKsqCntCoef      v' ep' = ep' { epKsqCntCoef      = round v' }
+          setEpKsqScale        v' ep' = ep' { epKsqScale        = round v' }
           setEpMaterMinor      v' ep' = ep' { epMaterMinor      = round v' }
           setEpMaterRook       v' ep' = ep' { epMaterRook       = round v' }
           setEpMaterQueen      v' ep' = ep' { epMaterQueen      = round v' }
