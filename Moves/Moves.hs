@@ -118,8 +118,8 @@ pawnBlackAttacks !b = (bbLeft b .|. bbRight b) `unsafeShiftR` 8
 {-# INLINE pawnBlackAttacks #-}
 
 pAttacs :: Color -> Square -> BBoard
-pAttacs White sq = pawnWhiteAttacks $ uBit sq
-pAttacs Black sq = pawnBlackAttacks $ uBit sq
+pAttacs White = pawnWhiteAttacks . uBit
+pAttacs Black = pawnBlackAttacks . uBit
 {-# INLINE pAttacs #-}
 
 pMovs :: Square -> Color -> BBoard -> BBoard

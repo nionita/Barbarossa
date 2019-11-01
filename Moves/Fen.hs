@@ -132,18 +132,16 @@ setPiece sq c f !p
 
 -- Update the rest of position representation according to the basic representation
 updatePos :: Maybe BBoard -> MyPos -> MyPos
-updatePos mbb !p = p {
-        occup = toccup, me = tme, yo = tyo, kings  = tkings,
-        pawns = tpawns, knights = tknights, queens = tqueens,
-        rooks = trooks, bishops = tbishops, passed = tpassed,
-        attacks = tattacks, attacked = tattacked, lazyBits = lzb, logbook = tlog
-    }
-    where (tattacks, tattacked, tlog) = case mbb of
-              Just cha -> updateAttacks (slide p)
-                              toccup twpawns tbpawns tknights tbishops trooks tqueens tkings
-                              cha (attacks p) (attacked p)
-              Nothing  -> recalcAttacks toccup
-                              twpawns tbpawns tknights tbishops trooks tqueens tkings
+updatePos mbb !p = pos
+    where pos = p {
+              occup = toccup, me = tme, yo = tyo, kings  = tkings,
+              pawns = tpawns, knights = tknights, queens = tqueens,
+              rooks = trooks, bishops = tbishops, passed = tpassed,
+              attacks = tattacks, attacked = tattacked, lazyBits = lzb, logbook = tlog
+          }
+          (!tattacks, !tattacked, tlog) = case mbb of
+              Just cha -> updateAttacks pos cha (slide p) (attacks p) (attacked p)
+              Nothing  -> recalcAttacks pos
           !toccup = kkrq p .|. diag p
           !tkings = kkrq p .&. diag p `less` slide p
           !twhite = toccup `less` black p
@@ -200,21 +198,21 @@ posLazy !co tattacks !ocp !tblack !tpawns !tknights !tbishops !trooks !tqueens !
           -- !tcheck = whcheck .|. blcheck
           f = unsafeAt tattacks
 
-recalcAttacks :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard
-              -> (MaArray, MaArray, [String])
-recalcAttacks toccup twpawns tbpawns tknights tbishops trooks tqueens tkings
-    = (rattacks, rattacked, [])
-    where nlist = map (\s -> (s, nAttacs s))        $ bbToSquares tknights
-          klist = map (\s -> (s, kAttacs s))        $ bbToSquares tkings
-          pwist = map (\s -> (s, pAttacs White s))  $ bbToSquares twpawns
-          pbist = map (\s -> (s, pAttacs Black s))  $ bbToSquares tbpawns
-          blist = map (\s -> (s, bAttacs toccup s)) $ bbToSquares tbishops
-          rlist = map (\s -> (s, rAttacs toccup s)) $ bbToSquares trooks
-          qlist = map (\s -> (s, rAttacs toccup s
-                             .|. bAttacs toccup s)) $ bbToSquares tqueens
+recalcAttacks :: MyPos -> (MaArray, MaArray, [String])
+recalcAttacks p = (rattacks, rattacked, [])
+    where nlist = map (\s -> (s, nAttacs s))        $ bbToSquares $ knights p
+          klist = map (\s -> (s, kAttacs s))        $ bbToSquares $ kings p
+          blist = map (\s -> (s, bAttacs (occup p) s)) $ bbToSquares $ bishops p
+          rlist = map (\s -> (s, rAttacs (occup p) s)) $ bbToSquares $ rooks p
+          qlist = map (\s -> (s, rAttacs (occup p) s
+                             .|. bAttacs (occup p) s)) $ bbToSquares $ queens p
+          pwist = map (\s -> (s, pAttacs White s))  $ bbToSquares wpawns
+          pbist = map (\s -> (s, pAttacs Black s))  $ bbToSquares bpawns
           rattacks = zeroArray // concat [nlist, klist, pwist, pbist, blist, rlist, qlist]
           rattacked = calcAttacked rattacks
           zeroArray = listArray (0, 63) $ repeat 0
+          (wpawns, bpawns) | moving p == White = (pawns p .&. me p, pawns p .&. yo p)
+                           | otherwise         = (pawns p .&. yo p, pawns p .&. me p)
 
 -- Recompute the whole attacked array
 -- Optimisation: GHC did detect the correct strictness
@@ -236,9 +234,8 @@ calcAttacked arr
 --
 -- Optimisation: there is no need currently to set explicit strictness in let or monad
 -- GHC did find the strict expressions
-updateAttacks :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard
-              -> BBoard -> BBoard -> BBoard -> MaArray -> MaArray
-              -> (MaArray, MaArray, [String])
+updateAttacks :: MyPos -> BBoard -> BBoard -> MaArray -> MaArray -> (MaArray, MaArray, [String])
+{-
 updateAttacks tslide toccup twpawns tbpawns tknights tbishops trooks tqueens tkings cha out ins
     = runST $ do
         (logger, getlog) <- loggingUtilities
@@ -272,7 +269,7 @@ updateAttacks tslide toccup twpawns tbpawns tknights tbishops trooks tqueens tki
                    ]
         logger $ "Arebb:\n" ++ showBB arebb
         -- For every piece type existing in the attack recalculation bitboard...
-        -- Alternativey we could just take every square and analyse what piece is on it
+        -- Alternatively we could just take every square and analyse what piece is on it
         -- It should not be very much variation here I guess... But only tests can say
         forM_ pcfs $ \(bb, func) -> do
             -- and every piece of that type
@@ -297,6 +294,57 @@ updateAttacks tslide toccup twpawns tbpawns tknights tbishops trooks tqueens tki
         ninsf <- unsafeFreeze nins
         finlog <- getlog
         return (noutf, ninsf, finlog)
+-}
+updateAttacks p cha oslide out ins
+    = runST $ do
+        (logger, getlog) <- loggingUtilities
+        -- logger $ "Occup:\n" ++ showBB toccup
+        logger $ "Move BB:\n" ++ showBB cha
+        -- The new out & ins (take a copy)
+        nout <- (thaw out) :: ST s (STUArray s Int BBoard)
+        nins <- (thaw ins) :: ST s (STUArray s Int BBoard)
+        -- These squares are blocked/deblocked by adding/removing the pieces
+        -- We could use the fact that the board margins are special:
+        -- If a square from the margine is changed, than only sliders from the margin can be affected
+        -- not the interior ones, because the margins are non blocking for interior sliders
+        -- Something like:
+        -- let cham = cha .&. margins
+        --     chai = cha `less` margins
+        --     blkm = tslide .&. margins .&. bbToSquaresBB (unsafeAt ins) cham
+        --     blki = tslide             .&. bbToSquaresBB (unsafeAt ins) chai
+        --     blck = blkm .|. blki
+        --     arebb = blck .|. cha
+        let blckd = oslide .&. bbToSquaresBB (unsafeAt ins) cha
+            arebb = cha .|. blckd	-- for those we need an attack recalculation
+        logger $ "Arebb:\n" ++ showBB arebb
+        -- For every square to recalculate, get the new attacks and then
+        -- adjust the attacked suares from it
+        forM_ (bbToSquares arebb) $ \sq -> do
+            let oatc = out `unsafeAt` sq	-- old attacks from that square
+                natc = case tabla p sq of	-- new attacks from that square
+                           Empty    -> 0
+                           Busy c f -> case f of
+                               Pawn -> pAttacs c sq
+                               _    -> fAttacs sq f (occup p)
+            unsafeWrite nout sq natc
+            logger $ "New attacks from square " ++ show sq ++ ":\n" ++ showBB natc
+            let sqbb = uBit sq
+                ains = natc `less` oatc	-- added attackedBy from this square
+            forM_ (bbToSquares ains) $ \s -> do
+                obb <- unsafeRead nins s
+                unsafeWrite nins s (obb .|. sqbb)	-- add sq to the attackedBy of s
+                logger $ "Add " ++ show sq ++ " to attacked of " ++ show s
+            let sqdd = complement sqbb
+                dins = oatc `less` natc	-- deleted attackedBy from this square
+            forM_ (bbToSquares dins) $ \s -> do
+                obb <- unsafeRead nins s
+                unsafeWrite nins s (obb .&. sqdd)	-- delete sq from the attackedBy of s
+                logger $ "Remove " ++ show sq ++ " from attacked of " ++ show s
+        noutf <- unsafeFreeze nout
+        ninsf <- unsafeFreeze nins
+        finlog <- getlog
+        return (noutf, ninsf, finlog)
+
 
 -- Just to test the incremental attacks update
 -- Not an exhaustive test
