@@ -142,7 +142,7 @@ lessRook p | mq == yq && mr == yr = mb + mn - yb - yn `elem` [-1, 0, 1]
           !yn = popCount $ knights p .&. yo p
 
 winBonus :: Int
-winBonus = 200	-- when it's known win
+winBonus = 500	-- when it's known win
 
 mateKBBK :: MyPos -> Bool -> Int
 mateKBBK = scoreToMate centerDistance
@@ -261,9 +261,13 @@ kingSquare kingsb colorp = firstOne $ kingsb .&. colorp
 ------ Material ------
 
 materDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-materDiff p !ew mide = mad mide (ewMaterialDiff ew) md
+materDiff p !ew mide = mad mide (ewMaterialDiff ew) mf
     where !md | moving p == White =   mater p
               | otherwise         = - mater p
+          !mf | md >  100 = md + materBonus
+              | md < -100 = md - materBonus
+              | otherwise = md
+          materBonus = 50
 
 ------ King placement and opennes ------
 
