@@ -18,6 +18,7 @@ import Data.Int
 import Struct.Struct
 import Struct.Status
 import Struct.Config
+import Struct.MidEnd
 import Moves.Moves
 import Moves.BitBoard
 import Moves.Pattern
