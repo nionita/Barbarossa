@@ -1,15 +1,17 @@
 {-# LANGUAGE TemplateHaskell #-}
 
+-- Disclaimer: it's a nightmare to work with Template Haskell!!
+-- It feels like programming in machine code in the 50's
+-- But in this case it must be, otherwise the changes of the parameter records
+-- when trying different parameters and weights is too time consuming
+
 module Struct.Params (
     genEvalParams,
     genEvalWeights
 ) where
 
--- import Data.Maybe (fromJust)
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
-
--- import Struct.MidEnd
 
 type EvalParamSpec = (String, Integer)
 type EvalWeightSpec = (String, (Integer, Integer))
@@ -89,6 +91,15 @@ weights = [
 -- This part is for generating the data structures and the CollectParams instances
 data Phase = Mid | End
 
+-- The type class, for which we want to generate an instance for any of our parameter data types
+collectParams :: Type
+collectParams = ConT $ mkName "CollectParams"
+
+-- This will generate a function to assign a value to a filed of the parameter data type
+-- For parameters (one value), this will be: \v rec -> rec { field = round v }
+-- For weights (two values), this will be:
+-- for mid values: \v rec -> rec { field = field rec { mid = round v } }
+-- for end values: \v rec -> rec { field = field rec { end = round v } }
 genSetParamExp :: Maybe Phase -> String -> Q Exp
 genSetParamExp mphase field = do
     val <- newName "v"
@@ -104,6 +115,18 @@ genSetParamExp mphase field = do
           roundVal v = AppE (VarE 'round) (VarE v)
           base r = AppE (VarE fldName) (VarE r)
 
+-- This will generate a function to collect all parameters or weights, in form of:
+-- \ (s, v) rec -> lookApply s v rec [ ("field", \v rec -> ... ) ... ]
+-- The list contains one pair field name / assign function per data filed for params,
+-- and 2 two pairs per data field for weights, one with the assignment for the mid
+-- and one for the end value, while in this case the string will have the corresponding
+-- prefix, "mid." or "end."
+-- Example for the field ewKingSafe:
+-- [ ...
+--   ("mid.ewKingSafe", \ v rec -> rec {ewKingSafe = (ewKingSafe rec) {mid = round v}}),
+--   ("end.ewKingSafe", \ v rec -> rec {ewKingSafe = (ewKingSafe rec) {end = round v}}),
+--   ...
+-- ]
 genCollectEvalParamsExp :: [String] -> Bool -> Q Exp
 genCollectEvalParamsExp names withPhase = do
     (newNames, setFs) <- if withPhase
@@ -138,9 +161,8 @@ getEndSet names = do
     return (qualNames, setFs)
 
 -- Generate the parts for EvalParams
-evalParams, collectParams :: Name
-evalParams    = mkName "EvalParams"
-collectParams = mkName "CollectParams"
+evalParams :: Name
+evalParams = mkName "EvalParams"
 
 genRecFieldDecP :: String -> VarStrictType
 genRecFieldDecP fld = (fldName, IsStrict, ConT ''Int)
@@ -155,15 +177,14 @@ genEvalParams :: Q [Dec]
 genEvalParams = do
     bodyExp <- genCollectEvalParamsExp (map fst params) False
     let colParm = ValD (VarP $ mkName "npColParm") (NormalB bodyExp) []
-        i = InstanceD [] (AppT theClass theInst) [ typeDec, colInit, colParm, setParm ]
+        theInst = ConT evalParams
+        typeDec = TySynInstD (mkName "CollectFor") (TySynEqn [theInst] theInst)
+        colInit = ValD (VarP $ mkName "npColInit")
+                       (NormalB (RecConE evalParams $ map genRecFieldIniP params)) []
+        setParm = ValD (VarP $ mkName "npSetParm") (NormalB (VarE 'id)) []
+        d = DataD [] evalParams [] [RecC evalParams (map (genRecFieldDecP . fst) params)] [''Show]
+        i = InstanceD [] (AppT collectParams theInst) [ typeDec, colInit, colParm, setParm ]
     return [d, i]
-    where d = DataD [] evalParams [] [RecC evalParams (map (genRecFieldDecP . fst) params)] [''Show]
-          theClass = ConT collectParams
-          theInst = ConT evalParams
-          typeDec = TySynInstD (mkName "CollectFor") (TySynEqn [theInst] theInst)
-          colInit = ValD (VarP $ mkName "npColInit")
-                         (NormalB (RecConE evalParams $ map genRecFieldIniP params)) []
-          setParm = ValD (VarP $ mkName "npSetParm") (NormalB (VarE 'id)) []
 
 -- Generate the parts for EvalWeights
 evalWeights :: Name
@@ -186,11 +207,10 @@ genEvalWeights = do
     let colParm = ValD (VarP $ mkName "npColParm") (NormalB bodyExp) []
         inis = map genRecFieldIniW weights
         rfds = map (genRecFieldDecW . fst) weights
-        i = InstanceD [] (AppT theClass theInst) [ typeDec, colInit, colParm, setParm ]
-        d = DataD [] evalWeights [] [RecC evalWeights rfds] [''Show]
         colInit = ValD (VarP $ mkName "npColInit") (NormalB (RecConE evalWeights inis)) []
+        theInst = ConT evalWeights
+        typeDec = TySynInstD (mkName "CollectFor") (TySynEqn [theInst] theInst)
+        setParm = ValD (VarP $ mkName "npSetParm") (NormalB (VarE 'id)) []
+        d = DataD [] evalWeights [] [RecC evalWeights rfds] [''Show]
+        i = InstanceD [] (AppT collectParams theInst) [ typeDec, colInit, colParm, setParm ]
     return [d, i]
-    where theClass = ConT collectParams
-          theInst = ConT evalWeights
-          typeDec = TySynInstD (mkName "CollectFor") (TySynEqn [theInst] theInst)
-          setParm = ValD (VarP $ mkName "npSetParm") (NormalB (VarE 'id)) []
