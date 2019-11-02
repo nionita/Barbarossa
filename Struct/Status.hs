@@ -1,4 +1,3 @@
-{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TemplateHaskell #-}
 
@@ -17,6 +16,7 @@ import Moves.History
 import Hash.TransTab
 import Search.AlbetaTypes
 
+-- Here we generate the data types EvalParams and EvalWeights with instances for CollectParams
 $(genEvalParams)
 $(genEvalWeights)
 
