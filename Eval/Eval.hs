@@ -65,7 +65,7 @@ normalEval p !sti = sc
           !mide1 = materDiff p ew (MidEnd 0 0)
           !mide2 = evalRedundance p ew mide1
           !mide3 = evalRookPawn p ew mide2
-          !mide4 = kingSafe p ew mide3
+          !mide4 = kingSafe ep p ew mide3
           !mide5 = kingPlace ep p ew mide4
           !mide6 = lastline p ew mide5
           !mide7 = mobiLity p ew mide6
@@ -198,11 +198,11 @@ bnMateDistance wbish sq = min (squareDistance sq ocor1) (squareDistance sq ocor2
 ----------------------------------------------------------------------------
 
 ------ King Safety ------
-kingSafe :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-kingSafe p !ew !mide = madm mide (ewKingSafe ew) ksafe
-    where !ksafe = ksSide (yo p) (yoKAttacs p) (myPAttacs p) (myNAttacs p) (myBAttacs p) (myRAttacs p)
+kingSafe :: EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
+kingSafe !ep p !ew !mide = madm mide (ewKingSafe ew) ksafe
+    where !ksafe = ksSide ep (yo p) (yoKAttacs p) (myPAttacs p) (myNAttacs p) (myBAttacs p) (myRAttacs p)
                           (myQAttacs p) (myKAttacs p) (myAttacs p)
-                 - ksSide (me p) (myKAttacs p) (yoPAttacs p) (yoNAttacs p) (yoBAttacs p) (yoRAttacs p)
+                 - ksSide ep (me p) (myKAttacs p) (yoPAttacs p) (yoNAttacs p) (yoBAttacs p) (yoRAttacs p)
                           (yoQAttacs p) (yoKAttacs p) (yoAttacs p)
 
 -- To make the sum and count in one pass
@@ -211,8 +211,8 @@ data Flc = Flc !Int !Int
 fadd :: Flc -> Flc -> Flc
 fadd (Flc f1 q1) (Flc f2 q2) = Flc (f1+f2) (q1+q2)
 
-ksSide :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
-ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
+ksSide :: EvalParams -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
+ksSide !ep !yop !yok !myp !myn !myb !myr !myq !myk !mya
     | myq == 0  = 0
     | otherwise = mattacs
     where qual a p
@@ -223,13 +223,13 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
               | otherwise = Flc 1 (p `unsafeShiftL` 3)
               where !yoka = yok .&. a
                     y = popCount yoka
-          -- qualWeights = [1, 2, 2, 4, 8, 2]
-          !qp = qual myp 1
-          !qn = qual myn 2
-          !qb = qual myb 2
-          !qr = qual myr 4
-          !qq = qual myq 8
-          !qk = qual myk 2
+          -- Original: qualWeights = [1, 2, 2, 4, 8, 2] (when shift was 2)
+          !qp = qual myp (epKingSafePawn   ep)
+          !qn = qual myn (epKingSafeKnight ep)
+          !qb = qual myb (epKingSafeBishop ep)
+          !qr = qual myr (epKingSafeRook   ep)
+          !qq = qual myq (epKingSafeQueen  ep)
+          !qk = qual myk (epKingSafeKing   ep)
           !(Flc c q) = fadd qp $ fadd qn $ fadd qb $ fadd qr $ fadd qq qk
           !mattacs
               | c == 0 = 0
@@ -238,7 +238,7 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
               --       !conce = popCount $ yok .&. mya
               -- This is equivalent to:
               where !freco = popCount $ yok `less` (yop `less` mya)
-                    !ixm = c * q `unsafeShiftR` 2
+                    !ixm = c * q `unsafeShiftR` 4
                     !ixt = ixm + c + ksShift - freco
                     ksShift = 13
 
