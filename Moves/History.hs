@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE RankNTypes #-}
 
 module Moves.History (
         History, newHist, toHist, histSortMoves
@@ -48,31 +49,32 @@ iniHist :: [Int32]
 iniHist = runST $ do
     let uz = U.fromList $ take vsize $ repeat (0 :: Int32)
     v <- U.unsafeThaw uz
-    let wpMove = moveAddPiece Pawn $ moveFromTo 0 0
+    let wpMove = moveAddColor White $ moveAddPiece Pawn $ moveFromTo 0 0
         i = moveHisAdr wpMove
-    go v i
+    go v i 0
     let bpMove = moveAddColor Black wpMove
         j = moveHisAdr bpMove
-    go v j
+    go v j 0
     u <- U.unsafeFreeze v
     return $ U.toList u
-    where go _ i | i >= 64 = return ()
-          go v i = do
+    where go :: forall s. V.MVector s Int32 -> Int -> Int -> ST s ()
+          go _ _ k | k >= 64 = return ()
+          go v i k = do
               V.unsafeWrite v i pmInitialValue
-              go v (i+1)
+              go v (i+1) (k+1)
           pmInitialValue = 1
 
 -- When we create the new history we add a fixed part from iniHist and a random part
 -- We have weights to combine these parts as well as a general initial level for all
 -- moves which will control how fast the first scaling will take place
--- This code is not performance critic, as it is executed onye for every real move
+-- This code is not performance critical, as it is executed onye for every real move
 newHist :: IO History
 newHist = do
     g <- newStdGen
     U.thaw $ U.fromList $ zipWith (+) (map (iniLevel *) iniHist) $ smallVals g randomBits zeroLevel
-    where zeroLevel  = 1 `unsafeShiftL` 30
+    where zeroLevel  = 1 `unsafeShiftL` 20
           randomBits = 2
-          iniLevel   = -1024
+          iniLevel   = -8
 
 -- History value: exponential
 -- d is absolute depth, root = 1, so that cuts near root count more
