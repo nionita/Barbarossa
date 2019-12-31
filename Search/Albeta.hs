@@ -32,10 +32,9 @@ useAspirWin :: Bool
 useAspirWin = False
 
 -- Some fix search parameter
-scoreGrain, depthForCM, maxDepthExt, minPvDepth :: Int
+scoreGrain, depthForCM, minPvDepth :: Int
 scoreGrain  = 4	-- score granularity
 depthForCM  = 7 -- from this depth inform current move
-maxDepthExt = 8 -- maximum depth extension
 minPvDepth  = 2		-- from this depth we use alpha beta search
 useTTinPv :: Bool
 useTTinPv   = False	-- retrieve from TT in PV?
@@ -122,8 +121,8 @@ data PVReadOnly
     = PVReadOnly {
           draft  :: !Int,	-- root search depth
           albest :: !Bool,	-- always choose the best move (i.e. first)
-          timeli :: !Bool,	-- do we have time limit?
-          abmili :: !Int	-- abort when after this milisecond
+          abmil1 :: !Int,	-- abort after this millisecond when in first root move
+          abmili :: !Int	-- abort after this millisecond when from second root move
     } deriving Show
 
 data PVState
@@ -131,7 +130,6 @@ data PVState
           ronly   :: PVReadOnly,	-- read only parameters
           stats   :: SStats,	-- search statistics
           absdp   :: !Int,	-- absolute depth (root = 0)
-          usedext :: !Int,	-- used extension
           abort   :: !Bool,	-- search aborted (time)
           futme   :: !Int,	-- variable futility score - me
           futyo   :: !Int,	-- variable futility score - you
@@ -209,7 +207,7 @@ emptySeq :: Seq Move
 emptySeq = Seq []
 
 pvsInit :: PVState
-pvsInit = PVState { ronly = pvro00, stats = ssts0, absdp = 0, usedext = 0, abort = False,
+pvsInit = PVState { ronly = pvro00, stats = ssts0, absdp = 0, abort = False,
                     futme = futIniVal, futyo = futIniVal,
                     lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
 nst0 :: NodeState
@@ -222,7 +220,7 @@ resetNSt :: Path -> Killer -> NodeState -> NodeState
 resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, rbmch = 0 }
 
 pvro00 :: PVReadOnly
-pvro00 = PVReadOnly { draft = 0, albest = False, timeli = False, abmili = 0 }
+pvro00 = PVReadOnly { draft = 0, albest = False, abmil1 = 0, abmili = 0 }
 
 alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int)
 alphaBeta abc = do
@@ -233,7 +231,7 @@ alphaBeta abc = do
         -- We have lastpath as a parameter here (can change after fail low or high)
         searchFull    lp  = pvRootSearch alpha0 beta0 d lp  rmvs False
         pvro = PVReadOnly { draft = d, albest = best abc,
-                            timeli = stoptime abc /= 0, abmili = stoptime abc }
+                            abmil1 = stoptime1 abc, abmili = stoptime abc }
         pvs0 = pvsInit { ronly = pvro }	-- :: PVState
     r <- if useAspirWin
          then case lastscore abc of
@@ -345,17 +343,16 @@ pvInnerRoot b d nst e = timeToAbort (True, nst) $ do
                          Illegal -> error "Cannot be illegal here"
                 -- undo the move if it was legal
                 lift undoMove
-                modify $ \s' -> s' { absdp = absdp old, usedext = usedext old }
+                lift incrementRootMoveNumber
+                modify $ \s' -> s' { absdp = absdp old }
                 let s' = addToPath e s
                 checkFailOrPVRoot (stats old) b d e s' nst
             else return (False, nst)
 
 pvInnerRootExten :: Int -> Int -> Int -> NodeState -> Search Path
 pvInnerRootExten b d !exd nst = do
-    old <- get
-    exd' <- reserveExtension (usedext old) exd
     let !inPv = crtnt nst == PVNode
-        !d1   = d + exd' - 1	-- this is the normal (unreduced) depth for the next search
+        !d1   = d + exd - 1	-- this is the normal (unreduced) depth for the next search
         a     = pathScore $ cursc nst
     if inPv || d <= minPvDepth	-- search of principal variation
        then do
@@ -651,7 +648,7 @@ pvInnerLoop b d zw prune nst e = timeToAbort nst $ do
                       Final   -> return (drawPath, nst)
                       Illegal -> error "Cannot be illegal here"
                   lift undoMove	-- undo the move
-                  modify $ \s' -> s' { absdp = absdp old, usedext = usedext old }
+                  modify $ \s' -> s' { absdp = absdp old }
                   let s' = addToPath e s
                   checkFunc b d e s' nst1
               else return nst
@@ -663,19 +660,11 @@ pvInnerLoop b d zw prune nst e = timeToAbort nst $ do
 resetSpc :: NodeState -> NodeState
 resetSpc nst = nst { spcno = movno nst }
 
-reserveExtension :: Int -> Int -> Search Int
-reserveExtension !uex !exd
-    | exd == 0 || uex >= maxDepthExt = return 0
-    | otherwise = do
-        modify $ \s -> s { usedext = usedext s + exd }
-        return exd
-
 pvInnerLoopExten :: Int -> Int -> Bool -> Int -> NodeState -> Search Path
 pvInnerLoopExten b d spec !exd nst = do
     old <- get
-    exd' <- reserveExtension (usedext old) exd
     let !inPv = crtnt nst == PVNode
-        !d1   = d + exd' - 1	-- this is the normal (unreduced) depth for next search
+        !d1   = d + exd - 1	-- this is the normal (unreduced) depth for next search
         a     = pathScore $ cursc nst
     if inPv || d <= minPvDepth
        then do
@@ -699,9 +688,8 @@ pvInnerLoopExten b d spec !exd nst = do
 pvInnerLoopExtenZ :: Int -> Int -> Bool -> Int -> NodeState -> Search Path
 pvInnerLoopExtenZ b d spec !exd nst = do
     old  <- get
-    exd' <- reserveExtension (usedext old) exd
     -- late move reduction
-    let !d1 = d + exd' - 1	-- this is the normal (unreduced) depth for next search
+    let !d1 = d + exd - 1	-- this is the normal (unreduced) depth for next search
         !d' = reduceLmr (nearmate b) spec d1 (lmrlv old) (movno nst - spcno nst)
         !onemB = scoreGrain - b
     zeroWithLMR d' d1 onemB b nst
@@ -990,18 +978,20 @@ noKiller (Killer kl) = null kl
 timeToAbort :: a -> Search a -> Search a
 timeToAbort a act = do
     s <- get
+    rmn <- lift getRootMoveNumber
     if abort s
        then return a
        else do
            let ro = ronly s
-           if draft ro > 1 && timeli ro
+           if draft ro > 1 && abmili ro > 0
               then if timeNodes .&. sNodes (stats s) /= 0
                       then act
                       else do
-                          !abrt <- lift $ isTimeout $ abmili ro
+                          !abrt <- lift $ isTimeout $ if rmn > 1 then abmili ro else abmil1 ro
                           if abrt
                              then do
-                                 lift $ informStr "Albeta: search abort!"
+                                 let msg = if rmn > 1 then "Time abort in move 1" else "Time abort"
+                                 lift $ informStr msg
                                  put s { abort = True }
                                  return a
                              else act

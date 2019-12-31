@@ -8,7 +8,7 @@ module Uci.UciGlue (
 
 -- import Control.Monad.State.Lazy
 
-import qualified Search.CStateMonad as SM
+import Search.CStateMonad (runCState)
 import Search.AlbetaTypes
 import Search.Albeta
 import Struct.Struct
@@ -20,8 +20,8 @@ aspirWindow :: Int
 aspirWindow   = 24	-- initial aspiration window
 
 -- One iteration in the search for the best move
-bestMoveCont :: Int -> Int -> MyState -> Maybe Int -> [Move] -> [Move] -> CtxIO IterResult
-bestMoveCont draft sttime stati lastsc lpv rmvs = do
+bestMoveCont :: Int -> Int -> Int-> MyState -> Maybe Int -> [Move] -> [Move] -> CtxIO IterResult
+bestMoveCont draft sttime1 sttime stati lastsc lpv rmvs = do
     informGuiDepth draft
     ctxLog LogInfo $ "start search for depth " ++ show draft
     let abc = ABC {
@@ -31,10 +31,10 @@ bestMoveCont draft sttime stati lastsc lpv rmvs = do
                 rootmvs   = rmvs,
                 window    = aspirWindow,
                 best      = False,
+                stoptime1 = sttime1,
                 stoptime  = sttime
-                }
-    ((sc, path, rmvsf, timint, ch), statf) <- SM.runCState (alphaBeta abc) stati
-    -- when (sc == 0) $ return ()
+              }
+    ((sc, path, rmvsf, timint, ch), statf) <- runCState (alphaBeta abc) stati
     let n = sNodes $ mstats statf
     informGui sc draft n path
     ctxLog LogInfo $ "score " ++ show sc ++ " path " ++ show path

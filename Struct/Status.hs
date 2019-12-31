@@ -21,7 +21,8 @@ data MyState = MyState {
         hash   :: Cache,	-- transposition table
         hist   :: History,	-- history table
         mstats :: SStats,	-- per move search statistics
-        evalst :: EvalState	-- eval status (parameter & statistics)
+        evalst :: EvalState,	-- eval status (parameter & statistics)
+        rootmn :: !Int		-- root move number
     }
 
 data EvalState = EvalState {
