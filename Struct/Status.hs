@@ -184,10 +184,10 @@ instance CollectParams EvalWeights where
           ewRookOpen        = tme 205 177,	-- DSPSA rook2
           ewRookConn        = tme  88  60,	-- DSPSA rook2
           ewRook7th         = tme 197 161,	-- DSPSA rook2
-          ewMobilityKnight  = tme 50 56,
-          ewMobilityBishop  = tme 53 33,
-          ewMobilityRook    = tme 17 34,	-- DSPSA rook2
-          ewMobilityQueen   = tme  2 11,
+          ewMobilityKnight  = tme 50 112,
+          ewMobilityBishop  = tme 53  66,
+          ewMobilityRook    = tme 17  68,
+          ewMobilityQueen   = tme  2  22,
           ewCenterPAtts     = tme 73 57,
           ewCenterNAtts     = tme 48 37,
           ewCenterBAtts     = tme 52 35,
