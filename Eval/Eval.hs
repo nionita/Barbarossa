@@ -701,28 +701,21 @@ evalRedundance p !ew = mad (ewBishopPawns    ew) pa .
           !bbd = bishops p .&. yo p .&. darkSquares
           !bpwl = popCount wbl
           !bpwd = popCount wbd
-          !bpw = bpwl .&. bpwd	-- tricky here: exact 1 and 1 is ok
+          !bpw  = bpwl .&. bpwd	-- tricky here: exact 1 and 1 is ok
           !bpbl = popCount bbl
           !bpbd = popCount bbd
-          !bpb = bpbl .&. bpbd	-- and here
-          !bp  = bpw - bpb
-          -- Bishop blocked pawns
-          !mpal | bpwl /= 0 = popCount (blockedPawns .&. lightSquares .&. me p .&. badBishopArea)
+          !bpb  = bpbl .&. bpbd	-- and here
+          !bp   = bpw - bpb
+          -- Bishop pawns: only own pawns count
+          !mpal | bpwl /= 0 = popCount (lightSquares .&. me p .&. pawns p)
                 | otherwise = 0
-          !mpad | bpwd /= 0 = popCount (blockedPawns .&. darkSquares .&. me p .&. badBishopArea)
+          !mpad | bpwd /= 0 = popCount (darkSquares  .&. me p .&. pawns p)
                 | otherwise = 0
-          !ypal | bpbl /= 0 = popCount (blockedPawns .&. lightSquares .&. yo p .&. badBishopArea)
+          !ypal | bpbl /= 0 = popCount (lightSquares .&. yo p .&. pawns p)
                 | otherwise = 0
-          !ypad | bpbd /= 0 = popCount (blockedPawns .&. darkSquares .&. yo p .&. badBishopArea)
+          !ypad | bpbd /= 0 = popCount (darkSquares  .&. yo p .&. pawns p)
                 | otherwise = 0
           !pa = mpal + mpad - ypal - ypad
-          whitePawns | moving p == White = me p .&. pawns p
-                     | otherwise         = yo p .&. pawns p
-          blackPawns = pawns p `less` whitePawns
-          blockedPawnsWhite = (occup p `unsafeShiftR` 8) .&. whitePawns
-          blockedPawnsBlack = (occup p `unsafeShiftL` 8) .&. blackPawns
-          blockedPawns = blockedPawnsWhite .|. blockedPawnsBlack
-          badBishopArea = 0x007E7E7E7E7E7E00
           -- Redundance rook
           !wro = rooks p .&. me p
           !bro = rooks p .&. yo p
