@@ -798,24 +798,25 @@ perPassedPawnOk !gph ep p c sq sqbb moi toi moia toia = val
           -- We want the kings to support or stop the pawn
           -- So we consider touching the way of the pawn as good for the respective king side
           -- We could allocate a separate parameter for the touch and tune it
-          !mdis = squareDistance myking asq
-          !mtouch = popCount (kAttacs myking .&. way) `unsafeShiftR` 1
-          !ydis = squareDistance yoking asq
-          !ytouch = popCount (kAttacs yoking .&. way) `unsafeShiftR` 1
-          !kdist = mdis + ytouch - ydis - mtouch
-          !kprx = (kdDist kdist * epPassKingProx ep * (256 - gph)) `unsafeShiftR` 8
+          !mdis   = squareDistance myking asq `unsafeShiftR` 1
+          !mtouch = popCount (kAttacs myking .&. way)
+          !ydis   = squareDistance yoking asq `unsafeShiftR` 1
+          !ytouch = popCount (kAttacs yoking .&. way)
+          !kdist  = mdis + ytouch - ydis - mtouch
+          -- !kprx = (kdDist kdist * epPassKingProx ep * (256 - gph)) `unsafeShiftR` 8
+          !kprx = (kdist * epPassKingProx ep * (256 - gph)) `unsafeShiftR` 8
           !val1 = (pmax * (128 - kprx) * (128 - epPassBlockO ep * mblo)) `unsafeShiftR` 14
           !val2 = (val1 * (128 - epPassBlockA ep * yblo)) `unsafeShiftR` 7
           !val  = (val2 * (128 + epPassMyCtrl ep * myctrl) * (128 - epPassYoCtrl ep * yoctrl))
                     `unsafeShiftR` 14
 
--- mdis/ydis can be from 0 to 7, mtouch/ytouch 0 or 1
--- This means: mdis + ytouch - ydis - mtouch lies between -8 and 8
-kdDistArr :: UArray Int Int  --   -8 -7 -6 -5 -4 -3 -2 -1  0  1  2  3  4  5  6  7  8
-kdDistArr = listArray (0, 16) $ [ -4,-4,-3,-3,-3,-2,-2,-1, 0, 1, 2, 2, 3, 3, 3, 4, 4]
+-- mdis/ydis can be from 0 to 7, mtouch/ytouch from 0 to 3
+-- This means: mdis + ytouch - ydis - mtouch lies between -10 and 10
+-- kdDistArr :: UArray Int Int  --   -10  -9  -8  -7  -6  -5  -4  -3  -2  -1 0  1  2  3  4  5  6  7  8  9 10
+-- kdDistArr = listArray (0, 16) $ [ -75,-72,-68,-63,-57,-50,-42,-33,-23,-12,0,12,23,33,42,50,57,63,68,72,75]
 
-kdDist :: Int -> Int
-kdDist = (kdDistArr `unsafeAt`) . (8 +)
+-- kdDist :: Int -> Int
+-- kdDist = (kdDistArr `unsafeAt`) . (8 +)
 
 
 ------ Advanced pawns, on 6th & 7th rows (not passed) ------
