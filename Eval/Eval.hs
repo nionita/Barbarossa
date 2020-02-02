@@ -64,10 +64,11 @@ normalEval p !sti = sc
           !mide1 = materDiff p ew (MidEnd 0 0)
           !mide2 = evalRedundance p ew mide1
           !mide3 = evalRookPawn p ew mide2
-          !mide4 = kingSafe p ew mide3
-          !mide5 = kingPlace ep p ew mide4
-          !mide6 = lastline p ew mide5
-          !mide7 = mobiLity p ew mide6
+          !mide4 = mobiLity p ew mide3
+          !medif = meDiff mide4 mide3
+          !mide5 = kingSafe p ew (moks medif) mide4
+          !mide6 = kingPlace ep p ew mide5
+          !mide7 = lastline p ew mide6
           !mide8 = centerDiff p ew mide7
           !mide9 = spaceDiff p ew mide8
           !midea = adversDiff p ew mide9
@@ -206,12 +207,12 @@ bnMateDistance wbish sq = min (squareDistance sq ocor1) (squareDistance sq ocor2
 ----------------------------------------------------------------------------
 
 ------ King Safety ------
-kingSafe :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-kingSafe p !ew = mad (ewKingSafe ew) ksafe
+kingSafe :: MyPos -> EvalWeights -> Int -> MidEnd -> MidEnd
+kingSafe p !ew !medif = mad (ewKingSafe ew) ksafe
     where !ksafe = ksSide (yo p) (yoKAttacs p) (myPAttacs p) (myNAttacs p) (myBAttacs p) (myRAttacs p) 
-                          (myQAttacs p) (myKAttacs p) (myAttacs p)
+                          (myQAttacs p) (myKAttacs p) (myAttacs p) medif
                  - ksSide (me p) (myKAttacs p) (yoPAttacs p) (yoNAttacs p) (yoBAttacs p) (yoRAttacs p) 
-                          (yoQAttacs p) (yoKAttacs p) (yoAttacs p)
+                          (yoQAttacs p) (yoKAttacs p) (yoAttacs p) medif
 
 -- To make the sum and count in one pass
 data Flc = Flc !Int !Int
@@ -219,8 +220,8 @@ data Flc = Flc !Int !Int
 fadd :: Flc -> Flc -> Flc
 fadd (Flc f1 q1) (Flc f2 q2) = Flc (f1+f2) (q1+q2)
 
-ksSide :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
-ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
+ksSide :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int -> Int
+ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya !medif
     | myq == 0  = 0
     | otherwise = mattacs
     where qual a p
@@ -247,7 +248,7 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
               -- This is equivalent to:
               where !freco = popCount $ yok `less` (yop `less` mya)
                     !ixm = c * q `unsafeShiftR` 2
-                    !ixt = ixm + c + ksShift - freco
+                    !ixt = ixm + c + ksShift - freco + medif
                     ksShift = 13
 
 -- We take the maximum of 272 because:
@@ -266,6 +267,10 @@ attCoef = listArray (0, 319) $ take zeros (repeat 0) ++ [ f x | x <- [0..63] ] +
 kingSquare :: BBoard -> BBoard -> Square
 kingSquare kingsb colorp = firstOne $ kingsb .&. colorp
 {-# INLINE kingSquare #-}
+
+-- Proportion of mobility in king safety
+moks :: Int -> Int
+moks x = (x `unsafeShiftR` 7) - (x `unsafeShiftR` 8)
 
 ------ Material ------
 

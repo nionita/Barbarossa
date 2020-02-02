@@ -7,7 +7,7 @@ module Struct.Status (
     EvalParams(..),
     EvalWeights(..),
     MidEnd(..),
-    mad
+    mad, meDiff
 ) where
 
 import Struct.Struct
@@ -46,6 +46,11 @@ tme a b = MidEnd a b
 {-# INLINE mad #-}
 mad :: MidEnd -> Int -> MidEnd -> MidEnd
 mad !weight !fact !acc = MidEnd { mid = mid acc + mid weight * fact, end = end acc + end weight * fact }
+
+-- We encapsulate the MidEnd difference here, used to consider mobility (difference) in king safety
+{-# INLINE meDiff #-}
+meDiff :: MidEnd -> MidEnd -> Int
+meDiff (MidEnd a _) (MidEnd b _) = a - b
 
 -- This is the parameter record for characteristics evaluation
 data EvalParams
