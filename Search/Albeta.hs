@@ -78,7 +78,7 @@ futilMargins d s = s `unsafeShiftL` (d-1)
 futIniVal, futMinVal, futDecayB, futDecayW :: Int
 futIniVal = 100
 futMinVal = 30
-futDecayB = 13
+futDecayB = 14
 futDecayW = (1 `unsafeShiftL` futDecayB) - 1
 
 -- Parameters for null move pruning
