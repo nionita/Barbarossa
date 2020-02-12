@@ -78,7 +78,7 @@ futilMargins d s = s `unsafeShiftL` (d-1)
 futIniVal, futMinVal, futDecayB, futDecayW :: Int
 futIniVal = 100
 futMinVal = 30
-futDecayB = 13
+futDecayB = 11
 futDecayW = (1 `unsafeShiftL` futDecayB) - 1
 
 -- Parameters for null move pruning
@@ -147,6 +147,7 @@ data NodeState
           spcno  :: !Int,	-- last move number of a special move
           albe   :: !Bool,	-- in alpha/beta search (for small depths)
           rbmch  :: !Int,	-- number of changes in root best move / score type otherwise
+          fumax  :: !Int,	-- max static score difference for non-captures
           killer :: !Killer,	-- the current killer moves
           cursc  :: Path,	-- current alpha value (now plus path & depth)
           cpos   :: MyPos,	-- current position for this node
@@ -211,13 +212,13 @@ pvsInit = PVState { ronly = pvro00, stats = ssts0, absdp = 0, abort = False,
                     futme = futIniVal, futyo = futIniVal,
                     lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
 nst0 :: NodeState
-nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore 0, rbmch = -1,
+nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore 0, rbmch = -1, fumax = 0,
              movno = 1, spcno = 1, killer = Killer [], albe = False, cpos = initPos, pvsl = [] }
              -- we start with spcno = 1 as we consider the first move as special
              -- to avoid in any way reducing the tt move
 
 resetNSt :: Path -> Killer -> NodeState -> NodeState
-resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, rbmch = 0 }
+resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, rbmch = 0, fumax = 0 }
 
 pvro00 :: PVReadOnly
 pvro00 = PVReadOnly { draft = 0, albest = False, abmil1 = 0, abmili = 0 }
@@ -332,9 +333,6 @@ pvInnerRoot b d nst e = timeToAbort (True, nst) $ do
                 modify $ \s -> s { absdp = absdp s + 1 }
                 s <- case exd of
                          Exten exd' _ _ -> do
-                             when (canPruneMove (cpos nst) e) $ do
-                                 sdiff <- lift scoreDiff
-                                 updateFutil sdiff	-- e
                              xchangeFutil
                              s <- pvInnerRootExten b d exd' (deepNSt nst)
                              xchangeFutil
@@ -489,6 +487,7 @@ pvSearch nst !a !b !d = do
                     if movno nstf == 1
                        then return $! failHardNoValidMove a b pos
                        else do
+                           updateFutil (fumax nstf)
                            let de = max d $ pathDepth s
                            nodes1 <- gets (sNodes . stats)
                            lift $ do
@@ -545,6 +544,7 @@ pvZeroW !nst !b !d = do
                             if movno nstf == 1
                                then return $! failHardNoValidMove bGrain b pos
                                else do
+                                   updateFutil (fumax nstf)
                                    let !de = max d $ pathDepth s
                                    !nodes1 <- gets (sNodes . stats)
                                    lift $ do
@@ -623,7 +623,7 @@ pvInnerLoop :: Int 	-- current beta
             -> Move	-- move to search
             -> Search NodeState
 pvInnerLoop b d zw prune nst e = timeToAbort nst $ do
-    let !canPrune = canPruneMove (cpos nst) e
+    let canPrune = canPruneMove (cpos nst) e
     if prune && (zw || movno nst > 1) && canPrune
        then return $! nst { movno = movno nst + 1 }
        else do
@@ -635,16 +635,18 @@ pvInnerLoop b d zw prune nst e = timeToAbort nst $ do
                   modify $ \s -> s { absdp = absdp s + 1 }
                   (s, nst1) <- case exd of
                       Exten exd' cap nolmr -> do
-                          when canPrune $ do
-                              sdiff <- lift scoreDiff
-                              updateFutil sdiff	-- e
+                          nst1 <- if canPrune
+                                     then do
+                                         sdiff <- lift scoreDiff
+                                         return $ localFutil sdiff nst
+                                     else return nst
                           -- Resetting means we reduce less (only with distance to last capture)
-                          let nst1 | cap       = resetSpc nst
-                                   | otherwise = nst
+                          let nst2 | cap       = resetSpc nst1
+                                   | otherwise = nst1
                           xchangeFutil
-                          s <- extenFunc b d (cap || nolmr) exd' (deepNSt nst1)
+                          s <- extenFunc b d (cap || nolmr) exd' (deepNSt nst2)
                           xchangeFutil
-                          return (s, nst1)
+                          return (s, nst2)
                       Final   -> return (drawPath, nst)
                       Illegal -> error "Cannot be illegal here"
                   lift undoMove	-- undo the move
@@ -855,6 +857,9 @@ xchangeFutil
 
 varFutVal :: Search Int
 varFutVal = max futMinVal <$> gets futme
+
+localFutil :: Int -> NodeState -> NodeState
+localFutil sdiff nst = nst { fumax = max (fumax nst) sdiff }
 
 failHardNoValidMove :: Int -> Int -> MyPos -> Path
 failHardNoValidMove !a !b pos = trimaxPath a b $! if tacticalPos pos then matedPath else drawPath
