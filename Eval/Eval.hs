@@ -212,7 +212,7 @@ kingSafe p !ew !medif = mad (ewKingSafe ew) ksafe
     where !ksafe = ksSide (yo p) (yoKAttacs p) (myPAttacs p) (myNAttacs p) (myBAttacs p) (myRAttacs p) 
                           (myQAttacs p) (myKAttacs p) (myAttacs p) medif
                  - ksSide (me p) (myKAttacs p) (yoPAttacs p) (yoNAttacs p) (yoBAttacs p) (yoRAttacs p) 
-                          (yoQAttacs p) (yoKAttacs p) (yoAttacs p) medif
+                          (yoQAttacs p) (yoKAttacs p) (yoAttacs p) (-medif)
 
 -- To make the sum and count in one pass
 data Flc = Flc !Int !Int
@@ -248,7 +248,7 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya !medif
               -- This is equivalent to:
               where !freco = popCount $ yok `less` (yop `less` mya)
                     !ixm = c * q `unsafeShiftR` 2
-                    !ixt = ixm + c + ksShift - freco + medif
+                    !ixt = ixm + c + ksShift - freco + max medif 0
                     ksShift = 13
 
 -- We take the maximum of 272 because:
