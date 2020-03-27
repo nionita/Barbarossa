@@ -156,7 +156,7 @@ pieceAt !p bsq
                       0 -> King
                       _ -> Queen
 
--- {-# INLINE tabla #-}
+{-# INLINE tabla #-}
 tabla :: MyPos -> Square -> TabCont
 tabla p sq
     | occup p .&. bsq == 0 = Empty
@@ -430,12 +430,12 @@ fromSquare m@(Move w)
 toSquare :: Move -> Square
 toSquare (Move m) = fromIntegral (m .&. 0x3F)
 
--- {-# INLINE moveAddColor #-}
+{-# INLINE moveAddColor #-}
 moveAddColor :: Color -> Move -> Move
 moveAddColor White (Move w) = Move $ w .&. 0x7FFF
 moveAddColor Black (Move w) = Move $ w .|. 0x8000
 
--- {-# INLINE moveAddPiece #-}
+{-# INLINE moveAddPiece #-}
 moveAddPiece :: Piece -> Move -> Move
 moveAddPiece piece (Move w)
     = Move $ (fromIntegral (fromEnum piece) `unsafeShiftL` 12) .|. (w .&. 0x8FFF)
