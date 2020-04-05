@@ -286,7 +286,9 @@ kingPlace ep p !ew = mad (ewKingPawn      ew) kpa .
                      mad (ewKingThreat    ew) ktr .
                      mad (ewKingOpen      ew) ko .
                      mad (ewKingPlaceCent ew) kcd .
-                     mad (ewKingPlacePwns ew) kpd
+                     mad (ewKingPlacePwns ew) kpd .
+                     mad (ewKnightProxy   ew) npd .
+                     mad (ewBishopProxy   ew) bpd
     where !kcd = (mpl - ypl) `unsafeShiftR` epMaterBonusScale ep
           !kpd = (mpi - ypi) `unsafeShiftR` epPawnBonusScale  ep
           !mks = kingSquare (kings p) $ me p
@@ -318,8 +320,8 @@ kingPlace ep p !ew = mad (ewKingPawn      ew) kpa .
                                `unsafeShiftR` epMaterScale ep
           !ko = adv - own
           mwb = popCount $ bAttacs (pawns p) mks .&. nopawns
-          mwr = popCount $ rAttacs (pawns p) mks .&. nopawns
           ywb = popCount $ bAttacs (pawns p) yks .&. nopawns
+          mwr = popCount $ rAttacs (pawns p) mks .&. nopawns
           ywr = popCount $ rAttacs (pawns p) yks .&. nopawns
           nopawns = complement $ pawns p
           comb !oR !oQ !wb !wr = let r = oR * wr
@@ -336,6 +338,30 @@ kingPlace ep p !ew = mad (ewKingPawn      ew) kpa .
           pmktr = popCount (myKAttacs p .&. yo p .&. nopawns `less` yoPAttacs p)
           pyktr = popCount (yoKAttacs p .&. me p .&. nopawns `less` myPAttacs p)
           !ktr = pmktr - pyktr
+          -- Knight proxy: better when near to any king -- NO: better when near to own king
+          -- !npd = myKnightMyKing + myKnightYoKing - yoKnightMyKing - yoKnightYoKing
+          !npd = myKnightMyKing - yoKnightYoKing
+          myKnightMyKing = knightKingProxy mks $ knights p .&. me p
+          -- myKnightYoKing = knightKingProxy yks $ knights p .&. me p
+          -- yoKnightMyKing = knightKingProxy mks $ knights p .&. yo p
+          yoKnightYoKing = knightKingProxy yks $ knights p .&. yo p
+          -- Bishop proxy: better when intersecting opponents king area on empty board
+          !bpd = myBishopProxy - yoBishopProxy
+          myBishopProxy = bishopKingProxy (yoKAttacs p .|. (kings p .&. yo p)) $ bishops p .&. me p
+          yoBishopProxy = bishopKingProxy (myKAttacs p .|. (kings p .&. me p)) $ bishops p .&. yo p
+
+knightKingProxy :: Square -> BBoard -> Int
+knightKingProxy ksq ns = sum $ map (knightProxyPoints . squareDistance ksq) $ bbToSquares ns
+
+knightProxyPoints :: Int -> Int
+knightProxyPoints = \x -> 2 - x	-- normal distance of 2 is ok
+
+bishopKingProxy :: BBoard -> BBoard -> Int
+bishopKingProxy katt bs = sum $ map (bishopProxyPoints . popCount . ((.&.) katt) . bAttacs 0)
+                              $ bbToSquares bs
+
+bishopProxyPoints :: Int -> Int
+bishopProxyPoints = \x -> x * x
 
 promoW, promoB :: Square -> Square
 promoW s = 56 + (s .&. 7)

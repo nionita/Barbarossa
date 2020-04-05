@@ -75,6 +75,8 @@ data EvalWeights
           ewKingPlacePwns   :: !MidEnd,
           ewKingPawn        :: !MidEnd,
           ewKingThreat      :: !MidEnd,
+          ewKnightProxy     :: !MidEnd,
+          ewBishopProxy     :: !MidEnd,
           ewRookHOpen       :: !MidEnd,
           ewRookOpen        :: !MidEnd,
           ewRookConn        :: !MidEnd,
@@ -175,6 +177,8 @@ instance CollectParams EvalWeights where
           ewKingPlacePwns   = tme 0 4,		-- old value
           ewKingPawn        = tme 3 50,		-- manually
           ewKingThreat      = tme 0 300,	-- manually
+          ewKnightProxy     = tme 15 15,	-- manually
+          ewBishopProxy     = tme 15  0,	-- manually
           ewRookHOpen       = tme 162 182,	-- DSPSA with Adadelta
           ewRookOpen        = tme 205 178,	-- 20k steps, depth 4,
           ewRookConn        = tme  89  59,	-- 2 games, beta=0.95, gamma=0.8,
@@ -228,6 +232,10 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
         ("end.kingPawn",       setEndKingPawn),
         ("mid.kingThreat",     setMidKingThreat),
         ("end.kingThreat",     setEndKingThreat),
+        ("mid.knightProxy",    setMidKnightProxy),
+        ("end.knightProxy",    setEndKnightProxy),
+        ("mid.bishopProxy",    setMidBishopProxy),
+        ("end.bishopProxy",    setEndBishopProxy),
         ("mid.rookHOpen",      setMidRookHOpen),
         ("end.rookHOpen",      setEndRookHOpen),
         ("mid.rookOpen",       setMidRookOpen),
@@ -311,6 +319,10 @@ collectEvalWeights (s, v) ew = lookApply s v ew [
           setEndKingPawn        v' ew' = ew' { ewKingPawn        = (ewKingPawn        ew') { end = round v' }}
           setMidKingThreat      v' ew' = ew' { ewKingThreat      = (ewKingThreat      ew') { mid = round v' }}
           setEndKingThreat      v' ew' = ew' { ewKingThreat      = (ewKingThreat      ew') { end = round v' }}
+          setMidKnightProxy     v' ew' = ew' { ewKnightProxy     = (ewKnightProxy     ew') { mid = round v' }}
+          setEndKnightProxy     v' ew' = ew' { ewKnightProxy     = (ewKnightProxy     ew') { end = round v' }}
+          setMidBishopProxy     v' ew' = ew' { ewBishopProxy     = (ewBishopProxy     ew') { mid = round v' }}
+          setEndBishopProxy     v' ew' = ew' { ewBishopProxy     = (ewBishopProxy     ew') { end = round v' }}
           setMidRookHOpen       v' ew' = ew' { ewRookHOpen       = (ewRookHOpen       ew') { mid = round v' }}
           setEndRookHOpen       v' ew' = ew' { ewRookHOpen       = (ewRookHOpen       ew') { end = round v' }}
           setMidRookOpen        v' ew' = ew' { ewRookOpen        = (ewRookOpen        ew') { mid = round v' }}
