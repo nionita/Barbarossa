@@ -799,9 +799,9 @@ perPassedPawnOk !gph ep p c sq sqbb moi toi moia toia = val
           -- So we consider touching the way of the pawn as good for the respective king side
           -- We could allocate a separate parameter for the touch and tune it
           !mdis = squareDistance myking asq
-          !mtouch = popCount (kAttacs myking .&. way) `unsafeShiftR` 1
+          !mtouch = popCount (kAttacs myking .&. way)
           !ydis = squareDistance yoking asq
-          !ytouch = popCount (kAttacs yoking .&. way) `unsafeShiftR` 1
+          !ytouch = popCount (kAttacs yoking .&. way)
           !kdist = mdis + ytouch - ydis - mtouch
           !kprx = (kdDist kdist * epPassKingProx ep * (256 - gph)) `unsafeShiftR` 8
           !val1 = (pmax * (128 - kprx) * (128 - epPassBlockO ep * mblo)) `unsafeShiftR` 14
@@ -809,13 +809,14 @@ perPassedPawnOk !gph ep p c sq sqbb moi toi moia toia = val
           !val  = (val2 * (128 + epPassMyCtrl ep * myctrl) * (128 - epPassYoCtrl ep * yoctrl))
                     `unsafeShiftR` 14
 
--- mdis/ydis can be from 0 to 7, mtouch/ytouch 0 or 1
--- This means: mdis + ytouch - ydis - mtouch lies between -8 and 8
-kdDistArr :: UArray Int Int  --   -8 -7 -6 -5 -4 -3 -2 -1  0  1  2  3  4  5  6  7  8
-kdDistArr = listArray (0, 16) $ [ -4,-4,-3,-3,-3,-2,-2,-1, 0, 1, 2, 2, 3, 3, 3, 4, 4]
+-- mdis/ydis can be from 0 to 7, mtouch/ytouch 0 to 3
+-- This means: mdis + ytouch - ydis - mtouch lies between -10 and 10
+kdDistArr :: UArray Int Int   -- -10  -9  -8  -7  -6  -5  -4 -3 -2 -1  0  1  2  3  4  5  6  7  8  9 10
+-- kdDistArr = listArray (0, 21) $ [-16,-16,-16,-16,-12,-12,-12,-8,-8,-4, 0, 4, 8, 8,12,12,12,16,16,16,16]
+kdDistArr = listArray (0, 21) $ [-12,-12,-11,-11,-11,-10,-10,-9,-7,-4, 0, 4, 7, 9,10,10,11,11,11,12,12]
 
 kdDist :: Int -> Int
-kdDist = (kdDistArr `unsafeAt`) . (8 +)
+kdDist = (kdDistArr `unsafeAt`) . (10 +)
 
 
 ------ Advanced pawns, on 6th & 7th rows (not passed) ------
