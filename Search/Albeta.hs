@@ -622,9 +622,8 @@ pvInnerLoop :: Int 	-- current beta
             -> NodeState 	-- node status
             -> Move	-- move to search
             -> Search NodeState
-pvInnerLoop b d zw prune nst e = timeToAbort nst $ do
-    let canPrune = canPruneMove (cpos nst) e
-    if prune && (zw || movno nst > 1) && canPrune
+pvInnerLoop b d zw prune nst e = timeToAbort nst $
+    if prune && (zw || movno nst > 1) && canPruneMove (cpos nst) e
        then return $! nst { movno = movno nst + 1 }
        else do
            old <- get
@@ -635,18 +634,17 @@ pvInnerLoop b d zw prune nst e = timeToAbort nst $ do
                   modify $ \s -> s { absdp = absdp s + 1 }
                   (s, nst1) <- case exd of
                       Exten exd' cap nolmr -> do
-                          nst1 <- if canPrune
-                                     then do
-                                         sdiff <- lift scoreDiff
-                                         return $ localFutil sdiff nst
-                                     else return nst
-                          -- Resetting means we reduce less (only with distance to last capture)
-                          let nst2 | cap       = resetSpc nst1
-                                   | otherwise = nst1
+                          -- For captures: no prune & no use for futility margin calculation
+                          nst1 <- if cap
+                                     -- Reset: reduce less (only with distance to last capture)
+                                     then return $ resetSpc nst
+                                     else if canPruneNormalNonCapture (cpos nst) e
+                                             then localFutil nst <$> lift scoreDiff
+                                             else return nst
                           xchangeFutil
-                          s <- extenFunc b d (cap || nolmr) exd' (deepNSt nst2)
+                          s <- extenFunc b d (cap || nolmr) exd' (deepNSt nst1)
                           xchangeFutil
-                          return (s, nst2)
+                          return (s, nst1)
                       Final   -> return (drawPath, nst)
                       Illegal -> error "Cannot be illegal here"
                   lift undoMove	-- undo the move
@@ -858,8 +856,10 @@ xchangeFutil
 varFutVal :: Search Int
 varFutVal = max futMinVal <$> gets futme
 
-localFutil :: Int -> NodeState -> NodeState
-localFutil sdiff nst = nst { fumax = max (fumax nst) sdiff }
+localFutil :: NodeState -> Int -> NodeState
+localFutil nst sdiff
+    | fumax nst >= sdiff = nst
+    | otherwise          = nst { fumax = sdiff }
 
 failHardNoValidMove :: Int -> Int -> MyPos -> Path
 failHardNoValidMove !a !b pos = trimaxPath a b $! if tacticalPos pos then matedPath else drawPath

@@ -4,7 +4,8 @@
 module Moves.Base (
     posToState, getPos, posNewSearch,
     doRealMove, doMove, doQSMove, doNullMove, undoMove,
-    genMoves, genTactMoves, genEscapeMoves, canPruneMove,
+    genMoves, genTactMoves, genEscapeMoves,
+    canPruneMove, canPruneNormalNonCapture,
     tacticalPos, zugZwang, isMoveLegal, isKillCand, isTKillCand,
     betaCut, ttRead, ttStore, curNodes, isTimeout, informCtx,
     mateScore, scoreDiff, qsDelta,
@@ -388,15 +389,21 @@ captOrPromo p m
 noLMR :: MyPos -> Move -> Bool
 noLMR = movePassed
 
--- We will call this function before we do the move
--- This will spare a heavy operation for pruned moved
+-- We call this function before we do the move
+-- If it returns true, this will spare a heavy operation do move operation
 {-# INLINE canPruneMove #-}
 canPruneMove :: MyPos -> Move -> Bool
 canPruneMove p m
     | not (moveIsNormal m) = False
     | moveIsCapture p m    = False
-    | movePassed p m       = False
-    | otherwise            = not $ moveChecks p m
+    | otherwise            = canPruneNormalNonCapture p m
+
+-- This is called when we have a normal non-capture move
+-- to decide if this move contributes to the calculation
+-- of the next futility margin
+{-# INLINE canPruneNormalNonCapture #-}
+canPruneNormalNonCapture :: MyPos -> Move -> Bool
+canPruneNormalNonCapture p m = not $ movePassed p m || moveChecks p m
 
 -- Score difference obtained by last move, from POV of the moving part
 -- It considers the fact that static score is for the part which has to move
