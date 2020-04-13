@@ -623,8 +623,9 @@ pvInnerLoop :: Int 	-- current beta
             -> Move	-- move to search
             -> Search NodeState
 pvInnerLoop b d zw prune nst e = timeToAbort nst $ do
-    let !canPrune = canPruneMove (cpos nst) e
-    if prune && (zw || movno nst > 1) && canPrune
+    let !prunable = prune && (zw || movno nst > 1)
+        canPrune = canPruneMove (cpos nst) e
+    if prunable && canPrune
        then return $! nst { movno = movno nst + 1 }
        else do
            old <- get
@@ -635,7 +636,8 @@ pvInnerLoop b d zw prune nst e = timeToAbort nst $ do
                   modify $ \s -> s { absdp = absdp s + 1 }
                   (s, nst1) <- case exd of
                       Exten exd' cap nolmr -> do
-                          when canPrune $ do
+                          -- Check & update futility margin only every 8th node
+                          when (not prunable && (sNodes (stats old) .&. 7 == 7) && canPrune) $ do
                               sdiff <- lift scoreDiff
                               updateFutil sdiff	-- e
                           -- Resetting means we reduce less (only with distance to last capture)
