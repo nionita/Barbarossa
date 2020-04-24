@@ -7,7 +7,6 @@ module Search.Albeta (
 
 import Control.Monad
 import Control.Monad.State hiding (gets, modify)
-import Data.Array.Base (unsafeAt)
 import Data.Array.Unboxed
 import Data.Bits
 import Data.Int
@@ -82,10 +81,13 @@ futDecayB = 13
 futDecayW = (1 `unsafeShiftL` futDecayB) - 1
 
 -- Parameters for null move pruning
-nulMargin, nulSubmrg, nulTrig :: Int
+nulMargin, nulSubmrg, nulTrig, nulDFact, nulVFact, nulShift :: Int
 nulMargin = 1		-- margin to search the null move (over beta) (in scoreGrain units!)
 nulSubmrg = 2		-- improved margin (in scoreGrain units!)
-nulTrig   = -15	-- static margin to beta, to trigger null move (in scoreGrain units!)
+nulTrig   = -15		-- static margin to beta, to trigger null move (in scoreGrain units!)
+nulDFact  = 377		-- factor for depth to linear depth of the null move search
+nulVFact  = 1		-- factor for value to linear depth of the null move search
+nulShift  = 9		-- exponential scale for linear depth of the null move search
 nulSubAct :: Bool
 nulSubAct = True
 
@@ -553,44 +555,33 @@ data NullMoveResult = NoNullMove | NullMoveHigh | NullMoveLow | NullMoveThreat P
 nullMoveFailsHigh :: MyPos -> NodeState -> Int -> Int -> Search NullMoveResult
 nullMoveFailsHigh pos nst b d
     | d < 2 || tacticalPos pos || zugZwang pos		-- no null move at d < 2
-      || crtnt nst == AllNode = return NoNullMove	-- no null move in all nodes
+      || crtnt nst == AllNode || v < tv = return NoNullMove	-- no null move in all nodes
     | otherwise = do
-        let v = staticScore pos
-        if v < b + nulTrig * scoreGrain
-           then return NoNullMove
+        -- Here we have d >= 2
+        when nulDebug $ incReBe 1
+        lift doNullMove	-- do null move
+        newNode d
+        xchangeFutil
+        let nst' = deepNSt nst
+        val <- pnextlev <$> pvZeroW nst' (-nma) d1
+        lift undoMove	-- undo null move
+        xchangeFutil
+        if pathScore val >= nmb
+           then return NullMoveHigh
            else do
-               when nulDebug $ incReBe 1
-               lift doNullMove	-- do null move
-               newNode d
-               xchangeFutil
-               let nst' = deepNSt nst
-               val <- if v > b + bigDiff
-                         then pnextlev <$> pvZeroW nst' (-nma) d2
-                         else pnextlev <$> pvZeroW nst' (-nma) d1
-               lift undoMove	-- undo null move
-               xchangeFutil
-               if pathScore val >= nmb
-                  then return NullMoveHigh
-                  else do
-                       when nulDebug $ do
-                           incReMi
-                           when (not $ nullSeq (pathMoves val)) $ lift $ do
-                               when collectFens $ finNode "NMLO" 0
-                               logmes $ "fail low path: " ++ show val
-                       if nullSeq (pathMoves val)
-                          then return $ NullMoveLow
-                          else return $ NullMoveThreat val
-    where d1  = nmDArr1 `unsafeAt` d	-- here we have always d >= 1
-          d2  = nmDArr2 `unsafeAt` d	-- this is for bigger differences
-          nmb = if nulSubAct then b - (nulSubmrg * scoreGrain) else b
+               when nulDebug $ do
+                   incReMi
+                   when (not $ nullSeq (pathMoves val)) $ lift $ do
+                       when collectFens $ finNode "NMLO" 0
+                       logmes $ "fail low path: " ++ show val
+               if nullSeq (pathMoves val)
+                  then return $ NullMoveLow
+                  else return $ NullMoveThreat val
+    where nmb = if nulSubAct then b - (nulSubmrg * scoreGrain) else b
           nma = nmb - (nulMargin * scoreGrain)
-          bigDiff = 500	-- if we are very far ahead
-
--- This is now more than reduction 3 for depth over 9
-nmDArr1, nmDArr2 :: UArray Int Int
-------------------------------0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16  17  18  19  20
-nmDArr1 = listArray (0, 20) [ 0, 0, 0, 0, 0, 1, 2, 3, 4, 4, 5, 6, 7, 7, 8, 9, 9, 10, 11, 11, 12 ]
-nmDArr2 = listArray (0, 20) [ 0, 0, 0, 0, 0, 0, 1, 2, 3, 3, 4, 5, 6, 6, 7, 8, 8,  9, 10, 10, 11 ]
+          v  = staticScore pos
+          tv = b + nulTrig * scoreGrain
+          d1 = ((d * nulDFact - (v - tv) * nulVFact) `unsafeShiftR` nulShift) - 1
 
 isCut :: Int -> NodeState -> Bool
 isCut b nst = pathScore (cursc nst) >= b
