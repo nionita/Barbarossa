@@ -631,10 +631,20 @@ pvInnerLoop b d zw prune nst e = timeToAbort nst $ do
                               sdiff <- lift scoreDiff
                               updateFutil sdiff	-- e
                           -- Resetting means we reduce less (only with distance to last capture)
-                          let nst1 | cap       = resetSpc nst
-                                   | otherwise = nst
+                          let goodCapture = cap && spcno nst >= movno nst - 1
+                              nst1 | goodCapture = resetSpc nst
+                                   | otherwise   = nst
+                              special = goodCapture || nolmr
+                          -- No LMR if:
+                          -- - capture with non negative SEE
+                          -- - or explicitely LMR disabled (which now is only for moving passers)
+                          -- First condition is tricky and not quite accurate
+                          -- If we have at least 2 quiet moves before a capture,
+                          -- that capture cannot be good
+                          -- This will not reduce good captures, but also in some cases
+                          -- the first bad capture after a quiet move
                           xchangeFutil
-                          s <- extenFunc b d (cap || nolmr) exd' (deepNSt nst1)
+                          s <- extenFunc b d special exd' (deepNSt nst1)
                           xchangeFutil
                           return (s, nst1)
                       Final   -> return (drawPath, nst)
