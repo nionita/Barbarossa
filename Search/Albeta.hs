@@ -89,6 +89,12 @@ nulTrig   = -15	-- static margin to beta, to trigger null move (in scoreGrain un
 nulSubAct :: Bool
 nulSubAct = True
 
+-- Parameter for Bad Start Search
+bssTrig, bssMargin, bssMinDepth :: Int
+bssTrig     = 125 * scoreGrain	-- trigger bad start search if more than this under beta
+bssMargin   = 5   * scoreGrain	-- search beta for bad start search
+bssMinDepth = 5			-- minimum depth for bad start search
+
 -- Parameters for internal iterative deepening
 minIIDPV, minIIDCut, minIIDCutNK, maxIIDDepth :: Int
 minIIDPV    = 5
@@ -531,12 +537,16 @@ pvZeroW !nst !b !d = do
                                         NullMoveThreat s -> newTKiller pos d s
                                         _                -> Killer []
                             !nsti = resetNSt (pathFromScore bGrain) kill1 nst'
-                        !nstf <- pvSLoop b d True prune nsti edges
-                        let s = cursc nstf
-                        whenAbort s $
-                            if movno nstf == 1
-                               then return $! failHardNoValidMove bGrain b pos
-                               else do
+                        redus <- badStartSearch pos nsti b d
+                        case redus of
+                          BSSLow -> return $ pathFromScore bGrain
+                          _      -> do
+                            !nstf <- pvSLoop b d True prune nsti edges
+                            let s = cursc nstf
+                            whenAbort s $
+                              if movno nstf == 1
+                                 then return $! failHardNoValidMove bGrain b pos
+                                 else do
                                    let !de = max d $ pathDepth s
                                    !nodes1 <- gets (sNodes . stats)
                                    lift $ do
@@ -811,6 +821,25 @@ pvLoop f s (Alt (e:es)) = do
     (cut, s') <- f s e
     if cut then return s'
            else pvLoop f s' $ Alt es
+
+-- Reduced search in positions where we have no hope, for higher depths:
+-- if our static score is much below beta and we have still a longer search,
+-- do a shallower zero window search with a lower beta
+-- If we fail low, then we will return alpha from the main search
+-- This should be called only in non-PV nodes
+data BSSResult = NoBSS | BSSLow | BSSHigh Path
+
+badStartSearch :: MyPos -> NodeState -> Int -> Int -> Search BSSResult
+badStartSearch pos nst b d
+    | d <= bssMinDepth || staticScore pos >= bsst = return NoBSS
+    | otherwise = do
+        s <- pvZeroW nst bssb d1
+        if pathScore s >= bssb
+           then return $ BSSHigh s
+           else return BSSLow
+    where d1   = bssMinDepth + (d - bssMinDepth) `unsafeShiftR` 1
+          bsst = b - bssTrig   * scoreGrain
+          bssb = b - bssMargin * scoreGrain
 
 -- About futility pruning:
 -- A. 3 versions would be possible:
