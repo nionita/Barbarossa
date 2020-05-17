@@ -73,8 +73,9 @@ normalEval p !sti = sc
           !mide9 = spaceDiff p ew mide8
           !midea = adversDiff p ew mide9
           !mideb = evalRookPlc p ew midea
-          !midec = enPrise p ew mideb
-          !mided = pawnBl p ew midec
+          !midec = attackedPieces p ew mideb
+          !midek = weakPawns p ew midec
+          !mided = pawnBl p ew midek
           !midee = isolDiff p ew mided
           !midef = backDiff p ew midee
           !mideg = advPawns p ew midef
@@ -618,52 +619,47 @@ frontAttacksBlack !b = fa
           far = bbRight b
           !fa = shadowDown (fal .|. far)	-- shadowUp is exclusive the original!
 
------- En prise ------
--- enpHanging and enpEnPrise optimised (only mean) with Clop by running 4222
--- games at 15+0.25 sec against pass3v, resulting in a Clop forecast of 62 +- 39 ELO
--- enpAttacked optimised (together with epMovingMid & epMovingEnd), only mean, with Clop
--- by 3712 games at 15+0.25 sec against pass3v, Clop forecast: 82 +- 40 ELO
--- enpHanging and enpEnPrise again optimised (only mean) with Clop by running 16300
--- games at 15+0.25 sec against pass3w, resulting in a Clop forecast of 63 +- 19 ELO
-
--- Here we should only take at least the opponent attacks! When we evaluate,
--- we are in one on this situations:
--- 1. we have no further capture and evaluate in a leaf
--- 2. we are evaluating for delta cut
--- In 1 we should take the opponent attacks and analyse them:
--- - if he has more than 2 attacks, than our sencond best attacked piece will be lost
--- (but not always, for example when we can check or can defent one with the other)
--- - if he has only one attack, we are somehow restricted to defend or move that piece
--- In 2 we have a more complicated analysis, which maybe is not worth to do
-enPrise :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-enPrise p !ew mide = mad (mad (mad (mad mide (ewEnpHanging ew) ha)
-                                  (ewEnpEnPrise ew) ep)
-                             (ewEnpAttacked ew) at)
-                        (ewWepAttacked ew) wp
-    where !meP = me p .&. pawns   p	-- my pieces
-          !meM = me p .&. (knights p .|. bishops p)
-          !meR = me p .&. rooks   p
-          !meQ = me p .&. queens  p
-          !atP = meP  .&. yoAttacs p	-- my attacked pieces
-          !atM = meM  .&. yoAttacs p
-          !atR = meR  .&. yoAttacs p
-          !atQ = meQ  .&. yoAttacs p
-          !noma = complement $ myAttacs p
-          !haP = atP .&. noma	-- attacked and not defended (hanging)
-          !haM = atM .&. noma
-          !haR = atR .&. noma
-          !haQ = atQ .&. noma
-          !epM = meM .&. yoPAttacs p	-- defended, but attacked by less valuable opponent pieces
-          !epR = meR .&. yoA1
-          !epQ = meQ .&. yoA2
-          !yoA1 = yoPAttacs p .|. yoNAttacs p .|. yoBAttacs p
-          !yoA2 = yoA1 .|. yoRAttacs p
-          !ha = popCount haP + 3 * popCount haM + 5 * popCount haR + 9 * popCount haQ
-          !ep =                3 * popCount epM + 5 * popCount epR + 9 * popCount epQ
-          !at = popCount atP + 3 * popCount atM + 5 * popCount atR + 9 * popCount atQ
-          !wp1 = popCount $ (meP `less` myPAttacs p) .&. yoAttacs p	-- my weak attacked pawns
+------ Weak pawns attacked ------
+weakPawns :: MyPos -> EvalWeights -> MidEnd -> MidEnd
+weakPawns p !ew mide = mad mide (ewWepAttacked ew) wp
+    where !wp1 = popCount $ (me p .&. pawns p `less` myPAttacs p) .&. yoAttacs p	-- my weak attacked pawns
           !wp2 = popCount $ (yo p .&. pawns p `less` yoPAttacs p) .&. myAttacs p	-- your weak attacked pawns
           !wp = wp2 - wp1
+
+------- Attacked Pieces -------
+attackedPieces :: MyPos -> EvalWeights -> MidEnd -> MidEnd
+attackedPieces p !ew mide = mad (mad (mad (mad (mad (mad mide (ewAtpPawns ew) pd)
+                                                    (ewAtpKnights ew) nd)
+                                               (ewAtpBishops ew) bd)
+                                          (ewAtpRooks ew) rd)
+                                     (ewAtpQueens ew) qd)
+                                (ewAtpKing ew) kd
+    where !meByPawns   = attackedByScore p (me p) (yoPAttacs p)
+          !meByKnights = attackedByScore p (me p) (yoNAttacs p)
+          !meByBishops = attackedByScore p (me p) (yoBAttacs p)
+          !meByRooks   = attackedByScore p (me p) (yoRAttacs p)
+          !meByQueens  = attackedByScore p (me p) (yoQAttacs p)
+          !meByKing    = attackedByScore p (me p) (yoKAttacs p)
+          !yoByPawns   = attackedByScore p (yo p) (myPAttacs p)
+          !yoByKnights = attackedByScore p (yo p) (myNAttacs p)
+          !yoByBishops = attackedByScore p (yo p) (myBAttacs p)
+          !yoByRooks   = attackedByScore p (yo p) (myRAttacs p)
+          !yoByQueens  = attackedByScore p (yo p) (myQAttacs p)
+          !yoByKing    = attackedByScore p (yo p) (myKAttacs p)
+          !pd = meByPawns   - yoByPawns
+          !nd = meByKnights - yoByKnights
+          !bd = meByBishops - yoByBishops
+          !rd = meByRooks   - yoByRooks
+          !qd = meByQueens  - yoByQueens
+          !kd = meByKing    - yoByKing
+
+attackedByScore :: MyPos -> BBoard -> BBoard -> Int
+attackedByScore p victim aggAttacks
+    | perType /= 0 = sum $ map (\s -> s * s) $ zipWith (*) [1, 3, 3, 5, 9]
+                         $ map (popCount . ((.&.) perType))
+                               [pawns p, knights p, bishops p, rooks p, queens p]
+    | otherwise    = 0
+    where !perType = victim .&. aggAttacks
 
 ------ Last Line ------
 
