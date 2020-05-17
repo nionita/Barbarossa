@@ -1,5 +1,16 @@
 {-# LANGUAGE TypeFamilies #-}
-module Struct.Context where
+module Struct.Context (
+    Context(..),
+    CtxIO,
+    LogLevel(..),
+    Changing(..),
+    IterResult,
+    TimeParams(..),
+    levToPrf, readChanging, modifyChanging, ctxLog, logging,
+    getMyTime, formatMyTime, startSecond, currMilli,
+    answer, bestMove, infos,
+    informGui, informGuiCM, informGuiDepth, informGuiString
+) where
 
 import Control.Concurrent.Chan
 import Control.Concurrent
@@ -13,24 +24,8 @@ import Struct.Struct
 import Struct.Status
 import Struct.Config
 
-data InfoToGui = Info {
-                    infoDepth :: Int,
-                    -- infoSelDepth :: Int,
-                    infoTime :: Int,
-                    infoNodes :: Int64,
-                    infoPv :: [Move],
-                    infoScore :: Int
-                }
-                | InfoB {
-                    infoPv :: [Move],
-                    infoScore :: Int
-                }
-                | InfoD { infoDepth :: Int }
-                | InfoCM {
-                    infoMove :: Move,
-                    infoCurMove :: Int
-                }
-                | InfoS { infoString :: String }
+mateScore :: Int
+mateScore = 20000
 
 data LogLevel = DebugSearch | DebugUci | LogInfo | LogWarning | LogError | LogNever
     deriving (Eq, Ord)
@@ -49,7 +44,6 @@ levToPrf LogNever    = "Never"
 data Context = Ctx {
         logger :: Chan String,          -- the logger channel
         writer :: Chan String,          -- the writer channel
-        inform :: Chan InfoToGui,       -- the gui informer channel
         strttm :: UTCTime,              -- the program start time
         loglev :: LogLevel,             -- loglevel, only higher messages will be logged
         evpid  :: String,		-- identifier for the eval parameter config
@@ -96,7 +90,7 @@ data Changing = Chg {
         compThread :: Maybe ThreadId,   -- the search thread id
         crtStatus  :: MyState,          -- current state
         realPly    :: Maybe Int,	-- real ply so far (if defined)
-        forGui     :: Maybe InfoToGui,  -- info for gui
+        forGui     :: Maybe [Move],     -- info for gui: best path so far (if any)
         srchStrtMs :: Int,              -- search start time (milliseconds)
         myColor    :: Color,            -- our play color
         totBmCh    :: Int,		-- all BM changes in this search
@@ -149,35 +143,112 @@ currMilli ref = do
 -- A few functions to communicate with the GUI
 -- Communicate the best path so far
 informGui :: Int -> Int -> Int64 -> [Move] -> CtxIO ()
-informGui sc tief nds path = do
+informGui sc depth nds path = do
     ctx <- ask
     chg <- readChanging
     currt <- lift $ currMilli $ strttm ctx
-    let gi = Info {
-                infoDepth = tief,
-                infoTime = currt - srchStrtMs chg,
-                infoNodes = nds,
-                infoPv = path,
-                infoScore = sc
-             }
-    liftIO $ writeChan (inform ctx) gi
+    let infoTime = currt - srchStrtMs chg
+    answer $ formInfo sc depth infoTime nds path
 
 -- Communicate the current move
 informGuiCM :: Move -> Int -> CtxIO ()
-informGuiCM m cm = do
-    ctx <- ask
-    let gi = InfoCM { infoMove = m, infoCurMove = cm }
-    liftIO $ writeChan (inform ctx) gi
+informGuiCM m = answer . formInfoCM m
 
 -- Communicate the current depth
 informGuiDepth :: Int -> CtxIO ()
-informGuiDepth tief = do
-    ctx <- ask
-    let gi = InfoD { infoDepth = tief }
-    liftIO $ writeChan (inform ctx) gi
+informGuiDepth = answer . formInfoDepth
 
 informGuiString :: String -> CtxIO ()
-informGuiString s = do
+informGuiString = answer . infos
+
+-- Helper: Answers the GUI with a string
+answer :: String -> CtxIO ()
+answer s = do
     ctx <- ask
-    let gi = InfoS { infoString = s }
-    liftIO $ writeChan (inform ctx) gi
+    liftIO $ writeChan (writer ctx) s
+
+-- Functions to format the UCI answers to GUI
+bestMove :: Move -> Maybe Move -> String
+bestMove m mp = s
+    where s = "bestmove " ++ toString m ++ sp
+          sp = maybe "" (\v -> " ponder " ++ toString v) mp
+
+-- Info answers:
+-- sel.depth nicht implementiert
+formInfo :: Int -> Int -> Int -> Int64 -> [Move] -> String
+formInfo sc depth time nodes path = "info"
+    ++ formScore esc
+    ++ " depth " ++ show depth
+    -- ++ " seldepth " ++ show idp
+    ++ " time " ++ show time
+    ++ " nodes " ++ show nodes
+    ++ nps'
+    ++ " pv" ++ concatMap (\m -> ' ' : toString m) path
+    where nps' = case time of
+                     0 -> ""
+                     x -> " nps " ++ show (nodes `div` fromIntegral x * 1000)
+          esc = scoreToExtern sc (length path)
+
+data ExternScore = Score Int | Mate Int
+
+-- The internal score is weird for found mates (always mate)
+-- Turn it to nicer score by considering path lenght to mate
+scoreToExtern :: Int -> Int -> ExternScore
+scoreToExtern sc le
+    | sc ==  mateScore = Mate $ (le + 1) `div` 2
+    | sc == -mateScore = Mate $ negate $ le `div` 2
+    | otherwise        = Score sc
+
+-- formInfoB :: InfoToGui -> String
+-- formInfoB itg = "info"
+--     -- ++ " score cp " ++ show isc
+--     ++ formScore isc
+--     ++ " pv" ++ concatMap (\m -> ' ' : toString m) (infoPv itg)
+--     where isc = infoScore itg
+
+formScore :: ExternScore -> String
+formScore (Score s) = " score cp " ++ show s
+formScore (Mate n)  = " score mate " ++ show n
+
+-- sel.depth nicht implementiert
+-- formInfo2 :: InfoToGui -> String
+-- formInfo2 itg = "info"
+--     ++ " depth " ++ show (infoDepth itg)
+--     ++ " time " ++ show (infoTime itg)
+--     ++ " nodes " ++ show (infoNodes itg)
+--     ++ nps'
+--     -- ++ " pv" ++ concatMap (\m -> ' ' : toString m) (infoPv itg)
+--     where nps' = case infoTime itg of
+--                      0 -> ""
+--                      x -> " nps " ++ show (infoNodes itg * 1000 `div` x)
+
+-- formInfoNps :: InfoToGui -> Maybe String
+-- formInfoNps itg
+--     = case infoTime itg of
+--           0 -> Nothing
+--           x -> Just $ "info nps " ++ show (infoNodes itg `div` x * 1000)
+
+formInfoDepth :: Int -> String
+formInfoDepth depth
+    = "info depth " ++ show depth
+      --  ++ " seldepth " ++ show (infoDepth itg)
+
+formInfoCM :: Move -> Int -> String
+formInfoCM mv n
+    = "info currmove " ++ toString mv ++ " currmovenumber " ++ show n
+
+-- depth :: Int -> Int -> String
+-- depth d _ = "info depth " ++ show d
+
+-- inodes :: Int -> String
+-- inodes n = "info nodes " ++ show n
+
+-- pv :: Int -> [Move] -> String
+-- pv t mvs = "info time " ++ show t ++ " pv"
+--     ++ concatMap (\m -> ' ' : toString m) mvs
+
+-- nps :: Int -> String
+-- nps n = "info nps " ++ show n
+
+infos :: String -> String
+infos s = "info string " ++ s

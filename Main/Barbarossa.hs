@@ -39,7 +39,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.6.0"
-progVerSuff = "i2003"
+progVerSuff = "cuci"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -98,7 +98,6 @@ initContext opts = do
     let llev = optLogging opts
     lchan <- newChan
     wchan  <- newChan
-    ichan <- newChan
     ha <- newCache 1	-- it will take the minimum number of entries
     hi <- newHist
     let paramList
@@ -119,7 +118,6 @@ initContext opts = do
     let context = Ctx {
             logger = lchan,
             writer = wchan,
-            inform = ichan,
             strttm = clktm,
             change = ctxVar,
             loglev = llev,
@@ -145,7 +143,6 @@ interMachine = do
     let logFileName = progLogName ++ "-" ++ show (startSecond ctx) ++ ".log"
     startLogger logFileName
     startWriter True
-    startInformer
     beforeReadLoop
     ctxCatch theReader
         $ \e -> ctxLog LogError $ "Reader error: " ++ show e
@@ -158,7 +155,6 @@ analysingMachine fi = do
     let logFileName = progLogName ++ "-" ++ show (startSecond ctx) ++ ".log"
     startLogger logFileName
     startWriter False
-    startInformer
     beforeReadLoop
     fileReader fi
     -- whatever to do when ending:
@@ -209,28 +205,6 @@ theWriter inter wchan lchan mustlog refs = forever $ do
         hFlush stdout
     when mustlog $ logging lchan refs "Output" s
 
--- The informer is getting structured data
--- and formats it to a string which is sent to the writer
--- It ignores messages which come while we are not searching
-startInformer :: CtxIO ()
-startInformer = do
-    ctx <- ask
-    void $ newThread (theInformer (inform ctx))
-    return ()
-
-theInformer :: Chan InfoToGui -> CtxIO ()
-theInformer ichan = forever $ do
-    s <- liftIO $ readChan ichan
-    chg <- readChanging
-    when (working chg) $ toGui s
-
-toGui :: InfoToGui -> CtxIO ()
-toGui s = case s of
-            InfoS s'   -> answer $ infos s'
-            InfoD _    -> answer $ formInfoDepth s
-            InfoCM _ _ -> answer $ formInfoCM s
-            _          -> answer $ formInfo s
-
 -- The reader is executed by the main thread
 -- It reads commands from the GUI and interprets them
 theReader :: CtxIO ()
@@ -250,22 +224,23 @@ theReader = do
 interpret :: UCIMess -> CtxIO Bool
 interpret uci =
     case uci of
-        Quit       -> do doQuit
-                         let ms = 500   -- sleep 0.5 second
-                         liftIO $ threadDelay $ ms * 1000
-                         return True
-        Uci        -> goOn doUci
-        IsReady    -> goOn doIsReady
-        UciNewGame -> goOn doUciNewGame
-        Position p mvs -> goOn (doPosition p mvs)
-        Go cmds    -> goOn (doGo cmds)
-        Stop       -> goOn doStop
-        Ponderhit  -> goOn doPonderhit
-        SetOption o -> goOn (doSetOption o)
-        _          -> goOn ignore
+        Quit           -> doQuit
+        Uci            -> goOn doUci
+        IsReady        -> goOn doIsReady
+        UciNewGame     -> goOn doUciNewGame
+        Position p mvs -> goOn $ doPosition p mvs
+        Go cmds        -> goOn $ doGo cmds
+        Stop           -> goOn doStop
+        Ponderhit      -> goOn doPonderhit
+        SetOption o    -> goOn $ doSetOption o
+        _              -> goOn ignore
 
-doQuit :: CtxIO ()
-doQuit = ctxLog LogInfo "Normal exit"
+doQuit :: CtxIO Bool
+doQuit = do
+    ctxLog LogInfo "Normal exit"
+    let ms = 500   -- sleep 0.5 second to let the channels time to process
+    liftIO $ threadDelay $ ms * 1000
+    return True
 
 goOn :: CtxIO () -> CtxIO Bool
 goOn action = action >> return False
@@ -484,8 +459,8 @@ startSearchThread tim tpm mtg dpt rept =
             let mes = "searchTheTree terminated by exception: " ++ show e
             answer $ infos mes
             case forGui chg of
-                Just ifg -> giveBestMove $ infoPv ifg
-                Nothing  -> return ()
+                Just ms -> giveBestMove ms
+                Nothing -> return ()
             ctxLog LogError mes
             lift $ collectError $ SomeException (SearchException mes)
 
@@ -512,8 +487,8 @@ searchTheTree draft mdraft timx1 timx tim tpm mtg rept lsc lpv rmvs = do
              | otherwise = lastChDr chg
     when (ch > 0) $
         ctxLog LogInfo $ "Changes in draft " ++ show draft ++ ": " ++ show ch ++ " / " ++ show totch
-    modifyChanging $ \c -> c { crtStatus = stfin, totBmCh = totch, lastChDr = ldCh,
-                               forGui = Just $ InfoB { infoPv = path, infoScore = sc }}
+    modifyChanging $
+        \c -> c { crtStatus = stfin, totBmCh = totch, lastChDr = ldCh, forGui = Just path }
     currms <- lift $ currMilli (strttm ctx)
     let (ms, mx) = compTime tim tpm mtg sc rept
         exte = maybe False id $ do
@@ -680,21 +655,14 @@ doStop = do
     modifyChanging $ \c -> c { working = False, compThread = Nothing }
     case compThread chg of
         Just tid -> do
-            -- when extern $ liftIO $ threadDelay 100000  -- warte 0.1 Sec.
             liftIO $ killThread tid
             case forGui chg of
-                Just ifg -> giveBestMove $ infoPv ifg
+                Just ms -> giveBestMove ms
                 Nothing  -> return ()
         _ -> return ()
 
 doPonderhit :: CtxIO ()
 doPonderhit = notImplemented "doPonderhit"
-
--- Helper: Answers the GUI with a string
-answer :: String -> CtxIO ()
-answer s = do
-    ctx <- ask
-    liftIO $ writeChan (writer ctx) s
 
 -- Name of the log file
 progLogName :: String
@@ -710,6 +678,7 @@ idAuthor = "id author " ++ progAuthor
 uciOk = "uciok"
 readyOk = "readyok"
 
+{-
 bestMove :: Move -> Maybe Move -> String
 bestMove m mp = s
     where s = "bestmove " ++ toString m ++ sp
@@ -796,6 +765,7 @@ formInfoCM itg
 
 infos :: String -> String
 infos s = "info string " ++ s
+-}
 
 -- These are the supported Uci options
 data UciGUIOptionType = UGOTRange String String
