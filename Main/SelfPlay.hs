@@ -157,8 +157,7 @@ initContext opts = do
             strttm = clktm,
             change = ctxVar,
             loglev = if debug then DebugSearch else LogNever,
-            evpid  = parc,
-            tipars = npSetParm (colParams paramList :: CollectFor TimeParams)
+            evpid  = parc
          }
     return context
 

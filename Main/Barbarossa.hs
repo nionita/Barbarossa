@@ -121,8 +121,7 @@ initContext opts = do
             strttm = clktm,
             change = ctxVar,
             loglev = llev,
-            evpid  = parc,
-            tipars = npSetParm (colParams paramList :: CollectFor TimeParams)
+            evpid  = parc
          }
     return context
 
@@ -341,7 +340,7 @@ doGo cmds = do
         else if Ponder `elem` cmds
             then ctxLog DebugUci "Just ponder: ignored"
             else do
-                let (tim, tpm, mtg) = getTimeParams cmds $ myColor chg
+                let (tim, tpm, mtg) = getUCITime cmds $ myColor chg
                     rept = countRepetitions $ crtStatus chg
                     md   = 20	-- max search depth
                     dpt  = fromMaybe md (findDepth cmds)
@@ -382,8 +381,8 @@ aggregateError agr refsc sc
     = agr { agrCumErr = agrCumErr agr + fromIntegral (dif * dif), agrFenOk = agrFenOk agr + 1 }
     where dif = sc - refsc
 
-getTimeParams :: [GoCmds] -> Color -> (Int, Int, Int)
-getTimeParams cs c
+getUCITime :: [GoCmds] -> Color -> (Int, Int, Int)
+getUCITime cs c
     | tpm == 0 && tim == 0 = (0, 0, 0)
     | otherwise            = (tim, tpm, mtg)
     where tpm = fromMaybe 0 $ findTInc c cs
@@ -634,9 +633,6 @@ giveBestMove mvs = do
 
 beforeReadLoop :: CtxIO ()
 beforeReadLoop = do
-    ctxLog LogInfo "Time parameters:"
-    tp <- asks tipars
-    ctxLog LogInfo $ show tp
     chg <- readChanging
     let evst = evalst $ crtStatus chg
     ctxLog LogInfo "Eval parameters and weights:"
@@ -677,95 +673,6 @@ idName = "id name " ++ progName ++ ' ' : progVersion
 idAuthor = "id author " ++ progAuthor
 uciOk = "uciok"
 readyOk = "readyok"
-
-{-
-bestMove :: Move -> Maybe Move -> String
-bestMove m mp = s
-    where s = "bestmove " ++ toString m ++ sp
-          sp = maybe "" (\v -> " ponder " ++ toString v) mp
-
--- Info answers:
--- sel.depth nicht implementiert
-formInfo :: InfoToGui -> String
-formInfo itg = "info"
-    ++ formScore esc
-    ++ " depth " ++ show (infoDepth itg)
-    -- ++ " seldepth " ++ show idp
-    ++ " time " ++ show (infoTime itg)
-    ++ " nodes " ++ show (infoNodes itg)
-    ++ nps'
-    ++ " pv" ++ concatMap (\m -> ' ' : toString m) pv
-    where nps' = case infoTime itg of
-                     0 -> ""
-                     x -> " nps " ++ show (infoNodes itg `div` fromIntegral x * 1000)
-          esc = scoreToExtern (infoScore itg) (length pv)
-          pv  = infoPv itg
-
-data ExternScore = Score Int | Mate Int
-
--- The internal score is weird for found mates (always mate)
--- Turn it to nicer score by considering path lenght to mate
-scoreToExtern :: Int -> Int -> ExternScore
-scoreToExtern sc le
-    | sc ==  mateScore = Mate $ (le + 1) `div` 2
-    | sc == -mateScore = Mate $ negate $ le `div` 2
-    | otherwise        = Score sc
-
--- formInfoB :: InfoToGui -> String
--- formInfoB itg = "info"
---     -- ++ " score cp " ++ show isc
---     ++ formScore isc
---     ++ " pv" ++ concatMap (\m -> ' ' : toString m) (infoPv itg)
---     where isc = infoScore itg
-
-formScore :: ExternScore -> String
-formScore (Score s) = " score cp " ++ show s
-formScore (Mate n)  = " score mate " ++ show n
-
--- sel.depth nicht implementiert
--- formInfo2 :: InfoToGui -> String
--- formInfo2 itg = "info"
---     ++ " depth " ++ show (infoDepth itg)
---     ++ " time " ++ show (infoTime itg)
---     ++ " nodes " ++ show (infoNodes itg)
---     ++ nps'
---     -- ++ " pv" ++ concatMap (\m -> ' ' : toString m) (infoPv itg)
---     where nps' = case infoTime itg of
---                      0 -> ""
---                      x -> " nps " ++ show (infoNodes itg * 1000 `div` x)
-
--- formInfoNps :: InfoToGui -> Maybe String
--- formInfoNps itg
---     = case infoTime itg of
---           0 -> Nothing
---           x -> Just $ "info nps " ++ show (infoNodes itg `div` x * 1000)
-
-formInfoDepth :: InfoToGui -> String
-formInfoDepth itg
-    = "info depth " ++ show (infoDepth itg)
-      --  ++ " seldepth " ++ show (infoDepth itg)
-
-formInfoCM :: InfoToGui -> String
-formInfoCM itg
-    = "info currmove " ++ toString (infoMove itg)
-        ++ " currmovenumber " ++ show (infoCurMove itg)
-
--- depth :: Int -> Int -> String
--- depth d _ = "info depth " ++ show d
-
--- inodes :: Int -> String
--- inodes n = "info nodes " ++ show n
-
--- pv :: Int -> [Move] -> String
--- pv t mvs = "info time " ++ show t ++ " pv"
---     ++ concatMap (\m -> ' ' : toString m) mvs
-
--- nps :: Int -> String
--- nps n = "info nps " ++ show n
-
-infos :: String -> String
-infos s = "info string " ++ s
--}
 
 -- These are the supported Uci options
 data UciGUIOptionType = UGOTRange String String
