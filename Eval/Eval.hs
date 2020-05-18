@@ -636,10 +636,11 @@ frontAttacksBlack !b = fa
 -- - if he has only one attack, we are somehow restricted to defend or move that piece
 -- In 2 we have a more complicated analysis, which maybe is not worth to do
 enPrise :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-enPrise p !ew mide = mad (mad (mad (mad mide (ewEnpHanging ew) ha)
-                                  (ewEnpEnPrise ew) ep)
-                             (ewEnpAttacked ew) at)
-                        (ewWepAttacked ew) wp
+enPrise p !ew mide = mad (mad (mad (mad (mad mide (ewEnpHanging ew) ha)
+                                        (ewEnpEnPrise ew) ep)
+                                   (ewEnpAttacked ew) at)
+                              (ewWepTotal ew) wp)
+                         (ewWepAttacked ew) wa
     where !meP = me p .&. pawns   p	-- my pieces
           !meM = me p .&. (knights p .|. bishops p)
           !meR = me p .&. rooks   p
@@ -661,9 +662,13 @@ enPrise p !ew mide = mad (mad (mad (mad mide (ewEnpHanging ew) ha)
           !ha = popCount haP + 3 * popCount haM + 5 * popCount haR + 9 * popCount haQ
           !ep =                3 * popCount epM + 5 * popCount epR + 9 * popCount epQ
           !at = popCount atP + 3 * popCount atM + 5 * popCount atR + 9 * popCount atQ
-          !wp1 = popCount $ (meP `less` myPAttacs p) .&. yoAttacs p	-- my weak attacked pawns
-          !wp2 = popCount $ (yo p .&. pawns p `less` yoPAttacs p) .&. myAttacs p	-- your weak attacked pawns
-          !wp = wp2 - wp1
+          -- Weak pawns: total & attacked
+          !mwp = meP `less` myPAttacs p	-- my weak pawns
+          !ywp = yo p .&. pawns p `less` yoPAttacs p	-- your weak pawns
+          !mwa = mwp .&. yoAttacs p	-- my weak attacked pawns
+          !ywa = ywp .&. myAttacs p	-- your weak attacked pawns
+          !wp = popCount ywp - popCount mwp
+          !wa = popCount ywa - popCount mwa
 
 ------ Last Line ------
 
