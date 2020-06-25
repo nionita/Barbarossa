@@ -838,8 +838,9 @@ updateFutil sd = do
     let !so = futme s
     put s { futme = expFutSlide so sd }
 
+-- We double the current static difference to have a futility reserve
 expFutSlide :: Int -> Int -> Int
-expFutSlide o n = (o * futDecayW + max 0 n) `unsafeShiftR` futDecayB
+expFutSlide o n = (o * futDecayW + 2 * max 0 n) `unsafeShiftR` futDecayB
 
 xchangeFutil :: Search ()
 xchangeFutil
