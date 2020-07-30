@@ -4,7 +4,8 @@ module Struct.Struct (
          Piece(..), Color(..), TabCont(..), MyPos(..), LazyBits(..),
          other, moving, epMask, fyMask, fyIncr, fyZero, mvMask, caRiMa,
          caRKiw, caRQuw, caRMKw, caRMQw, caRAKw, caRAQw, caRKib, caRQub, caRMKb, caRMQb, caRAKb, caRAQb,
-         tabla, emptyPos, isReversible, remis50Moves, set50Moves, reset50Moves, addHalfMove,
+         tabla, emptyPos, isReversible, isNewTTGeneration,
+         remis50Moves, set50Moves, reset50Moves, addHalfMove,
          fromSquare, toSquare, isSlide, isDiag, isKkrq,
          moveIsNormal, moveIsCastle, moveIsPromo, moveIsEnPas, moveColor, movePiece,
          movePromoPiece, moveEnPasDel, makeEnPas, moveAddColor, moveAddPiece,
@@ -215,6 +216,10 @@ emptyPos = MyPos {
 {-# INLINE isReversible #-}
 isReversible :: MyPos -> Bool
 isReversible p = fyMask .&. epcas p /= 0
+
+{-# INLINE isNewTTGeneration #-}
+isNewTTGeneration :: MyPos -> Bool
+isNewTTGeneration p = fyMask .&. epcas p <= fyIncr
 
 {-# INLINE remis50Moves #-}
 remis50Moves :: MyPos -> Bool

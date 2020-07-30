@@ -72,7 +72,11 @@ posToState p c h e = MyState {
           p'' = p { staticScore = stsc }
 
 posNewSearch :: MyState -> MyState
-posNewSearch p = p { hash = newGener (hash p), rootmn = 1 }
+posNewSearch s = s { hash = newHash, rootmn = 1 }
+    where newHash | null (stack s)      = hash s
+                  | isNewTTGeneration p = newGener (hash s)
+                  | otherwise           = hash s
+          p = head $ stack s
 
 draftStats :: SStats -> Game ()
 draftStats dst = do
