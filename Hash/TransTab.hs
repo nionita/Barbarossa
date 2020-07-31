@@ -225,21 +225,23 @@ lastaAmount :: Int
 lastaAmount = 3 * pCacheEnSize	-- for computation of the last address in the cell
 
 -- Here we implement the logic which decides which entry is weaker
--- the low word is the score (when the move is masked away):
--- generation (when > curr gen: whole score is 0)
+-- The low word of the cell is the score (when the move is masked away):
+-- generation (when != curr gen: terminate search loop)
 -- type (2 - exact - only few entries, PV, 1 - lower bound: have good moves, 0 - upper bound)
 -- depth
 -- nodes
+-- The termination could allow TT to be populated with more than one entry for same position
+-- We speculate that this is not hapenning a lot
 scoreReplaceLow :: Word64 -> Word64 -> Ptr Word64 -> Ptr Word64 -> Word64
     -> (Ptr Word64 -> IO ())		-- terminating function
     -> (Ptr Word64 -> Word64 -> IO ())	-- continue function
     -> IO ()
 scoreReplaceLow gen lowc crt rep sco term cont
-    | generation > gen = term crt
-    | lowm < sco = cont crt lowm
+    | cell_gen /= gen = term crt
+    | cell_sco <  sco = cont crt cell_sco
     | otherwise  = cont rep sco
-    where generation = lowc .&. generMsk
-          lowm = lowc .&. 0xFFFF	-- mask the move
+    where cell_gen = lowc .&. generMsk	-- cell generation
+          cell_sco = lowc .&. 0xFFFF	-- mask the move to get the cell score
 
 quintToCacheEn :: Cache -> ZKey -> Int -> Int -> Int -> Move -> Int64 -> PCacheEn
 quintToCacheEn !tt !zkey !depth !tp !score !(Move move) !nodes = pCE
