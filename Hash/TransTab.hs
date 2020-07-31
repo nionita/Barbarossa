@@ -237,7 +237,7 @@ scoreReplaceLow gen lowc crt rep sco term cont
     | cell_sco < sco = cont crt cell_sco
     | otherwise  = cont rep sco
     where cell_gen = lowc .&. generMsk
-          cell_sco = lowc .&. 0xFFFFFFFFFFFF0000	-- mask the move
+          cell_sco = lowc .&. 0xFFC0000000000000	-- mask the depth, nodes & move
 
 quintToCacheEn :: Cache -> ZKey -> Int -> Int -> Int -> Move -> Int64 -> PCacheEn
 quintToCacheEn !tt !zkey !depth !tp !score !(Move move) !nodes = pCE
