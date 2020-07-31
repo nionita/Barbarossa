@@ -216,7 +216,6 @@ writeCache !tt !zkey !depth !tp !score !move !nodes = do
                             else do
                                 lowc <- peek (crt0 `plusPtr` 8)	-- take the low word
                                 scoreReplaceLow gen lowc crt0 rep0 sco0
-                                    (\r -> poke (castPtr r) pCE)
                                     (\r s -> if crt0 >= lasta
                                                 then poke (castPtr r) pCE
                                                 else go (crt0 `plusPtr` pCacheEnSize) r s)
@@ -230,16 +229,17 @@ lastaAmount = 3 * pCacheEnSize	-- for computation of the last address in the cel
 -- type (2 - exact - only few entries, PV, 1 - lower bound: have good moves, 0 - upper bound)
 -- depth
 -- nodes
+-- There is no premature termination of the loop, except when we find the exact key,
+-- but this case is handled in the local go function of writeCache
 scoreReplaceLow :: Word64 -> Word64 -> Ptr Word64 -> Ptr Word64 -> Word64
-    -> (Ptr Word64 -> IO ())		-- terminating function
-    -> (Ptr Word64 -> Word64 -> IO ())	-- continue function
+    -> (Ptr Word64 -> Word64 -> IO ())	-- continuation function
     -> IO ()
-scoreReplaceLow gen lowc crt rep sco term cont
-    | generation > gen = term crt
-    | lowm < sco = cont crt lowm
+scoreReplaceLow gen lowc crt rep sco cont
+    | cell_gen /= gen = cont crt 0		-- replace: not same generation
+    | cell_sco <  sco = cont crt cell_sco	-- replace: worse score
     | otherwise  = cont rep sco
-    where generation = lowc .&. generMsk
-          lowm = lowc .&. 0xFFFF	-- mask the move
+    where cell_gen = lowc .&. generMsk
+          cell_sco = lowc .&. 0xFFFF	-- mask the move to get the cell score
 
 quintToCacheEn :: Cache -> ZKey -> Int -> Int -> Int -> Move -> Int64 -> PCacheEn
 quintToCacheEn !tt !zkey !depth !tp !score !(Move move) !nodes = pCE
