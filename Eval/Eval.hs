@@ -655,9 +655,8 @@ attackedPieces p !ew mide = mad (mad (mad (mad (mad (mad mide (ewAtpPawns ew) pd
 
 attackedByScore :: MyPos -> BBoard -> BBoard -> Int
 attackedByScore p victim aggAttacks
-    | perType /= 0 = sum $ map (\s -> s * s) $ zipWith (*) [1, 3, 3, 5, 9]
-                         $ map (popCount . ((.&.) perType))
-                               [pawns p, knights p, bishops p, rooks p, queens p]
+    | perType /= 0 = sum $ zipWith (*) [3, 3, 5, 9]
+                         $ map (popCount . ((.&.) perType)) [knights p, bishops p, rooks p, queens p]
     | otherwise    = 0
     where !perType = victim .&. aggAttacks
 
