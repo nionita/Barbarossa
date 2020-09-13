@@ -169,7 +169,7 @@ instance CollectParams EvalWeights where
     type CollectFor EvalWeights = EvalWeights
     npColInit = EvalWeights {
           ewMaterialDiff    = tme 8 8,
-          ewKingSafe        = tme 1 0,
+          ewKingSafe        = tme 67 0,	-- because linear: change the scale
           ewKingOpen        = tme 2 4,		-- old value
           ewKingPlaceCent   = tme 8 1,		-- old value
           ewKingPlacePwns   = tme 0 4,		-- old value

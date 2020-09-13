@@ -239,29 +239,14 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
           !qq = qual myq 7
           !qk = qual myk 3
           !(Flc c q) = fadd qp $ fadd qn $ fadd qb $ fadd qr $ fadd qq qk
-          !mattacs
+          mattacs
               | c == 0 = 0
-              | otherwise = fromIntegral $ attCoef `unsafeAt` ixt
-              -- where !freey = popCount $ yok `less` (mya .|. yop)
-              --       !conce = popCount $ yok .&. mya
-              -- This is equivalent to:
-              where !freco = popCount $ yok `less` (yop `less` mya)
+              | otherwise = ixt
+              -- When opponent king cannot move: bonus
+              where !bonus | yok `less` (yop .|. mya) /= 0 = 0
+                           | otherwise                     = 1
                     !ixm = c * q `unsafeShiftR` 2
-                    !ixt = ixm + c + ksShift - freco
-                    ksShift = 13
-
--- We take the maximum of 272 because:
--- Quali max: 8 * (1 + 3 + 3 + 5 + 10 + 3) = 200
--- Flag max: 6
--- 6 * 200 / 4 + 6 + 13 = 319
-attCoef :: UArray Int Int32
-attCoef = listArray (0, 319) $ take zeros (repeat 0) ++ [ f x | x <- [0..63] ] ++ repeat (f 63)
-    where -- Without the scaling, f will take max value of 4000 for 63
-          f :: Int -> Int32
-          f x = let y = fromIntegral x :: Double
-                in round $ maxks * (2.92968750 - 0.03051758*y)*y*y / 4000
-          zeros = 8
-          maxks = 4200
+                    !ixt = ixm + c * (bonus + 1)
 
 kingSquare :: BBoard -> BBoard -> Square
 kingSquare kingsb colorp = firstOne $ kingsb .&. colorp
