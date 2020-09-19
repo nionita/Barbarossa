@@ -4,7 +4,7 @@
 module Moves.Base (
     posToState, getPos, posNewSearch,
     doRealMove, doMove, doQSMove, doNullMove, undoMove,
-    genMoves, genTactMoves, genEscapeMoves, canPruneMove,
+    genMoves, genTactMoves, genEscapeMoves, moveIsQuiet,
     tacticalPos, zugZwang, isMoveLegal, isKillCand, isTKillCand,
     betaCut, ttRead, ttStore, curNodes, isTimeout, informCtx,
     mateScore, scoreDiff, qsDelta,
@@ -17,7 +17,7 @@ module Moves.Base (
 
 import Data.Bits
 import Data.Int
-import Data.List (nub)
+import Data.List (nub, partition)
 import Control.Monad.State
 import Control.Monad.Reader (ask)
 -- import Numeric
@@ -79,19 +79,33 @@ draftStats dst = do
     s <- get
     put s { mstats = addStats (mstats s) dst }
 
-genMoves :: Int -> Game ([Move], [Move])
-genMoves d = do
+-- When we generate the moves, we want to filter out the quiet moves when pruning is enabled
+-- But there are some complications:
+-- 1. We must detect if we have no quiets at all: important to detect if mated
+-- 2. When we prune, sometimes we want at least one move
+-- 3. For higher depths we want to have at least some moves: for 2: 1, for 3: 2
+genMoves :: Int -> Bool -> Bool -> Game ([Move], [Move], Bool)
+genMoves d prune one = do
     p <- getPos
     if inCheck p
-       then return (genMoveFCheck p, [])
+       then return (genMoveFCheck p, [], True)
        else do
             h <- gets hist
             let l0 = genMoveCast p
                 l1 = genMovePromo p
                 (l2w, l2l) = genMoveCaptWL p
-                l3 = histSortMoves d h $ genMoveNCapt p
+                nc = genMoveNCapt p
+                l3 = if prune
+                        then filterPruned p h d one nc
+                        else histSortMoves d h nc
             -- Loosing captures after non-captures
-            return (l1 ++ l2w, l0 ++ l3 ++ l2l)
+            return (l1 ++ l2w, l0 ++ l3 ++ l2l, null nc)
+
+filterPruned :: MyPos -> History -> Int -> Bool -> [Move] -> [Move]
+filterPruned p h d one nc = take n $ histSortMoves d h $ ok ++ pr
+    where (pr, ok) = partition (canPruneMove p) nc
+          n | one       = d
+            | otherwise = d - 1
 
 -- Generate only tactical moves, i.e. promotions & captures
 -- Needed only in QS, when we know we are not in check
@@ -388,15 +402,14 @@ captOrPromo p m
 noLMR :: MyPos -> Move -> Bool
 noLMR = movePassed
 
--- We will call this function before we do the move
--- This will spare a heavy operation for pruned moved
-{-# INLINE canPruneMove #-}
+-- We use this function to filter quiet moves before history sort
 canPruneMove :: MyPos -> Move -> Bool
-canPruneMove p m
-    | not (moveIsNormal m) = False
-    | moveIsCapture p m    = False
-    | movePassed p m       = False
-    | otherwise            = not $ moveChecks p m
+canPruneMove p m = not (movePassed p m || moveChecks p m)
+
+-- This will consider castle as not quiet!
+{-# INLINE moveIsQuiet #-}
+moveIsQuiet :: MyPos -> Move -> Bool
+moveIsQuiet p m = moveIsNormal m && (not $ moveIsCapture p m)
 
 -- Score difference obtained by last move, from POV of the moving part
 -- It considers the fact that static score is for the part which has to move

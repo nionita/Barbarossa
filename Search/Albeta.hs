@@ -63,7 +63,7 @@ varImp :: Double -> Double -> Int
 varImp lev w = round $ go 0 lev w
     where go :: Double -> Double -> Double -> Double
           go !lv !b !i | i <= b    = lv
-                       | otherwise = go (lv+1) (b*1.2) (i-b)
+                       | otherwise = go (lv+1) (b*1.1) (i-b)
 
 -- Parameters for futility pruning:
 maxFutilDepth :: Int
@@ -279,11 +279,11 @@ pvRootSearch :: Int -> Int -> Int -> Seq Move -> Alt Move -> Bool
              -> Search (Int, Seq Move, Alt Move, Int)
 pvRootSearch a b d lastpath rmvs aspir = do
     pos <- lift getPos
-    edges <- if null (unalt rmvs)	-- only when d==1, but we could have lastpath from the previous real move
-                then genAndSort nst0 { cpos = pos } Nothing a b d	-- no IID here as d==1
-                else case lastpath of
-                         Seq []    -> return rmvs	-- does this happen? - check to simplify!
-                         Seq (e:_) -> return $ Alt $ e : delete e (unalt rmvs)
+    (edges, _) <- if null (unalt rmvs)	-- only when d==1, but we could have lastpath from the prev real move
+                     then genAndSort nst0 { cpos = pos } Nothing False False a b d	-- no IID here as d==1
+                     else case lastpath of
+                              Seq []    -> return (rmvs, False)	-- does this happen? - check to simplify!
+                              Seq (e:_) -> return (Alt $ e : delete e (unalt rmvs), False)
     let !nsti = nst0 { cursc = pathFromScore a, cpos = pos }
     nstf <- pvLoop (pvInnerRoot b d) nsti edges
     abrt <- gets abort
@@ -322,32 +322,32 @@ pvInnerRoot :: Int 	-- current beta
             -> Move	-- move to search
             -> Search (Bool, NodeState)
 pvInnerRoot b d nst e = timeToAbort (True, nst) $ do
-         -- do the move
-         exd <- lift $ doMove e
-         if legalResult exd
-            then do
-                old <- get
-                when (draft (ronly old) >= depthForCM) $ lift $ informCM e $ movno nst
-                newNode d
-                modify $ \s -> s { absdp = absdp s + 1 }
-                s <- case exd of
-                         Exten exd' _ _ -> do
-                             when (canPruneMove (cpos nst) e) $ do
-                                 sdiff <- lift scoreDiff
-                                 updateFutil sdiff	-- e
-                             xchangeFutil
-                             s <- pvInnerRootExten b d exd' (deepNSt nst)
-                             xchangeFutil
-                             return s
-                         Final   -> return drawPath
-                         Illegal -> error "Cannot be illegal here"
-                -- undo the move if it was legal
-                lift undoMove
-                lift incrementRootMoveNumber
-                modify $ \s' -> s' { absdp = absdp old }
-                let s' = addToPath e s
-                checkFailOrPVRoot (stats old) b d e s' nst
-            else return (False, nst)
+    -- do the move
+    exd <- lift $ doMove e
+    if legalResult exd
+       then do
+           old <- get
+           when (draft (ronly old) >= depthForCM) $ lift $ informCM e $ movno nst
+           newNode d
+           modify $ \s -> s { absdp = absdp s + 1 }
+           s <- case exd of
+                    Exten exd' _ _ -> do
+                        when (moveIsQuiet (cpos nst) e) $ do
+                            sdiff <- lift scoreDiff
+                            updateFutil sdiff	-- e
+                        xchangeFutil
+                        s <- pvInnerRootExten b d exd' (deepNSt nst)
+                        xchangeFutil
+                        return s
+                    Final   -> return drawPath
+                    Illegal -> error "Cannot be illegal here"
+           -- undo the move if it was legal
+           lift undoMove
+           lift incrementRootMoveNumber
+           modify $ \s' -> s' { absdp = absdp old }
+           let s' = addToPath e s
+           checkFailOrPVRoot (stats old) b d e s' nst
+       else return (False, nst)
 
 pvInnerRootExten :: Int -> Int -> Int -> NodeState -> Search Path
 pvInnerRootExten b d !exd nst = do
@@ -466,16 +466,16 @@ pvSearch nst !a !b !d = do
            -- Use the found TT move as best move
            let mttmv = if hdeep > 0 then Just e else Nothing
                !nst'  = nst { cpos = pos }
-           edges <- genAndSort nst' mttmv a b d
-           if noMove edges
+           !prune <- isPruneFutil d a True (staticScore pos)
+           (edges, mated) <- genAndSort nst' mttmv prune True a b d
+           if mated
               then return $! failHardNoValidMove a b pos
               else do
                 nodes0 <- gets (sNodes . stats)
                 -- futility pruning:
-                !prune <- isPruneFutil d a True (staticScore pos)
                 -- Loop thru the moves
                 let !nsti = resetNSt (pathFromScore a) (Killer []) nst'
-                !nstf <- pvSLoop b d False prune nsti edges
+                !nstf <- pvSLoop b d False nsti edges
                 let s = cursc nstf
                 whenAbort s $
                     if movno nstf == 1
@@ -486,7 +486,7 @@ pvSearch nst !a !b !d = do
                            lift $ do
                                let !deltan = nodes1 - nodes0
                                    mvs = pathMoves s
-                                   mv | nullSeq mvs = head $ unalt edges	-- not null - on "else" of noMove
+                                   mv | nullSeq mvs = head $ unalt edges -- at least one valid move
                                       | otherwise   = head $ unseq mvs
                                ttStore de (rbmch nstf) (pathScore s) mv deltan
                            return s
@@ -519,19 +519,19 @@ pvZeroW !nst !b !d = do
                    -- Use the TT move as best move
                    let mttmv = if hdeep > 0 then Just e else Nothing
                        !nst' = nst { cpos = pos }
-                   edges <- genAndSort nst' mttmv bGrain b d
-                   if noMove edges
+                   -- futility pruning:
+                   !prune <- isPruneFutil d bGrain False (staticScore pos)
+                   (edges, mated) <- genAndSort nst' mttmv prune False bGrain b d
+                   if mated
                       then return $! failHardNoValidMove bGrain b pos
                       else do
                         !nodes0 <- gets (sNodes . stats)
-                        -- futility pruning:
-                        !prune <- isPruneFutil d bGrain False (staticScore pos)
                         -- Loop thru the moves
                         let kill1 = case nmhigh of
                                         NullMoveThreat s -> newTKiller pos d s
                                         _                -> Killer []
                             !nsti = resetNSt (pathFromScore bGrain) kill1 nst'
-                        !nstf <- pvSLoop b d True prune nsti edges
+                        !nstf <- pvSLoop b d True nsti edges
                         let s = cursc nstf
                         whenAbort s $
                             if movno nstf == 1
@@ -542,7 +542,7 @@ pvZeroW !nst !b !d = do
                                    lift $ do
                                        let !deltan = nodes1 - nodes0
                                            mvs = pathMoves s
-                                           mv | nullSeq mvs = head $ unalt edges	-- not null - on "else" of noMove
+                                           mv | nullSeq mvs = head $ unalt edges -- at least one valid move
                                               | otherwise   = head $ unseq mvs
                                        ttStore de (rbmch nstf) (pathScore s) mv deltan
                                    return s
@@ -595,11 +595,11 @@ nmDArr2 = listArray (0, 20) [ 0, 0, 0, 0, 0, 0, 1, 2, 3, 3, 4, 5, 6, 6, 7, 8, 8,
 isCut :: Int -> NodeState -> Bool
 isCut b nst = pathScore (cursc nst) >= b
 
-pvSLoop :: Int -> Int -> Bool -> Bool -> NodeState -> Alt Move -> Search NodeState
-pvSLoop b d zw p = go
+pvSLoop :: Int -> Int -> Bool -> NodeState -> Alt Move -> Search NodeState
+pvSLoop b d zw = go
     where go !s (Alt []) = return s
           go !s (Alt (e:es)) = do
-             !s' <- pvInnerLoop b d zw p s e
+             !s' <- pvInnerLoop b d zw s e
              if isCut b s' then return s'
                            else go s' $ Alt es
 
@@ -610,40 +610,35 @@ pvSLoop b d zw p = go
 pvInnerLoop :: Int 	-- current beta
             -> Int	-- current search depth
             -> Bool	-- zero window search?
-            -> Bool	-- prune?
             -> NodeState 	-- node status
             -> Move	-- move to search
             -> Search NodeState
-pvInnerLoop b d zw prune nst e = timeToAbort nst $ do
-    let !canPrune = canPruneMove (cpos nst) e
-    if prune && (zw || movno nst > 1) && canPrune
-       then return $! nst { movno = movno nst + 1 }
-       else do
-           old <- get
-           !exd <- lift $ doMove e	-- do the move
-           if legalResult exd
-              then do
-                  newNode d
-                  modify $ \s -> s { absdp = absdp s + 1 }
-                  (s, nst1) <- case exd of
-                      Exten exd' cap nolmr -> do
-                          when canPrune $ do
-                              sdiff <- lift scoreDiff
-                              updateFutil sdiff	-- e
-                          -- Resetting means we reduce less (only with distance to last capture)
-                          let nst1 | cap       = resetSpc nst
-                                   | otherwise = nst
-                          xchangeFutil
-                          s <- extenFunc b d (cap || nolmr) exd' (deepNSt nst1)
-                          xchangeFutil
-                          return (s, nst1)
-                      Final   -> return (drawPath, nst)
-                      Illegal -> error "Cannot be illegal here"
-                  lift undoMove	-- undo the move
-                  modify $ \s' -> s' { absdp = absdp old }
-                  let s' = addToPath e s
-                  checkFunc b d e s' nst1
-              else return nst
+pvInnerLoop b d zw nst e = timeToAbort nst $ do
+    old <- get
+    !exd <- lift $ doMove e	-- do the move
+    if legalResult exd
+       then do
+           newNode d
+           modify $ \s -> s { absdp = absdp s + 1 }
+           (s, nst1) <- case exd of
+               Exten exd' cap nolmr -> do
+                   when (moveIsQuiet (cpos nst) e) $ do
+                       sdiff <- lift scoreDiff
+                       updateFutil sdiff	-- e
+                   -- Resetting means we reduce less (only with distance to last capture)
+                   let nst1 | cap       = resetSpc nst
+                            | otherwise = nst
+                   xchangeFutil
+                   s <- extenFunc b d (cap || nolmr) exd' (deepNSt nst1)
+                   xchangeFutil
+                   return (s, nst1)
+               Final   -> return (drawPath, nst)
+               Illegal -> error "Cannot be illegal here"
+           lift undoMove	-- undo the move
+           modify $ \s' -> s' { absdp = absdp old }
+           let s' = addToPath e s
+           checkFunc b d e s' nst1
+       else return nst
     where extenFunc | zw        = pvInnerLoopExtenZ
                     | otherwise = pvInnerLoopExten
           checkFunc | zw        = checkFailOrPVLoopZ
@@ -765,16 +760,16 @@ newTKiller pos d s
 
 -- We don't sort the moves here, they have to come sorted from genMoves
 -- But we consider the best move first (TT or IID) and the killers
-genAndSort :: NodeState -> Maybe Move -> Int -> Int -> Int -> Search (Alt Move)
-genAndSort !nst mttmv !a !b !d = do
-    path <- case mttmv of
-                Just mv -> return [mv]
-                Nothing -> bestMoveFromIID nst a b d	-- it will do nothing for AllNode
+genAndSort :: NodeState -> Maybe Move -> Bool -> Bool -> Int -> Int -> Int -> Search (Alt Move, Bool)
+genAndSort !nst mttmv prune one !a !b !d = do
+    mbm <- case mttmv of
+               Just mv -> return [mv]
+               Nothing -> bestMoveFromIID nst a b d	-- it will do nothing for AllNode
     lift $ do
         let kl = filter (isMoveLegal (cpos nst)) $ killerToList (killer nst)
-        esp <- genMoves d
-        let es = bestFirst path kl esp
-        return $ Alt es
+        (es1, es2, emp) <- genMoves d prune one
+        let es = bestFirst mbm kl es1 es2
+        return (Alt es, emp && null es)
 
 -- Late Move Reduction
 -- With a variable lmrlev the reduction should stay in a region
@@ -1064,8 +1059,8 @@ incReBe n = modStat $ \s -> s { sReBe = sReBe s + n }
 incReMi :: Search ()
 incReMi = modStat $ \s -> s { sReMi = sReMi s + 1 }
 
-bestFirst :: [Move] -> [Move] -> ([Move], [Move]) -> [Move]
-bestFirst path kl (es1, es2)
+bestFirst :: [Move] -> [Move] -> [Move] -> [Move] -> [Move]
+bestFirst path kl es1 es2
     | null path = es1 ++ kl ++ chainUniqFilters kl es2
     | otherwise = e : uniqFilter e es1 ++ kl ++ chainUniqFilters (e : kl) es2
     where (e:_)  = path
