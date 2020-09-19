@@ -8,12 +8,14 @@ module Eval.Eval (
     posEval
 ) where
 
+-- import Control.Exception (assert)
 import Data.Array.Base (unsafeAt)
 import Data.Bits
 import Data.List (minimumBy)
 import Data.Array.Unboxed
 import Data.Ord (comparing)
 import Data.Int
+import Data.Word
 
 import Struct.Struct
 import Struct.Status
@@ -169,19 +171,19 @@ scoreToMate f p mywin = msc
           !wsc = if mywin then sc else -sc
           !msc = mtr + wsc
 
+{--
 squareDistArr :: UArray Int Int32
 squareDistArr = array (0, 64*64-1) [(sqSqIdx s1 s2, squareDist s1 s2) | s1 <- [0..63], s2 <- [0..63]]
     where squareDist f t = max (abs (fr - tr)) (abs (fc - tc))
               where (fr, fc) = fromIntegral f `divMod` 8
                     (tr, tc) = fromIntegral t `divMod` 8
 
-squareDistance :: Square -> Square -> Int
-squareDistance !sq1 !sq2 = fromIntegral $ squareDistArr `unsafeAt` sqSqIdx sq1 sq2
+sqd :: Square -> Square -> Int
+sqd !sq1 !sq2 = fromIntegral $ squareDistArr `unsafeAt` sqSqIdx sq1 sq2
 
 sqSqIdx :: Square -> Square -> Int
 sqSqIdx !sq1 !sq2 = (sq1 `unsafeShiftL` 6) + sq2
 
-{--
 squareDistance :: Square -> Square -> Int
 squareDistance f t = max (abs (fr - tr)) (abs (fc - tc))
     where fr = f `unsafeShiftR` 3
@@ -189,6 +191,24 @@ squareDistance f t = max (abs (fr - tr)) (abs (fc - tc))
           fc = f .&. 7
           tc = t .&. 7
 --}
+
+squareDistance :: Square -> Square -> Int
+-- squareDistance f t = assert (m == sqd f t) m
+squareDistance f t = m
+    where fr = f `unsafeShiftR` 3
+          tr = t `unsafeShiftR` 3
+          fc = f .&. 7
+          tc = t .&. 7
+          m = max (absDiff fr tr) (absDiff fc tc)
+
+-- A specific calculation of the function abs (x - y) for 0 <= x, y <= 7
+-- This is used in the square distance calculation
+{-# INLINE absDiff #-}
+absDiff :: Square -> Square -> Int
+absDiff x y = fromIntegral $ b .&. 7
+    where a = c `unsafeShiftR` (x `unsafeShiftL` 2)
+          b = a `unsafeShiftR` ((7 - y) `unsafeShiftL` 2)
+          c = 0x765432101234567 :: Word64
 
 -- This center distance should be pre calculated
 centerDistance :: Int -> Int
