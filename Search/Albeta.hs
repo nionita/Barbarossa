@@ -44,26 +44,25 @@ maxKillers :: Int
 maxKillers = 3
 
 -- Parameters for late move reduction:
-lmrInitLv, lmrInitLim, lmrLevMin, lmrLevMax, lmrNoDepth :: Int
-lmrInitLv  = 8
-lmrInitLim = 8500
+lmrLevMin, lmrLevMax, lmrNoDepth :: Int
+lmrFactor :: Double
 lmrLevMin  = 0
 lmrLevMax  = 15
 lmrNoDepth = 1
+lmrFactor = 1.05
+-- lmrFactor == 1 is not good, too sharp
 
--- The late move reduction is variable and regulated by the number of re-searches
--- Lower levels (towards 0) means less reductions, higher - more
+-- The late move reduction depends on depth & move number
 lmrArr :: UArray (Int, Int) Int
 lmrArr = array ((lmrLevMin, 0), (lmrLevMax, 255))
                [ ((l, i), varImp (fromIntegral (1+lmrLevMax-l)) (fromIntegral i))
                     | l <- [lmrLevMin..lmrLevMax], i <- [0..255]]
 
--- Here b == 1 is not good, too sharp
 varImp :: Double -> Double -> Int
 varImp lev w = round $ go 0 lev w
     where go :: Double -> Double -> Double -> Double
           go !lv !b !i | i <= b    = lv
-                       | otherwise = go (lv+1) (b*1.2) (i-b)
+                       | otherwise = go (lv+1) (b * lmrFactor) (i-b)
 
 -- Parameters for futility pruning:
 maxFutilDepth :: Int
@@ -132,10 +131,7 @@ data PVState
           absdp   :: !Int,	-- absolute depth (root = 0)
           abort   :: !Bool,	-- search aborted (time)
           futme   :: !Int,	-- variable futility score - me
-          futyo   :: !Int,	-- variable futility score - you
-          lmrhi   :: !Int,	-- upper limit of nodes to raise the lmr level
-          lmrlv   :: !Int,	-- LMR level
-          lmrrs   :: !Int	-- counter for nodes/re-searches, to adapt the LMR level
+          futyo   :: !Int	-- variable futility score - you
       } deriving Show
 
 -- This is a state which reflects the status of alpha beta in a node while going through the edges
@@ -208,8 +204,7 @@ emptySeq = Seq []
 
 pvsInit :: PVState
 pvsInit = PVState { ronly = pvro00, stats = ssts0, absdp = 0, abort = False,
-                    futme = futIniVal, futyo = futIniVal,
-                    lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
+                    futme = futIniVal, futyo = futIniVal }
 nst0 :: NodeState
 nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore 0, rbmch = -1,
              movno = 1, spcno = 1, killer = Killer [], albe = False, cpos = initPos, pvsl = [] }
@@ -654,7 +649,6 @@ resetSpc nst = nst { spcno = movno nst }
 
 pvInnerLoopExten :: Int -> Int -> Bool -> Int -> NodeState -> Search Path
 pvInnerLoopExten b d spec !exd nst = do
-    old <- get
     let !inPv = crtnt nst == PVNode
         !d1   = d + exd - 1	-- this is the normal (unreduced) depth for next search
         a     = pathScore $ cursc nst
@@ -666,7 +660,7 @@ pvInnerLoopExten b d spec !exd nst = do
        else do
            -- Here we must be in a Cut node (will fail low)
            -- and we should have: crtnt = CutNode, nxtnt = AllNode
-           let !d' = reduceLmr (nearmate b) spec d1 (lmrlv old) (movno nst - spcno nst)
+           let !d' = reduceLmr (nearmate b) spec d1 (movno nst - spcno nst)
            !s1 <- zeroWithLMR d' d1 (-a) (a+scoreGrain) nst
            whenAbort s1 $
                if pathScore s1 <= a
@@ -679,19 +673,16 @@ pvInnerLoopExten b d spec !exd nst = do
 -- For zero window
 pvInnerLoopExtenZ :: Int -> Int -> Bool -> Int -> NodeState -> Search Path
 pvInnerLoopExtenZ b d spec !exd nst = do
-    old  <- get
     -- late move reduction
     let !d1 = d + exd - 1	-- this is the normal (unreduced) depth for next search
-        !d' = reduceLmr (nearmate b) spec d1 (lmrlv old) (movno nst - spcno nst)
+        !d' = reduceLmr (nearmate b) spec d1 (movno nst - spcno nst)
         !onemB = scoreGrain - b
     zeroWithLMR d' d1 onemB b nst
 
 zeroWithLMR :: Int -> Int -> Int -> Int -> NodeState -> Search Path
 zeroWithLMR !d' !d1 !onemB !b nst =
     if d' == d1
-       then do
-           moreLMR True 1	-- more LMR
-           pnextlev <$> pvZeroW nst onemB d'
+       then pnextlev <$> pvZeroW nst onemB d'
        else do
            incRedu
            nds0 <- gets $ sNodes . stats
@@ -700,19 +691,13 @@ zeroWithLMR !d' !d1 !onemB !b nst =
            let nodre = nds1 - nds0
            whenAbort sr $
                if pathScore sr < b
-                  then do
-                    moreLMR True 1	-- more LMR
-                    return sr		-- failed low (as expected)
+                  then return sr		-- failed low (as expected)
                   else do
                     -- was reduced and didn't fail low: re-search with full depth
                     incReSe nodre	-- so many nodes we wasted by reducing this time
-                    moreLMR False d'	-- less LMR
                     -- Now we expect to fail high, i.e. exchange the crt/nxt node type
                     let nst1 = nst { crtnt = nxtnt nst, nxtnt = crtnt nst }
-                    !sf <- pnextlev <$> pvZeroW nst1 onemB d1
-                    whenAbort sf $ do
-                        when (pathScore sf >= b) $ moreLMR False d1
-                        return sf
+                    pnextlev <$> pvZeroW nst1 onemB d1
 
 checkFailOrPVLoop :: Int -> Int -> Move -> Path -> NodeState -> Search NodeState
 checkFailOrPVLoop b d e s nst = whenAbort nst $ do
@@ -777,32 +762,12 @@ genAndSort !nst mttmv !a !b !d = do
         return $ Alt es
 
 -- Late Move Reduction
--- With a variable lmrlev the reduction should stay in a region
--- where the number of researches has an acceptable level
 {-# INLINE reduceLmr #-}
-reduceLmr :: Bool -> Bool -> Int -> Int -> Int -> Int
-reduceLmr nearmatea spec d lmrlev w
+reduceLmr :: Bool -> Bool -> Int -> Int -> Int
+reduceLmr nearmatea spec d w
     | spec || d <= lmrNoDepth || nearmatea = d
     | otherwise                            = max 1 $ d - lmrArr!(lmrlev, w)
-
--- Adjust the LMR related parameters in the state
-moreLMR :: Bool -> Int -> Search ()
-moreLMR more !d = do
-    s <- get
-    let !i  | more      = 1
-            | otherwise = - (1 `unsafeShiftL` d)
-        !i1 = lmrrs s + i
-    if i1 < 0
-       then if lmrlv s <= lmrLevMin
-               then put s { lmrhi = find (lmrhi s), lmrrs = 0 }
-               else put s { lmrlv = lmrlv s - 1, lmrrs = 0 }
-       else if i1 > lmrhi s
-               then if lmrlv s >= lmrLevMax
-                       then put s { lmrhi = fdir (lmrhi s), lmrrs = 0 }
-                       else put s { lmrlv = lmrlv s + 1, lmrrs = 0 }
-               else put s { lmrrs = i1 }
-    where fdir x = x `unsafeShiftL` 2
-          find x = max 1 $ x `unsafeShiftR` 1
+    where lmrlev = min lmrLevMax (lmrLevMin + d - lmrNoDepth - 1)
 
 -- This is a kind of monadic fold optimized for (beta) cut
 pvLoop :: Monad m => (s -> e -> m (Bool, s)) -> s -> Alt e -> m s
@@ -1007,8 +972,6 @@ reportStats = do
        logmes $ "Search statistics after draft " ++ show (draft $ ronly s) ++ ":"
        mapM_ logmes $ formatStats dst
        logmes $ "Variable futility params: me = " ++ show (futme s) ++ ", yo = " ++ show (futyo s)
-       logmes $ "Variable LMR: hi = " ++ show (lmrhi s)
-                    ++ ", lv = " ++ show (lmrlv s) ++ ", qu = " ++ show (lmrrs s)
 
 -- Functions to keep statistics
 modStat :: (SStats -> SStats) -> Search ()
