@@ -79,8 +79,10 @@ normalEval p !sti = sc
           !midef = backDiff p ew midee
           !mideg = advPawns p ew midef
           !mideh = passPawns gph ep p ew mideg
-          !sc = ((mid mideh + epMovingMid ep) * gph + (end mideh + epMovingEnd ep) * (256 - gph))
-                   `unsafeShiftR` (shift2Cp + 8)
+          !scr = (mid mideh + epMovingMid ep) * gph + (end mideh + epMovingEnd ep) * (256 - gph)
+          (fact50, red50) = to50Moves p
+          !scc = (scr * fact50) `unsafeShiftR` red50
+          sc = scc `unsafeShiftR` (shift2Cp + 8)
 
 gamePhase :: MyPos -> Int
 gamePhase p = g

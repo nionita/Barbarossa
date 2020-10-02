@@ -4,7 +4,7 @@ module Struct.Struct (
          Piece(..), Color(..), TabCont(..), MyPos(..), LazyBits(..),
          other, moving, epMask, fyMask, fyIncr, fyZero, mvMask, caRiMa,
          caRKiw, caRQuw, caRMKw, caRMQw, caRAKw, caRAQw, caRKib, caRQub, caRMKb, caRMQb, caRAKb, caRAQb,
-         tabla, emptyPos, isReversible, remis50Moves, set50Moves, reset50Moves, addHalfMove,
+         tabla, emptyPos, isReversible, remis50Moves, set50Moves, reset50Moves, addHalfMove, to50Moves,
          fromSquare, toSquare, isSlide, isDiag, isKkrq,
          moveIsNormal, moveIsCastle, moveIsPromo, moveIsEnPas, moveColor, movePiece,
          movePromoPiece, moveEnPasDel, makeEnPas, moveAddColor, moveAddPiece,
@@ -231,6 +231,11 @@ set50Moves i b = reset50Moves b .|. (fromIntegral i `shift` 8 .&. fyMask)
 {-# INLINE addHalfMove #-}
 addHalfMove :: BBoard -> BBoard
 addHalfMove b = b + fyIncr
+
+{-# INLINE to50Moves #-}
+-- 15 is hardcoded, depends on fyMaxi, but no chance to change soon...
+to50Moves :: MyPos -> (Int, Int)
+to50Moves p = (fromIntegral $ fyMaxi - (epcas p .&. fyMask), 15)
 
 {-# INLINE isSlide #-}
 isSlide :: Piece -> Bool
