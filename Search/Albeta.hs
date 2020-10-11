@@ -760,16 +760,19 @@ newTKiller pos d s
 
 -- We don't sort the moves here, they have to come sorted from genMoves
 -- But we consider the best move first (TT or IID) and the killers
+-- Because the quiet moves can come reduced (prune!), we must check exactly when we have moves available
 genAndSort :: NodeState -> Maybe Move -> Bool -> Bool -> Int -> Int -> Int -> Search (Alt Move, Bool)
 genAndSort !nst mttmv prune one !a !b !d = do
-    mbm <- case mttmv of
+    lbm <- case mttmv of
                Just mv -> return [mv]
                Nothing -> bestMoveFromIID nst a b d	-- it will do nothing for AllNode
     lift $ do
         let kl = filter (isMoveLegal (cpos nst)) $ killerToList (killer nst)
-        (es1, es2, emp) <- genMoves d prune one
-        let es = bestFirst mbm kl es1 es2
-        return (Alt es, emp && null es)
+            on = one && null kl
+        (es1, es2, emp) <- genMoves d prune on
+        let es    = bestFirst lbm kl es1 es2
+            mated = null lbm && null es1 && null kl && null es2 && emp
+        return (Alt es, mated)
 
 -- Late Move Reduction
 -- With a variable lmrlev the reduction should stay in a region

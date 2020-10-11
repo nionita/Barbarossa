@@ -83,7 +83,6 @@ draftStats dst = do
 -- But there are some complications:
 -- 1. We must detect if we have no quiets at all: important to detect if mated
 -- 2. When we prune, sometimes we want at least one move
--- 3. For higher depths we want to have at least some moves: for 2: 1, for 3: 2
 genMoves :: Int -> Bool -> Bool -> Game ([Move], [Move], Bool)
 genMoves d prune one = do
     p <- getPos
@@ -102,10 +101,10 @@ genMoves d prune one = do
             return (l1 ++ l2w, l0 ++ l3 ++ l2l, null nc)
 
 filterPruned :: MyPos -> History -> Int -> Bool -> [Move] -> [Move]
-filterPruned p h d one nc = take n $ histSortMoves d h $ ok ++ pr
-    where (pr, ok) = partition (canPruneMove p) nc
-          n | one       = d
-            | otherwise = d - 1
+filterPruned p h d one noncapts
+    | one && null full = take 1 prune
+    | otherwise        = histSortMoves d h full
+    where (full, prune) = partition (fullMove p) noncapts
 
 -- Generate only tactical moves, i.e. promotions & captures
 -- Needed only in QS, when we know we are not in check
@@ -403,8 +402,8 @@ noLMR :: MyPos -> Move -> Bool
 noLMR = movePassed
 
 -- We use this function to filter quiet moves before history sort
-canPruneMove :: MyPos -> Move -> Bool
-canPruneMove p m = not (movePassed p m || moveChecks p m)
+fullMove :: MyPos -> Move -> Bool
+fullMove p m = movePassed p m || moveChecks p m
 
 -- This will consider castle as not quiet!
 {-# INLINE moveIsQuiet #-}
