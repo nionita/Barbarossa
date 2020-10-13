@@ -47,9 +47,9 @@ maxKillers = 3
 lmrLevMin, lmrLevMax, lmrNoDepth :: Int
 lmrFactor :: Double
 lmrLevMin  = 0
-lmrLevMax  = 15
+lmrLevMax  = 5
 lmrNoDepth = 1
-lmrFactor = 1.05
+lmrFactor  = 1.15
 -- lmrFactor == 1 is not good, too sharp
 
 -- The late move reduction depends on depth & move number
@@ -61,8 +61,8 @@ lmrArr = array ((lmrLevMin, 0), (lmrLevMax, 255))
 varImp :: Double -> Double -> Int
 varImp lev w = round $ go 0 lev w
     where go :: Double -> Double -> Double -> Double
-          go !lv !b !i | i <= b    = lv
-                       | otherwise = go (lv+1) (b * lmrFactor) (i-b)
+          go !r !b !i | i <= b    = r
+                      | otherwise = go (r+1) (b * lmrFactor) (i-b)
 
 -- Parameters for futility pruning:
 maxFutilDepth :: Int
