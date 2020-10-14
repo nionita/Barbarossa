@@ -279,11 +279,11 @@ pvRootSearch :: Int -> Int -> Int -> Seq Move -> Alt Move -> Bool
              -> Search (Int, Seq Move, Alt Move, Int)
 pvRootSearch a b d lastpath rmvs aspir = do
     pos <- lift getPos
-    (edges, _) <- if null (unalt rmvs)	-- only when d==1, but we could have lastpath from the prev real move
-                     then genAndSort nst0 { cpos = pos } Nothing False False a b d	-- no IID here as d==1
-                     else case lastpath of
-                              Seq []    -> return (rmvs, False)	-- does this happen? - check to simplify!
-                              Seq (e:_) -> return (Alt $ e : delete e (unalt rmvs), False)
+    edges <- if null (unalt rmvs)	-- only when d==1, but we could have lastpath from the prev real move
+                then genAndSort nst0 { cpos = pos } Nothing False False a b d	-- no IID here as d==1
+                else case lastpath of
+                         Seq []    -> return rmvs	-- does this happen? - check to simplify!
+                         Seq (e:_) -> return $ Alt $ e : delete e (unalt rmvs)
     let !nsti = nst0 { cursc = pathFromScore a, cpos = pos }
     nstf <- pvLoop (pvInnerRoot b d) nsti edges
     abrt <- gets abort
@@ -466,10 +466,10 @@ pvSearch nst !a !b !d = do
            -- Use the found TT move as best move
            let mttmv = if hdeep > 0 then Just e else Nothing
                !nst'  = nst { cpos = pos }
-           !prune <- isPruneFutil d a True (staticScore pos)
-           (edges, mated) <- genAndSort nst' mttmv prune True a b d
-           if mated
-              then return $! failHardNoValidMove a b pos
+           !prune <- isPruneFutil pos d a True
+           edges <- genAndSort nst' mttmv prune True a b d
+           if noMove edges
+              then return $! if prune then pathFromScore a else failHardNoValidMove a b pos
               else do
                 nodes0 <- gets (sNodes . stats)
                 -- futility pruning:
@@ -479,7 +479,7 @@ pvSearch nst !a !b !d = do
                 let s = cursc nstf
                 whenAbort s $
                     if movno nstf == 1
-                       then return $! failHardNoValidMove a b pos
+                       then return $! if prune then pathFromScore a else failHardNoValidMove a b pos
                        else do
                            let de = max d $ pathDepth s
                            nodes1 <- gets (sNodes . stats)
@@ -520,10 +520,10 @@ pvZeroW !nst !b !d = do
                    let mttmv = if hdeep > 0 then Just e else Nothing
                        !nst' = nst { cpos = pos }
                    -- futility pruning:
-                   !prune <- isPruneFutil d bGrain False (staticScore pos)
-                   (edges, mated) <- genAndSort nst' mttmv prune False bGrain b d
-                   if mated
-                      then return $! failHardNoValidMove bGrain b pos
+                   !prune <- isPruneFutil pos d bGrain False
+                   edges <- genAndSort nst' mttmv prune False bGrain b d
+                   if noMove edges
+                      then return $! if prune then pathFromScore bGrain else failHardNoValidMove bGrain b pos
                       else do
                         !nodes0 <- gets (sNodes . stats)
                         -- Loop thru the moves
@@ -535,7 +535,7 @@ pvZeroW !nst !b !d = do
                         let s = cursc nstf
                         whenAbort s $
                             if movno nstf == 1
-                               then return $! failHardNoValidMove bGrain b pos
+                               then return $! if prune then pathFromScore bGrain else failHardNoValidMove bGrain b pos
                                else do
                                    let !de = max d $ pathDepth s
                                    !nodes1 <- gets (sNodes . stats)
@@ -761,7 +761,7 @@ newTKiller pos d s
 -- We don't sort the moves here, they have to come sorted from genMoves
 -- But we consider the best move first (TT or IID) and the killers
 -- Because the quiet moves can come reduced (prune!), we must check exactly when we have moves available
-genAndSort :: NodeState -> Maybe Move -> Bool -> Bool -> Int -> Int -> Int -> Search (Alt Move, Bool)
+genAndSort :: NodeState -> Maybe Move -> Bool -> Bool -> Int -> Int -> Int -> Search (Alt Move)
 genAndSort !nst mttmv prune one !a !b !d = do
     lbm <- case mttmv of
                Just mv -> return [mv]
@@ -769,10 +769,9 @@ genAndSort !nst mttmv prune one !a !b !d = do
     lift $ do
         let kl = filter (isMoveLegal (cpos nst)) $ killerToList (killer nst)
             on = one && null kl
-        (es1, es2, emp) <- genMoves d prune on
-        let es    = bestFirst lbm kl es1 es2
-            mated = null lbm && null es1 && null kl && null es2 && emp
-        return (Alt es, mated)
+        (es1, es2) <- genMoves d prune on
+        let es = bestFirst lbm kl es1 es2
+        return $ Alt es
 
 -- Late Move Reduction
 -- With a variable lmrlev the reduction should stay in a region
@@ -821,14 +820,14 @@ pvLoop f s (Alt (e:es)) = do
 -- B. When we are in check, and also much below alpha, we have even less chances to come out,
 --    so it is ok to not exclude here check escapes, and maybe we should even make the margin
 --    lower (experiemnts, tune!) Maybe this is also depth dependent
-isPruneFutil :: Int -> Int -> Bool -> Int -> Search Bool
-isPruneFutil d a pv v
-    | nearmate a              = return False
-    | pv && d > maxFutilDepth = return False
-    | d > maxFutilDepth + 1   = return False	-- for zero window searches we allow higher futility depth
+isPruneFutil :: MyPos -> Int -> Int -> Bool -> Search Bool
+isPruneFutil p d a pv
+    | tacticalPos p || nearmate a = return False
+    | pv && d > maxFutilDepth     = return False
+    | d > maxFutilDepth + 1       = return False	-- for zero window searches we allow higher futility depth
     | otherwise = do
         m <- varFutVal	-- variable futility value
-        return $! v + futilMargins d m <= a
+        return $! staticScore p + futilMargins d m <= a
 
 updateFutil :: Int -> Search ()
 updateFutil sd = do

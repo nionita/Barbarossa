@@ -80,14 +80,12 @@ draftStats dst = do
     put s { mstats = addStats (mstats s) dst }
 
 -- When we generate the moves, we want to filter out the quiet moves when pruning is enabled
--- But there are some complications:
--- 1. We must detect if we have no quiets at all: important to detect if mated
--- 2. When we prune, sometimes we want at least one move
-genMoves :: Int -> Bool -> Bool -> Game ([Move], [Move], Bool)
+-- There is one complication: we sometimes want at least one move
+genMoves :: Int -> Bool -> Bool -> Game ([Move], [Move])
 genMoves d prune one = do
     p <- getPos
     if inCheck p
-       then return (genMoveFCheck p, [], True)
+       then return (genMoveFCheck p, [])
        else do
             h <- gets hist
             let l0 = genMoveCast p
@@ -98,11 +96,11 @@ genMoves d prune one = do
                         then filterPruned p h d one nc
                         else histSortMoves d h nc
             -- Loosing captures after non-captures
-            return (l1 ++ l2w, l0 ++ l3 ++ l2l, null nc)
+            return (l1 ++ l2w, l0 ++ l3 ++ l2l)
 
 filterPruned :: MyPos -> History -> Int -> Bool -> [Move] -> [Move]
 filterPruned p h d one noncapts
-    | one && null full = take 1 prune
+    | one && null full = take 1 $ filter (isMoveLegal p) $ histSortMoves d h prune
     | otherwise        = histSortMoves d h full
     where (full, prune) = partition (fullMove p) noncapts
 
