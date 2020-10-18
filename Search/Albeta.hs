@@ -66,8 +66,9 @@ varImp lev w = round $ go 0 lev w
                        | otherwise = go (lv+1) (b*1.2) (i-b)
 
 -- Parameters for futility pruning:
-maxFutilDepth :: Int
+maxFutilDepth, minFutilQSDepth :: Int
 maxFutilDepth = 3
+minFutilQSDepth = 3
 
 -- Futility margins
 futilMargins :: Int -> Int -> Int
@@ -472,7 +473,7 @@ pvSearch nst !a !b !d = do
               else do
                 nodes0 <- gets (sNodes . stats)
                 -- futility pruning:
-                !prune <- isPruneFutil d a True (staticScore pos)
+                !prune <- isPruneFutil d a (staticScore pos) True
                 -- Loop thru the moves
                 let !nsti = resetNSt (pathFromScore a) (Killer []) nst'
                 !nstf <- pvSLoop b d False prune nsti edges
@@ -525,7 +526,7 @@ pvZeroW !nst !b !d = do
                       else do
                         !nodes0 <- gets (sNodes . stats)
                         -- futility pruning:
-                        !prune <- isPruneFutil d bGrain False (staticScore pos)
+                        !prune <- isPruneFutil d bGrain (staticScore pos) False
                         -- Loop thru the moves
                         let kill1 = case nmhigh of
                                         NullMoveThreat s -> newTKiller pos d s
@@ -823,14 +824,21 @@ pvLoop f s (Alt (e:es)) = do
 -- B. When we are in check, and also much below alpha, we have even less chances to come out,
 --    so it is ok to not exclude here check escapes, and maybe we should even make the margin
 --    lower (experiemnts, tune!) Maybe this is also depth dependent
-isPruneFutil :: Int -> Int -> Bool -> Int -> Search Bool
-isPruneFutil d a pv v
+isPruneFutil :: Int -> Int -> Int -> Bool -> Search Bool
+isPruneFutil d a v pv
     | nearmate a              = return False
     | pv && d > maxFutilDepth = return False
     | d > maxFutilDepth + 1   = return False	-- for zero window searches we allow higher futility depth
     | otherwise = do
         m <- varFutVal	-- variable futility value
-        return $! v + futilMargins d m <= a
+        let !qb = a - futilMargins d m
+        if d < minFutilQSDepth
+           then return $! v < qb
+           else do
+               -- We use the result of a quiescent search to decide if we prune or not
+               let !qa = qb - scoreGrain
+               q <- qSearch qa qb True
+               return $! q < qb
 
 updateFutil :: Int -> Search ()
 updateFutil sd = do
