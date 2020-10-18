@@ -202,8 +202,8 @@ doMove m = do
                    if checkRemisRules p (stack s)
                       then return Final
                       else if captOrPromo pc m
-                              then return $! Exten (exten pc p) True True
-                              else return $! Exten (exten pc p) False (noLMR pc m)
+                              then return $! Exten (exten m pc p) True True
+                              else return $! Exten (exten m pc p) False (noLMR pc m)
 
 -- Move from a node to a descendent - the QS search version
 -- Here we do only a restricted check for illegal moves
@@ -251,15 +251,19 @@ undoMove = modify $ \s -> s { stack = tail $ stack s }
 
 -- We extend when last move:
 -- - gives check
+-- - is capture and ends in the opponent king area
 -- - captures last queen
 -- - captures last rook when no queens
-exten :: MyPos -> MyPos -> Int
-exten p1 p2 | inCheck p2     = 1
-            | queens p2 /= 0 = 0
-            | queens p1 /= 0 = 1
-            | rooks  p2 /= 0 = 0
-            | rooks  p1 /= 0 = 1
-            | otherwise      = 0
+exten :: Move -> MyPos -> MyPos -> Int
+exten m p1 p2 | inCheck p2     = 1
+              | inKingArea     = 1
+              | queens p2 /= 0 = 0
+              | queens p1 /= 0 = 1
+              | rooks  p2 /= 0 = 0
+              | rooks  p1 /= 0 = 1
+              | otherwise      = 0
+    where inKingArea = (queens p1 .&. me p1 /= 0) && (btm .&. yoKAttacs p1 /= 0) && (btm .&. yo p1 /= 0)
+          btm = uBit $ toSquare m
 
 {--
 -- Parameters for pawn threats
