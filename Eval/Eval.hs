@@ -652,7 +652,7 @@ enPrise :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 enPrise p !ew = mad (ewEnpHanging  ew) ha .
                 mad (ewEnpEnPrise  ew) ep .
                 mad (ewEnpAttacked ew) at .
-                mad (ewWepAttacked ew) wp .
+                mad (ewWepTotal    ew) wp .
                 mad (ewWepAttacked ew) wa
     where !meP = me p .&. pawns   p	-- my pieces
           !meM = me p .&. (knights p .|. bishops p)
