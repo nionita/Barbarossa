@@ -68,7 +68,6 @@ weights = [
         ("ewSpace",           (   1,    0)),
         ("ewAdvAtts",         (   1,   17)),
         ("ewIsolPawns",       ( -36, -113)),
-        ("ewIsolPassed",      ( -63, -143)),
         ("ewBackPawns",       (-108, -141)),
         ("ewBackPOpen",       ( -21,  -27)),
         ("ewEnpHanging",      ( -19,  -27)),

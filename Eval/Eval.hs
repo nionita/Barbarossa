@@ -567,24 +567,18 @@ adversDiff p !ew = mad (ewAdvAtts ew) ad
 -------- Isolated pawns --------
 
 isolDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-isolDiff p !ew = mad (ewIsolPawns  ew) nd .
-                 mad (ewIsolPassed ew) pd
-    where (!myr, !myp) = isol (pawns p .&. me p) (passed p)
-          (!yor, !yop) = isol (pawns p .&. yo p) (passed p)
+isolDiff p !ew = mad (ewIsolPawns  ew) nd
+    where !myr = isol (pawns p .&. me p)
+          !yor = isol (pawns p .&. yo p)
           !nd = myr - yor
-          !pd = myp - yop
 
-isol :: BBoard -> BBoard -> (Int, Int)
-isol ps pp = (ris, pis)
-    where !myp = ps .&. pp
-          !myr = ps `less` myp
-          !myf = bbLeft ps .|. bbRight ps
+isol :: BBoard -> Int
+isol ps = ris
+    where !myf = bbLeft ps .|. bbRight ps
           !myu = myf `unsafeShiftL` 8
           !myd = myf `unsafeShiftR` 8
           !myc = myf .|. myu .|. myd
-          !nomyc = complement myc
-          !ris = popCount $ myr .&. nomyc
-          !pis = popCount $ myp .&. nomyc
+          !ris = popCount $ ps `less` myc
 
 -------- Backward pawns --------
 
@@ -629,7 +623,7 @@ frontAttacksBlack :: BBoard -> BBoard
 frontAttacksBlack !b = fa
     where fal = bbLeft b
           far = bbRight b
-          !fa = shadowDown (fal .|. far)	-- shadowUp is exclusive the original!
+          !fa = shadowDown (fal .|. far)	-- shadowDown is exclusive the original!
 
 ------ En prise ------
 -- enpHanging and enpEnPrise optimised (only mean) with Clop by running 4222
@@ -652,7 +646,7 @@ enPrise :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 enPrise p !ew = mad (ewEnpHanging  ew) ha .
                 mad (ewEnpEnPrise  ew) ep .
                 mad (ewEnpAttacked ew) at .
-                mad (ewWepAttacked ew) wp .
+                mad (ewWepTotal    ew) wp .
                 mad (ewWepAttacked ew) wa
     where !meP = me p .&. pawns   p	-- my pieces
           !meM = me p .&. (knights p .|. bishops p)
