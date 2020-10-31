@@ -95,6 +95,9 @@ data Phase = Mid | End
 -- The type class, for which we want to generate an instance for any of our parameter data types
 collectParams :: Type
 collectParams = ConT $ mkName "CollectParams"
+-- We need to derive the Show instance
+derivingShow :: DerivClause
+derivingShow = DerivClause Nothing [ConT ''Show]
 
 -- This will generate a function to assign a value to a filed of the parameter data type
 -- For parameters (one value), this will be: \v rec -> rec { field = round v }
@@ -166,7 +169,7 @@ evalParams :: Name
 evalParams = mkName "EvalParams"
 
 genRecFieldDecP :: String -> VarStrictType
-genRecFieldDecP fld = (fldName, IsStrict, ConT ''Int)
+genRecFieldDecP fld = (fldName, Bang NoSourceUnpackedness SourceStrict, ConT ''Int)
     where fldName = mkName fld
 
 genRecFieldIniP :: EvalParamSpec -> FieldExp
@@ -179,12 +182,13 @@ genEvalParams = do
     bodyExp <- genCollectEvalParamsExp (map fst params) False
     let colParm = ValD (VarP $ mkName "npColParm") (NormalB bodyExp) []
         theInst = ConT evalParams
-        typeDec = TySynInstD (mkName "CollectFor") (TySynEqn [theInst] theInst)
+        collectFor = AppT (ConT (mkName "CollectFor")) theInst
+        typeDec = TySynInstD (TySynEqn Nothing collectFor theInst)
         colInit = ValD (VarP $ mkName "npColInit")
                        (NormalB (RecConE evalParams $ map genRecFieldIniP params)) []
         setParm = ValD (VarP $ mkName "npSetParm") (NormalB (VarE 'id)) []
-        d = DataD [] evalParams [] [RecC evalParams (map (genRecFieldDecP . fst) params)] [''Show]
-        i = InstanceD [] (AppT collectParams theInst) [ typeDec, colInit, colParm, setParm ]
+        d = DataD [] evalParams [] Nothing [RecC evalParams (map (genRecFieldDecP . fst) params)] [derivingShow]
+        i = InstanceD Nothing [] (AppT collectParams theInst) [ typeDec, colInit, colParm, setParm ]
     return [d, i]
 
 -- Generate the parts for EvalWeights
@@ -192,7 +196,7 @@ evalWeights :: Name
 evalWeights = mkName "EvalWeights"
 
 genRecFieldDecW :: String -> VarStrictType
-genRecFieldDecW fld = (fldName, IsStrict, ConT midEndType)
+genRecFieldDecW fld = (fldName, Bang NoSourceUnpackedness SourceStrict, ConT midEndType)
     where fldName = mkName fld
           midEndType = mkName "MidEnd"
 
@@ -210,8 +214,9 @@ genEvalWeights = do
         rfds = map (genRecFieldDecW . fst) weights
         colInit = ValD (VarP $ mkName "npColInit") (NormalB (RecConE evalWeights inis)) []
         theInst = ConT evalWeights
-        typeDec = TySynInstD (mkName "CollectFor") (TySynEqn [theInst] theInst)
+        collectFor = AppT (ConT (mkName "CollectFor")) theInst
+        typeDec = TySynInstD (TySynEqn Nothing collectFor theInst)
         setParm = ValD (VarP $ mkName "npSetParm") (NormalB (VarE 'id)) []
-        d = DataD [] evalWeights [] [RecC evalWeights rfds] [''Show]
-        i = InstanceD [] (AppT collectParams theInst) [ typeDec, colInit, colParm, setParm ]
+        d = DataD [] evalWeights [] Nothing [RecC evalWeights rfds] [derivingShow]
+        i = InstanceD Nothing [] (AppT collectParams theInst) [ typeDec, colInit, colParm, setParm ]
     return [d, i]

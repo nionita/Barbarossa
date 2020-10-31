@@ -15,13 +15,14 @@ import Moves.Board
 toNiceNotation :: MyPos -> Move -> String
 toNiceNotation p m
     | moveIsCastle m = if s > d then "0-0-0" else "0-0"
-    | otherwise      = piece ++ src ++ capt ++ dst ++ transf ++ chk
+    | otherwise      = piece ++ src ++ capt ++ dst ++ promo ++ chk
     where piece = pcToCh False fig
           s = fromSquare m
           d = toSquare m
           (sr, sc) = s `divMod` 8
           (dr, dc) = d `divMod` 8
           (fig, fcol) | Busy c f <- tabla p s = (f, c)
+                      | otherwise = error "Move nothing"
           iscapt | Busy _ _ <- tabla p d = True
                  | otherwise             = False
           capt = if iscapt then "x" else ""
@@ -33,7 +34,7 @@ toNiceNotation p m
               | fig == Queen  = desamb (queens p)
               | otherwise     = ""	-- king
           dst = col dc : row dr : ""
-          transf = if moveIsPromo m then pcToCh False (movePromoPiece m) else ""
+          promo = if moveIsPromo m then pcToCh False (movePromoPiece m) else ""
           p' = doFromToMove m p
           chk = if isCheck p' (other fcol) then "+" else ""
           orda = ord 'a'
