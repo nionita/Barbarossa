@@ -49,7 +49,7 @@ weights = [
         ("ewKingOpen",        (   2,    4)),
         ("ewKingPlaceCent",   (   8,    1)),
         ("ewKingPlacePwns",   (   0,    4)),
-        ("ewKingPawn",        (   3,   50)),
+        ("ewKingPawn",        (  39,   85)),	-- Bayes
         ("ewKingThreat",      (   0,  300)),
         ("ewRookHOpen",       ( 162,  182)),	-- DSPSA with Adadelta
         ("ewRookOpen",        ( 205,  178)),	-- 20k steps, depth 4,
@@ -67,14 +67,14 @@ weights = [
         ("ewCenterKAtts",     (   2,   62)),
         ("ewSpace",           (   1,    0)),
         ("ewAdvAtts",         (   1,   17)),
-        ("ewIsolPawns",       ( -36, -113)),
-        ("ewBackPawns",       (-108, -141)),
-        ("ewBackPOpen",       ( -21,  -27)),
+        ("ewIsolPawns",       ( -36, -112)),	-- Bayes
+        ("ewBackPawns",       (-119, -121)),	-- Bayes
+        ("ewBackPOpen",       ( -50, -118)),	-- Bayes
         ("ewEnpHanging",      ( -19,  -27)),
         ("ewEnpEnPrise",      ( -29,  -26)),
         ("ewEnpAttacked",     (  -2,  -14)),
-        ("ewWepTotal",        ( 150,    0)),
-        ("ewWepAttacked",     (   0,  200)),
+        ("ewWepTotal",        ( 151,    0)),	-- Bayes
+        ("ewWepAttacked",     (   0,  167)),	-- Bayes
         ("ewLastLinePenalty", ( 100,    0)),
         ("ewBishopPair",      ( 386,  323)),
         ("ewBishopPawns",     ( -25,  -54)),
@@ -82,7 +82,7 @@ weights = [
         ("ewRookPawn",        ( -44,  -32)),
         ("ewAdvPawn5",        (  14,  106)),
         ("ewAdvPawn6",        ( 352,  333)),
-        ("ewPawnBlockP",      (-112,  -92)),
+        ("ewPawnBlockP",      (-116,  -76)),	-- Bayes
         ("ewPawnBlockO",      ( -23,  -26)),
         ("ewPawnBlockA",      ( -19,  -69)),
         ("ewPassPawnLev",     (   2,    8))
