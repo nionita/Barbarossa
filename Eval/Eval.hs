@@ -78,7 +78,7 @@ normalEval p !sti = sc
           !midee = isolDiff p ew mided
           !midef = backDiff p ew midee
           !mideg = advPawns p ew midef
-          !mideh = passPawns gph ep p ew mideg
+          !mideh = passPawns ep p ew mideg
           !sc = ((mid mideh + epMovingMid ep) * gph + (end mideh + epMovingEnd ep) * (256 - gph))
                    `unsafeShiftR` (shift2Cp + 8)
 
@@ -791,72 +791,64 @@ pawnBloBlack !pa !op !tp = cntPaBlo p1 pa op tp
 ------ Passed pawns ------
 
 -- Every passed pawn will be evaluated separately
-passPawns :: Int -> EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
-passPawns !gph ep p !ew = mad (ewPassPawnLev ew) dpp
+passPawns :: EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
+passPawns ep p !ew = mad (ewPassPawnLev ew) dpp
     where !mppbb = passed p .&. me p
           !yppbb = passed p .&. yo p
           !myc = moving p
           !yoc = other myc
-          !mypp = sum $ map (perPassedPawn gph ep p myc) $ bbToSquares mppbb
-          !yopp = sum $ map (perPassedPawn gph ep p yoc) $ bbToSquares yppbb
+          !mypp = sum $ map (perPassedPawn ep p myc (myPAttacs p) (yoNAttacs p .|. yoBAttacs p))
+                      $ bbToSquares mppbb
+          !yopp = sum $ map (perPassedPawn ep p yoc (yoPAttacs p) (myNAttacs p .|. myBAttacs p))
+                      $ bbToSquares yppbb
           !dpp  = mypp - yopp
 
--- The value of the passed pawn depends answers to this questions:
--- - is it defended/attacked? by which pieces?
--- - how many squares ahead are blocked by own/opponent pieces?
--- - how many squares ahead are controlled by own/opponent pieces?
--- - does it has a rook behind?
-perPassedPawn :: Int -> EvalParams -> MyPos -> Color -> Square -> Int
-perPassedPawn !gph ep p c sq
-    | attacked && not defended
-        && c /= moving p = epPassMin ep	-- but if we have more than one like that?
-    | otherwise          = perPassedPawnOk gph ep p c sq sqbb moi toi moia toia
+-- Rewrite the passed pawn logic based on this questions:
+-- - is it defended by pawns?
+-- - is the next advance square blocked by own/opponent pieces?
+-- - is the next advance square attacked by own/opponent pieces?
+-- - does it have a rook behind?
+-- - does the opponent have minor attacks on the way to promotion?
+perPassedPawn :: EvalParams -> MyPos -> Color -> BBoard -> BBoard -> Square -> Int
+perPassedPawn ep p c mypa yoma sq = max (epPassMin ep) okValue
     where !sqbb = 1 `unsafeShiftL` sq
-          (!moi, !toi, !moia, !toia)
+          (moi, toi, moia, toia)
                | moving p == c = (me p, yo p, myAttacs p, yoAttacs p)
                | otherwise     = (yo p, me p, yoAttacs p, myAttacs p)
-          !defended = moia .&. sqbb /= 0
-          !attacked = toia .&. sqbb /= 0
+          okValue = perPassedPawnOk ep p c sq sqbb moi toi moia toia mypa yoma
 
-perPassedPawnOk :: Int -> EvalParams -> MyPos -> Color -> Square -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
-perPassedPawnOk !gph ep p c sq sqbb moi toi moia toia = val
-    where (!way, !behind, !asq)
-              | c == White = (shadowUp sqbb, shadowDown sqbb, sq+8)
-              | otherwise  = (shadowDown sqbb, shadowUp sqbb, sq-8)
-          !mblo = popCount $ moi .&. way
-          !yblo = popCount $ toi .&. way
-          !rookBehind = behind .&. (rooks p .|. queens p)
-          !mebehind = rookBehind .&. moi /= 0
-                   && rookBehind .&. toi == 0
-          !yobehind = rookBehind .&. moi == 0
-                   && rookBehind .&. toi /= 0
-          !bbmyctrl | mebehind  = way
-                    | otherwise = moia .&. way
-          !bbyoctrl | yobehind  = way `less` bbmyctrl
-                    | otherwise = toia .&. (way `less` bbmyctrl)
-          !myctrl = popCount bbmyctrl
-          !yoctrl = popCount bbyoctrl
-          !x = popCount way
+-- The advantages/disadvantages are multiplicative
+perPassedPawnOk :: EvalParams -> MyPos -> Color -> Square -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
+perPassedPawnOk ep p pawnColor sq sqbb moi toi moia toia mypa yoma
+    | way .&. yoma /= 0 = min val (epPassMinor ep)
+    | otherwise         = val
+    where (!behind, !way, !asqbb)
+              | pawnColor == White = (shadowDown sqbb, shadowUp   sqbb, sqbb `unsafeShiftL` 8)
+              | otherwise          = (shadowUp   sqbb, shadowDown sqbb, sqbb `unsafeShiftR` 8)
+          -- Malus if the advance square is blocked
+          !blocked | toi .&. asqbb /= 0 = epPassBlockA ep
+                   | moi .&. asqbb /= 0 = epPassBlockO ep
+                   | otherwise          = 0
+          -- Bonus for my rook/queen behind my passed pawn
+          !myRQB = behind .&. (rooks p .|. queens p) .&. moi
+          !rookBehind | myRQB /= 0 && rAttacs (moi .|. toi) sq .&. myRQB /= 0 = epPassRookBehind ep
+                      | otherwise = 0
+          -- Bonus/malus for controlling the advance square
+          !myCtrl | moia .&. asqbb /= 0 = epPassMyCtrl ep
+                  | otherwise           = 0
+          !yoCtrl | toia .&. asqbb /= 0 = epPassYoCtrl ep
+                  | otherwise           = 0
+          !sustained | mypa .&. sqbb /= 0 = epPassSustained ep
+                     | otherwise          = 0
+          -- Passed pawn value depending on how many squares to go
+          -- -1: maximum is for 7th rank (1 square to go)
+          !squaresToGo = popCount way - 1
           a0 = 10
           b0 = -120
           c0 = 410
-          !pmax = (a0 * x + b0) * x + c0
-          !myking = kingSquare (kings p) moi
-          !yoking = kingSquare (kings p) toi
-          !mdis = squareDistance myking asq
-          !ydis = squareDistance yoking asq
-          !kingprx = (kdDist (mdis - ydis) * epPassKingProx ep * (256 - gph)) `unsafeShiftR` 8
-          !val1 = (pmax * (128 - kingprx) * (128 - epPassBlockO ep * mblo)) `unsafeShiftR` 14
-          !val2 = (val1 * (128 - epPassBlockA ep * yblo)) `unsafeShiftR` 7
-          !val  = (val2 * (128 + epPassMyCtrl ep * myctrl) * (128 - epPassYoCtrl ep * yoctrl))
-                    `unsafeShiftR` 14
-
-kdDistArr :: UArray Int Int  --  -7 -6 -5 -4 -3 -2 -1  0  1  2  3  4  5  6  7
-kdDistArr = listArray (0, 14) $ [-4,-3,-3,-3,-2,-2,-1, 0, 1, 2, 2, 3, 3, 3, 4]
-
-kdDist :: Int -> Int
-kdDist = (kdDistArr `unsafeAt`) . (7+)
-
+          !pawnValue = (a0 * squaresToGo + b0) * squaresToGo + c0
+          !val = (((pawnValue * (128 + rookBehind) * (128 + myCtrl)) `unsafeShiftR` 14)
+                     * (128 + sustained) * (128 - blocked) * (128 - yoCtrl)) `unsafeShiftR` 21
 
 ------ Advanced pawns, on 6th & 7th rows (not passed) ------
  
