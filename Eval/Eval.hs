@@ -450,38 +450,54 @@ perRook allp myp rsq (ho, op)
 
 ------ Mobility ------
 
+-- Piece mobility simplified
+-- All mobility: all attacks, except for own pieces - counts less
+-- Free Mobility: all attacks, except for own pieces and squares attacked by enemy pawns - counts more
 mobiLity :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-mobiLity p ew mide
-    | moving p == White = mobDiff p r23 r67 pbw pbb ew mide
-    | otherwise         = mobDiff p r67 r23 pbb pbw ew mide
-    where r23 = row2 .|. row3
-          r67 = row6 .|. row7
-          pbw = occup p `unsafeShiftR` 8
-          pbb = occup p `unsafeShiftL` 8
-
--- No pawn mobility (which, calculated as attacks, is useless)
--- Mobility inspired by Stockfish, with mobility aria
-mobDiff :: MyPos -> BBoard -> BBoard -> BBoard -> BBoard -> EvalWeights -> MidEnd -> MidEnd
-mobDiff p mylr yolr mypb yopb ew = mad (ewMobilityKnight ew) n .
-                                   mad (ewMobilityBishop ew) b .
-                                   mad (ewMobilityRook   ew) r .
-                                   mad (ewMobilityQueen  ew) q
-    where !myPMA = me p .&. pawns p .&. (mylr .|. mypb)
-          !yoPMA = yo p .&. pawns p .&. (yolr .|. yopb)
-          !myMA  = complement $ myPMA .|. (kings p .&. me p) .|. yoPAttacs p
-          !yoMA  = complement $ yoPMA .|. (kings p .&. yo p) .|. myPAttacs p
-          !myN = popCount $ myNAttacs p .&. myMA
-          !myB = popCount $ myBAttacs p .&. myMA
-          !myR = popCount $ myRAttacs p .&. myMA
-          !myQ = popCount $ myQAttacs p .&. myMA
-          !yoN = popCount $ yoNAttacs p .&. yoMA
-          !yoB = popCount $ yoBAttacs p .&. yoMA
-          !yoR = popCount $ yoRAttacs p .&. yoMA
-          !yoQ = popCount $ yoQAttacs p .&. yoMA
+mobiLity p ew = mad (ewMobilityKnight ew) n .
+                mad (ewMobilityBishop ew) b .
+                mad (ewMobilityRook   ew) r .
+                mad (ewMobilityQueen  ew) q .
+                mad (ewMobility       ew) a
+    where !notMe = complement $ me p
+          !myNa  = popCount $ myNAttacs p .&. notMe
+          !myBa  = popCount $ myBAttacs p .&. notMe
+          !myRa  = popCount $ myRAttacs p .&. notMe
+          !myQa  = popCount $ myQAttacs p .&. notMe
+          !meFre = complement $ me p .|. yoPAttacs p
+          !myNf  = popCount $ myNAttacs p .&. meFre
+          !myBf  = popCount $ myBAttacs p .&. meFre
+          !myRf  = popCount $ myRAttacs p .&. meFre
+          !myQf  = popCount $ myQAttacs p .&. meFre
+          !notYo = complement $ yo p
+          !yoNa  = popCount $ yoNAttacs p .&. notYo
+          !yoBa  = popCount $ yoBAttacs p .&. notYo
+          !yoRa  = popCount $ yoRAttacs p .&. notYo
+          !yoQa  = popCount $ yoQAttacs p .&. notYo
+          !yoFre = complement $ yo p .|. myPAttacs p
+          !yoNf  = popCount $ yoNAttacs p .&. yoFre
+          !yoBf  = popCount $ yoBAttacs p .&. yoFre
+          !yoRf  = popCount $ yoRAttacs p .&. yoFre
+          !yoQf  = popCount $ yoQAttacs p .&. yoFre
+          !myN = combine 2 myNf myNa
+          !myB = combine 2 myBf myBa
+          !myR = combine 3 myRf myRa
+          !myQ = combine 4 myQf myQa
+          !yoN = combine 2 yoNf yoNa
+          !yoB = combine 2 yoBf yoBa
+          !yoR = combine 3 yoRf yoRa
+          !yoQ = combine 4 yoQf yoQa
+          !myA = popCount $ myAttacs p
+          !yoA = popCount $ yoAttacs p
           !n = myN - yoN
           !b = myB - yoB
           !r = myR - yoR
           !q = myQ - yoQ
+          !a = myA - yoA
+          -- Combine free with all mobility
+          -- We must reduce the weights to count for that multiplication!
+          combine :: Int -> Int -> Int -> Int
+          combine factorBits freeMob allMob = (freeMob `unsafeShiftL` factorBits) + allMob
 
 ------ Center control ------
 
