@@ -797,9 +797,9 @@ passPawns ep p !ew = mad (ewPassPawnLev ew) dpp
           !yppbb = passed p .&. yo p
           !myc = moving p
           !yoc = other myc
-          !mypp = sum $ map (perPassedPawn ep p myc (myPAttacs p) (yoNAttacs p .|. yoBAttacs p))
+          !mypp = sum $ map (perPassedPawn ep p myc (yoNAttacs p .|. yoBAttacs p))
                       $ bbToSquares mppbb
-          !yopp = sum $ map (perPassedPawn ep p yoc (yoPAttacs p) (myNAttacs p .|. myBAttacs p))
+          !yopp = sum $ map (perPassedPawn ep p yoc (myNAttacs p .|. myBAttacs p))
                       $ bbToSquares yppbb
           !dpp  = mypp - yopp
 
@@ -809,17 +809,17 @@ passPawns ep p !ew = mad (ewPassPawnLev ew) dpp
 -- - is the next advance square attacked by own/opponent pieces?
 -- - does it have a rook behind?
 -- - does the opponent have minor attacks on the way to promotion?
-perPassedPawn :: EvalParams -> MyPos -> Color -> BBoard -> BBoard -> Square -> Int
-perPassedPawn ep p c mypa yoma sq = max (epPassMin ep) okValue
+perPassedPawn :: EvalParams -> MyPos -> Color -> BBoard -> Square -> Int
+perPassedPawn ep p c yoma sq = max (epPassMin ep) okValue
     where !sqbb = 1 `unsafeShiftL` sq
           (moi, toi, moia, toia)
                | moving p == c = (me p, yo p, myAttacs p, yoAttacs p)
                | otherwise     = (yo p, me p, yoAttacs p, myAttacs p)
-          okValue = perPassedPawnOk ep p c sq sqbb moi toi moia toia mypa yoma
+          okValue = perPassedPawnOk ep p c sq sqbb moi toi moia toia yoma
 
 -- The advantages/disadvantages are multiplicative
-perPassedPawnOk :: EvalParams -> MyPos -> Color -> Square -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
-perPassedPawnOk ep p pawnColor sq sqbb moi toi moia toia mypa yoma
+perPassedPawnOk :: EvalParams -> MyPos -> Color -> Square -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
+perPassedPawnOk ep p pawnColor sq sqbb moi toi moia toia yoma
     | way .&. yoma /= 0 = min val (epPassMinor ep)
     | otherwise         = val
     where (!behind, !way, !asqbb)
@@ -827,7 +827,6 @@ perPassedPawnOk ep p pawnColor sq sqbb moi toi moia toia mypa yoma
               | otherwise          = (shadowUp   sqbb, shadowDown sqbb, sqbb `unsafeShiftR` 8)
           -- Malus if the advance square is blocked
           !blocked | toi .&. asqbb /= 0 = epPassBlockA ep
-                   | moi .&. asqbb /= 0 = epPassBlockO ep
                    | otherwise          = 0
           -- Bonus for my rook/queen behind my passed pawn
           !myRQB = behind .&. (rooks p .|. queens p) .&. moi
@@ -838,8 +837,6 @@ perPassedPawnOk ep p pawnColor sq sqbb moi toi moia toia mypa yoma
                   | otherwise           = 0
           !yoCtrl | toia .&. asqbb /= 0 = epPassYoCtrl ep
                   | otherwise           = 0
-          !sustained | mypa .&. sqbb /= 0 = epPassSustained ep
-                     | otherwise          = 0
           -- Passed pawn value depending on how many squares to go
           -- -1: maximum is for 7th rank (1 square to go)
           !squaresToGo = popCount way - 1
@@ -848,7 +845,7 @@ perPassedPawnOk ep p pawnColor sq sqbb moi toi moia toia mypa yoma
           c0 = 410
           !pawnValue = (a0 * squaresToGo + b0) * squaresToGo + c0
           !val = (((pawnValue * (128 + rookBehind) * (128 + myCtrl)) `unsafeShiftR` 14)
-                     * (128 + sustained) * (128 - blocked) * (128 - yoCtrl)) `unsafeShiftR` 21
+                     * (128 - blocked) * (128 - yoCtrl)) `unsafeShiftR` 14
 
 ------ Advanced pawns, on 6th & 7th rows (not passed) ------
  

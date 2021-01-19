@@ -32,12 +32,10 @@ params = [
         ("epPawnBonusScale",    1),
         ("epPassMin",          30),
         ("epPassMinor",       350),
-        ("epPassBlockO",       12),
-        ("epPassBlockA",       25),
-        ("epPassRookBehind",   10),
-        ("epPassMyCtrl",        8),
-        ("epPassYoCtrl",        5),
-        ("epPassSustained",    10)
+        ("epPassBlockA",       23),	-- Bayes
+        ("epPassRookBehind",   34),	-- Bayes
+        ("epPassMyCtrl",       20),	-- Bayes
+        ("epPassYoCtrl",       25)	-- Bayes
     ]
 
 -- The configurable weights we use
@@ -88,7 +86,7 @@ weights = [
         ("ewPawnBlockP",      (-112,  -92)),
         ("ewPawnBlockO",      ( -23,  -26)),
         ("ewPawnBlockA",      ( -19,  -69)),
-        ("ewPassPawnLev",     (   2,    8))
+        ("ewPassPawnLev",     (   2,    5))	-- Bayes
     ]
 
 -- This part is for generating the data structures and the CollectParams instances
