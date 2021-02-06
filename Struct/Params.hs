@@ -13,7 +13,7 @@ module Struct.Params (
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 
-type EvalParamSpec = (String, Integer)
+type EvalParamSpec  = (String, Integer)
 type EvalWeightSpec = (String, (Integer, Integer))
 
 -- The configurable parameters we use
@@ -96,11 +96,15 @@ weights = [
 data Phase = Mid | End
 
 -- The type class, for which we want to generate an instance for any of our parameter data types
-collectParams :: Type
-collectParams = ConT $ mkName "CollectParams"
+classCollectParams :: Type
+classCollectParams = ConT $ mkName "CollectParams"
+
 -- We need to derive the Show instance
 derivingShow :: DerivClause
 derivingShow = DerivClause Nothing [ConT ''Show]
+
+typeFunCollectFor :: Type -> Type
+typeFunCollectFor = AppT (ConT (mkName "CollectFor"))
 
 -- This will generate a function to assign a value to a filed of the parameter data type
 -- For parameters (one value), this will be: \v rec -> rec { field = round v }
@@ -168,8 +172,8 @@ getEndSet names = do
     return (qualNames, setFs)
 
 -- Generate the parts for EvalParams
-evalParams :: Name
-evalParams = mkName "EvalParams"
+nameEvalParams :: Name
+nameEvalParams = mkName "EvalParams"
 
 genRecFieldDecP :: String -> VarStrictType
 genRecFieldDecP fld = (fldName, Bang NoSourceUnpackedness SourceStrict, ConT ''Int)
@@ -180,23 +184,42 @@ genRecFieldIniP (fld, val) = (fldName, fldVal)
     where fldName = mkName fld
           fldVal = LitE (IntegerL val)
 
+-- Generate the declarations for EvalParams, something like:
+-- data EvalParams = EvalParams {
+--                       epKingDist :: !Int,
+--                       ...
+--                   }
+-- instance CollectParams EvalParams where
+--     type CollectFor EvalParams = EvalParams
+--     npColInit = EvalParams {
+--                     epKingDist = 12,
+--                     ...
+--                 }
+--     npColParm = \ (s, v) rec -> lookApply s v rec [ ("field", \v rec -> ... ) ... ]
+--     npSetParm = id
+--
 genEvalParams :: Q [Dec]
 genEvalParams = do
-    bodyExp <- genCollectEvalParamsExp (map fst params) False
-    let colParm = ValD (VarP $ mkName "npColParm") (NormalB bodyExp) []
-        theInst = ConT evalParams
-        collectFor = AppT (ConT (mkName "CollectFor")) theInst
-        typeDec = TySynInstD (TySynEqn Nothing collectFor theInst)
+    lambdaExp <- genCollectEvalParamsExp (map fst params) False
+    let typeEvalParams = ConT nameEvalParams
+        typeDec = TySynInstD (TySynEqn Nothing (typeFunCollectFor typeEvalParams) typeEvalParams)
         colInit = ValD (VarP $ mkName "npColInit")
-                       (NormalB (RecConE evalParams $ map genRecFieldIniP params)) []
+                       (NormalB (RecConE nameEvalParams $ map genRecFieldIniP params)) []
+        colParm = ValD (VarP $ mkName "npColParm") (NormalB lambdaExp) []
         setParm = ValD (VarP $ mkName "npSetParm") (NormalB (VarE 'id)) []
-        d = DataD [] evalParams [] Nothing [RecC evalParams (map (genRecFieldDecP . fst) params)] [derivingShow]
-        i = InstanceD Nothing [] (AppT collectParams theInst) [ typeDec, colInit, colParm, setParm ]
+        -- Data daclaration
+        d = DataD [] nameEvalParams [] Nothing
+                  [RecC nameEvalParams (map (genRecFieldDecP . fst) params)]
+                  [derivingShow]
+        -- Instance declaration
+        i = InstanceD Nothing []
+                      (AppT classCollectParams typeEvalParams)
+                      [typeDec, colInit, colParm, setParm]
     return [d, i]
 
 -- Generate the parts for EvalWeights
-evalWeights :: Name
-evalWeights = mkName "EvalWeights"
+nameEvalWeights :: Name
+nameEvalWeights = mkName "EvalWeights"
 
 genRecFieldDecW :: String -> VarStrictType
 genRecFieldDecW fld = (fldName, Bang NoSourceUnpackedness SourceStrict, ConT midEndType)
@@ -211,15 +234,19 @@ genRecFieldIniW (fld, (valM, valE)) = (fldName, fldVal)
 
 genEvalWeights :: Q [Dec]
 genEvalWeights = do
-    bodyExp <- genCollectEvalParamsExp (map fst weights) True
-    let colParm = ValD (VarP $ mkName "npColParm") (NormalB bodyExp) []
-        inis = map genRecFieldIniW weights
-        rfds = map (genRecFieldDecW . fst) weights
-        colInit = ValD (VarP $ mkName "npColInit") (NormalB (RecConE evalWeights inis)) []
-        theInst = ConT evalWeights
-        collectFor = AppT (ConT (mkName "CollectFor")) theInst
-        typeDec = TySynInstD (TySynEqn Nothing collectFor theInst)
+    lambdaExp <- genCollectEvalParamsExp (map fst weights) True
+    let typeEvalWeights = ConT nameEvalWeights
+        typeDec = TySynInstD (TySynEqn Nothing (typeFunCollectFor typeEvalWeights) typeEvalWeights)
+        colInit = ValD (VarP $ mkName "npColInit")
+                       (NormalB (RecConE nameEvalWeights $ map genRecFieldIniW weights)) []
+        colParm = ValD (VarP $ mkName "npColParm") (NormalB lambdaExp) []
         setParm = ValD (VarP $ mkName "npSetParm") (NormalB (VarE 'id)) []
-        d = DataD [] evalWeights [] Nothing [RecC evalWeights rfds] [derivingShow]
-        i = InstanceD Nothing [] (AppT collectParams theInst) [ typeDec, colInit, colParm, setParm ]
+        -- Data declaration
+        d = DataD [] nameEvalWeights [] Nothing
+                  [RecC nameEvalWeights (map (genRecFieldDecW . fst) weights)]
+                  [derivingShow]
+        -- Instance declaration
+        i = InstanceD Nothing []
+                      (AppT classCollectParams typeEvalWeights)
+                      [typeDec, colInit, colParm, setParm]
     return [d, i]
