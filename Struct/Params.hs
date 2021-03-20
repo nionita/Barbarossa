@@ -55,11 +55,11 @@ weights = [
         ("ewRookOpen",        ( 205,  178)),	-- 20k steps, depth 4,
         ("ewRookConn",        (  89,   59)),	-- 2 games, beta=0.95, gamma=0.8,
         ("ewRook7th",         ( 201,  161)),	-- niu=0.99, eps=1E-6
-        ("ewMobilityKnight",  (  13,   14)),	-- new mobility
-        ("ewMobilityBishop",  (  13,    8)),	-- new mobility
-        ("ewMobilityRook",    (   2,    4)),	-- new mobility
-        ("ewMobilityQueen",   (   0,    1)),	-- new mobility
-        ("ewMobility",        (   1,    2)),	-- new mobility
+        ("ewMobilityKnight",  (  13,    3)),	-- new mobility, Bayes
+        ("ewMobilityBishop",  (  11,    2)),	-- new mobility, Bayes
+        ("ewMobilityRook",    (   3,    2)),	-- new mobility, Bayes
+        ("ewMobilityQueen",   (   0,    1)),	-- new mobility, Bayes
+        ("ewMobility",        (  10,    0)),	-- new mobility, Bayes
         ("ewCenterPAtts",     (  73,   57)),
         ("ewCenterNAtts",     (  48,   37)),
         ("ewCenterBAtts",     (  52,   35)),
