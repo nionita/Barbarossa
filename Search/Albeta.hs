@@ -67,7 +67,7 @@ varImp lev w = round $ go 0 lev w
 
 -- Parameters for futility pruning:
 maxFutilDepth :: Int
-maxFutilDepth = 5
+maxFutilDepth = 7
 
 -- Futility margins
 futilMargins :: Int -> Int
@@ -75,7 +75,7 @@ futilMargins d = futMinVal `unsafeShiftL` (d-1)	-- this is ok also for d == 1
 
 -- Parameters for futility pruning
 futMinVal :: Int
-futMinVal = 24
+futMinVal = 32
 
 -- Parameters for null move pruning
 nulMargin, nulSubmrg, nulTrig :: Int
