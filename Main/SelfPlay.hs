@@ -136,7 +136,6 @@ initContext opts = do
     clktm <- getMyTime
     lchan <- newChan
     wchan <- newChan
-    ichan <- newChan
     ha <- newCache 1	-- it will take the minimum number of entries
     hi <- newHist
     let paramList = stringToParams $ concat $ intersperse "," $ optParams opts
@@ -155,12 +154,10 @@ initContext opts = do
     let context = Ctx {
             logger = lchan,
             writer = wchan,
-            inform = ichan,
             strttm = clktm,
             change = ctxVar,
             loglev = if debug then DebugSearch else LogNever,
-            evpid  = parc,
-            tipars = npSetParm (colParams paramList :: CollectFor TimeParams)
+            evpid  = parc
          }
     return context
 
@@ -179,7 +176,6 @@ filterFile opts = do
     ctx <- ask
     let logFileName = "selfplay-" ++ show (startSecond ctx) ++ ".log"
     startLogger logFileName
-    startInformer
     lift $ do
         putStrLn $ "Vectorizing " ++ optAFenFile opts
         putStrLn $ "Play depth  " ++ show (optDepth opts)
@@ -202,7 +198,6 @@ matchFile opts dir = do
     ctx <- ask
     let logFileName = "selfplay-" ++ show (startSecond ctx) ++ ".log"
     startLogger logFileName
-    startInformer
     liftIO $ do
         putStrLn $ "Playing games from " ++ optAFenFile opts
         putStrLn $ "Play depth  " ++ show (optDepth opts)
@@ -398,17 +393,6 @@ theLogger lchan lst = do
             hPutStrLn h s
             hFlush h
             theLogger lchan lst
-
--- The informer is getting structured data
--- Because we do not have a Gui here, we discard the messages
-startInformer :: CtxIO ()
-startInformer = do
-    ctx <- ask
-    void $ newThread (theInformer (inform ctx))
-    return ()
-
-theInformer :: Chan InfoToGui -> CtxIO ()
-theInformer ichan = forever $ void $ liftIO $ readChan ichan
 
 newThread :: CtxIO () -> CtxIO ThreadId
 newThread a = do
