@@ -7,7 +7,7 @@ module Moves.Base (
     genMoves, genTactMoves, genEscapeMoves, canPruneMove,
     tacticalPos, zugZwang, isMoveLegal, isKillCand, isTKillCand,
     betaCut, ttRead, ttStore, curNodes, isTimeout, informCtx,
-    mateScore, scoreDiff, qsDelta,
+    mateScore, qsDelta,
     draftStats,
     finNode, countRepetitions,
     showMyPos, logMes,
@@ -397,15 +397,6 @@ canPruneMove p m
     | moveIsCapture p m    = False
     | movePassed p m       = False
     | otherwise            = not $ moveChecks p m
-
--- Score difference obtained by last move, from POV of the moving part
--- It considers the fact that static score is for the part which has to move
-scoreDiff :: Game Int
-scoreDiff = do
-    s <- get
-    case stack s of
-        (p1:p2:_) -> return $! negate (staticScore p1 + staticScore p2)
-        _         -> return 0
 
 logMes :: String -> Game ()
 logMes s = lift $ talkToContext . LogMes $ s

@@ -67,19 +67,15 @@ varImp lev w = round $ go 0 lev w
 
 -- Parameters for futility pruning:
 maxFutilDepth :: Int
-maxFutilDepth = 3
+maxFutilDepth = 5
 
 -- Futility margins
-futilMargins :: Int -> Int -> Int
-futilMargins 1 s = s
-futilMargins d s = s `unsafeShiftL` (d-1)
+futilMargins :: Int -> Int
+futilMargins d = futMinVal `unsafeShiftL` (d-1)	-- this is ok also for d == 1
 
--- Score statistics parameters for variable futility
-futIniVal, futMinVal, futDecayB, futDecayW :: Int
-futIniVal = 100
-futMinVal = 30
-futDecayB = 13
-futDecayW = (1 `unsafeShiftL` futDecayB) - 1
+-- Parameters for futility pruning
+futMinVal :: Int
+futMinVal = 24
 
 -- Parameters for null move pruning
 nulMargin, nulSubmrg, nulTrig :: Int
@@ -131,8 +127,6 @@ data PVState
           stats   :: SStats,	-- search statistics
           absdp   :: !Int,	-- absolute depth (root = 0)
           abort   :: !Bool,	-- search aborted (time)
-          futme   :: !Int,	-- variable futility score - me
-          futyo   :: !Int,	-- variable futility score - you
           lmrhi   :: !Int,	-- upper limit of nodes to raise the lmr level
           lmrlv   :: !Int,	-- LMR level
           lmrrs   :: !Int	-- counter for nodes/re-searches, to adapt the LMR level
@@ -208,7 +202,6 @@ emptySeq = Seq []
 
 pvsInit :: PVState
 pvsInit = PVState { ronly = pvro00, stats = ssts0, absdp = 0, abort = False,
-                    futme = futIniVal, futyo = futIniVal,
                     lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
 nst0 :: NodeState
 nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore 0, rbmch = -1,
@@ -331,14 +324,7 @@ pvInnerRoot b d nst e = timeToAbort (True, nst) $ do
                 newNode d
                 modify $ \s -> s { absdp = absdp s + 1 }
                 s <- case exd of
-                         Exten exd' _ _ -> do
-                             when (canPruneMove (cpos nst) e) $ do
-                                 sdiff <- lift scoreDiff
-                                 updateFutil sdiff	-- e
-                             xchangeFutil
-                             s <- pvInnerRootExten b d exd' (deepNSt nst)
-                             xchangeFutil
-                             return s
+                         Exten exd' _ _ -> pvInnerRootExten b d exd' (deepNSt nst)
                          Final   -> return drawPath
                          Illegal -> error "Cannot be illegal here"
                 -- undo the move if it was legal
@@ -472,7 +458,7 @@ pvSearch nst !a !b !d = do
               else do
                 nodes0 <- gets (sNodes . stats)
                 -- futility pruning:
-                !prune <- isPruneFutil d a True (staticScore pos)
+                let !prune = isPruneFutil d a True (staticScore pos)
                 -- Loop thru the moves
                 let !nsti = resetNSt (pathFromScore a) (Killer []) nst'
                 !nstf <- pvSLoop b d False prune nsti edges
@@ -525,7 +511,7 @@ pvZeroW !nst !b !d = do
                       else do
                         !nodes0 <- gets (sNodes . stats)
                         -- futility pruning:
-                        !prune <- isPruneFutil d bGrain False (staticScore pos)
+                        let !prune = isPruneFutil d bGrain False (staticScore pos)
                         -- Loop thru the moves
                         let kill1 = case nmhigh of
                                         NullMoveThreat s -> newTKiller pos d s
@@ -562,13 +548,11 @@ nullMoveFailsHigh pos nst b d
                when nulDebug $ incReBe 1
                lift doNullMove	-- do null move
                newNode d
-               xchangeFutil
                let nst' = deepNSt nst
                val <- if v > b + bigDiff
                          then pnextlev <$> pvZeroW nst' (-nma) d2
                          else pnextlev <$> pvZeroW nst' (-nma) d1
                lift undoMove	-- undo null move
-               xchangeFutil
                if pathScore val >= nmb
                   then return NullMoveHigh
                   else do
@@ -627,15 +611,10 @@ pvInnerLoop b d zw prune nst e = timeToAbort nst $ do
                   modify $ \s -> s { absdp = absdp s + 1 }
                   (s, nst1) <- case exd of
                       Exten exd' cap nolmr -> do
-                          when canPrune $ do
-                              sdiff <- lift scoreDiff
-                              updateFutil sdiff	-- e
                           -- Resetting means we reduce less (only with distance to last capture)
                           let nst1 | cap       = resetSpc nst
                                    | otherwise = nst
-                          xchangeFutil
                           s <- extenFunc b d (cap || nolmr) exd' (deepNSt nst1)
-                          xchangeFutil
                           return (s, nst1)
                       Final   -> return (drawPath, nst)
                       Illegal -> error "Cannot be illegal here"
@@ -812,42 +791,13 @@ pvLoop f s (Alt (e:es)) = do
     if cut then return s'
            else pvLoop f s' $ Alt es
 
--- About futility pruning:
--- A. 3 versions would be possible:
---    - material difference
---    - static evaluation (as now)
---    - result after QS
---    Material would be very cheap, but risky, unless we know material ~ static val (statistic)
---    QS looks to be too expensive, but maybe it can be done for higher depths
---    Experiemnts should be done
--- B. When we are in check, and also much below alpha, we have even less chances to come out,
---    so it is ok to not exclude here check escapes, and maybe we should even make the margin
---    lower (experiemnts, tune!) Maybe this is also depth dependent
-isPruneFutil :: Int -> Int -> Bool -> Int -> Search Bool
+-- Futility pruning:
+isPruneFutil :: Int -> Int -> Bool -> Int -> Bool
 isPruneFutil d a pv v
-    | nearmate a              = return False
-    | pv && d > maxFutilDepth = return False
-    | d > maxFutilDepth + 1   = return False	-- for zero window searches we allow higher futility depth
-    | otherwise = do
-        m <- varFutVal	-- variable futility value
-        return $! v + futilMargins d m <= a
-
-updateFutil :: Int -> Search ()
-updateFutil sd = do
-    s <- get
-    let !so = futme s
-    put s { futme = expFutSlide so sd }
-
--- We double the current static difference to have a futility reserve
-expFutSlide :: Int -> Int -> Int
-expFutSlide o n = (o * futDecayW + 2 * max 0 n) `unsafeShiftR` futDecayB
-
-xchangeFutil :: Search ()
-xchangeFutil
-    = modify $ \s -> s { futme = futyo s, futyo = futme s }
-
-varFutVal :: Search Int
-varFutVal = max futMinVal <$> gets futme
+    | nearmate a              = False
+    | pv && d > maxFutilDepth = False
+    | d > maxFutilDepth + 1   = False	-- for zero window searches we allow higher futility depth
+    | otherwise               = v + futilMargins d <= a
 
 failHardNoValidMove :: Int -> Int -> MyPos -> Path
 failHardNoValidMove !a !b pos = trimaxPath a b $! if tacticalPos pos then matedPath else drawPath
@@ -1006,7 +956,6 @@ reportStats = do
        draftStats dst
        logmes $ "Search statistics after draft " ++ show (draft $ ronly s) ++ ":"
        mapM_ logmes $ formatStats dst
-       logmes $ "Variable futility params: me = " ++ show (futme s) ++ ", yo = " ++ show (futyo s)
        logmes $ "Variable LMR: hi = " ++ show (lmrhi s)
                     ++ ", lv = " ++ show (lmrlv s) ++ ", qu = " ++ show (lmrrs s)
 
