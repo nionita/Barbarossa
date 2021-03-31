@@ -22,8 +22,8 @@ type EvalWeightSpec = (String, (Integer, Integer))
 -- All parameters have type Int
 params :: [EvalParamSpec]
 params = [
-        ("epMovingMid",       156),
-        ("epMovingEnd",       156),
+        ("epMovingMid",       152),	-- Bayes
+        ("epMovingEnd",       161),	-- Bayes
         ("epMaterMinor",        1),
         ("epMaterRook",         4),
         ("epMaterQueen",       13),
@@ -89,7 +89,7 @@ weights = [
         ("ewPawnBlockP",      (-112,  -92)),
         ("ewPawnBlockO",      ( -23,  -26)),
         ("ewPawnBlockA",      ( -19,  -69)),
-        ("ewPassPawnLev",     (   2,    8))
+        ("ewPassPawnLev",     (   2,    8))	-- Bayes confirmed
     ]
 
 -- This part is for generating the data structures and the CollectParams instances
