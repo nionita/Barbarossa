@@ -208,11 +208,15 @@ bnMateDistance wbish sq = min (squareDistance sq ocor1) (squareDistance sq ocor2
 
 ------ King Safety ------
 kingSafe :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-kingSafe p !ew = mad (ewKingSafe ew) ksafe
-    where !ksafe = ksSide (yo p) (yoKAttacs p) (myPAttacs p) (myNAttacs p) (myBAttacs p) (myRAttacs p) 
-                          (myQAttacs p) (myKAttacs p) (myAttacs p)
-                 - ksSide (me p) (myKAttacs p) (yoPAttacs p) (yoNAttacs p) (yoBAttacs p) (yoRAttacs p) 
-                          (yoQAttacs p) (yoKAttacs p) (yoAttacs p)
+kingSafe p !ew = mad (ewKingSafe ew) (kvyo - kvme)
+    where kvyo | thme = ksSide (yo p) (yoKAttacs p) (myPAttacs p) (myNAttacs p) (myBAttacs p)
+                               (myRAttacs p) (myQAttacs p) (myKAttacs p) (myAttacs p)
+               | otherwise = 0
+          kvme | thyo = ksSide (me p) (myKAttacs p) (yoPAttacs p) (yoNAttacs p) (yoBAttacs p)
+                               (yoRAttacs p) (yoQAttacs p) (yoKAttacs p) (yoAttacs p)
+               | otherwise = 0
+          thme = myQAttacs p > 0 && (myAttacs p .&. yoKAttacs p > 0)
+          thyo = yoQAttacs p > 0 && (yoAttacs p .&. myKAttacs p > 0)
 
 -- To make the sum and count in one pass
 data Flc = Flc !Int !Int
@@ -220,43 +224,45 @@ data Flc = Flc !Int !Int
 fadd :: Flc -> Flc -> Flc
 fadd (Flc f1 q1) (Flc f2 q2) = Flc (f1+f2) (q1+q2)
 
+-- Your king vulnerability
+-- Depends on count and quality of my attacks on your king area
+-- and on your king legal moves
 ksSide :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
-ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
-    | myq == 0  = 0
-    | otherwise = mattacs
-    where qual a p
-              | yoka == 0 = Flc 0 0
-              | y == 1    = Flc 1 p
-              | y == 2    = Flc 1 (p `unsafeShiftL` 1)
-              | y == 3    = Flc 1 (p `unsafeShiftL` 2)
-              | otherwise = Flc 1 (p `unsafeShiftL` 3)
-              where !yoka = yok .&. a
-                    y = popCount yoka
-          -- qualWeights = [1, 3, 3, 5, 7, 3]
-          !qp = qual myp 1
-          !qn = qual myn 3
-          !qb = qual myb 3
-          !qr = qual myr 5
-          !qq = qual myq 7
-          !qk = qual myk 3
+ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya = mattacs
+    where -- qualWeights = [1, 3, 3, 5, 7, 3]
+          !qp = attackQuality yok myp 1
+          !qn = attackQuality yok myn 3
+          !qb = attackQuality yok myb 3
+          !qr = attackQuality yok myr 4
+          !qq = attackQuality yok myq 6
+          !qk = attackQuality yok myk 3
           !(Flc c q) = fadd qp $ fadd qn $ fadd qb $ fadd qr $ fadd qq qk
-          !mattacs
-              | c == 0 = 0
-              | otherwise = fromIntegral $ attCoef `unsafeAt` ixt
-              -- where !freey = popCount $ yok `less` (mya .|. yop)
-              --       !conce = popCount $ yok .&. mya
-              -- This is equivalent to:
-              where !freco = popCount $ yok `less` (yop `less` mya)
-                    !ixm = c * q `unsafeShiftR` 2
-                    !ixt = ixm + c + ksShift - freco
-                    ksShift = 13
+          !mattacs = fromIntegral $ attCoef `unsafeAt` ixt
+          -- !freey = popCount $ yok `less` (mya .|. yop)
+          -- !conce = popCount $ yok .&. mya
+          -- This is equivalent to:
+          !freco = popCount $ yok `less` (yop `less` mya)
+          !ixm = c * q `unsafeShiftR` 2
+          !ixt = ixm + c + ksShift - freco
+          ksShift = 13
 
--- We take the maximum of 272 because:
--- Quali max: 8 * (1 + 3 + 3 + 5 + 10 + 3) = 200
--- Flag max: 6
--- 6 * 200 / 4 + 6 + 13 = 319
+{-# INLINE attackQuality #-}
+attackQuality :: BBoard -> BBoard -> Int -> Flc
+attackQuality yok a p
+    | yoka == 0 = Flc 0 0
+    | y    == 1 = Flc 1 p
+    | y    == 2 = Flc 1 (p `unsafeShiftL` 1)
+    | y    == 3 = Flc 2 (p `unsafeShiftL` 2)
+    | otherwise = Flc 2 (p `unsafeShiftL` 3)
+    where yoka = yok .&. a
+          y = popCount yoka
+
+-- We take the maximum of 499 because:
+-- Quali max: 8 * (1 + 3 + 3 + 4 + 6 + 3) = 160
+-- Flag max: 12
+-- 12 * 160 / 4 + 6 + 13 = 499
 attCoef :: UArray Int Int32
-attCoef = listArray (0, 319) $ take zeros (repeat 0) ++ [ f x | x <- [0..63] ] ++ repeat (f 63)
+attCoef = listArray (0, 499) $ take zeros (repeat 0) ++ [ f x | x <- [0..63] ] ++ repeat (f 63)
     where -- Without the scaling, f will take max value of 4000 for 63
           f :: Int -> Int32
           f x = let y = fromIntegral x :: Double
