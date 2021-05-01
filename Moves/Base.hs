@@ -411,10 +411,10 @@ showStack :: Int -> [MyPos] -> String
 showStack n = concatMap showMyPos . take n
 
 talkToContext :: Comm -> CtxIO ()
-talkToContext (LogMes s)       = ctxLog LogInfo s
-talkToContext (BestMv a b c d) = informGui a b c d
-talkToContext (CurrMv a b)     = informGuiCM a b
-talkToContext (InfoStr s)      = informGuiString s
+talkToContext (LogMes s)         = ctxLog LogInfo s
+talkToContext (BestMv a b c d e) = informGuiBM a b c d e
+talkToContext (CurrMv a b)       = informGuiCM a b
+talkToContext (InfoStr s)        = informGuiSt s
 
 timeFromContext :: CtxIO Int
 timeFromContext = do

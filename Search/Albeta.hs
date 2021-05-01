@@ -113,8 +113,8 @@ data Pvsl = Pvsl {
 newtype Killer = Killer [Move] deriving Show
 
 -- Read only parameters of the search, so that we can change them programatically
-data PVReadOnly
-    = PVReadOnly {
+data PVStRO
+    = PVStRO {
           draft  :: !Int,	-- root search depth
           albest :: !Bool,	-- always choose the best move (i.e. first)
           abmil1 :: !Int,	-- abort after this millisecond when in first root move
@@ -123,9 +123,10 @@ data PVReadOnly
 
 data PVState
     = PVState {
-          ronly   :: PVReadOnly,	-- read only parameters
+          ronly   :: PVStRO,	-- read only parameters
           stats   :: SStats,	-- search statistics
           absdp   :: !Int,	-- absolute depth (root = 0)
+          maxdp   :: !Int,	-- maximum reached depth (>= absdp)
           abort   :: !Bool,	-- search aborted (time)
           lmrhi   :: !Int,	-- upper limit of nodes to raise the lmr level
           lmrlv   :: !Int,	-- LMR level
@@ -201,7 +202,7 @@ emptySeq :: Seq Move
 emptySeq = Seq []
 
 pvsInit :: PVState
-pvsInit = PVState { ronly = pvro00, stats = ssts0, absdp = 0, abort = False,
+pvsInit = PVState { ronly = pvro00, stats = ssts0, absdp = 0, maxdp = 0, abort = False,
                     lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
 nst0 :: NodeState
 nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore 0, rbmch = -1,
@@ -212,10 +213,10 @@ nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore 0, rbmch = -1
 resetNSt :: Path -> Killer -> NodeState -> NodeState
 resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, rbmch = 0 }
 
-pvro00 :: PVReadOnly
-pvro00 = PVReadOnly { draft = 0, albest = False, abmil1 = 0, abmili = 0 }
+pvro00 :: PVStRO
+pvro00 = PVStRO { draft = 0, albest = False, abmil1 = 0, abmili = 0 }
 
-alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int)
+alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int, Int)
 alphaBeta abc = do
     let !d = maxdepth abc
         rmvs = Alt $ rootmvs abc
@@ -223,34 +224,35 @@ alphaBeta abc = do
         searchReduced a b = pvRootSearch a      b     d lpv rmvs True
         -- We have lastpath as a parameter here (can change after fail low or high)
         searchFull    lp  = pvRootSearch alpha0 beta0 d lp  rmvs False
-        pvro = PVReadOnly { draft = d, albest = best abc,
+        pvro = PVStRO { draft = d, albest = best abc,
                             abmil1 = stoptime1 abc, abmili = stoptime abc }
         pvs0 = pvsInit { ronly = pvro }	-- :: PVState
-    r <- if useAspirWin
-         then case lastscore abc of
-             Just sp -> do
-                let !alpha1 = sp - window abc
-                    !beta1  = sp + window abc
-                -- informStr $ "+++ Aspi search with d = " ++ show d
-                --                ++ " alpha = " ++ show alpha1
-                --                ++ " beta = " ++ show beta1
-                -- aspirWin alpha1 beta1 d lpv rmvs aspTries
-                r1@((s1, es1, _, _), pvsf)
-                    <- runCState (searchReduced alpha1 beta1) pvs0
-                if abort pvsf || (s1 > alpha1 && s1 < beta1 && not (nullSeq es1))
-                    then return r1
-                    else if nullSeq es1
-                        then runCState (searchFull lpv) pvs0
-                        else runCState (searchFull es1) pvs0
-             Nothing -> runCState (searchFull lpv) pvs0
-         else runCState (searchFull lpv) pvs0
-    let timint = abort (snd r)
-    -- when aborted, return the last found good move
-    -- we have to trust that abort is never done in draft 1!
-    case fst r of
-        (s, Seq path, Alt rmvs', ch) -> if null path
-           then return (fromMaybe 0 $ lastscore abc, lastpv abc, [], timint, 0)
-           else return (s, path, rmvs', timint, ch)
+    -- We will get a result and a final state:
+    (r, s) <- if useAspirWin
+                 then case lastscore abc of
+                     Just sp -> do
+                        let !alpha1 = sp - window abc
+                            !beta1  = sp + window abc
+                        -- informStr $ "+++ Aspi search with d = " ++ show d
+                        --                ++ " alpha = " ++ show alpha1
+                        --                ++ " beta = " ++ show beta1
+                        -- aspirWin alpha1 beta1 d lpv rmvs aspTries
+                        r1@((s1, es1, _, _), pvsf)
+                            <- runCState (searchReduced alpha1 beta1) pvs0
+                        if abort pvsf || (s1 > alpha1 && s1 < beta1 && not (nullSeq es1))
+                            then return r1
+                            else if nullSeq es1
+                                then runCState (searchFull lpv) pvs0
+                                else runCState (searchFull es1) pvs0
+                     Nothing -> runCState (searchFull lpv) pvs0
+                 else runCState (searchFull lpv) pvs0
+    let timint   = abort s
+        seldepth = maxdp s
+    -- When aborted, return the last found good move
+    -- We have to trust that abort is never done in draft 1!
+    case r of (sc, Seq path, Alt rmvs', ch) -> if null path
+                  then return (fromMaybe 0 $ lastscore abc, lastpv abc, [], timint, 0, 0)
+                  else return (sc, path, rmvs', timint, ch, seldepth)
 
 {--
 aspirWin :: Int -> Int -> Int -> Seq Move -> Alt Move -> Int -> m (Int, Seq Move, Alt Move)
@@ -322,7 +324,9 @@ pvInnerRoot b d nst e = timeToAbort (True, nst) $ do
                 old <- get
                 when (draft (ronly old) >= depthForCM) $ lift $ informCM e $ movno nst
                 newNode d
-                modify $ \s -> s { absdp = absdp s + 1 }
+                let adp = absdp old + 1
+                    mdp = max (maxdp old) adp
+                modify $ \s -> s { absdp = adp, maxdp = mdp }
                 s <- case exd of
                          Exten exd' _ _ -> pvInnerRootExten b d exd' (deepNSt nst)
                          Final   -> return drawPath
@@ -603,12 +607,14 @@ pvInnerLoop b d zw prune nst e = timeToAbort nst $ do
     if prune && (zw || movno nst > 1) && canPrune
        then return $! nst { movno = movno nst + 1 }
        else do
-           old <- get
            !exd <- lift $ doMove e	-- do the move
            if legalResult exd
               then do
                   newNode d
-                  modify $ \s -> s { absdp = absdp s + 1 }
+                  old <- get
+                  let adp = absdp old + 1
+                      mdp = max (maxdp old) adp
+                  modify $ \s -> s { absdp = adp, maxdp = mdp }
                   (s, nst1) <- case exd of
                       Exten exd' cap nolmr -> do
                           -- Resetting means we reduce less (only with distance to last capture)
@@ -633,7 +639,6 @@ resetSpc nst = nst { spcno = movno nst }
 
 pvInnerLoopExten :: Int -> Int -> Bool -> Int -> NodeState -> Search Path
 pvInnerLoopExten b d spec !exd nst = do
-    old <- get
     let !inPv = crtnt nst == PVNode
         !d1   = d + exd - 1	-- this is the normal (unreduced) depth for next search
         a     = pathScore $ cursc nst
@@ -645,6 +650,7 @@ pvInnerLoopExten b d spec !exd nst = do
        else do
            -- Here we must be in a Cut node (will fail low)
            -- and we should have: crtnt = CutNode, nxtnt = AllNode
+           old <- get
            let !d' = reduceLmr (nearmate b) spec d1 (lmrlv old) (movno nst - spcno nst)
            !s1 <- zeroWithLMR d' d1 (-a) (a+scoreGrain) nst
            whenAbort s1 $
@@ -1052,7 +1058,8 @@ logmes s = informCtx (LogMes s)
 
 informPV :: Int -> Int -> [Move] -> Search ()
 informPV s d es = do
-    ss <- gets stats
+    st <- get
+    let ss = stats st
     lift $ do
         n <- curNodes $ sNodes ss
-        informCtx (BestMv s d n es)
+        informCtx (BestMv s d (maxdp st) n es)

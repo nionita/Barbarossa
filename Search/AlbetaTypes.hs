@@ -26,7 +26,7 @@ data DoResult = Exten !Int !Bool !Bool	-- return mit extension, iscapt & canlmr
               | Illegal			-- illegal move
 
 data Comm = LogMes String
-          | BestMv Int Int Int64 [Move]
+          | BestMv Int Int Int Int64 [Move]
           | CurrMv Move Int
           | InfoStr String
 
