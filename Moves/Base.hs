@@ -1,9 +1,5 @@
-{-# LANGUAGE TypeSynonymInstances,
-             MultiParamTypeClasses,
-             BangPatterns,
-             RankNTypes, UndecidableInstances,
-             FlexibleInstances
-             #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE PatternGuards #-}
 
 module Moves.Base (
     posToState, getPos, posNewSearch,
@@ -11,11 +7,12 @@ module Moves.Base (
     genMoves, genTactMoves, genEscapeMoves, canPruneMove,
     tacticalPos, zugZwang, isMoveLegal, isKillCand, isTKillCand,
     betaCut, ttRead, ttStore, curNodes, isTimeout, informCtx,
-    mateScore, scoreDiff, qsDelta,
+    mateScore, qsDelta,
     draftStats,
     finNode, countRepetitions,
     showMyPos, logMes,
-    nearmate
+    nearmate,
+    getRootMoveNumber, incrementRootMoveNumber
 ) where
 
 import Data.Bits
@@ -68,13 +65,14 @@ posToState p c h e = MyState {
                        hash = c,
                        hist = h,
                        mstats = ssts0,
-                       evalst = e
+                       evalst = e,
+                       rootmn = 1
                    }
     where stsc = posEval p e
           p'' = p { staticScore = stsc }
 
 posNewSearch :: MyState -> MyState
-posNewSearch p = p { hash = newGener (hash p) }
+posNewSearch p = p { hash = newGener (hash p), rootmn = 1 }
 
 draftStats :: SStats -> Game ()
 draftStats dst = do
@@ -201,9 +199,8 @@ doMove m = do
                then return Illegal
                else do
                    put s { stack = p : stack s }
-                   remis <- checkRemisRules p
-                   if remis
-                      then return $ Final 0
+                   if checkRemisRules p (stack s)
+                      then return Final
                       else if captOrPromo pc m
                               then return $! Exten (exten pc p) True True
                               else return $! Exten (exten pc p) False (noLMR pc m)
@@ -232,17 +229,14 @@ doNullMove = do
         p   = reverseMoving pc { staticScore = sts }
     put s { stack = p : stack s }
 
-checkRemisRules :: MyPos -> Game Bool
-checkRemisRules p = do
-    s <- get
-    if remis50Moves p
-       then return True
-       else do	-- check repetition rule
-         let revers = map zobkey $ takeWhile isReversible $ stack s
-             equal  = filter (== zobkey p) revers	-- if keys are equal, pos is equal
-         case equal of
-            (_:_:_)    -> return True
-            _          -> return False
+checkRemisRules :: MyPos -> [MyPos] -> Bool
+checkRemisRules p ps
+    | remis50Moves p       = True
+    | not $ isReversible p = False
+    | otherwise            = not $ null $ filter (== zobkey p) $ map zobkey $ takeWhile isReversible ps
+    -- Remarks:
+    -- ps does not contain p
+    -- if keys are equal, pos is equal
 
 -- If we have a few repetitions in the last moves, then we will reduce moves to go
 -- so the time management can allocate more time for next moves
@@ -322,6 +316,14 @@ finNode str nodes =
             fen = posToFen p
         logMes $ str ++ " Score: " ++ show (staticScore p) ++ " Fen: " ++ fen
 
+{-# INLINE getRootMoveNumber #-}
+getRootMoveNumber :: Game Int
+getRootMoveNumber = gets rootmn
+
+{-# INLINE incrementRootMoveNumber #-}
+incrementRootMoveNumber :: Game ()
+incrementRootMoveNumber = modify $ \s -> s { rootmn = rootmn s + 1 }
+
 -- {-# INLINE qsDelta #-}
 qsDelta :: Int -> Game Bool
 qsDelta !a = do
@@ -363,16 +365,16 @@ ttStore !deep !tp !sc !bestm !nds = do
     liftIO $ writeCache (hash s) (zobkey p) deep tp sc bestm nds
 
 -- History heuristic table update when beta cut
-betaCut :: Bool -> Int -> Move -> Game ()
-betaCut good absdp m
+betaCut :: Int -> Move -> Game ()
+betaCut absdp m
     | moveIsCastle m = do
         s <- get
-        liftIO $ toHist (hist s) good m absdp
+        liftIO $ toHist (hist s) m absdp
     | moveIsNormal m = do
         s <- get
         t <- getPos
         case tabla t (toSquare m) of
-            Empty -> liftIO $ toHist (hist s) good m absdp
+            Empty -> liftIO $ toHist (hist s) m absdp
             _     -> return ()
     | otherwise = return ()
 
@@ -396,15 +398,6 @@ canPruneMove p m
     | movePassed p m       = False
     | otherwise            = not $ moveChecks p m
 
--- Score difference obtained by last move, from POV of the moving part
--- It considers the fact that static score is for the part which has to move
-scoreDiff :: Game Int
-scoreDiff = do
-    s <- get
-    case stack s of
-        (p1:p2:_) -> return $! negate (staticScore p1 + staticScore p2)
-        _         -> return 0
-
 logMes :: String -> Game ()
 logMes s = lift $ talkToContext . LogMes $ s
 
@@ -426,5 +419,5 @@ talkToContext (InfoStr s)      = informGuiString s
 timeFromContext :: CtxIO Int
 timeFromContext = do
     ctx <- ask
-    let refs = startSecond ctx
+    let refs = strttm ctx
     lift $ currMilli refs

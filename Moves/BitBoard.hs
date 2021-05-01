@@ -45,18 +45,18 @@ mbsm x = fromIntegral $ (x * bitScanMagic) `unsafeShiftR` 58
 
 {-# INLINE bbToSquares #-}
 bbToSquares :: BBoard -> [Square]
-bbToSquares bb = unfoldr f bb
+bbToSquares = unfoldr f
     where f :: BBoard -> Maybe (Square, BBoard)
           f 0 = Nothing
           f b = Just $ extractSquare b
 
 {-# INLINE bbToSquaresBB #-}
 bbToSquaresBB :: (Square -> BBoard) -> BBoard -> BBoard
-bbToSquaresBB f bb = go bb 0
-    where go 0 w = w
-          go b w = let (sq, b') = extractSquare b
+bbToSquaresBB f = go 0
+    where go w 0 = w
+          go w b = let (sq, b') = extractSquare b
                        !w' = f sq .|. w
-                   in go b' w'
+                   in go w' b'
 
 {-# INLINE extractSquare #-}
 extractSquare :: BBoard -> (Square, BBoard)
@@ -70,8 +70,7 @@ extractSquare b = let lsbb = lsb b
 -- we define here the unsafe versions specialized for BBoard
 {-# INLINE uTestBit #-}
 uTestBit :: BBoard -> Int -> Bool
-uTestBit w b = let bb = 1 `unsafeShiftL` b
-               in w .&. bb /= 0
+uTestBit w b = w .&. uBit b /= 0
 
 {-# INLINE uBit #-}
 uBit :: Square -> BBoard

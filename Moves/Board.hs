@@ -99,7 +99,7 @@ genMovePromo !p = map (uncurry (makePromo Queen)) pGenNC
 
 {-# INLINE srcDests #-}
 srcDests :: (Square -> BBoard) -> Square -> [(Square, Square)]
-srcDests f !s = zip (repeat s) $ bbToSquares $ f s
+srcDests f = \s -> zip (repeat s) $ bbToSquares $ f s
 
 -- This one should be called only for normal moves
 {-# INLINE moveChecksDirect #-}
@@ -471,9 +471,10 @@ canMove fig p src dst = fAttacs src fig (occup p) `uTestBit` dst
 -- See http://stackoverflow.com/questions/47981/how-do-you-set-clear-and-toggle-a-single-bit-in-c-c
 -- I combined "Checking a bit" with "Changing the nth bit to x"
 -- We have also to clear dst bit
+{-# INLINE mvBit #-}
 mvBit :: Square -> Square -> BBoard -> BBoard
-mvBit !src !dst !w = (w `xor` mx) .&. (complement $ uBit src)
-    where !mx = ((complement ((w `unsafeShiftR` src) .&. 1) + 1) `xor` w) .&. (uBit dst)
+mvBit src dst w = (w `xor` mx) .&. (complement $ uBit src)
+    where mx = ((complement ((w `unsafeShiftR` src) .&. 1) + 1) `xor` w) .&. (uBit dst)
 
 {-# INLINE moveAndClearEp #-}
 moveAndClearEp :: BBoard -> BBoard
@@ -792,10 +793,10 @@ type LMove = Word32
 -- Otherwise this will not work!
 {-# INLINE moveToLMove #-}
 moveToLMove :: Piece -> Piece -> Move -> LMove
-moveToLMove attacker victim (Move w)
-    =   (vicval `unsafeShiftL` 24)
-    .|. (attval `unsafeShiftL` 16)
-    .|. fromIntegral w
+moveToLMove attacker victim
+    = \ (Move w) -> (vicval `unsafeShiftL` 24)
+                .|. (attval `unsafeShiftL` 16)
+                .|. fromIntegral w
     where kingval  = fromEnum King
           !vicval  = fromIntegral $ kingval - fromEnum victim	-- pseudo negate
           !attval  = fromIntegral $ fromEnum attacker

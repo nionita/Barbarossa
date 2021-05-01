@@ -1,5 +1,3 @@
-{-# LANGUAGE BangPatterns #-}
-
 module Search.AlbetaTypes (
     DoResult(..),
     Comm(..),
@@ -19,12 +17,13 @@ data ABControl = ABC {
         rootmvs   :: [Move],
         window    :: Int,
         best      :: Bool,
+        stoptime1 :: Int,
         stoptime  :: Int
     } deriving Show
 
 data DoResult = Exten !Int !Bool !Bool	-- return mit extension, iscapt & canlmr
-              | Final !Int	-- return with a final score (probably draw)
-              | Illegal		-- illegal move
+              | Final			-- this is always draw
+              | Illegal			-- illegal move
 
 data Comm = LogMes String
           | BestMv Int Int Int64 [Move]

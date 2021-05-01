@@ -12,12 +12,12 @@ import Data.Array.Unboxed
 import Data.Foldable (foldrM)
 import Data.List (intersperse)
 import Data.Maybe
+import Data.Time.Clock (UTCTime)
 import Data.Typeable
 import System.Console.GetOpt
 import System.Environment (getArgs)
 import System.IO
 import System.Random
-import System.Time
 
 import Struct.Struct
 import Struct.Status
@@ -38,7 +38,7 @@ import Eval.FileParams (makeEvalState)
 progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
-progVersion = "0.5.0"
+progVersion = "0.6.0"
 progVerSuff = ""
 
 data Options = Options {
@@ -94,11 +94,10 @@ theOptions = do
 
 initContext :: Options -> IO Context
 initContext opts = do
-    clktm <- getClockTime
+    clktm <- getMyTime
     let llev = optLogging opts
     lchan <- newChan
     wchan  <- newChan
-    ichan <- newChan
     ha <- newCache 1	-- it will take the minimum number of entries
     hi <- newHist
     let paramList
@@ -119,12 +118,10 @@ initContext opts = do
     let context = Ctx {
             logger = lchan,
             writer = wchan,
-            inform = ichan,
             strttm = clktm,
             change = ctxVar,
             loglev = llev,
-            evpid  = parc,
-            tipars = npSetParm (colParams paramList :: CollectFor TimeParams)
+            evpid  = parc
          }
     return context
 
@@ -145,7 +142,6 @@ interMachine = do
     let logFileName = progLogName ++ "-" ++ show (startSecond ctx) ++ ".log"
     startLogger logFileName
     startWriter True
-    startInformer
     beforeReadLoop
     ctxCatch theReader
         $ \e -> ctxLog LogError $ "Reader error: " ++ show e
@@ -158,7 +154,6 @@ analysingMachine fi = do
     let logFileName = progLogName ++ "-" ++ show (startSecond ctx) ++ ".log"
     startLogger logFileName
     startWriter False
-    startInformer
     beforeReadLoop
     fileReader fi
     -- whatever to do when ending:
@@ -199,37 +194,15 @@ startWriter :: Bool -> CtxIO ()
 startWriter inter = do
     ctx <- ask
     void $ liftIO $ forkIO
-         $ theWriter inter (writer ctx) (logger ctx) (LogInfo >= loglev ctx) (startSecond ctx)
+         $ theWriter inter (writer ctx) (logger ctx) (LogInfo >= loglev ctx) (strttm ctx)
 
-theWriter :: Bool -> Chan String -> Chan String -> Bool -> Integer -> IO ()
+theWriter :: Bool -> Chan String -> Chan String -> Bool -> UTCTime -> IO ()
 theWriter inter wchan lchan mustlog refs = forever $ do
     s <- readChan wchan
     when inter $ do	-- we write only in intercative mode
         putStrLn s
         hFlush stdout
     when mustlog $ logging lchan refs "Output" s
-
--- The informer is getting structured data
--- and formats it to a string which is sent to the writer
--- It ignores messages which come while we are not searching
-startInformer :: CtxIO ()
-startInformer = do
-    ctx <- ask
-    void $ newThread (theInformer (inform ctx))
-    return ()
-
-theInformer :: Chan InfoToGui -> CtxIO ()
-theInformer ichan = forever $ do
-    s <- liftIO $ readChan ichan
-    chg <- readChanging
-    when (working chg) $ toGui s
-
-toGui :: InfoToGui -> CtxIO ()
-toGui s = case s of
-            InfoS s'   -> answer $ infos s'
-            InfoD _    -> answer $ formInfoDepth s
-            InfoCM _ _ -> answer $ formInfoCM s
-            _          -> answer $ formInfo s
 
 -- The reader is executed by the main thread
 -- It reads commands from the GUI and interprets them
@@ -250,22 +223,23 @@ theReader = do
 interpret :: UCIMess -> CtxIO Bool
 interpret uci =
     case uci of
-        Quit       -> do doQuit
-                         let ms = 500   -- sleep 0.5 second
-                         liftIO $ threadDelay $ ms * 1000
-                         return True
-        Uci        -> goOn doUci
-        IsReady    -> goOn doIsReady
-        UciNewGame -> goOn doUciNewGame
-        Position p mvs -> goOn (doPosition p mvs)
-        Go cmds    -> goOn (doGo cmds)
-        Stop       -> goOn doStop
-        Ponderhit  -> goOn doPonderhit
-        SetOption o -> goOn (doSetOption o)
-        _          -> goOn ignore
+        Quit           -> doQuit
+        Uci            -> goOn doUci
+        IsReady        -> goOn doIsReady
+        UciNewGame     -> goOn doUciNewGame
+        Position p mvs -> goOn $ doPosition p mvs
+        Go cmds        -> goOn $ doGo cmds
+        Stop           -> goOn doStop
+        Ponderhit      -> goOn doPonderhit
+        SetOption o    -> goOn $ doSetOption o
+        _              -> goOn ignore
 
-doQuit :: CtxIO ()
-doQuit = ctxLog LogInfo "Normal exit"
+doQuit :: CtxIO Bool
+doQuit = do
+    ctxLog LogInfo "Normal exit"
+    let ms = 500   -- sleep 0.5 second to let the channels time to process
+    liftIO $ threadDelay $ ms * 1000
+    return True
 
 goOn :: CtxIO () -> CtxIO Bool
 goOn action = action >> return False
@@ -366,7 +340,7 @@ doGo cmds = do
         else if Ponder `elem` cmds
             then ctxLog DebugUci "Just ponder: ignored"
             else do
-                let (tim, tpm, mtg) = getTimeParams cmds $ myColor chg
+                let (tim, tpm, mtg) = getUCITime cmds $ myColor chg
                     rept = countRepetitions $ crtStatus chg
                     md   = 20	-- max search depth
                     dpt  = fromMaybe md (findDepth cmds)
@@ -399,7 +373,7 @@ perFenLine dpt fenLine agr = do
     ctxLog LogInfo $ "Ref.Score " ++ refsc ++ " fen " ++ fen
     doPosition (Pos fen) []
     modifyChanging $ \c -> c { working = True }
-    sc <- searchTheTree 1 dpt 0 0 0 0 0 Nothing [] []
+    sc <- searchTheTree 1 dpt 0 0 0 0 0 0 Nothing [] []
     return $ aggregateError agr rsc sc
 
 aggregateError :: Agreg -> Int -> Int -> Agreg
@@ -407,8 +381,8 @@ aggregateError agr refsc sc
     = agr { agrCumErr = agrCumErr agr + fromIntegral (dif * dif), agrFenOk = agrFenOk agr + 1 }
     where dif = sc - refsc
 
-getTimeParams :: [GoCmds] -> Color -> (Int, Int, Int)
-getTimeParams cs c
+getUCITime :: [GoCmds] -> Color -> (Int, Int, Int)
+getUCITime cs c
     | tpm == 0 && tim == 0 = (0, 0, 0)
     | otherwise            = (tim, tpm, mtg)
     where tpm = fromMaybe 0 $ findTInc c cs
@@ -462,7 +436,7 @@ newThread a = do
 startWorking :: Int -> Int -> Int -> Int -> Int -> CtxIO ()
 startWorking tim tpm mtg dpt rept = do
     ctx <- ask
-    currms <- lift $ currMilli (startSecond ctx)
+    currms <- lift $ currMilli (strttm ctx)
     ctxLog DebugUci $ "Start at " ++ show currms
         ++ " to search: " ++ show tim ++ " / " ++ show tpm ++ " / " ++ show mtg
         ++ " - maximal " ++ show dpt ++ " plys"
@@ -478,14 +452,14 @@ startWorking tim tpm mtg dpt rept = do
 -- find another scheme, for example with STM
 startSearchThread :: Int -> Int -> Int -> Int -> Int -> CtxIO ()
 startSearchThread tim tpm mtg dpt rept =
-    ctxCatch (void $ searchTheTree 1 dpt 0 tim tpm mtg rept Nothing [] [])
+    ctxCatch (void $ searchTheTree 1 dpt 0 0 tim tpm mtg rept Nothing [] [])
         $ \e -> do
             chg <- readChanging
             let mes = "searchTheTree terminated by exception: " ++ show e
             answer $ infos mes
             case forGui chg of
-                Just ifg -> giveBestMove $ infoPv ifg
-                Nothing  -> return ()
+                Just ms -> giveBestMove ms
+                Nothing -> return ()
             ctxLog LogError mes
             lift $ collectError $ SomeException (SearchException mes)
 
@@ -500,21 +474,21 @@ ctxCatch a f = do
             (\e -> runReaderT (f e) ctx)
 
 -- Search with the given depth
-searchTheTree :: Int -> Int -> Int -> Int -> Int -> Int -> Int -> Maybe Int -> [Move] -> [Move] -> CtxIO Int
-searchTheTree draft mdraft timx tim tpm mtg rept lsc lpv rmvs = do
+searchTheTree :: Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Maybe Int -> [Move] -> [Move] -> CtxIO Int
+searchTheTree draft mdraft timx1 timx tim tpm mtg rept lsc lpv rmvs = do
     ctxLog LogInfo $ "searchTheTree starts draft " ++ show draft
     ctx <- ask
     chg <- readChanging
-    ctxLog LogInfo $ "Time = " ++ show tim ++ " Timx = " ++ show timx
-    (path, sc, rmvsf, timint, stfin, ch) <- bestMoveCont draft timx (crtStatus chg) lsc lpv rmvs
+    ctxLog LogInfo $ "Time = " ++ show tim ++ " Timx1 = " ++ show timx1 ++ " Timx = " ++ show timx
+    (path, sc, rmvsf, timint, stfin, ch) <- bestMoveCont draft timx1 timx (crtStatus chg) lsc lpv rmvs
     let totch = totBmCh chg + ch
         ldCh | ch > 0    = draft
              | otherwise = lastChDr chg
     when (ch > 0) $
         ctxLog LogInfo $ "Changes in draft " ++ show draft ++ ": " ++ show ch ++ " / " ++ show totch
-    modifyChanging $ \c -> c { crtStatus = stfin, totBmCh = totch, lastChDr = ldCh,
-                               forGui = Just $ InfoB { infoPv = path, infoScore = sc }}
-    currms <- lift $ currMilli (startSecond ctx)
+    modifyChanging $
+        \c -> c { crtStatus = stfin, totBmCh = totch, lastChDr = ldCh, forGui = Just path }
+    currms <- lift $ currMilli (strttm ctx)
     let (ms, mx) = compTime tim tpm mtg sc rept
         exte = maybe False id $ do
                   los <- lsc
@@ -555,12 +529,16 @@ searchTheTree draft mdraft timx tim tpm mtg rept lsc lpv rmvs = do
            chg' <- readChanging
            if working chg'
                then if mx == 0	-- no time constraint (take original maximum)
-                       then searchTheTree (draft + 1) mdraft 0             tim tpm mtg rept (Just sc) path rmvsf
-                       else searchTheTree (draft + 1) mdraft (start + mxr) tim tpm mtg rept (Just sc) path rmvsf
+                       then searchTheTree (draft+1) mdraft 0 0 tim tpm mtg rept (Just sc) path rmvsf
+                       else do
+                           let mxt  = start + mxr
+                               mxt1 = start + mxr `div` firstMoveTimeReductionFactor
+                           searchTheTree (draft+1) mdraft mxt1 mxt tim tpm mtg rept (Just sc) path rmvsf
                else do
                    ctxLog DebugUci "in searchTheTree: not working"
                    giveBestMove path -- was stopped
                    return sc
+    where firstMoveTimeReductionFactor = 3
 
 -- The time management changes like this:
 -- We calculate the normal and maximum time to use for this move, as before
@@ -655,9 +633,6 @@ giveBestMove mvs = do
 
 beforeReadLoop :: CtxIO ()
 beforeReadLoop = do
-    ctxLog LogInfo "Time parameters:"
-    tp <- asks tipars
-    ctxLog LogInfo $ show tp
     chg <- readChanging
     let evst = evalst $ crtStatus chg
     ctxLog LogInfo "Eval parameters and weights:"
@@ -676,21 +651,14 @@ doStop = do
     modifyChanging $ \c -> c { working = False, compThread = Nothing }
     case compThread chg of
         Just tid -> do
-            -- when extern $ liftIO $ threadDelay 100000  -- warte 0.1 Sec.
             liftIO $ killThread tid
             case forGui chg of
-                Just ifg -> giveBestMove $ infoPv ifg
+                Just ms -> giveBestMove ms
                 Nothing  -> return ()
         _ -> return ()
 
 doPonderhit :: CtxIO ()
 doPonderhit = notImplemented "doPonderhit"
-
--- Helper: Answers the GUI with a string
-answer :: String -> CtxIO ()
-answer s = do
-    ctx <- ask
-    liftIO $ writeChan (writer ctx) s
 
 -- Name of the log file
 progLogName :: String
@@ -705,93 +673,6 @@ idName = "id name " ++ progName ++ ' ' : progVersion
 idAuthor = "id author " ++ progAuthor
 uciOk = "uciok"
 readyOk = "readyok"
-
-bestMove :: Move -> Maybe Move -> String
-bestMove m mp = s
-    where s = "bestmove " ++ toString m ++ sp
-          sp = maybe "" (\v -> " ponder " ++ toString v) mp
-
--- Info answers:
--- sel.depth nicht implementiert
-formInfo :: InfoToGui -> String
-formInfo itg = "info"
-    ++ formScore esc
-    ++ " depth " ++ show (infoDepth itg)
-    -- ++ " seldepth " ++ show idp
-    ++ " time " ++ show (infoTime itg)
-    ++ " nodes " ++ show (infoNodes itg)
-    ++ nps'
-    ++ " pv" ++ concatMap (\m -> ' ' : toString m) pv
-    where nps' = case infoTime itg of
-                     0 -> ""
-                     x -> " nps " ++ show (infoNodes itg `div` fromIntegral x * 1000)
-          esc = scoreToExtern (infoScore itg) (length pv)
-          pv  = infoPv itg
-
-data ExternScore = Score Int | Mate Int
-
--- The internal score is weird for found mates (always mate)
--- Turn it to nicer score by considering path lenght to mate
-scoreToExtern :: Int -> Int -> ExternScore
-scoreToExtern sc le
-    | sc ==  mateScore = Mate $ (le + 1) `div` 2
-    | sc == -mateScore = Mate $ negate $ le `div` 2
-    | otherwise        = Score sc
-
--- formInfoB :: InfoToGui -> String
--- formInfoB itg = "info"
---     -- ++ " score cp " ++ show isc
---     ++ formScore isc
---     ++ " pv" ++ concatMap (\m -> ' ' : toString m) (infoPv itg)
---     where isc = infoScore itg
-
-formScore :: ExternScore -> String
-formScore (Score s) = " score cp " ++ show s
-formScore (Mate n)  = " score mate " ++ show n
-
--- sel.depth nicht implementiert
--- formInfo2 :: InfoToGui -> String
--- formInfo2 itg = "info"
---     ++ " depth " ++ show (infoDepth itg)
---     ++ " time " ++ show (infoTime itg)
---     ++ " nodes " ++ show (infoNodes itg)
---     ++ nps'
---     -- ++ " pv" ++ concatMap (\m -> ' ' : toString m) (infoPv itg)
---     where nps' = case infoTime itg of
---                      0 -> ""
---                      x -> " nps " ++ show (infoNodes itg * 1000 `div` x)
-
--- formInfoNps :: InfoToGui -> Maybe String
--- formInfoNps itg
---     = case infoTime itg of
---           0 -> Nothing
---           x -> Just $ "info nps " ++ show (infoNodes itg `div` x * 1000)
-
-formInfoDepth :: InfoToGui -> String
-formInfoDepth itg
-    = "info depth " ++ show (infoDepth itg)
-      --  ++ " seldepth " ++ show (infoDepth itg)
-
-formInfoCM :: InfoToGui -> String
-formInfoCM itg
-    = "info currmove " ++ toString (infoMove itg)
-        ++ " currmovenumber " ++ show (infoCurMove itg)
-
--- depth :: Int -> Int -> String
--- depth d _ = "info depth " ++ show d
-
--- inodes :: Int -> String
--- inodes n = "info nodes " ++ show n
-
--- pv :: Int -> [Move] -> String
--- pv t mvs = "info time " ++ show t ++ " pv"
---     ++ concatMap (\m -> ' ' : toString m) mvs
-
--- nps :: Int -> String
--- nps n = "info nps " ++ show n
-
-infos :: String -> String
-infos s = "info string " ++ s
 
 -- These are the supported Uci options
 data UciGUIOptionType = UGOTRange String String
@@ -822,9 +703,9 @@ makeOptionVals UGOTNone = ""
 collectError :: SomeException -> IO ()
 collectError e = handle cannot $ do
     let efname = "Barbarossa_collected_errors.txt"
-    TOD tm _ <- getClockTime
+    tm <- getMyTime
     ef <- openFile efname AppendMode
-    hPutStrLn ef $ show tm ++ " " ++ idName ++ ": " ++ show e
+    hPutStrLn ef $ formatMyTime tm ++ " " ++ idName ++ ": " ++ show e
     hClose ef
     where cannot :: IOException -> IO ()
           cannot _ = return ()

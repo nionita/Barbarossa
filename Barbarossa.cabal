@@ -1,5 +1,5 @@
 Name:                Barbarossa
-Version:             0.5.0
+Version:             0.6.0
 Synopsis:            UCI chess engine written in Haskell
 License:             BSD3
 License-file:        LICENSE
@@ -12,7 +12,7 @@ Cabal-version:       >=1.8
 
 Flag sse42
   Description:	Enable SSE4.2 support
-  Default:	False
+  Default:	True
 
 Flag ddump
   Description:  Enable ddumps
@@ -23,7 +23,7 @@ Executable Barbarossa
   Build-depends:
       base >= 4.5,
       array,
-      old-time,
+      time,
       containers,
       mtl,
       parsec,
@@ -33,7 +33,8 @@ Executable Barbarossa
       directory,
       transformers,
       QuickCheck,
-      text
+      text,
+      template-haskell
   Other-modules:
       Eval.BasicEval,
       Eval.Eval,
@@ -56,6 +57,8 @@ Executable Barbarossa
       Search.AlbetaTypes,
       Search.CStateMonad,
       Struct.Config,
+      Struct.Params,
+      Struct.MidEnd,
       Struct.Context,
       Struct.Status,
       Struct.Struct,
@@ -64,7 +67,7 @@ Executable Barbarossa
   GHC-Options: -O2 -Wall
                -funbox-strict-fields
                -threaded
-               -rtsopts -with-rtsopts=-N3
+               -rtsopts -with-rtsopts=-N1
                -fspec-constr-count=24
                -funfolding-use-threshold=32
                -fno-warn-tabs
@@ -74,13 +77,14 @@ Executable Barbarossa
   if flag(ddump)
     GHC-Options: -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques
                  -ddump-opt-cmm -ddump-asm
+                 -ddump-splices
 
 Executable SelfPlay
   Main-is:	Main/SelfPlay.hs
   Build-depends:
       base >= 4.5,
       array,
-      old-time,
+      time,
       containers,
       filepath,
       mtl,
@@ -91,7 +95,8 @@ Executable SelfPlay
       directory,
       transformers,
       QuickCheck,
-      text
+      text,
+      template-haskell
   Other-modules:
       Eval.BasicEval,
       Eval.Eval,
@@ -114,6 +119,8 @@ Executable SelfPlay
       Search.AlbetaTypes,
       Search.CStateMonad,
       Struct.Config,
+      Struct.Params,
+      Struct.MidEnd,
       Struct.Context,
       Struct.Status,
       Struct.Struct,
@@ -122,7 +129,7 @@ Executable SelfPlay
   GHC-Options: -O2 -Wall
                -funbox-strict-fields
                -threaded
-               -rtsopts -with-rtsopts=-N3
+               -rtsopts -with-rtsopts=-N1
                -fspec-constr-count=24
                -funfolding-use-threshold=32
                -fno-warn-tabs
@@ -132,6 +139,7 @@ Executable SelfPlay
   if flag(ddump)
     GHC-Options: -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques
                  -ddump-opt-cmm -ddump-asm
+                 -ddump-splices
 
 -- Executable Evolve
 --   Main-is:	Main/Evolve.hs
