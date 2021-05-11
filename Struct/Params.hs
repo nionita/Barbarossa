@@ -47,7 +47,11 @@ params = [
 -- All weights have type MidEnd
 weights :: [EvalWeightSpec]
 weights = [
-        ("ewMaterialDiff",    (   8,    8)),
+        ("ewQueenVal",        (8800, 8800)),	-- material value queen * 8
+        ("ewRookVal",         (4520, 4520)),	-- material value rook * 8
+        ("ewBishopVal",       (2880, 2880)),	-- material value bishop * 8
+        ("ewKnightVal",       (2880, 2880)),	-- material value knight * 8
+        ("ewPawnVal",         ( 800,  800)),	-- material value pawn * 8
         ("ewKingSafe",        (   1,    0)),
         ("ewKingOpen",        (   2,    4)),
         ("ewKingPlaceCent",   (   8,    1)),

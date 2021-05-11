@@ -12,7 +12,6 @@ import Struct.Struct
 import Moves.Moves
 import Moves.BitBoard
 import Moves.Pattern
-import Eval.BasicEval
 import Hash.Zobrist
 
 startFen :: String
@@ -172,14 +171,12 @@ setPiece sq c f !p
           slide = setCond (isSlide f)  $ slide p,
           kkrq  = setCond (isKkrq f)   $ kkrq p,
           diag  = setCond (isDiag f)   $ diag p,
-          zobkey = nzob, mater = nmat }
+          zobkey = nzob }
     where setCond cond = if cond then (.|. bsq) else (.&. nbsq)
           nzob = zobkey p `xor` zold `xor` znew
-          nmat = mater p - mold + mnew
-          (!zold, !mold) = case tabla p sq of
-                             Empty      -> (0, 0)
-                             Busy co fo -> (zobPiece co fo sq, matPiece co fo)
+          !zold = case tabla p sq of
+                      Empty      -> 0
+                      Busy co fo -> zobPiece co fo sq
           !znew = zobPiece c f sq
-          !mnew = matPiece c f
           bsq = uBit sq
           !nbsq = complement bsq

@@ -2,7 +2,7 @@
 
 module Struct.MidEnd (
     MidEnd(..),
-    mad, tme
+    mad, tme, egVal
 ) where
 
 data MidEnd = MidEnd { mid, end :: !Int } deriving Show
@@ -15,3 +15,7 @@ mad !weight !fact !acc = MidEnd { mid = mid acc + mid weight * fact, end = end a
 {-# INLINE tme #-}
 tme :: Int -> Int -> MidEnd
 tme a b = MidEnd a b
+
+{-# INLINE egVal #-}
+egVal :: MidEnd -> Int -> Int
+egVal (MidEnd _ b) a = a * b

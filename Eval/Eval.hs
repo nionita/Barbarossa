@@ -54,15 +54,14 @@ evalDispatch p !sti
     | pawns p .&. me p == 0 ||
       pawns p .&. yo p == 0 = evalSideNoPawns p sti
     | kings p .|. pawns p == occup p,
-      Just r <- pawnEndGame p = r
+      Just r <- pawnEndGame p (esEWeights sti) = r
     | otherwise    = normalEval p sti
 
 normalEval :: MyPos -> EvalState -> Int
 normalEval p !sti = sc
     where ep     = esEParams  sti
           ew     = esEWeights sti
-          !gph   = gamePhase p
-          !mide1 = materDiff p ew (MidEnd 0 0)
+          (mide1, gph) = matNPhase p ew
           !mide2 = evalRedundance p ew mide1
           !mide3 = evalRookPawn p ew mide2
           !mide4 = kingSafe p ew mide3
@@ -82,13 +81,29 @@ normalEval p !sti = sc
           !sc = ((mid mideh + epMovingMid ep) * gph + (end mideh + epMovingEnd ep) * (256 - gph))
                    `unsafeShiftR` (shift2Cp + 8)
 
-gamePhase :: MyPos -> Int
-gamePhase p = g
-    where qs = popCount $ queens p
-          rs = popCount $ rooks p
-          bs = popCount $ bishops p
-          ns = popCount $ knights p
-          !g = qs * 39 + rs * 20 + (bs + ns) * 12	-- opening: 254, end: 0
+-- Calculate material and game phase in one go
+matNPhase :: MyPos -> EvalWeights -> (MidEnd, Int)
+matNPhase p ew = (md, gp)
+    where qsm = popCount $ queens  p .&. me p
+          qsy = popCount $ queens  p .&. yo p
+          rsm = popCount $ rooks   p .&. me p
+          rsy = popCount $ rooks   p .&. yo p
+          bsm = popCount $ bishops p .&. me p
+          bsy = popCount $ bishops p .&. yo p
+          nsm = popCount $ knights p .&. me p
+          nsy = popCount $ knights p .&. yo p
+          psm = popCount $ pawns   p .&. me p
+          psy = popCount $ pawns   p .&. yo p
+          qs  = qsm + qsy
+          rs  = rsm + rsy
+          bs  = bsm + bsy
+          ns  = nsm + nsy
+          !gp = qs * 39 + rs * 20 + (bs + ns) * 12	-- opening: 254, end: 0
+          !md = mad (ewQueenVal  ew) (qsm - qsy) .
+                mad (ewRookVal   ew) (rsm - rsy) .
+                mad (ewBishopVal ew) (bsm - bsy) .
+                mad (ewKnightVal ew) (nsm - nsy) .
+                mad (ewPawnVal   ew) (psm - psy) $ MidEnd 0 0
 
 evalSideNoPawns :: MyPos -> EvalState -> Int
 evalSideNoPawns p !sti
@@ -165,10 +180,12 @@ scoreToMate f p mywin = msc
           !ky = kingSquare (kings p) (yo p)
           !distk = squareDistance km ky
           !distc = f kadv
-          !sc = winBonus + distc*distc - distk*distk
-          !mtr = if moving p == White then mater p else -(mater p)
+          !sc  = winBonus + distc*distc - distk*distk
+          !mtr = if mywin then mat2M else -mat2M
           !wsc = if mywin then sc else -sc
           !msc = mtr + wsc
+          -- Material for 2 minors: because we are in KBBK or KBNK
+          mat2M = 720
 
 squareDistArr :: UArray Int Int32
 squareDistArr = array (0, 64*64-1) [(sqSqIdx s1 s2, squareDist s1 s2) | s1 <- [0..63], s2 <- [0..63]]
@@ -267,13 +284,6 @@ attCoef = listArray (0, 319) $ take zeros (repeat 0) ++ [ f x | x <- [0..63] ] +
 kingSquare :: BBoard -> BBoard -> Square
 kingSquare kingsb colorp = firstOne $ kingsb .&. colorp
 {-# INLINE kingSquare #-}
-
------- Material ------
-
-materDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-materDiff p !ew = mad (ewMaterialDiff ew) md
-    where !md | moving p == White =   mater p
-              | otherwise         = - mater p
 
 ------ King placement and opennes ------
 
@@ -884,8 +894,8 @@ advPawns p !ew = mad (ewAdvPawn6 ew) ap6 .
 -- 2. What about the rest of pawns? Here we make a trick: we shift the passed
 -- pawns virtually one row back, which gives less points for the possibly remaining
 -- passed pawns - now with queens)
-pawnEndGame :: MyPos -> Maybe Int
-pawnEndGame p
+pawnEndGame :: MyPos -> EvalWeights -> Maybe Int
+pawnEndGame p ew
     | not (null mescds) && not (null yescds) = Just dpr
     | not (null mescds)                      = Just myrace
     |                      not (null yescds) = Just yorace
@@ -896,9 +906,12 @@ pawnEndGame p
           !yfpbb = passed p .&. yo p
           !myking = kingSquare (kings p) (me p)
           !yoking = kingSquare (kings p) (yo p)
-          (escMe, escYo, maDiff)
-              | moving p == White = (escMeWhite yoking, escYoBlack myking,   mater p)
-              | otherwise         = (escMeBlack yoking, escYoWhite myking, - mater p)
+          -- Here we must calculate the material difference, we have only pawns
+          maDiff  = egVal (ewPawnVal ew) (popCount (pawns p .&. me p) - popCount (pawns p .&. yo p))
+                        `unsafeShiftR` shift2Cp
+          (escMe, escYo)
+              | moving p == White = (escMeWhite yoking, escYoBlack myking)
+              | otherwise         = (escMeBlack yoking, escYoWhite myking)
           mpsqs  = map escMe $ bbToSquares mfpbb	-- my pp squares & distances to promotion
           mescds = map snd $ filter fst mpsqs		-- my escaped passed pawns
           ypsqs  = map escYo $ bbToSquares yfpbb	-- your pp squares & distances to promotion
