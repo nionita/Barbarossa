@@ -855,11 +855,13 @@ kdDist :: Int -> Int
 kdDist = (kdDistArr `unsafeAt`) . (7+)
 
 
------- Advanced pawns, on 6th & 7th rows (not passed) ------
+------ Advanced pawns and minors, on 5th & 6th ranks (not passed) ------
  
 advPawns :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 advPawns p !ew = mad (ewAdvPawn6 ew) ap6 .
-                 mad (ewAdvPawn5 ew) ap5
+                 mad (ewAdvPawn5 ew) ap5 .
+                 mad (ewAdvMino6 ew) am6 .
+                 mad (ewAdvMino5 ew) am5
     where !apbb  = pawns p `less` passed p
           !mapbb = apbb .&. me p
           !yapbb = apbb .&. yo p
@@ -872,6 +874,16 @@ advPawns p !ew = mad (ewAdvPawn6 ew) ap6 .
           !yap6 = popCount $ yapbb .&. yo6
           !ap5  = map5 - yap5
           !ap6  = map6 - yap6
+          --- advanced minors
+          !amino = bishops p .|. knights p
+          !mmino = amino .&. me p
+          !ymino = amino .&. yo p
+          !mmi5 = popCount $ mmino .&. my5
+          !mmi6 = popCount $ mmino .&. my6
+          !ymi5 = popCount $ ymino .&. yo5
+          !ymi6 = popCount $ ymino .&. yo6
+          !am5  = mmi5 - ymi5
+          !am6  = mmi6 - ymi6
 
 -- Pawn end games are treated specially
 -- We consider escaped passed pawns in 2 situations:
