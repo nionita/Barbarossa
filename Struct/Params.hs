@@ -74,9 +74,11 @@ weights = [
         ("ewIsolPassed",      ( -63, -143)),
         ("ewBackPawns",       (-108, -141)),
         ("ewBackPOpen",       ( -21,  -27)),
-        ("ewEnpHanging",      ( -19,  -27)),
-        ("ewEnpEnPrise",      ( -29,  -26)),
-        ("ewEnpAttacked",     (  -2,  -14)),
+        ("ewEnpAttacked",     (  -5,  -15)),
+        ("ewEnpHanging",      ( -60,  -30)),	-- additive to attacked
+        ("ewEnpEnPrise",      ( -30,  -20)),	-- additive to attacked
+        ("ewMulHanging",      (-200, -200)),	-- multiple hanging pieces
+        ("ewMulEnPrise",      (-150, -150)),	-- multiple en-prise pieces
         ("ewWepTotal",        ( 150,    0)),
         ("ewWepAttacked",     (   0,  200)),
         ("ewLastLinePenalty", ( 100,    0)),

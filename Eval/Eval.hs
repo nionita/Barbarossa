@@ -1,7 +1,8 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE PatternGuards #-}
-{-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE TypeFamilies #-}
+-- {-# LANGUAGE ExistentialQuantification #-}
+-- {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE MultiWayIf #-}
 
 module Eval.Eval (
     initEvalState,
@@ -632,26 +633,19 @@ frontAttacksBlack !b = fa
           !fa = shadowDown (fal .|. far)	-- shadowUp is exclusive the original!
 
 ------ En prise ------
--- enpHanging and enpEnPrise optimised (only mean) with Clop by running 4222
--- games at 15+0.25 sec against pass3v, resulting in a Clop forecast of 62 +- 39 ELO
--- enpAttacked optimised (together with epMovingMid & epMovingEnd), only mean, with Clop
--- by 3712 games at 15+0.25 sec against pass3v, Clop forecast: 82 +- 40 ELO
--- enpHanging and enpEnPrise again optimised (only mean) with Clop by running 16300
--- games at 15+0.25 sec against pass3w, resulting in a Clop forecast of 63 +- 19 ELO
-
--- Here we should only take at least the opponent attacks! When we evaluate,
--- we are in one on this situations:
--- 1. we have no further capture and evaluate in a leaf
--- 2. we are evaluating for delta cut
--- In 1 we should take the opponent attacks and analyse them:
--- - if he has more than 2 attacks, than our sencond best attacked piece will be lost
--- (but not always, for example when we can check or can defent one with the other)
--- - if he has only one attack, we are somehow restricted to defend or move that piece
--- In 2 we have a more complicated analysis, which maybe is not worth to do
+-- Our hanging, en-prise and attacked pieces are threats that we must consider
+-- when we evaluate the position - by the way: those of the opponent too,
+-- but the equal or winning captures would be followed in QS if we are not
+-- already much over beta, so that omission is not so important - but test once!)
+-- Hanging and en-prise are exclusive, attacked are all of them (additive to the others)
+-- When we have more than 1 hanging pieces, we are in an uncomfortable situation: more penalty
+-- Same when we have more than 1 en-prise pieces
 enPrise :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 enPrise p !ew = mad (ewEnpHanging  ew) ha .
                 mad (ewEnpEnPrise  ew) ep .
                 mad (ewEnpAttacked ew) at .
+                mad (ewMulHanging  ew) hm .
+                mad (ewMulEnPrise  ew) em .
                 mad (ewWepTotal    ew) wp .
                 mad (ewWepAttacked ew) wa
     where !meP = me p .&. pawns   p	-- my pieces
@@ -663,18 +657,24 @@ enPrise p !ew = mad (ewEnpHanging  ew) ha .
           !atR = meR  .&. yoAttacs p
           !atQ = meQ  .&. yoAttacs p
           !noma = complement $ myAttacs p
-          !haP = atP .&. noma	-- attacked and not defended (hanging)
+          !haP = atP .&. noma	-- attacked and not defended: hanging
           !haM = atM .&. noma
           !haR = atR .&. noma
           !haQ = atQ .&. noma
-          !epM = meM .&. yoPAttacs p	-- defended, but attacked by less valuable opponent pieces
-          !epR = meR .&. yoA1
-          !epQ = meQ .&. yoA2
+          !epM = meM .&. yoPAttacs p `less` haM	-- defended, but attacked by less valuable opponent
+          !epR = meR .&. yoA1 `less` haR
+          !epQ = meQ .&. yoA2 `less` haQ
           !yoA1 = yoPAttacs p .|. yoNAttacs p .|. yoBAttacs p
           !yoA2 = yoA1 .|. yoRAttacs p
-          !ha = popCount haP + 3 * popCount haM + 5 * popCount haR + 9 * popCount haQ
-          !ep =                3 * popCount epM + 5 * popCount epR + 9 * popCount epQ
-          !at = popCount atP + 3 * popCount atM + 5 * popCount atR + 9 * popCount atQ
+          !at   = popCount atP + 4 * popCount atM + 6 * popCount atR + 10 * popCount atQ
+          !ha   = popCount haP + 4 * popCount haM + 6 * popCount haR + 10 * popCount haQ
+          !ep   =                4 * popCount epM + 6 * popCount epR + 10 * popCount epQ
+          -- More than 1 hanging piece
+          !hm | ha == 0   = 0
+              | otherwise = multipleHanging haP haM haR haQ
+          -- More than 1 en-prise piece
+          !em | ep == 0   = 0
+              | otherwise = multipleEnPrise epM epR epQ
           -- Weak pawns: total & attacked
           !mwp = meP `less` myPAttacs p	-- my weak pawns
           !ywp = yo p .&. pawns p `less` yoPAttacs p	-- your weak pawns
@@ -682,6 +682,32 @@ enPrise p !ew = mad (ewEnpHanging  ew) ha .
           !ywa = ywp .&. myAttacs p	-- your weak attacked pawns
           !wp = popCount ywp - popCount mwp
           !wa = popCount ywa - popCount mwa
+
+-- When multiple pieces hanging: we give more penalty
+-- This is not really accurate, what if the pieces are of the same type?
+multipleHanging :: BBoard -> BBoard -> BBoard -> BBoard -> Int
+multipleHanging haP haM haR haQ
+    | haQ /= 0  = if | haR /= 0  -> 6
+                     | haM /= 0  -> 4
+                     | haP /= 0  -> 1
+                     | otherwise -> 0
+    | haR /= 0  = if | haM /= 0  -> 4
+                     | haP /= 0  -> 1
+                     | otherwise -> 0
+    | haM /= 0  = if | haP /= 0  -> 1
+                     | otherwise -> 0
+    | otherwise = 0
+
+-- When multiple pieces en-prise: we give more penalty
+-- This is not really accurate, what if the pieces are of the same type?
+multipleEnPrise :: BBoard -> BBoard -> BBoard -> Int
+multipleEnPrise epM epR epQ
+    | epQ /= 0  = if | epR /= 0  -> 6
+                     | epM /= 0  -> 4
+                     | otherwise -> 0
+    | epR /= 0  = if | epM /= 0  -> 4
+                     | otherwise -> 0
+    | otherwise = 0
 
 ------ Last Line ------
 
