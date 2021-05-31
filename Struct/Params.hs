@@ -47,11 +47,11 @@ params = [
 -- All weights have type MidEnd
 weights :: [EvalWeightSpec]
 weights = [
-        ("ewQueenVal",        (9592, 8536)),	-- Bayes Direct
-        ("ewRookVal",         (4432, 4573)),	-- Bayes Direct
-        ("ewBishopVal",       (2908, 3015)),	-- Bayes Direct
-        ("ewKnightVal",       (2907, 2759)),	-- Bayes Direct
-        ("ewPawnVal",         ( 801,  735)),	-- Bayes Direct
+        ("ewQueenVal",        (8768, 8746)),	-- Bayes Direct
+        ("ewRookVal",         (4409, 4630)),	-- Bayes Direct
+        ("ewBishopVal",       (2950, 2941)),	-- Bayes Direct
+        ("ewKnightVal",       (2892, 2803)),	-- Bayes Direct
+        ("ewPawnVal",         ( 824,  743)),	-- Bayes Direct
         ("ewKingSafe",        (   1,    0)),
         ("ewKingOpen",        (   2,    4)),
         ("ewKingPlaceCent",   (   8,    1)),
@@ -63,9 +63,9 @@ weights = [
         ("ewRookConn",        (  89,   59)),	-- 2 games, beta=0.95, gamma=0.8,
         ("ewRook7th",         ( 201,  161)),	-- niu=0.99, eps=1E-6
         ("ewMobilityKnight",  (  51,   56)),	-- Bayes Direct
-        ("ewMobilityBishop",  (  44,   30)),	-- Bayes Direct
-        ("ewMobilityRook",    (  18,   35)),	-- Bayes Direct
-        ("ewMobilityQueen",   (   2,   14)),	-- Bayes Direct
+        ("ewMobilityBishop",  (  48,   30)),	-- Bayes Direct
+        ("ewMobilityRook",    (  17,   35)),	-- Bayes Direct
+        ("ewMobilityQueen",   (   2,   12)),	-- Bayes Direct
         ("ewCenterPAtts",     (  73,   57)),
         ("ewCenterNAtts",     (  48,   37)),
         ("ewCenterBAtts",     (  52,   35)),
