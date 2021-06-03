@@ -174,9 +174,11 @@ data Path
          pathMoves :: Seq Move
       } deriving Show
 
+mated :: Int
+mated = - mateScore
 drawPath, matedPath :: Path
 drawPath  = Path { pathScore = 0, pathDepth = 0, pathMoves = Seq [] }
-matedPath = Path { pathScore = -mateScore, pathDepth = 0, pathMoves = Seq [] }
+matedPath = Path { pathScore = mated, pathDepth = 0, pathMoves = Seq [] }
 
 -- Making a path from a plain score:
 pathFromScore :: Int -> Path
@@ -827,27 +829,50 @@ pvQSearch !a !b = do
 qSearch :: Int -> Int -> Bool -> Search Int
 qSearch !a !b front = do
     (hdeep, tp, hsc, _, _) <- reTrieve >> lift ttRead
-    -- tp == 1 => score >= hsc, so if hsc > a then we improved
-    -- tp == 0 => score <= hsc, so if hsc <= asco then we fail low and
-    --    can terminate the search
-    if hdeep >= 0 && (
-            tp == 2		-- exact score: always good
-         || tp == 1 && hsc >= b	-- we will fail high
-         || tp == 0 && hsc <= a	-- we will fail low
-       )
-       then reSucc 1 >> return hsc
+    if hdeep >= 0
+       then qSearchFound    a b tp hsc front
+       else qSearchNotFound a b        front
+
+-- When we found a TT entry, we sometimes may terminate the QS immediately,
+-- and sometimes we may at least improve the search limits
+qSearchFound :: Int -> Int -> Int -> Int -> Bool -> Search Int
+qSearchFound !a !b !tp !hsc front = do
+    reSucc 1
+    -- tp == 2 => we have an exact score
+    -- tp == 1 => score >= hsc, so if hsc >  a then we at least improved
+    -- tp == 0 => score <= hsc, so if hsc <= a then we fail low
+    if    tp == 2		-- exact score: always good, terminate
+       || tp == 1 && hsc >= b	-- we will fail high
+       || tp == 0 && hsc <= a	-- we will fail low
+       then return hsc
        else do
-           when (hdeep < 0) reFail
-           pos <- lift getPos
-           if tacticalPos pos
-              then qsInCheck a b (staticScore pos)
-              else qsNormal a b (staticScore pos) front
+           -- Here we have one and only one of:
+           -- tp == 1 && hsc < b
+           -- tp == 0 && hsc > a
+           -- We can possibly improve one of the limit
+           -- This cannot happen in zero window search!
+           if a + scoreGrain == b
+              then qSearchLims a b front
+              else do
+                  let (!a', !b') | tp == 1   = (max a hsc, b)
+                                 | otherwise = (a, min b hsc)
+                  qSearchLims a' b' front
+
+qSearchNotFound :: Int -> Int -> Bool -> Search Int
+qSearchNotFound !a !b front = reFail >> qSearchLims a b front
+
+qSearchLims :: Int -> Int -> Bool -> Search Int
+qSearchLims !a !b front = do
+    pos <- lift getPos
+    if tacticalPos pos
+       then qsInCheck a b (staticScore pos)
+       else qsNormal  a b (staticScore pos) front
 
 qsInCheck :: Int -> Int -> Int -> Search Int
 qsInCheck !a !b !s = do
     edges <- Alt <$> lift genEscapeMoves
     if noMove edges
-       then return $! -mateScore
+       then return mated
        else do
           !dcut <- lift $ qsDelta $ a - s - qsDeltaMargin
           if dcut
