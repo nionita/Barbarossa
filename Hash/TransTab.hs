@@ -123,7 +123,7 @@ newGener :: Cache -> Cache
 newGener c = c { gener = gener c + generInc }
 
 {--
--- This computes the adress of the first entry of the cell where an entry given by the key
+-- This computes the address of the first entry of the cell where an entry given by the key
 -- should be stored, and the (ideal) index of that entry
 -- The (low) mask of the transposition table is also used - this determines the size of the index
 zKeyToCellIndex :: Cache -> ZKey -> (Ptr PCacheEn, Index)
@@ -146,7 +146,7 @@ getZKey tt !idx (PCacheEn {hi = w1}) = zkey
           widx = fromIntegral idx
 --}
 
--- This computes the adress of the first entry of the cell where an entry given by the key
+-- This computes the address of the first entry of the cell where an entry given by the key
 -- should be stored - see the remarks from zKeyToCellIndex for the calculations
 zKeyToCell :: Cache -> ZKey -> Ptr Word64
 zKeyToCell tt zkey = base
@@ -154,12 +154,12 @@ zKeyToCell tt zkey = base
           !base = mem tt `plusPtr` ((idx `unsafeShiftR` 2) `unsafeShiftL` 6)
 
 -- Faster check if we have the same key under the pointer
--- When we come to check this, we went through zKeyToCell with the sought key
+-- When we come to check this, we went through zKeyToCell with the wanted key
 -- Which means, we are already in the correct cell, so the mid part of the key
 -- (which in TT is overwritten by the score) will be all time the same (zkey .&. lomask tt)
--- In this case we can mask the mid part of the sought key once we start the search
+-- In this case we can mask the mid part of the wanted key once we start the search
 -- and in the search itself (up to 4 times) we have just to mask that part too,
--- and compare the result with the precomputed sought key
+-- and compare the result with the precomputed wanted key
 -- So we don't need to reconstruct the original key (which would be more expensive)
 isSameKey :: Word64 -> Word64 -> Ptr Word64 -> Bool
 isSameKey !mmask !mzkey !ptr =
@@ -170,19 +170,15 @@ isSameKey !mmask !mzkey !ptr =
 -- The position ZKey determines the cell where the TT entry should be, and there we do a linear search
 -- (i.e. 4 comparisons in case of a miss)
 readCache :: Addr# -> IO (Maybe (Int, Int, Int, Move, Int64))
-#if __GLASGOW_HASKELL__ >= 708
 readCache addr = if isTrue# (eqAddr# addr nullAddr#)
-#else
-readCache addr = if         (eqAddr# addr nullAddr#)
-#endif
                     then return Nothing
                     else Just . cacheEnToQuint <$> peek (castPtr (Ptr addr))
 
 retrieveEntry :: Cache -> ZKey -> Addr#
 retrieveEntry tt zkey =
-    let bas   = zKeyToCell tt zkey
-        mkey  = zkey .&. zemask tt
-        lasta = bas `plusPtr` lastaAmount
+    let !bas   = zKeyToCell tt zkey
+        !mkey  = zkey .&. zemask tt
+        !lasta = bas `plusPtr` lastaAmount
     in retrieve (zemask tt) mkey lasta bas
     where retrieve mmask mkey lasta = go
               where go !crt0@(Ptr a)
@@ -194,52 +190,56 @@ retrieveEntry tt zkey =
 
 -- Write the position in the table
 -- We want to keep table entries that:
--- + are from the same generation, or
+-- + are from the correct generation, or
 -- + have more nodes behind (from a previous search), or
 -- + have been searched deeper, or
 -- + have a more precise score (node type 2 before 1 and 0)
 -- That's why we choose the order in second word like it is (easy comparison)
 -- Actually we always search in the whole cell in the hope to find the zkey and replace it
 -- but also keep track of the weakest entry in the cell, which will be replaced otherwise
-writeCache :: Cache -> ZKey -> Int -> Int -> Int -> Move -> Int64 -> IO ()
+writeCache :: Cache -> ZKey -> Int -> Int -> Int -> Move -> Int64 -> IO Bool
 writeCache !tt !zkey !depth !tp !score !move !nodes = do
-    let bas   = zKeyToCell tt zkey
-        gen   = gener tt
-        pCE   = quintToCacheEn tt zkey depth tp score move nodes
-        mkey  = zkey .&. zemask tt
-        lasta = bas `plusPtr` lastaAmount
-    store gen (zemask tt) mkey pCE lasta bas bas maxBound
+    let !bas   = zKeyToCell tt zkey
+        !pCE   = quintToCacheEn tt zkey depth tp score move nodes
+        !mkey  = zkey .&. zemask tt
+        !lasta = bas `plusPtr` lastaAmount
+    store (gener tt) (zemask tt) mkey pCE lasta bas bas maxBound
     where store !gen !mmask !mkey !pCE !lasta = go
-              where go !crt0 !rep0 !sco0
-                       = if isSameKey mmask mkey crt0
-                            then poke (castPtr crt0) pCE	 -- here we found the same entry: just update (but depth?)
+              -- where go !crt0 !rep0 !sco0
+              --          = if isSameKey mmask mkey crt0
+              where go !crt0 !rep0 !sco0 = do
+                         w <- peek crt0
+                         if w .&. mmask == mkey
+                            then do
+                                poke (castPtr crt0) pCE	-- found same key: update & exit
+                                return True
                             else do
-                                lowc <- peek (crt0 `plusPtr` 8)	-- take the low word
+                                lowc <- peek (crt0 `plusPtr` 8)	-- take the lower word
                                 scoreReplaceLow gen lowc crt0 rep0 sco0
-                                    (\r -> poke (castPtr r) pCE)
                                     (\r s -> if crt0 >= lasta
-                                                then poke (castPtr r) pCE
+                                                then do
+                                                    poke (castPtr r) pCE
+                                                    return False
                                                 else go (crt0 `plusPtr` pCacheEnSize) r s)
 
 lastaAmount :: Int
 lastaAmount = 3 * pCacheEnSize	-- for computation of the last address in the cell
 
 -- Here we implement the logic which decides which entry is weaker
--- the low word is the score (when the move is masked away):
--- generation (when > curr gen: whole score is 0)
--- type (2 - exact - only few entries, PV, 1 - lower bound: have good moves, 0 - upper bound)
--- depth
--- nodes
+-- the lower word (with masked move) is the cell score:
+-- generation (but when > curr gen: cell score is minimum, and will be replaced)
+-- move, as a random element
+-- There is no premature termination of the loop, except when we find the exact key,
+-- but this case is handled in the local go function of writeCache
 scoreReplaceLow :: Word64 -> Word64 -> Ptr Word64 -> Ptr Word64 -> Word64
-    -> (Ptr Word64 -> IO ())		-- terminating function
-    -> (Ptr Word64 -> Word64 -> IO ())	-- continue function
-    -> IO ()
-scoreReplaceLow gen lowc crt rep sco term cont
-    | generation > gen = term crt
-    | lowm < sco = cont crt lowm
-    | otherwise  = cont rep sco
-    where generation = lowc .&. generMsk
-          lowm = lowc .&. 0xFFFF	-- mask the move
+    -> (Ptr Word64 -> Word64 -> IO Bool)	-- continuation function
+    -> IO Bool
+scoreReplaceLow gen lowc crt rep sco cont
+    | entry_gen > gen = cont crt minBound	-- replace: empty, or very old generation
+    | entry_sco < sco = cont crt entry_sco	-- replace: worse score
+    | otherwise       = cont rep sco
+    where entry_gen = lowc .&. generMsk
+          entry_sco = lowc .&. 0xFF0000000000FFFF	-- mask everything but the generation and the move
 
 quintToCacheEn :: Cache -> ZKey -> Int -> Int -> Int -> Move -> Int64 -> PCacheEn
 quintToCacheEn !tt !zkey !depth !tp !score !(Move move) !nodes = pCE

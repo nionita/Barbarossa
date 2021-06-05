@@ -9,7 +9,7 @@ module Moves.Base (
     betaCut, ttRead, ttStore, curNodes, isTimeout, informCtx,
     mateScore, qsDelta,
     draftStats,
-    finNode, countRepetitions,
+    finNode, countRepetitions, ttBadScore,
     showMyPos, logMes,
     nearmate,
     getRootMoveNumber, incrementRootMoveNumber
@@ -316,6 +316,16 @@ finNode str nodes =
             fen = posToFen p
         logMes $ str ++ " Score: " ++ show (staticScore p) ++ " Fen: " ++ fen
 
+ttBadScore :: Int -> Int -> Int -> Bool -> Bool -> Int -> Int -> Int -> Int -> Game ()
+ttBadScore a b d inPv ab hdeep tp hsc sscore = do
+    s <- get
+    let (p:_) = stack s	-- we never saw an empty stack error until now
+        fen = posToFen p
+    logMes $ "TT /= search: a = " ++ show a ++ ", b = " ++ show b ++ ", d = " ++ show d
+             ++ ", inPv = " ++ show inPv ++ ", ab = " ++ show ab ++ ", hdeep = " ++ show hdeep
+             ++ ", tp = " ++ show tp ++ ", hsc = " ++ show hsc ++ " /= " ++ show sscore ++ " in fen: " ++ fen
+             ++ " ZB: " ++ show (zobkey p)
+
 {-# INLINE getRootMoveNumber #-}
 getRootMoveNumber :: Game Int
 getRootMoveNumber = gets rootmn
@@ -356,13 +366,19 @@ ttRead = do
             if legalMove p m then return t else return empRez	-- we should count...
     where empRez = (-1, 0, 0, Move 0, 0)
 
+debugTT :: Bool
+debugTT = True
+
 {-# INLINE ttStore #-}
 ttStore :: Int -> Int -> Int -> Move -> Int64 -> Game ()
 ttStore !deep !tp !sc !bestm !nds = do
     s <- get
     p <- getPos
     -- We use the type: 0 - upper limit, 1 - lower limit, 2 - exact score
-    liftIO $ writeCache (hash s) (zobkey p) deep tp sc bestm nds
+    repl <- liftIO $ writeCache (hash s) (zobkey p) deep tp sc bestm nds
+    when debugTT $ logMes $ "ttSt " ++ (if repl then "same" else "diff") ++ ": "
+        ++ show (zobkey p) ++ " " ++ show deep ++ " / " ++ show tp
+        ++ " / " ++ show sc ++ " / " ++ show bestm ++ " / " ++ show nds
 
 -- History heuristic table update when beta cut
 betaCut :: Int -> Move -> Game ()
