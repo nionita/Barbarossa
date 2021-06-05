@@ -141,7 +141,7 @@ data NodeState
           albe   :: !Bool,	-- in alpha/beta search (for small depths)
           rbmch  :: !Int,	-- number of changes in root best move / score type otherwise
           killer :: !Killer,	-- the current killer moves
-          cursc  :: Path,	-- current alpha value (now plus path & depth)
+          cursc  :: Path,	-- current best path
           cpos   :: MyPos,	-- current position for this node
           pvsl   :: [Pvsl]	-- principal variation list (at root) with node statistics
       } deriving Show
@@ -211,7 +211,7 @@ nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore 0, rbmch = -1
              -- to avoid in any way reducing the tt move
 
 resetNSt :: Path -> Killer -> NodeState -> NodeState
-resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, rbmch = 0 }
+resetNSt sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, rbmch = 0 }
 
 pvro00 :: PVStRO
 pvro00 = PVStRO { draft = 0, albest = False, abmil1 = 0, abmili = 0 }
@@ -279,6 +279,7 @@ pvRootSearch a b d lastpath rmvs aspir = do
                 else case lastpath of
                          Seq []    -> return rmvs	-- does this happen? - check to simplify!
                          Seq (e:_) -> return $ Alt $ e : delete e (unalt rmvs)
+    nodes0 <- gets (sNodes . stats)
     let !nsti = nst0 { cursc = pathFromScore a, cpos = pos }
     nstf <- pvLoop (pvInnerRoot b d) nsti edges
     abrt <- gets abort
@@ -293,9 +294,12 @@ pvRootSearch a b d lastpath rmvs aspir = do
        else do
             -- lift $ mapM_ (\m -> informStr $ "Root move: " ++ show m) (pvsl nstf)
             -- when (d < depthForCM) $ informPV sc d pm
-            let (best':_) = pm
+            let (bm:_) = pm
                 allrmvs = if sc >= b then unalt edges else map pvslToMove (pvsl nstf)
-                xrmvs = Alt $ best' : delete best' allrmvs	-- best on top
+                xrmvs = Alt $ bm : delete bm allrmvs	-- best on top
+            -- Record best move (score is exact) - unless beta cut in aspiration!
+            nodes1 <- gets (sNodes . stats)
+            unless abrt $ lift $ ttStore d 2 sc bm (nodes1 - nodes0)
             return (sc, Seq pm, xrmvs, rbmch nstf)
 
 pvslToMove :: Pvsl -> Move
@@ -390,7 +394,7 @@ checkFailOrPVRoot xstats b d e s nst = whenAbort (True, nst) $ do
                else do	-- means: > a && < b
                  informPV (pathScore s) (draft $ ronly sst) $ unseq $ pathMoves s
                  lift $ do
-                     ttStore d 2 (pathScore s) e nodes'	-- best move so far (score is exact)
+                     ttStore d 1 (pathScore s) e nodes'	-- best move so far (score is NOT exact!)
                      betaCut (absdp sst) e	-- not really cut, but good move
                  let xpvslg = insertToPvs d pvg (pvsl nst)	-- the good
                      nst1 = nst { cursc = s, nxtnt = nextNodeType (nxtnt nst),
@@ -454,9 +458,11 @@ pvSearch !nst !a !b !d = do
              if hdeep /= d || nds .&. 0xF /= 0
                 then return pt
                 else do
+                    let tthead = "TT " ++ show nds
+                    -- lift $ logmes $ tthead ++ ": time to check"
                     fpath <- pvRealSearch nst a b d mttmv
                     let ok = pathScore pt == pathScore fpath
-                    when (not ok) $ lift $ ttBadScore a b d inPv ab hdeep tp hsc (pathScore fpath)
+                    when (not ok) $ lift $ ttBadScore tthead a b d inPv ab hdeep tp hsc (pathScore fpath)
                     return fpath
 
 pvRealSearch :: NodeState -> Int -> Int -> Int -> Maybe Move -> Search Path
@@ -481,11 +487,10 @@ pvRealSearch !nst !a !b !d mttmv = do
                     let s = cursc nstf
                     nodes1 <- gets (sNodes . stats)
                     lift $ do
-                        let !deltan = nodes1 - nodes0
-                            mvs = pathMoves s
+                        let mvs = pathMoves s
                             mv | nullSeq mvs = head $ unalt edges	-- on "else" of noMove
                                | otherwise   = head $ unseq mvs
-                        ttStore d (rbmch nstf) (pathScore s) mv deltan
+                        ttStore d (rbmch nstf) (pathScore s) mv (nodes1 - nodes0)
                     return s
 
 -- PV Zero Window
@@ -517,12 +522,14 @@ pvZeroW !nst !b !d = do
              if hdeep /= d || nds .&. 0xF /= 0
                 then return pt
                 else do
+                    let tthead = "TT " ++ show nds
+                    -- lift $ logmes $ tthead ++ ": time to check"
                     fpath <- pvZeroSearch nst b d mttmv
                     let ok =  tp == 0 && (pathScore fpath <  b || hsc >= b)
                            || tp == 1 && (pathScore fpath >= b || hsc <  b)
                            || tp == 2 && (pathScore fpath >= b && hsc >= b
                                       ||  pathScore fpath <  b && hsc <  b)
-                    when (not ok) $ lift $ ttBadScore b b d False False hdeep tp hsc (pathScore fpath)
+                    when (not ok) $ lift $ ttBadScore tthead b b d False False hdeep tp hsc (pathScore fpath)
                     return fpath
 
 pvZeroSearch :: NodeState -> Int -> Int -> Maybe Move -> Search Path
@@ -555,11 +562,10 @@ pvZeroSearch !nst !b !d mttmv = do
                             let s = cursc nstf
                             !nodes1 <- gets (sNodes . stats)
                             lift $ do
-                                let !deltan = nodes1 - nodes0
-                                    mvs = pathMoves s
+                                let mvs = pathMoves s
                                     mv | nullSeq mvs = head $ unalt edges	-- on "else" of noMove
                                        | otherwise   = head $ unseq mvs
-                                ttStore d (rbmch nstf) (pathScore s) mv deltan
+                                ttStore d (rbmch nstf) (pathScore s) mv (nodes1 - nodes0)
                             return s
 
 data NullMoveResult = NoNullMove | NullMoveHigh | NullMoveLow | NullMoveThreat Path

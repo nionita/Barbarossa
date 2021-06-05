@@ -316,12 +316,12 @@ finNode str nodes =
             fen = posToFen p
         logMes $ str ++ " Score: " ++ show (staticScore p) ++ " Fen: " ++ fen
 
-ttBadScore :: Int -> Int -> Int -> Bool -> Bool -> Int -> Int -> Int -> Int -> Game ()
-ttBadScore a b d inPv ab hdeep tp hsc sscore = do
+ttBadScore :: String -> Int -> Int -> Int -> Bool -> Bool -> Int -> Int -> Int -> Int -> Game ()
+ttBadScore tthead a b d inPv ab hdeep tp hsc sscore = do
     s <- get
     let (p:_) = stack s	-- we never saw an empty stack error until now
         fen = posToFen p
-    logMes $ "TT /= search: a = " ++ show a ++ ", b = " ++ show b ++ ", d = " ++ show d
+    logMes $ tthead ++ " /= search: a = " ++ show a ++ ", b = " ++ show b ++ ", d = " ++ show d
              ++ ", inPv = " ++ show inPv ++ ", ab = " ++ show ab ++ ", hdeep = " ++ show hdeep
              ++ ", tp = " ++ show tp ++ ", hsc = " ++ show hsc ++ " /= " ++ show sscore ++ " in fen: " ++ fen
              ++ " ZB: " ++ show (zobkey p)
@@ -367,7 +367,7 @@ ttRead = do
     where empRez = (-1, 0, 0, Move 0, 0)
 
 debugTT :: Bool
-debugTT = True
+debugTT = False
 
 {-# INLINE ttStore #-}
 ttStore :: Int -> Int -> Int -> Move -> Int64 -> Game ()
@@ -375,8 +375,8 @@ ttStore !deep !tp !sc !bestm !nds = do
     s <- get
     p <- getPos
     -- We use the type: 0 - upper limit, 1 - lower limit, 2 - exact score
-    repl <- liftIO $ writeCache (hash s) (zobkey p) deep tp sc bestm nds
-    when debugTT $ logMes $ "ttSt " ++ (if repl then "same" else "diff") ++ ": "
+    (bas, rea, repl) <- liftIO $ writeCache (hash s) (zobkey p) deep tp sc bestm nds
+    when debugTT $ logMes $ "ttSt " ++ show bas ++ " / " ++ show rea ++ " / " ++ show repl ++ ": "
         ++ show (zobkey p) ++ " " ++ show deep ++ " / " ++ show tp
         ++ " / " ++ show sc ++ " / " ++ show bestm ++ " / " ++ show nds
 

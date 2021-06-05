@@ -188,6 +188,8 @@ retrieveEntry tt zkey =
                                      then nullAddr#
                                      else go $ crt0 `plusPtr` pCacheEnSize
 
+type WriteInfo = (Ptr Word64, Int, Bool)
+
 -- Write the position in the table
 -- We want to keep table entries that:
 -- + are from the correct generation, or
@@ -197,14 +199,14 @@ retrieveEntry tt zkey =
 -- That's why we choose the order in second word like it is (easy comparison)
 -- Actually we always search in the whole cell in the hope to find the zkey and replace it
 -- but also keep track of the weakest entry in the cell, which will be replaced otherwise
-writeCache :: Cache -> ZKey -> Int -> Int -> Int -> Move -> Int64 -> IO Bool
+writeCache :: Cache -> ZKey -> Int -> Int -> Int -> Move -> Int64 -> IO WriteInfo
 writeCache !tt !zkey !depth !tp !score !move !nodes = do
-    let !bas   = zKeyToCell tt zkey
-        !pCE   = quintToCacheEn tt zkey depth tp score move nodes
+    let !pCE   = quintToCacheEn tt zkey depth tp score move nodes
         !mkey  = zkey .&. zemask tt
         !lasta = bas `plusPtr` lastaAmount
     store (gener tt) (zemask tt) mkey pCE lasta bas bas maxBound
-    where store !gen !mmask !mkey !pCE !lasta = go
+    where !bas = zKeyToCell tt zkey 
+          store !gen !mmask !mkey !pCE !lasta = go
               -- where go !crt0 !rep0 !sco0
               --          = if isSameKey mmask mkey crt0
               where go !crt0 !rep0 !sco0 = do
@@ -212,14 +214,14 @@ writeCache !tt !zkey !depth !tp !score !move !nodes = do
                          if w .&. mmask == mkey
                             then do
                                 poke (castPtr crt0) pCE	-- found same key: update & exit
-                                return True
+                                return (bas, crt0 `minusPtr` bas, True)
                             else do
                                 lowc <- peek (crt0 `plusPtr` 8)	-- take the lower word
                                 scoreReplaceLow gen lowc crt0 rep0 sco0
                                     (\r s -> if crt0 >= lasta
                                                 then do
                                                     poke (castPtr r) pCE
-                                                    return False
+                                                    return (bas, r `minusPtr` bas, False)
                                                 else go (crt0 `plusPtr` pCacheEnSize) r s)
 
 lastaAmount :: Int
@@ -232,14 +234,14 @@ lastaAmount = 3 * pCacheEnSize	-- for computation of the last address in the cel
 -- There is no premature termination of the loop, except when we find the exact key,
 -- but this case is handled in the local go function of writeCache
 scoreReplaceLow :: Word64 -> Word64 -> Ptr Word64 -> Ptr Word64 -> Word64
-    -> (Ptr Word64 -> Word64 -> IO Bool)	-- continuation function
-    -> IO Bool
+    -> (Ptr Word64 -> Word64 -> IO WriteInfo)	-- continuation function
+    -> IO WriteInfo
 scoreReplaceLow gen lowc crt rep sco cont
     | entry_gen > gen = cont crt minBound	-- replace: empty, or very old generation
     | entry_sco < sco = cont crt entry_sco	-- replace: worse score
     | otherwise       = cont rep sco
-    where entry_gen = lowc .&. generMsk
-          entry_sco = lowc .&. 0xFF0000000000FFFF	-- mask everything but the generation and the move
+    where !entry_gen = lowc .&. generMsk
+          entry_sco  = lowc .&. 0xFF0000000000FFFF	-- mask everything but the generation and the move
 
 quintToCacheEn :: Cache -> ZKey -> Int -> Int -> Int -> Move -> Int64 -> PCacheEn
 quintToCacheEn !tt !zkey !depth !tp !score !(Move move) !nodes = pCE
