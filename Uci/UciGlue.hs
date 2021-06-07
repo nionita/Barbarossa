@@ -30,7 +30,6 @@ bestMoveCont draft sttime1 sttime stati lastsc lpv rmvs = do
                 lastscore = lastsc,
                 rootmvs   = rmvs,
                 window    = aspirWindow,
-                best      = False,
                 stoptime1 = sttime1,
                 stoptime  = sttime
               }
