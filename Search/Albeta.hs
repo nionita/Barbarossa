@@ -97,7 +97,7 @@ iidNewDepth = subtract 1
 
 -- Parameter for quiescenst search
 qsDeltaMargin :: Int
-qsDeltaMargin  = 100
+qsDeltaMargin  = 1100
 
 type Search a = CState PVState Game a
 
@@ -462,7 +462,7 @@ pvSearch nst !a !b !d = do
               else do
                 nodes0 <- gets (sNodes . stats)
                 -- futility pruning:
-                let !prune = isPruneFutil d a True (staticScore pos)
+                let !prune = isPruneFutil pos d a True
                 -- Loop thru the moves
                 let !nsti = resetNSt (pathFromScore a) (Killer []) nst'
                 !nstf <- pvSLoop b d False prune nsti edges
@@ -515,7 +515,7 @@ pvZeroW !nst !b !d = do
                       else do
                         !nodes0 <- gets (sNodes . stats)
                         -- futility pruning:
-                        let !prune = isPruneFutil d bGrain False (staticScore pos)
+                        let !prune = isPruneFutil pos d bGrain False
                         -- Loop thru the moves
                         let kill1 = case nmhigh of
                                         NullMoveThreat s -> newTKiller pos d s
@@ -798,12 +798,12 @@ pvLoop f s (Alt (e:es)) = do
            else pvLoop f s' $ Alt es
 
 -- Futility pruning:
-isPruneFutil :: Int -> Int -> Bool -> Int -> Bool
-isPruneFutil d a pv v
+isPruneFutil :: MyPos -> Int -> Int -> Bool -> Bool
+isPruneFutil pos d a pv
     | nearmate a              = False
     | pv && d > maxFutilDepth = False
     | d > maxFutilDepth + 1   = False	-- for zero window searches we allow higher futility depth
-    | otherwise               = v + futilMargins d <= a
+    | otherwise               = staticScore pos + futilMargins d <= a
 
 failHardNoValidMove :: Int -> Int -> MyPos -> Path
 failHardNoValidMove !a !b pos = trimaxPath a b $! if tacticalPos pos then matedPath else drawPath
@@ -848,34 +848,29 @@ qsInCheck !a !b !s = do
     edges <- Alt <$> lift genEscapeMoves
     if noMove edges
        then return $! -mateScore
-       else do
-          !dcut <- lift $ qsDelta $ a - s - qsDeltaMargin
-          if dcut
-             then do
+       else if s + qsDeltaMargin < a
+               then do
                  when collectFens $ finWithNodes "DELT"
                  return a
-             else pvQLoop b a edges
+               else pvQLoop b a edges
 
 qsNormal :: Int -> Int -> Int -> Bool -> Search Int
 qsNormal !a !b !s front
     | s >= b = do
          when collectFens $ finWithNodes "BETA"
          return b
+    | s + qsDeltaMargin < a = do
+         when collectFens $ finWithNodes "DELT"
+         return a
     | otherwise = do
-         !dcut <- lift $ qsDelta $ a - s - qsDeltaMargin
-         if dcut
-            then do
-                when collectFens $ finWithNodes "DELT"
-                return a
-            else do
-                edges <- Alt <$> lift (genTactMoves front)
-                if noMove edges
-                   then do	-- no more captures
-                       when collectFens $ finWithNodes "NOCA"
-                       return s
-                   else if s > a
-                           then pvQLoop b s edges
-                           else pvQLoop b a edges
+         edges <- Alt <$> lift (genTactMoves front)
+         if noMove edges
+            then do	-- no more captures
+                when collectFens $ finWithNodes "NOCA"
+                return s
+            else if s > a
+                    then pvQLoop b s edges
+                    else pvQLoop b a edges
 
 pvQLoop :: Int -> Int -> Alt Move -> Search Int
 pvQLoop !b = go
