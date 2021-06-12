@@ -455,16 +455,19 @@ pvSearch nst !a !b !d = do
            -- Use the found TT move as best move
            let mttmv = if hdeep > 0 then Just e else Nothing
                !nst'  = nst { cpos = pos }
-           edges <- genAndSort nst' mttmv a b d
+               -- Idea from Stockfish: reduce PV depth when not in TT
+               !d' | inPv, d >= 6, hdeep < 0 = d - 2
+                   | otherwise               = d
+           edges <- genAndSort nst' mttmv a b d'
            if noMove edges
               then return $! failSoftNoValidMove pos
               else do
                 nodes0 <- gets (sNodes . stats)
                 -- futility pruning:
-                let !prune = isPruneFutil d a True (staticScore pos)
+                let !prune = isPruneFutil d' a True (staticScore pos)
                     !nsti  = resetNSt a (Killer []) nst'
                 -- Loop thru the moves
-                !nstf <- pvSLoop b d False prune nsti edges
+                !nstf <- pvSLoop b d' False prune nsti edges
                 let s = cursc nstf
                 whenAbort minPath $
                     if movno nstf == 1
@@ -476,7 +479,7 @@ pvSearch nst !a !b !d = do
                                    mvs = pathMoves s
                                    mv | nullSeq mvs = head $ unalt edges	-- not null - on "else" of noMove
                                       | otherwise   = head $ unseq mvs
-                               ttStore d (rbmch nstf) (pathScore s) mv deltan
+                               ttStore d' (rbmch nstf) (pathScore s) mv deltan
                            return s
 
 -- PV Zero Window
