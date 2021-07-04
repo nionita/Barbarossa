@@ -209,10 +209,12 @@ bnMateDistance wbish sq = min (squareDistance sq ocor1) (squareDistance sq ocor2
 ------ King Safety ------
 kingSafe :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 kingSafe p !ew = mad (ewKingSafe ew) ksafe
-    where !ksafe = ksSide (yo p) (yoKAttacs p) (myPAttacs p) (myNAttacs p) (myBAttacs p) (myRAttacs p) 
-                          (myQAttacs p) (myKAttacs p) (myAttacs p)
-                 - ksSide (me p) (myKAttacs p) (yoPAttacs p) (yoNAttacs p) (yoBAttacs p) (yoRAttacs p) 
-                          (yoQAttacs p) (yoKAttacs p) (yoAttacs p)
+    where !ksafe = ksSide (yo p) (yoKAttacs p) yoa (myPAttacs p) (myNAttacs p) (myBAttacs p)
+                          (myRAttacs p) (myQAttacs p) (myKAttacs p) (myAttacs p)
+                 - ksSide (me p) (myKAttacs p) mya (yoPAttacs p) (yoNAttacs p) (yoBAttacs p)
+                          (yoRAttacs p) (yoQAttacs p) (yoKAttacs p) (yoAttacs p)
+          yoa = yoNAttacs p .|. yoBAttacs p
+          mya = myNAttacs p .|. myBAttacs p
 
 -- To make the sum and count in one pass
 data Flc = Flc !Int !Int
@@ -220,8 +222,8 @@ data Flc = Flc !Int !Int
 fadd :: Flc -> Flc -> Flc
 fadd (Flc f1 q1) (Flc f2 q2) = Flc (f1+f2) (q1+q2)
 
-ksSide :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
-ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
+ksSide :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
+ksSide !yop !yok !yoa !myp !myn !myb !myr !myq !myk !mya
     | myq == 0  = 0
     | otherwise = mattacs
     where qual a p
@@ -232,13 +234,12 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
               | otherwise = Flc 1 (p `unsafeShiftL` 3)
               where !yoka = yok .&. a
                     y = popCount yoka
-          -- qualWeights = [1, 3, 3, 5, 7, 3]
-          !qp = qual myp 1
-          !qn = qual myn 3
-          !qb = qual myb 3
-          !qr = qual myr 5
-          !qq = qual myq 7
-          !qk = qual myk 3
+          !qp = qual myp qwP
+          !qn = qual myn qwN
+          !qb = qual myb qwB
+          !qr = qual myr qwR
+          !qq = qual myq qwQ
+          !qk = qual myk qwK
           !(Flc c q) = fadd qp $ fadd qn $ fadd qb $ fadd qr $ fadd qq qk
           !mattacs
               | c == 0 = 0
@@ -247,16 +248,29 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
               --       !conce = popCount $ yok .&. mya
               -- This is equivalent to:
               where !freco = popCount $ yok `less` (yop `less` mya)
-                    !ixm = c * q `unsafeShiftR` 2
-                    !ixt = ixm + c + ksShift - freco
-                    ksShift = 13
+                    !ixm   = c * q `unsafeShiftR` ixsh
+                    -- When the king is supported: less danger
+                    !ksupp = popCount $ yok .&. yoa
+                    !ixt   = offset + ixm + c - freco - ksupp
 
--- We take the maximum of 272 because:
--- Quali max: 8 * (1 + 3 + 3 + 5 + 10 + 3) = 200
--- Flag max: 6
--- 6 * 200 / 4 + 6 + 13 = 319
+-- Double here and half in the index (ixsh 3 instead of 2)
+qwP, qwN, qwB, qwR, qwQ, qwK :: Int
+qwP =  2
+qwN =  8
+qwB =  8
+qwR = 11
+qwQ = 14
+qwK =  9
+
+ixsh, lima, offset :: Int
+ixsh = 3
+offset = 16
+lima = (flag_max * quali_max `shiftR` ixsh) + flag_max
+    where flag_max  = 6
+          quali_max = 8 * (qwP + qwN + qwB + qwR + qwQ + qwK)
+
 attCoef :: UArray Int Int32
-attCoef = listArray (0, 319) $ take zeros (repeat 0) ++ [ f x | x <- [0..63] ] ++ repeat (f 63)
+attCoef = listArray (0, lima) $ take zeros (repeat 0) ++ [ f x | x <- [0..63] ] ++ repeat (f 63)
     where -- Without the scaling, f will take max value of 4000 for 63
           f :: Int -> Int32
           f x = let y = fromIntegral x :: Double
