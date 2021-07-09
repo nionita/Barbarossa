@@ -243,34 +243,32 @@ ksSide !yop !yok !yoa !myp !myn !myb !myr !myq !myk !mya
           !(Flc c q) = fadd qp $ fadd qn $ fadd qb $ fadd qr $ fadd qq qk
           !mattacs
               | c == 0 = 0
-              | otherwise = fromIntegral $ attCoef `unsafeAt` ixt
-              -- where !freey = popCount $ yok `less` (mya .|. yop)
-              --       !conce = popCount $ yok .&. mya
-              -- This is equivalent to:
-              where !freco = popCount $ yok `less` (yop `less` mya)
-                    !ixm   = c * q `unsafeShiftR` ixsh
+              | otherwise = fromIntegral $ ksArray `unsafeAt` ksIndex c q freco ksupp
+              where freco = popCount $ yok `less` (yop `less` mya)
                     -- When the king is supported: less danger
-                    !ksupp = popCount $ yok .&. yoa
-                    !ixt   = offset + ixm + c - freco - ksupp
+                    ksupp = popCount $ yok .&. yoa
 
--- Double here and half in the index (ixsh 3 instead of 2)
 qwP, qwN, qwB, qwR, qwQ, qwK :: Int
-qwP =  2
-qwN =  8
-qwB =  8
-qwR = 11
-qwQ = 14
-qwK =  9
+qwP = 1
+qwN = 4
+qwB = 4
+qwR = 6
+qwQ = 8
+qwK = 5
 
-ixsh, lima, offset :: Int
-ixsh = 3
-offset = 16
-lima = (flag_max * quali_max `shiftR` ixsh) + flag_max
-    where flag_max  = 6
-          quali_max = 8 * (qwP + qwN + qwB + qwR + qwQ + qwK)
+{-# INLINE ksIndex #-}
+ksIndex :: Int -> Int -> Int -> Int -> Int
+ksIndex cnt quali fre ksu = offset + (cnt * quali `unsafeShiftR` ixsh) + cnt - fre - ksu
+    where offset = 13
+          ixsh   = 2
 
-attCoef :: UArray Int Int32
-attCoef = listArray (0, lima) $ take zeros (repeat 0) ++ [ f x | x <- [0..63] ] ++ repeat (f 63)
+lima :: Int
+lima = ksIndex cnt_max quali_max 0 0
+    where quali_max = 8 * (qwP + qwN + qwB + qwR + qwQ + qwK)
+          cnt_max   = 6
+
+ksArray :: UArray Int Int32
+ksArray = listArray (0, lima) $ take zeros (repeat 0) ++ [ f x | x <- [0..63] ] ++ repeat (f 63)
     where -- Without the scaling, f will take max value of 4000 for 63
           f :: Int -> Int32
           f x = let y = fromIntegral x :: Double
