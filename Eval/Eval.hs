@@ -855,19 +855,18 @@ kdDist :: Int -> Int
 kdDist = (kdDistArr `unsafeAt`) . (7+)
 
 
------- Advanced pawns and minors, on 5th & 6th ranks (not passed) ------
+------ Advanced pawns (not passed) and minors, on 5th & 6th ranks ------
  
 advPawns :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 advPawns p !ew = mad (ewAdvPawn6 ew) ap6 .
                  mad (ewAdvPawn5 ew) ap5 .
-                 mad (ewAdvMino6 ew) am6 .
-                 mad (ewAdvMino5 ew) am5
+                 mad (ewAdvMinor ew) ami
     where !apbb  = pawns p `less` passed p
           !mapbb = apbb .&. me p
           !yapbb = apbb .&. yo p
           (my5, my6, yo5, yo6)
-              | moving p == White = (0x000000FF00000000, 0x0000FF0000000000, 0xFF000000, 0xFF0000)
-              | otherwise         = (0xFF000000, 0xFF0000, 0x000000FF00000000, 0x0000FF0000000000)
+              | moving p == White = (row5, row6, row4, row3)
+              | otherwise         = (row4, row3, row5, row6)
           !map5 = popCount $ mapbb .&. my5
           !map6 = popCount $ mapbb .&. my6
           !yap5 = popCount $ yapbb .&. yo5
@@ -878,12 +877,10 @@ advPawns p !ew = mad (ewAdvPawn6 ew) ap6 .
           !amino = bishops p .|. knights p
           !mmino = amino .&. me p
           !ymino = amino .&. yo p
-          !mmi5 = popCount $ mmino .&. my5
-          !mmi6 = popCount $ mmino .&. my6
-          !ymi5 = popCount $ ymino .&. yo5
-          !ymi6 = popCount $ ymino .&. yo6
-          !am5  = mmi5 - ymi5
-          !am6  = mmi6 - ymi6
+          !mmi  = popCount $ mmino .&. (my5 .|. my6) .&. notMargins
+          !ymi  = popCount $ ymino .&. (yo5 .|. yo6) .&. notMargins
+          !ami  = mmi - ymi
+          notMargins = fileB .|. fileC .|. fileD .|. fileE .|. fileF .|. fileG
 
 -- Pawn end games are treated specially
 -- We consider escaped passed pawns in 2 situations:
