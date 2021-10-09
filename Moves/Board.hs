@@ -665,12 +665,12 @@ chooseAttacker pos !frompieces
           r = frompieces .&. rooks pos
           q = frompieces .&. queens pos
           k = frompieces .&. kings pos
-          p1 = lsb p
-          n1 = lsb n
-          b1 = lsb b
-          r1 = lsb r
-          q1 = lsb q
-          k1 = lsb k
+          p1 = lsbBBoard p
+          n1 = lsbBBoard n
+          b1 = lsbBBoard b
+          r1 = lsbBBoard r
+          q1 = lsbBBoard q
+          k1 = lsbBBoard k
 
 -- Data structure to keep the status for the incremental calculation
 -- of the new attacks during SEE
