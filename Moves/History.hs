@@ -6,7 +6,6 @@ module Moves.History (
 
 import Control.Monad.ST.Unsafe (unsafeIOToST)
 import Control.Monad.ST
-import Control.Monad (forM_)
 import Data.Bits
 import Data.List (unfoldr)
 import Data.Ord (comparing)
@@ -22,34 +21,15 @@ import Struct.Struct
 -- Int32 should be enough for now with max depth 20
 type History = V.IOVector Int32
 
-pieces, squares, vsize, bloff :: Int
-pieces  = 16
-squares = 64
-vsize = pieces * squares
-bloff = vsize `div` 2
+vsize :: Int
+vsize = 16 * 64 -- pieces * squares
 
 -- The layout is per color, then per piece type, then per square
 -- This should be more cache friendly for sorting the quiet moves
-{-# INLINE adr #-}
-adr :: Move -> Int
-adr m = ofs' m + adr' m
 
--- These functions are used to calculate faster the addresses of a list of moves
--- as they have all the same color, so the offset needs to be calculated only once
 {-# INLINE adrs #-}
 adrs :: [Move] -> [Int]
-adrs []     = []
-adrs (m:ms) = off + adr' m : map f ms
-    where !off = ofs' m
-          f x = off + adr' x
-
-{-# INLINE adr' #-}
-adr' :: Move -> Int
-adr' m = squares * moveHisAdr m + toSquare m
-
-{-# INLINE ofs' #-}
-ofs' :: Move -> Int
-ofs' m = bloff * moveHisOfs m
+adrs = map moveHisAdr
 
 -- Produce small random numbers to initialize the new history
 smallVals :: RandomGen g => g -> [Word32]
@@ -59,10 +39,31 @@ smallVals g = concatMap chop $ randoms g
           f (_, 0) = Nothing
           f (w, k) = Just (w .&. 3, (w `unsafeShiftR` 2, k-1))
 
+-- We want to give irreversible moves a better initial history
+-- (Better means more negative, because of the sort trick)
+-- We use a constant vector with all "pawn to" places fixed at a negative score
+iniHist :: [Int32]
+iniHist = runST $ do
+    let uz = U.fromList $ take vsize $ repeat (0 :: Int32)
+    v <- U.unsafeThaw uz
+    let wpMove = moveAddPiece Pawn $ moveFromTo 0 0
+        i = moveHisAdr wpMove
+    go v i
+    let bpMove = moveAddColor Black wpMove
+        j = moveHisAdr bpMove
+    go v j
+    u <- U.unsafeFreeze v
+    return $ U.toList u
+    where go _ i | i >= 64 = return ()
+          go v i = do
+              V.unsafeWrite v i pmInitialValue
+              go v (i+1)
+          pmInitialValue = -4
+
 newHist :: IO History
 newHist = do
     g <- newStdGen
-    U.thaw $ U.fromList $ map fromIntegral $ take vsize $ smallVals g
+    U.thaw $ U.fromList $ zipWith (+) iniHist $ map fromIntegral $ smallVals g
 
 -- History value: exponential
 -- d is absolute depth, root = 1, so that cuts near root count more
@@ -76,21 +77,24 @@ histw !d = 1 `unsafeShiftL` dm
 
 -- We don't use negative history (i.e. when move did not cut)
 toHist :: History -> Move -> Int -> IO ()
-toHist h m d = addHist h (adr m) (histw d)
+toHist h m d = addHist h (moveHisAdr m) (histw d)
 
 addHist :: History -> Int -> Int32 -> IO ()
 addHist h !ad !p = do
     oh <- V.unsafeRead h ad
     nh <- if (oh >= lowLimit)
              then return $ oh - p -- we subtract, so that the sort is reverse (big first)
-             else do
-                 -- Rescale the whole history
-                 forM_ [0..vsize-1] $ \i -> do
-                     o <- V.unsafeRead h i
-                     V.unsafeWrite h i (o `unsafeShiftR` 1)
+             else do -- Rescale the whole history
+                 go 0
                  return $ (oh `unsafeShiftR` 1) - p
     V.unsafeWrite h ad nh
     where lowLimit = - (1 `unsafeShiftL` 30)
+          go :: Int -> IO ()
+          go i | i >= vsize = return ()
+          go i = do
+              o <- V.unsafeRead h i
+              V.unsafeWrite h i (o `unsafeShiftR` 1)
+              go (i+1)
 
 -- We use a data structure to allow lazyness for the selection of the next
 -- best move (by history values), because we want to use by every selected move
