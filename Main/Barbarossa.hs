@@ -39,7 +39,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.7.0"
-progVerSuff = "i2110"
+progVerSuff = "ttt"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -394,12 +394,12 @@ getUCITime cs c
 
 -- These parameters should be optimised (i.e.: first made options)
 remTimeFracIni, remTimeFracFin, remTimeFracDev :: Double
-remTimeFracIni = 0.15	-- fraction of remaining time which we can consume at once - initial value
-remTimeFracFin = 0.5	-- same at final (when remaining time is near zero)
+remTimeFracIni = 0.05	-- fraction of remaining time which we can consumed at once - initial value
+remTimeFracFin = 0.25	-- same at final (when remaining time is near zero)
 remTimeFracDev = remTimeFracFin - remTimeFracIni
 
 timeReserved :: Int
-timeReserved = 100	-- milliseconds reserved for move communication
+timeReserved = 200	-- milliseconds reserved for move communication
 
 extendScoreMargin :: Int
 extendScoreMargin = 24
