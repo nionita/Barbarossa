@@ -210,9 +210,28 @@ bnMateDistance wbish sq = min (squareDistance sq ocor1) (squareDistance sq ocor2
 kingSafe :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 kingSafe p !ew = mad (ewKingSafe ew) ksafe
     where !ksafe = ksSide (yo p) (yoKAttacs p) (myPAttacs p) (myNAttacs p) (myBAttacs p) (myRAttacs p) 
-                          (myQAttacs p) (myKAttacs p) (myAttacs p)
+                          (myQAttacs p) (myKAttacs p) (myAttacs p) myb myr
                  - ksSide (me p) (myKAttacs p) (yoPAttacs p) (yoNAttacs p) (yoBAttacs p) (yoRAttacs p) 
-                          (yoQAttacs p) (yoKAttacs p) (yoAttacs p)
+                          (yoQAttacs p) (yoKAttacs p) (yoAttacs p) yob yor
+          (myb, myr, yob, yor) = slidesBehindQueen p
+
+{-# INLINE slidesBehindQueen #-}
+slidesBehindQueen :: MyPos -> (Int, Int, Int, Int)
+slidesBehindQueen p = (myb, myr, yob, yor)
+    where (myb, myr) | myQAttacs p .&. yoKAttacs p == 0 = (0, 0)
+                     | otherwise
+                     = (bbQ (me p) (myBAttacs p) (yoKAttacs p), rbQ (me p) (myRAttacs p) (yoKAttacs p))
+          (yob, yor) | yoQAttacs p .&. myKAttacs p == 0 = (0, 0)
+                     | otherwise
+                     = (bbQ (yo p) (yoBAttacs p) (myKAttacs p), rbQ (yo p) (yoRAttacs p) (myKAttacs p))
+          bbQ who oba ka | (nba `less` oba) .&. ka /= 0 = 2
+                         | otherwise                    = 0
+              where nba = bbToSquaresBB (bAttacs ocp) $ who .&. bishops p
+                    ocp = occup p `less` (queens p .&. who)
+          rbQ who ora ka | (nra `less` ora) .&. ka /= 0 = 3
+                         | otherwise                    = 0
+              where nra = bbToSquaresBB (rAttacs ocp) $ who .&. rooks p
+                    ocp = occup p `less` (queens p .&. who)
 
 -- To make the sum and count in one pass
 data Flc = Flc !Int !Int
@@ -220,8 +239,8 @@ data Flc = Flc !Int !Int
 fadd :: Flc -> Flc -> Flc
 fadd (Flc f1 q1) (Flc f2 q2) = Flc (f1+f2) (q1+q2)
 
-ksSide :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
-ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
+ksSide :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int -> Int -> Int
+ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya !bbq !rbq
     | myq == 0  = 0
     | otherwise = mattacs
     where qual a p
@@ -237,7 +256,7 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
           !qn = qual myn 3
           !qb = qual myb 3
           !qr = qual myr 5
-          !qq = qual myq 7
+          !qq = qual myq (8 + bbq + rbq)
           !qk = qual myk 3
           !(Flc c q) = fadd qp $ fadd qn $ fadd qb $ fadd qr $ fadd qq qk
           !mattacs
