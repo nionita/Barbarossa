@@ -26,11 +26,8 @@ import Moves.Fen
 -- Is color c in check in position p?
 {-# INLINE isCheck #-}
 isCheck :: MyPos -> Color -> Bool
-isCheck p White | check p .&. white == 0 = False
-                | otherwise              = True
-    where !white = occup p `less` black p
-isCheck p Black | check p .&. black p == 0 = False
-                | otherwise                = True
+isCheck p White = check p .&. (occup p `less` black p) /= 0
+isCheck p Black = check p .&. black p /= 0
 
 {-# INLINE inCheck #-}
 inCheck :: MyPos -> Bool

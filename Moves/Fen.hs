@@ -131,22 +131,28 @@ posLazy !co !ocp !tblack !tpawns !tknights !tbishops !trooks !tqueens !tkings
                   }
     where !twhPAtt = bbToSquaresBB (pAttacs White) $ tpawns .&. white
           !twhNAtt = bbToSquaresBB nAttacs $ tknights .&. white
-          !twhBAtt = bbToSquaresBB (bAttacs ocp) $ tbishops .&. white
-          !twhRAtt = bbToSquaresBB (rAttacs ocp) $ trooks .&. white
-          !twhQAtt = bbToSquaresBB (qAttacs ocp) $ tqueens .&. white
+          !twhBAtt = bbToSquaresBB (bAttacs ocpbw) $ tbishops .&. white
+          !twhRAtt = bbToSquaresBB (rAttacs ocprw) $ trooks .&. white
+          !twhQAtt = bbToSquaresBB (qAttacs ocp  ) $ tqueens .&. white
           !twhKAtt = kAttacs $ firstOne $ tkings .&. white
           !tblPAtt = bbToSquaresBB (pAttacs Black) $ tpawns .&. tblack
           !tblNAtt = bbToSquaresBB nAttacs $ tknights .&. tblack
-          !tblBAtt = bbToSquaresBB (bAttacs ocp) $ tbishops .&. tblack
-          !tblRAtt = bbToSquaresBB (rAttacs ocp) $ trooks .&. tblack
-          !tblQAtt = bbToSquaresBB (qAttacs ocp) $ tqueens .&. tblack
+          !tblBAtt = bbToSquaresBB (bAttacs ocpbb) $ tbishops .&. tblack
+          !tblRAtt = bbToSquaresBB (rAttacs ocprb) $ trooks .&. tblack
+          !tblQAtt = bbToSquaresBB (qAttacs ocp  ) $ tqueens .&. tblack
           !tblKAtt = kAttacs $ firstOne $ tkings .&. tblack
           !twhAttacs = twhPAtt .|. twhNAtt .|. twhBAtt .|. twhRAtt .|. twhQAtt .|. twhKAtt
           !tblAttacs = tblPAtt .|. tblNAtt .|. tblBAtt .|. tblRAtt .|. tblQAtt .|. tblKAtt
           !white = ocp `less` tblack
-          !whcheck = white   .&. tkings .&. tblAttacs
+          !whcheck = white  .&. tkings .&. tblAttacs
           !blcheck = tblack .&. tkings .&. twhAttacs
           !tcheck = whcheck .|. blcheck
+          !qandb = tqueens .|. tbishops
+          !qandr = tqueens .|. trooks
+          !ocpbw = ocp `less` (qandb .&. white)
+          !ocprw = ocp `less` (qandr .&. white)
+          !ocpbb = ocp `less` (qandb .&. tblack)
+          !ocprb = ocp `less` (qandr .&. tblack)
 
 -- Passed pawns: only with bitboard operations
 whitePassed :: BBoard -> BBoard -> BBoard
