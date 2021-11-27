@@ -465,7 +465,11 @@ mobDiff :: MyPos -> BBoard -> BBoard -> BBoard -> BBoard -> EvalWeights -> MidEn
 mobDiff p mylr yolr mypb yopb ew = mad (ewMobilityKnight ew) n .
                                    mad (ewMobilityBishop ew) b .
                                    mad (ewMobilityRook   ew) r .
-                                   mad (ewMobilityQueen  ew) q
+                                   mad (ewMobilityQueen  ew) q .
+                                   mad (ewMobilLowKnight ew) ln .
+                                   mad (ewMobilLowBishop ew) lb .
+                                   mad (ewMobilLowRook   ew) lr .
+                                   mad (ewMobilLowQueen  ew) lq
     where !myPMA = me p .&. pawns p .&. (mylr .|. mypb)
           !yoPMA = yo p .&. pawns p .&. (yolr .|. yopb)
           !myMA  = complement $ myPMA .|. (kings p .&. me p) .|. yoPAttacs p
@@ -482,6 +486,21 @@ mobDiff p mylr yolr mypb yopb ew = mad (ewMobilityKnight ew) n .
           !b = myB - yoB
           !r = myR - yoR
           !q = myQ - yoQ
+          -- Low mobility of o piece type is bad
+          loMob x a bb | bb == 0 || x >= a = 0
+                       | otherwise         = (a - x) * (a - x)
+          !myNl = loMob myN 2 $ knights p .&. me p
+          !myBl = loMob myB 2 $ bishops p .&. me p
+          !myRl = loMob myR 3 $ rooks   p .&. me p
+          !myQl = loMob myQ 2 $ queens  p .&. me p
+          !yoNl = loMob yoN 2 $ knights p .&. yo p
+          !yoBl = loMob yoB 2 $ bishops p .&. yo p
+          !yoRl = loMob yoR 3 $ rooks   p .&. yo p
+          !yoQl = loMob yoQ 2 $ queens  p .&. yo p
+          !ln = myNl - yoNl
+          !lb = myBl - yoBl
+          !lr = myRl - yoRl
+          !lq = myQl - yoQl
 
 ------ Center control ------
 

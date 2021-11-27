@@ -62,6 +62,10 @@ weights = [
         ("ewMobilityBishop",  (  53,   33)),
         ("ewMobilityRook",    (  16,   34)),	-- DSPSA ...
         ("ewMobilityQueen",   (   2,   11)),
+        ("ewMobilLowKnight",  (-100, -200)),	-- low mobility
+        ("ewMobilLowBishop",  (-100, -200)),	-- low mobility
+        ("ewMobilLowRook",    (-100, -300)),	-- low mobility
+        ("ewMobilLowQueen",   (-100, -400)),	-- low mobility
         ("ewCenterPAtts",     (  73,   57)),
         ("ewCenterNAtts",     (  48,   37)),
         ("ewCenterBAtts",     (  52,   35)),
