@@ -604,9 +604,8 @@ pvInnerLoop :: Int 	-- current beta
             -> NodeState 	-- node status
             -> Move	-- move to search
             -> Search NodeState
-pvInnerLoop b d zw prune nst e = timeToAbort nst $ do
-    let !canPrune = canPruneMove (cpos nst) e
-    if prune && (zw || movno nst > 1) && canPrune
+pvInnerLoop b d zw prune nst e = timeToAbort nst $
+    if prune && (zw || movno nst > 1) && canPruneMove (cpos nst) e
        then return $! nst { movno = movno nst + 1 }
        else do
            !exd <- lift $ doMove e	-- do the move

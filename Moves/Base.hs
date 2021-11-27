@@ -35,6 +35,7 @@ import Eval.Eval
 import Moves.ShowMe
 import Moves.History
 import Moves.Notation
+import Moves.Moves
 
 {-# INLINE nearmate #-}
 nearmate :: Int -> Bool
@@ -396,7 +397,18 @@ canPruneMove p m
     | not (moveIsNormal m) = False
     | moveIsCapture p m    = False
     | movePassed p m       = False
-    | otherwise            = not $ moveChecks p m
+    | moveChecks p m       = False
+    | myQAttacs p == 0     = True	-- the rest makes sense only with own queen on board
+    | otherwise            = not $ newQueenAttack p m
+
+-- A move that initiates a new queen attack will not be pruned
+newQueenAttack :: MyPos -> Move -> Bool
+newQueenAttack p m
+    | myAttacs  p .&. yoKAttacs p == 0 = False	-- not enough pressure
+    | myQAttacs p .&. yoKAttacs p /= 0 = False	-- already attacked
+    | movePiece m /= Queen             = False	-- not quite right: it could be a discovered new attack
+    | otherwise                        = bAttacs (occup p) (toSquare m) .&. yoKAttacs p /= 0
+                                      || rAttacs (occup p) (toSquare m) .&. yoKAttacs p /= 0
 
 logMes :: String -> Game ()
 logMes s = lift $ talkToContext . LogMes $ s
