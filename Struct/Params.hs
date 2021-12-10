@@ -47,11 +47,11 @@ params = [
 -- All weights have type MidEnd
 weights :: [EvalWeightSpec]
 weights = [
-        ("ewQueenVal",        (9149, 8710)),	-- Bayes direct 35 steps
-        ("ewRookVal",         (4350, 4635)),	-- Bayes direct 35 steps
-        ("ewBishopVal",       (2967, 3031)),	-- Bayes direct 35 steps
-        ("ewKnightVal",       (2930, 2757)),	-- Bayes direct 35 steps
-        ("ewPawnVal",         ( 717,  768)),	-- Bayes direct 35 steps
+        ("ewQueenVal",        (8853, 8390)),	-- Bayes direct 35 steps
+        ("ewRookVal",         (4583, 4652)),	-- Bayes direct 35 steps
+        ("ewBishopVal",       (2930, 3022)),	-- Bayes direct 35 steps
+        ("ewKnightVal",       (2874, 2778)),	-- Bayes direct 35 steps
+        ("ewPawnVal",         ( 743,  829)),	-- Bayes direct 35 steps
         ("ewKingSafe",        (   1,    0)),
         ("ewKingOpen",        (   2,    4)),
         ("ewKingPlaceCent",   (   8,    1)),
@@ -62,10 +62,10 @@ weights = [
         ("ewRookOpen",        ( 205,  178)),	-- 20k steps, depth 4,
         ("ewRookConn",        (  89,   59)),	-- 2 games, beta=0.95, gamma=0.8,
         ("ewRook7th",         ( 201,  161)),	-- niu=0.99, eps=1E-6
-        ("ewMobilityKnight",  (  53,   50)),	-- Bayes direct 35 steps
-        ("ewMobilityBishop",  (  42,   22)),	-- Bayes direct 35 steps
-        ("ewMobilityRook",    (  16,   42)),	-- Bayes direct 35 steps
-        ("ewMobilityQueen",   (   2,   12)),	-- Bayes direct 35 steps
+        ("ewMobilityKnight",  (  54,   53)),	-- Bayes direct 35 steps
+        ("ewMobilityBishop",  (  43,   27)),	-- Bayes direct 35 steps
+        ("ewMobilityRook",    (  19,   37)),	-- Bayes direct 35 steps
+        ("ewMobilityQueen",   (   2,   13)),	-- Bayes direct 35 steps
         ("ewCenterPAtts",     (  73,   57)),
         ("ewCenterNAtts",     (  48,   37)),
         ("ewCenterBAtts",     (  52,   35)),
