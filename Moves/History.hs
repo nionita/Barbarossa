@@ -39,9 +39,9 @@ smallVals g = concatMap chop $ randoms g
           f (_, 0) = Nothing
           f (w, k) = Just (w .&. 3, (w `unsafeShiftR` 2, k-1))
 
--- We want to give irreversible moves a better initial history
--- (Better means more negative, because of the sort trick)
--- We use a constant vector with all "pawn to" places fixed at a negative score
+-- We want to give irreversible moves a worse initial history
+-- (Worse means positive, because of the sort trick)
+-- We use a constant vector with all "pawn to" places initialized at a positive score
 iniHist :: [Int32]
 iniHist = runST $ do
     let uz = U.fromList $ take vsize $ repeat (0 :: Int32)
@@ -58,7 +58,7 @@ iniHist = runST $ do
           go v i = do
               V.unsafeWrite v i pmInitialValue
               go v (i+1)
-          pmInitialValue = -4
+          pmInitialValue = 4
 
 newHist :: IO History
 newHist = do
