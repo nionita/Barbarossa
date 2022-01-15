@@ -22,8 +22,8 @@ type EvalWeightSpec = (String, (Integer, Integer))
 -- All parameters have type Int
 params :: [EvalParamSpec]
 params = [
-        ("epMovingMid",       156),
-        ("epMovingEnd",       156),
+        ("epMovingMid",       169),
+        ("epMovingEnd",       153),
         ("epMaterMinor",        1),
         ("epMaterRook",         4),
         ("epMaterQueen",       13),
@@ -36,8 +36,8 @@ params = [
         ("epPassKingProx",     12),
         ("epPassBlockO",       11),
         ("epPassBlockA",       17),
-        ("epPassMin",          30),
-        ("epPassMyCtrl",        6),
+        ("epPassMin",          29),
+        ("epPassMyCtrl",        5),
         ("epPassYoCtrl",        7)
     ]
 
@@ -47,52 +47,52 @@ params = [
 -- All weights have type MidEnd
 weights :: [EvalWeightSpec]
 weights = [
-        ("ewQueenVal",        (8800, 8800)),	-- material value queen * 8
-        ("ewRookVal",         (4520, 4520)),	-- material value rook * 8
-        ("ewBishopVal",       (2880, 2880)),	-- material value bishop * 8
-        ("ewKnightVal",       (2880, 2880)),	-- material value knight * 8
-        ("ewPawnVal",         ( 800,  800)),	-- material value pawn * 8
+        ("ewQueenVal",        (8418, 9294)),	-- material value queen * 8
+        ("ewRookVal",         (4513, 4851)),	-- material value rook * 8
+        ("ewBishopVal",       (2791, 2741)),	-- material value bishop * 8
+        ("ewKnightVal",       (2787, 2747)),	-- material value knight * 8
+        ("ewPawnVal",         ( 792,  791)),	-- material value pawn * 8
         ("ewKingSafe",        (   1,    0)),
         ("ewKingOpen",        (   2,    4)),
         ("ewKingPlaceCent",   (   8,    1)),
         ("ewKingPlacePwns",   (   0,    4)),
-        ("ewKingPawn",        (   3,   50)),
-        ("ewKingThreat",      (   0,  300)),
-        ("ewRookHOpen",       ( 162,  182)),	-- DSPSA with Adadelta
-        ("ewRookOpen",        ( 205,  178)),	-- 20k steps, depth 4,
-        ("ewRookConn",        (  89,   59)),	-- 2 games, beta=0.95, gamma=0.8,
-        ("ewRook7th",         ( 201,  161)),	-- niu=0.99, eps=1E-6
-        ("ewMobilityKnight",  (  50,   56)),
-        ("ewMobilityBishop",  (  53,   33)),
-        ("ewMobilityRook",    (  16,   34)),	-- DSPSA ...
+        ("ewKingPawn",        (   3,   53)),
+        ("ewKingThreat",      (   1,  303)),
+        ("ewRookHOpen",       ( 166,  192)),	-- DSPSA with Adadelta
+        ("ewRookOpen",        ( 198,  172)),	-- 20k steps, depth 4,
+        ("ewRookConn",        (  92,   64)),	-- 2 games, beta=0.95, gamma=0.8,
+        ("ewRook7th",         ( 203,  145)),	-- niu=0.99, eps=1E-6
+        ("ewMobilityKnight",  (  48,   50)),
+        ("ewMobilityBishop",  (  53,   35)),
+        ("ewMobilityRook",    (  18,   34)),	-- DSPSA ...
         ("ewMobilityQueen",   (   2,   11)),
-        ("ewCenterPAtts",     (  73,   57)),
-        ("ewCenterNAtts",     (  48,   37)),
-        ("ewCenterBAtts",     (  52,   35)),
-        ("ewCenterRAtts",     (  14,   22)),	-- DSPSA ...
-        ("ewCenterQAtts",     (  13,   53)),
-        ("ewCenterKAtts",     (   2,   62)),
+        ("ewCenterPAtts",     (  74,   59)),
+        ("ewCenterNAtts",     (  46,   36)),
+        ("ewCenterBAtts",     (  52,   34)),
+        ("ewCenterRAtts",     (  14,   21)),	-- DSPSA ...
+        ("ewCenterQAtts",     (  13,   50)),
+        ("ewCenterKAtts",     (   2,   58)),
         ("ewSpace",           (   1,    0)),
         ("ewAdvAtts",         (   1,   17)),
-        ("ewIsolPawns",       ( -36, -113)),
-        ("ewIsolPassed",      ( -63, -143)),
-        ("ewBackPawns",       (-108, -141)),
+        ("ewIsolPawns",       ( -38, -111)),
+        ("ewIsolPassed",      ( -58, -140)),
+        ("ewBackPawns",       (-111, -140)),
         ("ewBackPOpen",       ( -21,  -27)),
-        ("ewEnpHanging",      ( -19,  -27)),
-        ("ewEnpEnPrise",      ( -29,  -26)),
+        ("ewEnpHanging",      ( -20,  -29)),
+        ("ewEnpEnPrise",      ( -32,  -25)),
         ("ewEnpAttacked",     (  -2,  -14)),
-        ("ewWepTotal",        ( 150,    0)),
-        ("ewWepAttacked",     (   0,  200)),
-        ("ewLastLinePenalty", ( 100,    0)),
-        ("ewBishopPair",      ( 386,  323)),
-        ("ewBishopPawns",     ( -25,  -54)),
-        ("ewRedundanceRook",  ( -27,  -51)),	-- DSPSA ...
-        ("ewRookPawn",        ( -44,  -32)),
-        ("ewAdvPawn5",        (  14,  106)),
-        ("ewAdvPawn6",        ( 352,  333)),
-        ("ewPawnBlockP",      (-112,  -92)),
-        ("ewPawnBlockO",      ( -23,  -26)),
-        ("ewPawnBlockA",      ( -19,  -69)),
+        ("ewWepTotal",        ( 138,    1)),
+        ("ewWepAttacked",     (   1,  190)),
+        ("ewLastLinePenalty", (  94,    1)),
+        ("ewBishopPair",      ( 367,  335)),
+        ("ewBishopPawns",     ( -26,  -57)),
+        ("ewRedundanceRook",  ( -26,  -55)),	-- DSPSA ...
+        ("ewRookPawn",        ( -46,  -30)),
+        ("ewAdvPawn5",        (  13,  117)),
+        ("ewAdvPawn6",        ( 330,  335)),
+        ("ewPawnBlockP",      (-106, -100)),
+        ("ewPawnBlockO",      ( -23,  -25)),
+        ("ewPawnBlockA",      ( -18,  -69)),
         ("ewPassPawnLev",     (   2,    8))
     ]
 
