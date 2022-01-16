@@ -284,7 +284,6 @@ materDiff p !ew = mad (ewMaterialDiff ew) md
 -- We also give a bonus for a king beeing near pawn(s)
 kingPlace :: EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
 kingPlace ep p !ew = mad (ewKingPawn      ew) kpa .
-                     mad (ewKingThreat    ew) ktr .
                      mad (ewKingOpen      ew) ko .
                      mad (ewKingPlaceCent ew) kcd .
                      mad (ewKingPlacePwns ew) kpd
@@ -317,26 +316,15 @@ kingPlace ep p !ew = mad (ewKingPawn      ew) kpa .
           !ypassed = passed p .&. yo p
           materFun m r q = (m * epMaterMinor ep + r * epMaterRook ep + q * epMaterQueen ep)
                                `unsafeShiftR` epMaterScale ep
-          !ko = adv - own
-          mwb = popCount $ bAttacs (pawns p) mks .&. nopawns
-          mwr = popCount $ rAttacs (pawns p) mks .&. nopawns
-          ywb = popCount $ bAttacs (pawns p) yks .&. nopawns
-          ywr = popCount $ rAttacs (pawns p) yks .&. nopawns
-          nopawns = complement $ pawns p
-          comb !oR !oQ !wb !wr = let r = oR * wr
-                                     q = oQ * (wb + wr)
-                                 in r + q*q
-          own = comb yrooks yqueens mwb mwr
-          adv = comb mrooks mqueens ywb ywr
+          !ko  = mop * mop - yop * yop
+          !mop | yqueens > 0 = popCount $ qAttacs (occup p) mks `less` pawns p
+               | otherwise   = 0
+          !yop | mqueens > 0 = popCount $ qAttacs (occup p) yks `less` pawns p
+               | otherwise   = 0
           -- King on pawns: more is better (now linear)
           pmkpa = popCount (myKAttacs p .&. pawns p)
           pykpa = popCount (yoKAttacs p .&. pawns p)
           !kpa = pmkpa - pykpa
-          -- Threat by king only pieces:
-          -- pieces attacked by king and not defended by a pawn
-          pmktr = popCount (myKAttacs p .&. yo p .&. nopawns `less` yoPAttacs p)
-          pyktr = popCount (yoKAttacs p .&. me p .&. nopawns `less` myPAttacs p)
-          !ktr = pmktr - pyktr
 
 promoW, promoB :: Square -> Square
 promoW s = 56 + (s .&. 7)
