@@ -293,16 +293,22 @@ kingPlace ep p !ew = mad (ewKingPawn      ew) kpa .
           !yks = kingSquare (kings p) $ yo p
           !mkm = materFun yminor yrooks yqueens
           !ykm = materFun mminor mrooks mqueens
-          (!mpl, !ypl, !mpi, !ypi)
+          (!mpl, !ypl, !mpi, !ypi, mback, yback, !mblop, !yblop)
               | moving p == White = ( kingMaterBonus yqueens White mpawns mkm mks
                                     , kingMaterBonus mqueens Black ypawns ykm yks
                                     , kingPawnsBonus mks mpassed ypassed
                                     , kingPawnsBonus yks mpassed ypassed
+                                    , row1, row8
+                                    , pawns p .&. (occup p `unsafeShiftR` 8)
+                                    , pawns p .&. (occup p `unsafeShiftL` 8)
                                     )
               | otherwise         = ( kingMaterBonus yqueens Black mpawns mkm mks
                                     , kingMaterBonus mqueens White ypawns ykm yks
                                     , kingPawnsBonus mks ypassed mpassed
                                     , kingPawnsBonus yks ypassed mpassed
+                                    , row8, row1
+                                    , pawns p .&. (occup p `unsafeShiftL` 8)
+                                    , pawns p .&. (occup p `unsafeShiftR` 8)
                                     )
           !mrooks  = popCount $ rooks p .&. me p
           !mqueens = popCount $ queens p .&. me p
@@ -317,9 +323,9 @@ kingPlace ep p !ew = mad (ewKingPawn      ew) kpa .
           materFun m r q = (m * epMaterMinor ep + r * epMaterRook ep + q * epMaterQueen ep)
                                `unsafeShiftR` epMaterScale ep
           !ko  = mop * mop - yop * yop
-          !mop | yqueens > 0 = popCount $ qAttacs (occup p) mks `less` pawns p
+          !mop | yqueens > 0 = popCount $ qAttacs (me p .|. yblop) mks `less` (pawns p .|. mback)
                | otherwise   = 0
-          !yop | mqueens > 0 = popCount $ qAttacs (occup p) yks `less` pawns p
+          !yop | mqueens > 0 = popCount $ qAttacs (yo p .|. mblop) yks `less` (pawns p .|. yback)
                | otherwise   = 0
           -- King on pawns: more is better (now linear)
           pmkpa = popCount (myKAttacs p .&. pawns p)

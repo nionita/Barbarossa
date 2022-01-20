@@ -49,7 +49,7 @@ weights :: [EvalWeightSpec]
 weights = [
         ("ewMaterialDiff",    (   8,    8)),
         ("ewKingSafe",        (   1,    0)),
-        ("ewKingOpen",        (  -7,    0)),	-- different logic
+        ("ewKingOpen",        (  -5,    0)),	-- different logic
         ("ewKingPlaceCent",   (   8,    1)),
         ("ewKingPlacePwns",   (   0,    4)),
         ("ewKingPawn",        (   3,   50)),
@@ -86,7 +86,7 @@ weights = [
         ("ewAdvPawn5",        (  14,  106)),
         ("ewAdvPawn6",        ( 352,  333)),
         ("ewPawnBlockP",      (-112,  -92)),
-        ("ewPawnBlockO",      ( -23,  -26)),
+        ("ewPawnBlockO",      ( -53,  -26)),
         ("ewPawnBlockA",      ( -19,  -69)),
         ("ewPassPawnLev",     (   2,    8))
     ]
