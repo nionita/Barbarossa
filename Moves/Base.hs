@@ -4,7 +4,7 @@
 module Moves.Base (
     posToState, getPos, posNewSearch,
     doRealMove, doMove, doQSMove, doNullMove, undoMove,
-    genMoves, genTactMoves, genEscapeMoves, canPruneMove,
+    genMoves, genTactMoves, genEscapeMoves, moveIsQuiet,
     tacticalPos, zugZwang, isMoveLegal, isKillCand, isTKillCand,
     betaCut, ttRead, ttStore, curNodes, isTimeout, informCtx,
     mateScore, qsDelta,
@@ -17,7 +17,7 @@ module Moves.Base (
 
 import Data.Bits
 import Data.Int
-import Data.List (nub)
+import Data.List (nub, partition)
 import Control.Monad.State
 import Control.Monad.Reader (ask)
 -- import Numeric
@@ -79,8 +79,10 @@ draftStats dst = do
     s <- get
     put s { mstats = addStats (mstats s) dst }
 
-genMoves :: Int -> Game ([Move], [Move])
-genMoves d = do
+-- When we generate the moves, we want to filter out the quiet moves when pruning is enabled
+-- There is one complication: we sometimes want at least one move
+genMoves :: Int -> Bool -> Bool -> Game ([Move], [Move])
+genMoves d prune one = do
     p <- getPos
     if inCheck p
        then return (genMoveFCheck p, [])
@@ -89,9 +91,18 @@ genMoves d = do
             let l0 = genMoveCast p
                 l1 = genMovePromo p
                 (l2w, l2l) = genMoveCaptWL p
-                l3 = histSortMoves d h $ genMoveNCapt p
+                nc = genMoveNCapt p
+                l3 = if prune
+                        then filterPruned p h d one nc
+                        else histSortMoves d h nc
             -- Loosing captures after non-captures
             return (l1 ++ l2w, l0 ++ l3 ++ l2l)
+
+filterPruned :: MyPos -> History -> Int -> Bool -> [Move] -> [Move]
+filterPruned p h d one noncapts
+    | one && null full = take 1 $ filter (isMoveLegal p) $ histSortMoves d h prune
+    | otherwise        = histSortMoves d h full
+    where (full, prune) = partition (fullMove p) noncapts
 
 -- Generate only tactical moves, i.e. promotions & captures
 -- Needed only in QS, when we know we are not in check
@@ -388,15 +399,14 @@ captOrPromo p m
 noLMR :: MyPos -> Move -> Bool
 noLMR = movePassed
 
--- We will call this function before we do the move
--- This will spare a heavy operation for pruned moved
-{-# INLINE canPruneMove #-}
-canPruneMove :: MyPos -> Move -> Bool
-canPruneMove p m
-    | not (moveIsNormal m) = False
-    | moveIsCapture p m    = False
-    | movePassed p m       = False
-    | otherwise            = not $ moveChecks p m
+-- We use this function to filter quiet moves before history sort
+fullMove :: MyPos -> Move -> Bool
+fullMove p m = movePassed p m || moveChecks p m
+
+-- This will consider castle as not quiet!
+{-# INLINE moveIsQuiet #-}
+moveIsQuiet :: MyPos -> Move -> Bool
+moveIsQuiet p m = moveIsNormal m && (not $ moveIsCapture p m)
 
 logMes :: String -> Game ()
 logMes s = lift $ talkToContext . LogMes $ s
