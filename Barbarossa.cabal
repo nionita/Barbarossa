@@ -25,6 +25,7 @@ Executable Barbarossa
       array,
       time,
       containers,
+      cereal,
       mtl,
       parsec,
       vector,
@@ -86,6 +87,7 @@ Executable SelfPlay
       array,
       time,
       containers,
+      cereal,
       filepath,
       mtl,
       parsec,
@@ -95,6 +97,70 @@ Executable SelfPlay
       directory,
       transformers,
       QuickCheck,
+      text,
+      template-haskell
+  Other-modules:
+      Eval.BasicEval,
+      Eval.Eval,
+      Eval.FileParams,
+      Hash.TransTab,
+      Hash.Zobrist,
+      Moves.Base,
+      Moves.BaseTypes,
+      Moves.BitBoard,
+      Moves.Board,
+      Moves.Fen,
+      Moves.GenMagics,
+      Moves.History,
+      Moves.Magics,
+      Moves.Moves,
+      Moves.Notation,
+      Moves.Pattern,
+      Moves.ShowMe,
+      Search.Albeta,
+      Search.AlbetaTypes,
+      Search.CStateMonad,
+      Struct.Config,
+      Struct.Params,
+      Struct.MidEnd,
+      Struct.Context,
+      Struct.Status,
+      Struct.Struct,
+      Uci.UCI,
+      Uci.UciGlue
+  GHC-Options: -O2 -Wall
+               -funbox-strict-fields
+               -threaded
+               -rtsopts -with-rtsopts=-N1
+               -fspec-constr-count=24
+               -funfolding-use-threshold=32
+               -fno-warn-tabs
+  CPP-Options: -DSMSTRICT
+  if flag(sse42)
+    GHC-Options: -msse4.2
+  if flag(ddump)
+    GHC-Options: -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques
+                 -ddump-opt-cmm -ddump-asm
+                 -ddump-splices
+
+Executable TexelError
+  Main-is:	Main/TexelError.hs
+  Build-depends:
+      base >= 4.5,
+      array,
+      time,
+      containers,
+      cereal,
+      filepath,
+      mtl,
+      parsec,
+      vector,
+      vector-algorithms,
+      random,
+      directory,
+      transformers,
+      QuickCheck,
+      split,
       text,
       template-haskell
   Other-modules:

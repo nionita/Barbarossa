@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE DeriveGeneric #-}
 module Struct.Struct (
          BBoard, Square, ZKey, ShArray, MaArray, DbArray, Move(..),
          Piece(..), Color(..), TabCont(..), MyPos(..), LazyBits(..),
@@ -22,6 +23,8 @@ import Data.Char (ord, chr)
 import Data.Word
 import Data.Bits
 import Numeric
+import Data.Serialize (Serialize)
+import GHC.Generics (Generic)
 
 -- The very basic data types used in the modules
 type BBoard = Word64
@@ -50,13 +53,17 @@ data MyPos = MyPos {
     staticScore :: Int,	-- lazy, not always needed
     lazyBits :: LazyBits	-- lazy of course
     }
+    deriving Generic
 
 data LazyBits = LazyBits {
     _myAttacs, _yoAttacs, _check :: !BBoard,		-- my & yours attacs, check
     _myPAttacs, _myNAttacs, _myBAttacs, _myRAttacs, _myQAttacs, _myKAttacs :: !BBoard,
     _yoPAttacs, _yoNAttacs, _yoBAttacs, _yoRAttacs, _yoQAttacs, _yoKAttacs :: !BBoard
     }
-    deriving Eq
+    deriving (Eq, Generic)
+
+instance Serialize MyPos where
+instance Serialize LazyBits where
 
 myAttacs, yoAttacs, check :: MyPos -> BBoard
 myPAttacs, myNAttacs, myBAttacs, myRAttacs, myQAttacs, myKAttacs :: MyPos -> BBoard
