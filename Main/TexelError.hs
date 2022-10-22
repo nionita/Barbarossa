@@ -10,14 +10,19 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Control.Concurrent
 import Control.Applicative ((<$>))
-import Data.List (intersperse, delete, isPrefixOf, stripPrefix)
+import Data.List (intersperse, delete, isPrefixOf, stripPrefix, foldl')
 import Data.List.Split (splitOn)
 import Data.Maybe
 import Data.Monoid
+import Data.ByteString (ByteString(..))
+import qualified Data.ByteString as B
+import qualified Data.Serialize as S
+import Data.Serialize.Get
 -- import Network
 import Numeric (showHex)
 import System.Console.GetOpt
 import System.Environment (getArgs)
+import System.FilePath
 import System.IO
 -- import System.Time
 
@@ -43,7 +48,7 @@ data Options = Options {
         optLogging  :: LogLevel,	-- logging level
         optNThreads :: Int,		-- number of threads
         optAFenFile :: Maybe FilePath,	-- annotated fen file for self analysis
-        optFOutFile :: Maybe FilePath,	-- output file for filter option
+        optConvert  :: Bool,	        -- convert epd to bin
         optServMode :: Bool,		-- run as server
         optClientOf :: [String]		-- run as client with given servers
     }
@@ -55,7 +60,7 @@ defaultOptions = Options {
         optLogging  = DebugUci,
         optNThreads = 1,
         optAFenFile = Nothing,
-        optFOutFile = Nothing,
+        optConvert  = False,
         optServMode = False,
         optClientOf = []
     }
@@ -83,8 +88,8 @@ addNThrds ns opt = opt { optNThreads = read ns }
 addAFile :: FilePath -> Options -> Options
 addAFile fi opt = opt { optAFenFile = Just fi }
 
-addOFile :: FilePath -> Options -> Options
-addOFile fi opt = opt { optFOutFile = Just fi }
+addConvert :: Options -> Options
+addConvert opt = opt { optConvert  = True }
 
 addServ :: Options -> Options
 addServ opt = opt { optServMode = True }
@@ -94,14 +99,14 @@ addHost cl opt = opt { optClientOf = cl : optClientOf opt }
 
 options :: [OptDescr (Options -> Options)]
 options = [
-        Option "c" ["config"] (ReqArg setConfFile "STRING") "Configuration file",
-        Option "l" ["loglev"] (ReqArg setLogging "STRING")  "Logging level from 0 (debug) to 5 (never)",
-        Option "p" ["param"]  (ReqArg addParam "STRING")    "Eval/search/time parameters: name=value,...",
+        Option "c" ["config"]  (ReqArg setConfFile "STRING") "Configuration file",
+        Option "l" ["loglev"]  (ReqArg setLogging "STRING")  "Logging level from 0 (debug) to 5 (never)",
+        Option "p" ["param"]   (ReqArg addParam "STRING")    "Eval/search/time parameters: name=value,...",
         Option "a" ["analyse"] (ReqArg addAFile "STRING")   "Analysis file",
         Option "t" ["threads"] (ReqArg addNThrds "STRING")  "Number of threads",
-        Option "f" ["filter"] (ReqArg addOFile "STRING")    "Filter output file",
-        Option "s" ["server"] (NoArg  addServ          )    "Run as server",
-        Option "h" ["hosts"]  (ReqArg addHost "STRING")     "Run as client with list of comma separated servers"
+        Option "o" ["convert"] (NoArg  addConvert)  "Convert epd file to bin",
+        Option "s" ["server"]  (NoArg  addServ)     "Run as server",
+        Option "h" ["hosts"]   (ReqArg addHost "STRING")     "Run as client with list of comma separated servers"
     ]
 
 theOptions :: IO (Options, [String])
@@ -160,21 +165,44 @@ main = do
     case optAFenFile opts of
         Nothing -> error "EPD input file is require"
         Just fi -> do
-            let paramList
-                    | null (optParams opts) = []
-                    | otherwise             = stringToParams $ concat $ intersperse "," $ optParams opts
-            (_, es)   <- makeEvalState (optConfFile opts) paramList "progver" "progsuf"
-            optFromFile fi es
+            let ext = takeExtension fi
+            if length ext == 0
+                then error "Cannot process input without extension"
+                else if ext == ".epd"
+                        then if optConvert opts
+                                then epdToBin fi
+                                else scoreAllFile fi (optConfFile opts) (optParams opts) False
+                        else if ext == ".bin"
+                                then scoreAllFile fi (optConfFile opts) (optParams opts) True
+                                else error $ "Cannot process input with extension " ++ ext
 
-optFromFile :: FilePath -> EvalState -> IO ()
-optFromFile fi es = do
-    inp <- readFile fi
+scoreAllFile :: FilePath -> Maybe String -> [String] -> Bool -> IO ()
+scoreAllFile fi mconf params bin = do
+    let paramList
+            | null params = []
+            | otherwise   = stringToParams $ concat $ intersperse "," params
+    (_, es)   <- makeEvalState mconf paramList "progver" "progsuf"
+    if bin
+       then optFromBinFile fi es
+       else optFromEpdFile fi es
+
+optFromEpdFile :: FilePath -> EvalState -> IO ()
+optFromEpdFile fi es = do
     putStrLn $ "Optimizing over " ++ fi
-    let pvs = map makePosVal (lines inp)
-        err = sum $ map (posError es) pvs
-        cou = length pvs
-        ave = sqrt(err / fromIntegral cou)
+    (cou, err) <- foldl' accumErrorCnt (0, 0) . map (posError es . makePosVal) . lines <$> readFile fi
+    let ave = sqrt(err / fromIntegral cou)
     putStrLn $ "Texel error (cnt/sum/avg): " ++ show cou ++ " / " ++ show err ++ " / " ++ show ave
+
+accumErrorCnt :: (Int, Double) -> Double -> (Int, Double)
+accumErrorCnt (cnt, acc) err = (cnt + 1, err + acc)
+
+epdToBin :: FilePath -> IO ()
+epdToBin fi = do
+    let fo = addExtension (dropExtension fi) ".bin"
+    putStrLn $ "Transform " ++ fi ++ " to " ++ fo
+    h <- openFile fo WriteMode
+    readFile fi >>= \cnt -> return (map (S.encode . makePosVal) (lines cnt)) >>= mapM_ (B.hPut h)
+    hClose h
 
 {--
 
@@ -297,6 +325,36 @@ makePosVal fenval = (pos, val)
     where (fen:sval:_) = splitOn "," fenval
           pos = posFromFen fen
           val = read sval
+
+-- Use the incremental interface of the Get monad
+optFromBinFile :: FilePath -> EvalState -> IO ()
+optFromBinFile fi es = do
+    putStrLn $ "Optimizing over " ++ fi
+    h <- openFile fi ReadMode
+    (cou, err) <- go (0, 0) B.empty h
+    let ave = sqrt(err / fromIntegral cou)
+    putStrLn $ "Texel error (cnt/sum/avg): " ++ show cou ++ " / " ++ show err ++ " / " ++ show ave
+    hClose h
+    where bufsize = 1024
+          iterate result h =
+              case result of
+                  Fail msg bstr -> error msg
+                  Partial cont  -> do
+                      nbs <- B.hGet h bufsize
+                      iterate (cont nbs) h
+                  Done r rbs -> return (r, rbs)
+          go acc@(!cnt, !err) bs h = do
+              (diri, bsne) <- if bs == B.empty
+                                 then do
+                                     bs1 <- B.hGet h bufsize
+                                     return (True, bs1)
+                                 else return (False, bs)
+              if diri && bsne == B.empty
+                 then return acc
+                 else do
+                     let result = runGetPartial S.get bsne
+                     (r, rbs) <- iterate result h
+                     go (cnt+1, err + posError es r) rbs h
 
 -- Calculate evaluation error for one position
 -- The game result is in val and it is from white point of view
