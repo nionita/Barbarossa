@@ -5,24 +5,26 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Main where
-import Control.Monad
-import Control.Monad.Reader
-import Control.Monad.State
-import Control.Concurrent
-import Control.Applicative ((<$>))
-import Data.List (intersperse, delete, isPrefixOf, stripPrefix, foldl')
+-- import Control.Monad
+-- import Control.Monad.Reader
+-- import Control.Monad.State
+-- import Control.Concurrent
+-- import Control.Applicative ((<$>))
+-- import Data.List (intersperse, delete, isPrefixOf, stripPrefix, foldl')
+import Data.List (intersperse, foldl')
 import Data.List.Split (splitOn)
-import Data.Maybe
-import Data.Monoid
-import Data.ByteString (ByteString(..))
+-- import Data.Maybe
+-- import Data.Monoid
+-- import Data.ByteString (ByteString(..))
 import qualified Data.ByteString as B
 import qualified Data.Serialize as S
 import Data.Serialize.Get
 -- import Network
-import Numeric (showHex)
+-- import Numeric (showHex)
 import System.Console.GetOpt
 import System.Environment (getArgs)
 import System.FilePath
+import System.Directory
 import System.IO
 -- import System.Time
 
@@ -30,14 +32,14 @@ import Struct.Struct
 import Struct.Status
 import Struct.Context
 import Struct.Config
-import Hash.TransTab
-import Moves.BaseTypes
-import Search.AlbetaTypes
-import Moves.Base
-import Moves.Board (posFromFen, initPos)
-import Moves.History
-import Moves.Notation
-import Search.CStateMonad (runCState)
+-- import Hash.TransTab
+-- import Moves.BaseTypes
+-- import Search.AlbetaTypes
+-- import Moves.Base
+-- import Moves.Board (posFromFen, initPos)
+-- import Moves.History
+-- import Moves.Notation
+-- import Search.CStateMonad (runCState)
 import Eval.FileParams (makeEvalState)
 import Eval.Eval (posEval)
 import Moves.Fen (posFromFen)
@@ -50,7 +52,7 @@ data Options = Options {
         optAFenFile :: Maybe FilePath,	-- annotated fen file for self analysis
         optConvert  :: Bool,	        -- convert epd to bin
         optServMode :: Bool,		-- run as server
-        optClientOf :: [String]		-- run as client with given servers
+        optWorkDir  :: Maybe FilePath	-- working dir
     }
 
 defaultOptions :: Options
@@ -62,7 +64,7 @@ defaultOptions = Options {
         optAFenFile = Nothing,
         optConvert  = False,
         optServMode = False,
-        optClientOf = []
+        optWorkDir = Nothing
     }
 
 setConfFile :: String -> Options -> Options
@@ -94,8 +96,8 @@ addConvert opt = opt { optConvert  = True }
 addServ :: Options -> Options
 addServ opt = opt { optServMode = True }
 
-addHost :: String -> Options -> Options
-addHost cl opt = opt { optClientOf = cl : optClientOf opt }
+addWDir :: String -> Options -> Options
+addWDir cl opt = opt { optWorkDir = Just cl }
 
 options :: [OptDescr (Options -> Options)]
 options = [
@@ -106,7 +108,7 @@ options = [
         Option "t" ["threads"] (ReqArg addNThrds "STRING")  "Number of threads",
         Option "o" ["convert"] (NoArg  addConvert)  "Convert epd file to bin",
         Option "s" ["server"]  (NoArg  addServ)     "Run as server",
-        Option "h" ["hosts"]   (ReqArg addHost "STRING")     "Run as client with list of comma separated servers"
+        Option "w" ["workdir"] (ReqArg addWDir "STRING")     "Change working directory"
     ]
 
 theOptions :: IO (Options, [String])
@@ -162,6 +164,9 @@ main :: IO ()
 -- main = withSocketsDo $ do
 main = do
     (opts, _) <- theOptions
+    case optWorkDir opts of
+        Nothing -> return ()
+        Just wd -> setCurrentDirectory wd
     case optAFenFile opts of
         Nothing -> error "EPD input file is require"
         Just fi -> do
@@ -331,30 +336,30 @@ optFromBinFile :: FilePath -> EvalState -> IO ()
 optFromBinFile fi es = do
     putStrLn $ "Optimizing over " ++ fi
     h <- openFile fi ReadMode
-    (cou, err) <- go (0, 0) B.empty h
+    (cou, err) <- go (0::Int) 0 B.empty h
     let ave = sqrt(err / fromIntegral cou)
     putStrLn $ "Texel error (cnt/sum/avg): " ++ show cou ++ " / " ++ show err ++ " / " ++ show ave
     hClose h
-    where bufsize = 1024
-          iterate result h =
+    where bufsize = 1024 * 8
+          iterGet result h =
               case result of
-                  Fail msg bstr -> error msg
-                  Partial cont  -> do
+                  Fail msg _   -> error msg
+                  Partial cont -> do
                       nbs <- B.hGet h bufsize
-                      iterate (cont nbs) h
-                  Done r rbs -> return (r, rbs)
-          go acc@(!cnt, !err) bs h = do
-              (diri, bsne) <- if bs == B.empty
-                                 then do
-                                     bs1 <- B.hGet h bufsize
-                                     return (True, bs1)
-                                 else return (False, bs)
-              if diri && bsne == B.empty
-                 then return acc
-                 else do
-                     let result = runGetPartial S.get bsne
-                     (r, rbs) <- iterate result h
-                     go (cnt+1, err + posError es r) rbs h
+                      iterGet (cont nbs) h
+                  Done r rbs   -> return (r, rbs)
+          go !cnt !err bs h = do
+             (diri, bsne) <- if bs == B.empty
+                                then do
+                                    bs1 <- B.hGet h bufsize
+                                    return (True, bs1)
+                                else return (False, bs)
+             if diri && bsne == B.empty
+                then return (cnt, err)
+                else do
+                    let result = runGetPartial S.get bsne
+                    (r, rbs) <- iterGet result h
+                    go (cnt + 1) (err + posError es r) rbs h
 
 -- Calculate evaluation error for one position
 -- The game result is in val and it is from white point of view
