@@ -58,10 +58,10 @@ weights = [
         ("ewRookOpen",        ( 205,  178)),	-- 20k steps, depth 4,
         ("ewRookConn",        (  89,   59)),	-- 2 games, beta=0.95, gamma=0.8,
         ("ewRook7th",         ( 201,  161)),	-- niu=0.99, eps=1E-6
-        ("ewMobilityKnight",  (  50,   56)),
-        ("ewMobilityBishop",  (  53,   33)),
-        ("ewMobilityRook",    (  16,   34)),	-- DSPSA ...
-        ("ewMobilityQueen",   (   2,   11)),
+        ("ewMobilityKnight",  (  70,   54)),	-- texel2 / o: 62, 47
+        ("ewMobilityBishop",  (  67,   32)),	-- texel2 / o: 61, 29
+        ("ewMobilityRook",    (  32,   40)),	-- texel2 / o: 32, 39
+        ("ewMobilityQueen",   (   4,   22)),	-- texel2 / o:  4, 22
         ("ewCenterPAtts",     (  73,   57)),
         ("ewCenterNAtts",     (  48,   37)),
         ("ewCenterBAtts",     (  52,   35)),
