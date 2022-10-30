@@ -49,8 +49,8 @@ weights :: [EvalWeightSpec]
 weights = [
         ("ewMaterialDiff",    (   8,    8)),
         ("ewKingSafe",        (   1,    0)),
-        ("ewKingOpen",        (   2,    4)),
-        ("ewKingPlaceCent",   (   8,    1)),
+        ("ewKingOpen",        (   1,    2)),
+        ("ewKingPlaceCent",   (   2,    4)),
         ("ewKingPlacePwns",   (   0,    4)),
         ("ewKingPawn",        (   3,   50)),
         ("ewKingThreat",      (   0,  300)),
