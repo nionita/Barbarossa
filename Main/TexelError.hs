@@ -11,6 +11,7 @@ module Main where
 -- import Control.Concurrent
 -- import Control.Applicative ((<$>))
 -- import Data.List (intersperse, delete, isPrefixOf, stripPrefix, foldl')
+import Data.Bits ((.|.), (.&.), popCount)
 import Data.List (intersperse, foldl')
 import Data.List.Split (splitOn)
 -- import Data.Maybe
@@ -365,11 +366,18 @@ optFromBinFile fi es = do
 -- The game result is in val and it is from white point of view
 -- Our static score is from side to move point of view, so we have to change sign if black is to move
 posError :: EvalState -> (MyPos, Double) -> Double
-posError es (pos, val) = vdiff * vdiff
+posError es (pos, val) = vdiff * vdiff / fromIntegral (complexity pos)
     where !stc = posEval pos es
           !myval | moving pos == White =   logisticFunction stc
                  | otherwise           = - logisticFunction stc
           vdiff = val - myval
+
+-- For complex positions with many tactical moves we cannot expect the eval to be very accurate
+-- To take this into account we calculate the number of attacks in a position and diminuate the
+-- error more when this number is bigger
+complexity :: MyPos -> Int
+complexity pos = 1 + atcs
+    where atcs = popCount $ (myAttacs pos .&. yo pos) .|. (yoAttacs pos .&. me pos)
 
 -- Logistic growth parameter is such that the probability of win for 400 cp advantage is 98%
 -- More important is that the error grows much less if we miss higher score by an amount of centipawns
