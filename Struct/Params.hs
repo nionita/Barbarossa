@@ -34,8 +34,8 @@ params = [
         ("epPassB",           -48),
         ("epPassC",            98),
         ("epPassKingProx",     12),
-        ("epPassBlockO",       11),
-        ("epPassBlockA",       17),
+        ("epPassBlockO",       10),
+        ("epPassBlockA",       16),
         ("epPassMin",          30),
         ("epPassMyCtrl",        6),
         ("epPassYoCtrl",        7)
@@ -47,17 +47,17 @@ params = [
 -- All weights have type MidEnd
 weights :: [EvalWeightSpec]
 weights = [
-        ("ewMaterialDiff",    (   8,    8)),
+        ("ewMaterialDiff",    (   6,   10)),
         ("ewKingSafe",        (   1,    0)),
         ("ewKingOpen",        (   2,    4)),
         ("ewKingPlaceCent",   (   8,    1)),
         ("ewKingPlacePwns",   (   0,    4)),
-        ("ewKingPawn",        (   3,   50)),
+        ("ewKingPawn",        (   3,   51)),
         ("ewKingThreat",      (   0,  300)),
-        ("ewRookHOpen",       ( 162,  182)),	-- DSPSA with Adadelta
+        ("ewRookHOpen",       ( 163,  182)),	-- DSPSA with Adadelta
         ("ewRookOpen",        ( 205,  178)),	-- 20k steps, depth 4,
-        ("ewRookConn",        (  89,   59)),	-- 2 games, beta=0.95, gamma=0.8,
-        ("ewRook7th",         ( 201,  161)),	-- niu=0.99, eps=1E-6
+        ("ewRookConn",        (  89,   58)),	-- 2 games, beta=0.95, gamma=0.8,
+        ("ewRook7th",         ( 202,  161)),	-- niu=0.99, eps=1E-6
         ("ewMobilityKnight",  (  50,   56)),
         ("ewMobilityBishop",  (  53,   33)),
         ("ewMobilityRook",    (  16,   34)),	-- DSPSA ...
@@ -69,15 +69,15 @@ weights = [
         ("ewCenterQAtts",     (  13,   53)),
         ("ewCenterKAtts",     (   2,   62)),
         ("ewSpace",           (   1,    0)),
-        ("ewAdvAtts",         (   1,   17)),
+        ("ewAdvAtts",         (   1,   18)),
         ("ewIsolPawns",       ( -36, -113)),
         ("ewIsolPassed",      ( -63, -143)),
         ("ewBackPawns",       (-108, -141)),
         ("ewBackPOpen",       ( -21,  -27)),
         ("ewEnpHanging",      ( -19,  -27)),
         ("ewEnpEnPrise",      ( -29,  -26)),
-        ("ewEnpAttacked",     (  -2,  -14)),
-        ("ewWepTotal",        ( 150,    0)),
+        ("ewEnpAttacked",     (  -1,  -14)),
+        ("ewWepTotal",        ( 150,    1)),
         ("ewWepAttacked",     (   0,  200)),
         ("ewLastLinePenalty", ( 100,    0)),
         ("ewBishopPair",      ( 386,  323)),
@@ -88,7 +88,7 @@ weights = [
         ("ewAdvPawn6",        ( 352,  333)),
         ("ewPawnBlockP",      (-112,  -92)),
         ("ewPawnBlockO",      ( -23,  -26)),
-        ("ewPawnBlockA",      ( -19,  -69)),
+        ("ewPawnBlockA",      ( -18,  -69)),
         ("ewPassPawnLev",     (   2,    8))
     ]
 
