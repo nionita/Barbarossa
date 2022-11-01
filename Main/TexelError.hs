@@ -380,11 +380,11 @@ complexity pos = 1 + coeff * fromIntegral atcs
     where atcs = popCount $ (myAttacs pos .&. yo pos) .|. (yoAttacs pos .&. me pos)
           coeff = 0.1
 
--- Logistic growth parameter is such that the probability of win for 400 cp advantage is 98%
--- More important is that the error grows much less if we miss higher score by an amount of centipawns
--- as when we miss lower scores by the same amount
+-- Logistic growth parameter is such that the error is sensible in a larger interval
+-- It is important that the error grows much less if we miss much higher score by an amount
+-- of centipawns as when we miss lower scores by the same amount
 logisticGrowth :: Double
-logisticGrowth = 0.01
+logisticGrowth = 0.001
 
 -- We chose the codomain between -1 and 1
 logisticFunction :: Int -> Double
