@@ -47,6 +47,7 @@ import Moves.Fen (posFromFen)
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
+        optKFactor  :: Double,		-- config file
         optParams   :: [String],	-- list of eval parameter assignements
         optLogging  :: LogLevel,	-- logging level
         optNThreads :: Int,		-- number of threads
@@ -59,6 +60,7 @@ data Options = Options {
 defaultOptions :: Options
 defaultOptions = Options {
         optConfFile = Nothing,
+        optKFactor  = 0.002,	-- this gives the minimum error over k for a set of 4M positions
         optParams   = [],
         optLogging  = DebugUci,
         optNThreads = 1,
@@ -70,6 +72,9 @@ defaultOptions = Options {
 
 setConfFile :: String -> Options -> Options
 setConfFile cf opt = opt { optConfFile = Just cf }
+
+setKFactor :: String -> Options -> Options
+setKFactor kf opt = opt { optKFactor = read kf }
 
 addParam :: String -> Options -> Options
 addParam pa opt = opt { optParams = pa : optParams opt }
@@ -103,6 +108,7 @@ addWDir cl opt = opt { optWorkDir = Just cl }
 options :: [OptDescr (Options -> Options)]
 options = [
         Option "c" ["config"]  (ReqArg setConfFile "STRING") "Configuration file",
+        Option "k" ["kfactor"] (ReqArg setKFactor "STRING") "K Factor",
         Option "l" ["loglev"]  (ReqArg setLogging "STRING")  "Logging level from 0 (debug) to 5 (never)",
         Option "p" ["param"]   (ReqArg addParam "STRING")    "Eval/search/time parameters: name=value,...",
         Option "a" ["analyse"] (ReqArg addAFile "STRING")   "Analysis file",
@@ -120,7 +126,7 @@ theOptions = do
         (_, _, es) -> ioError (userError (concat es ++ usageInfo header options))
     where header = "Usage: " ++ idName
               ++ " [-c CONF] [-l LEV] [-p name=val[,...]] [-a AFILE [-f OFILE | -s | h host,host,...]"
-          idName = "MMTO"
+          idName = "TexelError"
 
 {--
 initContext :: Options -> IO Context
@@ -177,25 +183,25 @@ main = do
                 else if ext == ".epd"
                         then if optConvert opts
                                 then epdToBin fi
-                                else scoreAllFile fi (optConfFile opts) (optParams opts) False
+                                else scoreAllFile fi (optKFactor opts) (optConfFile opts) (optParams opts) False
                         else if ext == ".bin"
-                                then scoreAllFile fi (optConfFile opts) (optParams opts) True
+                                then scoreAllFile fi (optKFactor opts) (optConfFile opts) (optParams opts) True
                                 else error $ "Cannot process input with extension " ++ ext
 
-scoreAllFile :: FilePath -> Maybe String -> [String] -> Bool -> IO ()
-scoreAllFile fi mconf params bin = do
+scoreAllFile :: FilePath -> Double -> Maybe String -> [String] -> Bool -> IO ()
+scoreAllFile fi kfactor mconf params bin = do
     let paramList
             | null params = []
             | otherwise   = stringToParams $ concat $ intersperse "," params
     (_, es)   <- makeEvalState mconf paramList "progver" "progsuf"
     if bin
-       then optFromBinFile fi es
-       else optFromEpdFile fi es
+       then optFromBinFile fi es kfactor
+       else optFromEpdFile fi es kfactor
 
-optFromEpdFile :: FilePath -> EvalState -> IO ()
-optFromEpdFile fi es = do
+optFromEpdFile :: FilePath -> EvalState -> Double -> IO ()
+optFromEpdFile fi es kfactor = do
     putStrLn $ "Optimizing over " ++ fi
-    (cou, err) <- foldl' accumErrorCnt (0, 0) . map (posError es . makePosVal) . lines <$> readFile fi
+    (cou, err) <- foldl' accumErrorCnt (0, 0) . map (posError es kfactor . makePosVal) . lines <$> readFile fi
     let ave = sqrt(err / fromIntegral cou)
     putStrLn $ "Texel error (cnt/sum/avg): " ++ show cou ++ " / " ++ show err ++ " / " ++ show ave
 
@@ -333,8 +339,8 @@ makePosVal fenval = (pos, val)
           val = read sval
 
 -- Use the incremental interface of the Get monad
-optFromBinFile :: FilePath -> EvalState -> IO ()
-optFromBinFile fi es = do
+optFromBinFile :: FilePath -> EvalState -> Double -> IO ()
+optFromBinFile fi es kfactor = do
     putStrLn $ "Optimizing over " ++ fi
     h <- openFile fi ReadMode
     (cou, err) <- go (0::Int) 0 B.empty h
@@ -360,16 +366,16 @@ optFromBinFile fi es = do
                 else do
                     let result = runGetPartial S.get bsne
                     (r, rbs) <- iterGet result h
-                    go (cnt + 1) (err + posError es r) rbs h
+                    go (cnt + 1) (err + posError es kfactor r) rbs h
 
 -- Calculate evaluation error for one position
 -- The game result is in val and it is from white point of view
 -- Our static score is from side to move point of view, so we have to change sign if black is to move
-posError :: EvalState -> (MyPos, Double) -> Double
-posError es (pos, val) = vdiff * vdiff / complexity pos
+posError :: EvalState -> Double -> (MyPos, Double) -> Double
+posError es kfactor (pos, val) = vdiff * vdiff / complexity pos
     where !stc = posEval pos es
-          !myval | moving pos == White =   logisticFunction stc
-                 | otherwise           = - logisticFunction stc
+          !myval | moving pos == White =   logisticFunction stc kfactor
+                 | otherwise           = - logisticFunction stc kfactor
           vdiff = val - myval
 
 -- For complex positions with many tactical moves we cannot expect the eval to be very accurate
@@ -380,15 +386,9 @@ complexity pos = 1 + coeff * fromIntegral atcs
     where atcs = popCount $ (myAttacs pos .&. yo pos) .|. (yoAttacs pos .&. me pos)
           coeff = 0.1
 
--- Logistic growth parameter is such that the error is sensible in a larger interval
--- It is important that the error grows much less if we miss much higher score by an amount
--- of centipawns as when we miss lower scores by the same amount
-logisticGrowth :: Double
-logisticGrowth = 0.001
-
 -- We chose the codomain between -1 and 1
-logisticFunction :: Int -> Double
-logisticFunction score = 2 / (1 + exp (-logisticGrowth * fromIntegral score)) - 1
+logisticFunction :: Int -> Double -> Double
+logisticFunction score kfactor = 2 / (1 + exp (-kfactor * fromIntegral score)) - 1
 
 {--
 makeMovePos :: MyState -> Maybe Handle -> String -> CtxIO (Maybe (Move, MyState))
