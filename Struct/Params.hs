@@ -22,7 +22,7 @@ type EvalWeightSpec = (String, (Integer, Integer))
 -- All parameters have type Int
 params :: [EvalParamSpec]
 params = [
-        ("epMovingMid",       156),
+        ("epMovingMid",       157),
         ("epMovingEnd",       156),
         ("epMaterMinor",        1),
         ("epMaterRook",         4),
@@ -33,11 +33,11 @@ params = [
         ("epPassA",            12),
         ("epPassB",           -48),
         ("epPassC",            98),
-        ("epPassKingProx",     12),
-        ("epPassBlockO",       11),
+        ("epPassKingProx",     13),
+        ("epPassBlockO",       10),
         ("epPassBlockA",       17),
         ("epPassMin",          30),
-        ("epPassMyCtrl",        6),
+        ("epPassMyCtrl",        5),
         ("epPassYoCtrl",        7)
     ]
 
@@ -47,49 +47,49 @@ params = [
 -- All weights have type MidEnd
 weights :: [EvalWeightSpec]
 weights = [
-        ("ewMaterialDiff",    (   8,    8)),
+        ("ewMaterialDiff",    (   3,    7)),
         ("ewKingSafe",        (   1,    0)),
-        ("ewKingOpen",        (   2,    4)),
-        ("ewKingPlaceCent",   (   8,    1)),
-        ("ewKingPlacePwns",   (   0,    4)),
-        ("ewKingPawn",        (   3,   50)),
-        ("ewKingThreat",      (   0,  300)),
-        ("ewRookHOpen",       ( 162,  182)),	-- DSPSA with Adadelta
-        ("ewRookOpen",        ( 205,  178)),	-- 20k steps, depth 4,
-        ("ewRookConn",        (  89,   59)),	-- 2 games, beta=0.95, gamma=0.8,
-        ("ewRook7th",         ( 201,  161)),	-- niu=0.99, eps=1E-6
-        ("ewMobilityKnight",  (  50,   56)),
-        ("ewMobilityBishop",  (  53,   33)),
-        ("ewMobilityRook",    (  16,   34)),	-- DSPSA ...
-        ("ewMobilityQueen",   (   2,   11)),
-        ("ewCenterPAtts",     (  73,   57)),
-        ("ewCenterNAtts",     (  48,   37)),
-        ("ewCenterBAtts",     (  52,   35)),
-        ("ewCenterRAtts",     (  14,   22)),	-- DSPSA ...
-        ("ewCenterQAtts",     (  13,   53)),
+        ("ewKingOpen",        (   0,    3)),
+        ("ewKingPlaceCent",   (   6,    0)),
+        ("ewKingPlacePwns",   (   1,    4)),
+        ("ewKingPawn",        (   2,   50)),
+        ("ewKingThreat",      (   1,  299)),
+        ("ewRookHOpen",       ( 163,  182)),	-- DSPSA with Adadelta
+        ("ewRookOpen",        ( 205,  179)),	-- 20k steps, depth 4,
+        ("ewRookConn",        (  90,   60)),	-- 2 games, beta=0.95, gamma=0.8,
+        ("ewRook7th",         ( 202,  161)),	-- niu=0.99, eps=1E-6
+        ("ewMobilityKnight",  (  51,   57)),
+        ("ewMobilityBishop",  (  54,   31)),
+        ("ewMobilityRook",    (  15,   33)),	-- DSPSA ...
+        ("ewMobilityQueen",   (   1,   11)),
+        ("ewCenterPAtts",     (  74,   55)),
+        ("ewCenterNAtts",     (  47,   37)),
+        ("ewCenterBAtts",     (  51,   37)),
+        ("ewCenterRAtts",     (  14,   24)),	-- DSPSA ...
+        ("ewCenterQAtts",     (  11,   54)),
         ("ewCenterKAtts",     (   2,   62)),
         ("ewSpace",           (   1,    0)),
         ("ewAdvAtts",         (   1,   17)),
-        ("ewIsolPawns",       ( -36, -113)),
-        ("ewIsolPassed",      ( -63, -143)),
-        ("ewBackPawns",       (-108, -141)),
-        ("ewBackPOpen",       ( -21,  -27)),
-        ("ewEnpHanging",      ( -19,  -27)),
-        ("ewEnpEnPrise",      ( -29,  -26)),
-        ("ewEnpAttacked",     (  -2,  -14)),
-        ("ewWepTotal",        ( 150,    0)),
-        ("ewWepAttacked",     (   0,  200)),
-        ("ewLastLinePenalty", ( 100,    0)),
-        ("ewBishopPair",      ( 386,  323)),
-        ("ewBishopPawns",     ( -25,  -54)),
-        ("ewRedundanceRook",  ( -27,  -51)),	-- DSPSA ...
-        ("ewRookPawn",        ( -44,  -32)),
-        ("ewAdvPawn5",        (  14,  106)),
-        ("ewAdvPawn6",        ( 352,  333)),
-        ("ewPawnBlockP",      (-112,  -92)),
-        ("ewPawnBlockO",      ( -23,  -26)),
-        ("ewPawnBlockA",      ( -19,  -69)),
-        ("ewPassPawnLev",     (   2,    8))
+        ("ewIsolPawns",       ( -35, -115)),
+        ("ewIsolPassed",      ( -62, -142)),
+        ("ewBackPawns",       (-107, -141)),
+        ("ewBackPOpen",       ( -22,  -28)),
+        ("ewEnpHanging",      ( -21,  -26)),
+        ("ewEnpEnPrise",      ( -28,  -27)),
+        ("ewEnpAttacked",     (  -3,  -15)),
+        ("ewWepTotal",        ( 149,    1)),
+        ("ewWepAttacked",     (   0,  201)),
+        ("ewLastLinePenalty", ( 100,    1)),
+        ("ewBishopPair",      ( 386,  322)),
+        ("ewBishopPawns",     ( -24,  -53)),
+        ("ewRedundanceRook",  ( -29,  -50)),	-- DSPSA ...
+        ("ewRookPawn",        ( -44,  -31)),
+        ("ewAdvPawn5",        (  15,  107)),
+        ("ewAdvPawn6",        ( 352,  334)),
+        ("ewPawnBlockP",      (-113,  -91)),
+        ("ewPawnBlockO",      ( -25,  -20)),
+        ("ewPawnBlockA",      ( -20,  -69)),
+        ("ewPassPawnLev",     (   1,    5))
     ]
 
 -- This part is for generating the data structures and the CollectParams instances
