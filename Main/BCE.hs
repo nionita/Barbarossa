@@ -126,7 +126,7 @@ theOptions = do
         (_, _, es) -> ioError (userError (concat es ++ usageInfo header options))
     where header = "Usage: " ++ idName
               ++ " [-c CONF] [-l LEV] [-p name=val[,...]] [-a AFILE [-f OFILE | -s | h host,host,...]"
-          idName = "TexelError"
+          idName = "BCE"
 
 {--
 initContext :: Options -> IO Context
@@ -202,8 +202,8 @@ optFromEpdFile :: FilePath -> EvalState -> Double -> IO ()
 optFromEpdFile fi es kfactor = do
     putStrLn $ "Optimizing over " ++ fi
     (cou, err) <- foldl' accumErrorCnt (0, 0) . map (posError es kfactor . makePosVal) . lines <$> readFile fi
-    let ave = sqrt(err / fromIntegral cou)
-    putStrLn $ "Texel error (cnt/sum/avg): " ++ show cou ++ " / " ++ show err ++ " / " ++ show ave
+    let ave = err / fromIntegral cou
+    putStrLn $ "BCE error (cnt/sum/avg): " ++ show cou ++ " / " ++ show err ++ " / " ++ show ave
 
 accumErrorCnt :: (Int, Double) -> Double -> (Int, Double)
 accumErrorCnt (cnt, acc) err = (cnt + 1, err + acc)
@@ -344,8 +344,8 @@ optFromBinFile fi es kfactor = do
     putStrLn $ "Optimizing over " ++ fi
     h <- openFile fi ReadMode
     (cou, err) <- go (0::Int) 0 B.empty h
-    let ave = sqrt(err / fromIntegral cou)
-    putStrLn $ "Texel error (cnt/sum/avg): " ++ show cou ++ " / " ++ show err ++ " / " ++ show ave
+    let ave = err / fromIntegral cou
+    putStrLn $ "BCE error (cnt/sum/avg): " ++ show cou ++ " / " ++ show err ++ " / " ++ show ave
     hClose h
     where bufsize = 1024 * 8
           iterGet result h =
@@ -368,27 +368,32 @@ optFromBinFile fi es kfactor = do
                     (r, rbs) <- iterGet result h
                     go (cnt + 1) (err + posError es kfactor r) rbs h
 
--- Calculate evaluation error for one position
+-- Calculate evaluation error for one position - binary cross entropy
+-- Because this is a binary classification it is very important that we have only 2 classes of positions:
+-- won and lost. The game result can be only 1 (won) and -1 (lost)
 -- The game result is in val and it is from white point of view
 -- Our static score is from side to move point of view, so we have to change sign if black is to move
 posError :: EvalState -> Double -> (MyPos, Double) -> Double
-posError es kfactor (pos, val) = vdiff * vdiff / complexity pos
+posError es kfactor (pos, val)
+    | val ==  1 = - log myval
+    | val == -1 = - log (1 - myval)
+    | otherwise = error $ "Position has wrong result: " ++ show val
     where !stc = posEval pos es
-          !myval | moving pos == White =   logisticFunction stc kfactor
-                 | otherwise           = - logisticFunction stc kfactor
-          vdiff = val - myval
+          !myval | moving pos == White =     logisticFunction stc kfactor
+                 | otherwise           = 1 - logisticFunction stc kfactor
+
+-- We chose the codomain between 0 and 1
+logisticFunction :: Int -> Double -> Double
+logisticFunction score kfactor = 1 / (1 + exp (-kfactor * fromIntegral score))
 
 -- For complex positions with many tactical moves we cannot expect the eval to be very accurate
 -- To take this into account we calculate the number of attacks in a position and diminuate the
 -- error more when this number is bigger
+-- *** Not used for now ***
 complexity :: MyPos -> Double
 complexity pos = 1 + coeff * fromIntegral atcs
     where atcs = popCount $ (myAttacs pos .&. yo pos) .|. (yoAttacs pos .&. me pos)
           coeff = 0.1
-
--- We chose the codomain between -1 and 1
-logisticFunction :: Int -> Double -> Double
-logisticFunction score kfactor = 2 / (1 + exp (-kfactor * fromIntegral score)) - 1
 
 {--
 makeMovePos :: MyState -> Maybe Handle -> String -> CtxIO (Maybe (Move, MyState))
