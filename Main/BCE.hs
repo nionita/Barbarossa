@@ -5,16 +5,16 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Main where
--- import Control.Monad
+import Control.Monad (when)
 -- import Control.Monad.Reader
 -- import Control.Monad.State
 -- import Control.Concurrent
 -- import Control.Applicative ((<$>))
 -- import Data.List (intersperse, delete, isPrefixOf, stripPrefix, foldl')
 import Data.Bits ((.|.), (.&.), popCount)
-import Data.List (intersperse, foldl')
+import Data.List (intercalate, foldl')
 import Data.List.Split (splitOn)
--- import Data.Maybe
+import Data.Maybe (catMaybes)
 -- import Data.Monoid
 -- import Data.ByteString (ByteString(..))
 import qualified Data.ByteString as B
@@ -37,6 +37,7 @@ import Struct.Config
 -- import Moves.BaseTypes
 -- import Search.AlbetaTypes
 -- import Moves.Base
+import Moves.Fen (fenFromString)
 -- import Moves.Board (posFromFen, initPos)
 -- import Moves.History
 -- import Moves.Notation
@@ -45,27 +46,32 @@ import Eval.FileParams (makeEvalState)
 import Eval.Eval (posEval)
 import Moves.Fen (posFromFen)
 
+debug :: Bool
+debug = False
+
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
         optKFactor  :: Double,		-- config file
         optParams   :: [String],	-- list of eval parameter assignements
-        optLogging  :: LogLevel,	-- logging level
+        -- optLogging  :: LogLevel,	-- logging level
         optNThreads :: Int,		-- number of threads
         optAFenFile :: Maybe FilePath,	-- annotated fen file for self analysis
         optConvert  :: Bool,	        -- convert epd to bin
+        optReverse  :: Bool,	        -- reverse fens & check eval
         optServMode :: Bool,		-- run as server
         optWorkDir  :: Maybe FilePath	-- working dir
-    }
+    } deriving Show
 
 defaultOptions :: Options
 defaultOptions = Options {
         optConfFile = Nothing,
-        optKFactor  = 0.002,	-- this gives the minimum error over k for a set of 4M positions
+        optKFactor  = 0.003,	-- this gives the minimum error over k for a set of 4M positions (BCE)
         optParams   = [],
-        optLogging  = DebugUci,
+        -- optLogging  = DebugUci,
         optNThreads = 1,
         optAFenFile = Nothing,
         optConvert  = False,
+        optReverse  = False,
         optServMode = False,
         optWorkDir = Nothing
     }
@@ -79,16 +85,16 @@ setKFactor kf opt = opt { optKFactor = read kf }
 addParam :: String -> Options -> Options
 addParam pa opt = opt { optParams = pa : optParams opt }
 
-setLogging :: String -> Options -> Options
-setLogging lev opt = opt { optLogging = llev }
-    where llev = case levi of
-                   0 -> DebugSearch
-                   1 -> DebugUci
-                   2 -> LogInfo
-                   3 -> LogWarning
-                   4 -> LogError
-                   _ -> if levi < 0 then DebugSearch else LogNever
-          levi = read lev :: Int
+-- setLogging :: String -> Options -> Options
+-- setLogging lev opt = opt { optLogging = llev }
+--     where llev = case levi of
+--                    0 -> DebugSearch
+--                    1 -> DebugUci
+--                    2 -> LogInfo
+--                    3 -> LogWarning
+--                    4 -> LogError
+--                    _ -> if levi < 0 then DebugSearch else LogNever
+--           levi = read lev :: Int
 
 addNThrds :: String -> Options -> Options
 addNThrds ns opt = opt { optNThreads = read ns }
@@ -98,6 +104,9 @@ addAFile fi opt = opt { optAFenFile = Just fi }
 
 addConvert :: Options -> Options
 addConvert opt = opt { optConvert  = True }
+
+setReverse :: Options -> Options
+setReverse opt = opt { optReverse  = True }
 
 addServ :: Options -> Options
 addServ opt = opt { optServMode = True }
@@ -109,11 +118,12 @@ options :: [OptDescr (Options -> Options)]
 options = [
         Option "c" ["config"]  (ReqArg setConfFile "STRING") "Configuration file",
         Option "k" ["kfactor"] (ReqArg setKFactor "STRING") "K Factor",
-        Option "l" ["loglev"]  (ReqArg setLogging "STRING")  "Logging level from 0 (debug) to 5 (never)",
+        -- Option "l" ["loglev"]  (ReqArg setLogging "STRING")  "Logging level from 0 (debug) to 5 (never)",
         Option "p" ["param"]   (ReqArg addParam "STRING")    "Eval/search/time parameters: name=value,...",
         Option "a" ["analyse"] (ReqArg addAFile "STRING")   "Analysis file",
         Option "t" ["threads"] (ReqArg addNThrds "STRING")  "Number of threads",
         Option "o" ["convert"] (NoArg  addConvert)  "Convert epd file to bin",
+        Option "r" ["reverse"] (NoArg  setReverse)  "Check epd file with the reverse fens",
         Option "s" ["server"]  (NoArg  addServ)     "Run as server",
         Option "w" ["workdir"] (ReqArg addWDir "STRING")     "Change working directory"
     ]
@@ -125,7 +135,7 @@ theOptions = do
         (o, n, []) -> return (foldr ($) defaultOptions o, n)
         (_, _, es) -> ioError (userError (concat es ++ usageInfo header options))
     where header = "Usage: " ++ idName
-              ++ " [-c CONF] [-l LEV] [-p name=val[,...]] [-a AFILE [-f OFILE | -s | h host,host,...]"
+              ++ " [-c CONF] [-l LEV] [-k kfact] [-p name=val[,...]] -a AFILE [-o|-r] [-w WORKDIR]"
           idName = "BCE"
 
 {--
@@ -138,7 +148,7 @@ initContext opts = do
     ichan <- newChan
     ha <- newCache 1	-- it will take the minimum number of entries
     hi <- newHist
-    let paramList = stringToParams $ concat $ intersperse "," $ optParams opts
+    let paramList = stringToParams $ intercalate "," $ optParams opts
     -- putStrLn "Before eval state"
     (parc, evs) <- makeEvalState (optConfFile opts) paramList "progver" "progsuf"
     -- putStrLn "eval state:"
@@ -171,6 +181,7 @@ main :: IO ()
 -- main = withSocketsDo $ do
 main = do
     (opts, _) <- theOptions
+    when debug $ putStrLn $ "Options: " ++ show opts
     case optWorkDir opts of
         Nothing -> return ()
         Just wd -> setCurrentDirectory wd
@@ -183,17 +194,28 @@ main = do
                 else if ext == ".epd"
                         then if optConvert opts
                                 then epdToBin fi
-                                else scoreAllFile fi (optKFactor opts) (optConfFile opts) (optParams opts) False
+                                else if optReverse opts
+                                        then checkAllFile fi
+                                        else scoreAllFile fi (optKFactor opts) (optConfFile opts) (optParams opts) False
                         else if ext == ".bin"
                                 then scoreAllFile fi (optKFactor opts) (optConfFile opts) (optParams opts) True
                                 else error $ "Cannot process input with extension " ++ ext
+
+checkAllFile :: FilePath -> IO ()
+checkAllFile fi = do
+    putStrLn $ "Check reverse fens over " ++ fi
+    (_, es) <- makeEvalState Nothing [] "progver" "progsuf"
+    -- probs <- catMaybes . map (checkPosRev es) . take 100 . lines <$> readFile fi
+    probs <- catMaybes . map (checkPosRev es) . lines <$> readFile fi
+    putStrLn "Problems:"
+    mapM_ (\p -> putStrLn (show p)) probs
 
 scoreAllFile :: FilePath -> Double -> Maybe String -> [String] -> Bool -> IO ()
 scoreAllFile fi kfactor mconf params bin = do
     let paramList
             | null params = []
-            | otherwise   = stringToParams $ concat $ intersperse "," params
-    (_, es)   <- makeEvalState mconf paramList "progver" "progsuf"
+            | otherwise   = stringToParams $ intercalate "," params
+    (_, es) <- makeEvalState mconf paramList "progver" "progsuf"
     if bin
        then optFromBinFile fi es kfactor
        else optFromEpdFile fi es kfactor
@@ -205,8 +227,9 @@ optFromEpdFile fi es kfactor = do
     let ave = err / fromIntegral cou
     putStrLn $ "BCE error (cnt/sum/avg): " ++ show cou ++ " / " ++ show err ++ " / " ++ show ave
 
-accumErrorCnt :: (Int, Double) -> Double -> (Int, Double)
-accumErrorCnt (cnt, acc) err = (cnt + 1, err + acc)
+accumErrorCnt :: (Int, Double) -> Maybe Double -> (Int, Double)
+accumErrorCnt (cnt, acc) Nothing    = (cnt,     acc      )
+accumErrorCnt (cnt, acc) (Just err) = (cnt + 1, acc + err)
 
 epdToBin :: FilePath -> IO ()
 epdToBin fi = do
@@ -256,7 +279,7 @@ endOfParams = "EOP"
 
 clientMode :: [String] -> [String] -> CtxIO ()
 clientMode hostsstrs params = do
-    let hosts = splitOn "," $ concat $ intersperse "," hostsstrs
+    let hosts = splitOn "," $ intercalate "," hostsstrs
     liftIO $ setNumCapabilities $ length hosts + 1
     agr <- parallelAgregate hosts (askServer params)
     liftIO $ showAgr agr
@@ -291,7 +314,7 @@ serverMode fi n = do
             (h, host, _) <- accept sock
             putStrLn $ "Accepting request from host " ++ host
             (params, _) <- accumLines False h (== endOfParams) (:) []
-            let paramList = stringToParams $ concat $ intersperse "," params
+            let paramList = stringToParams $ intercalate "," params
             (_, evs) <- makeEvalState Nothing paramList "progver" "progsuf"	-- no config file
             return (h, evs)
         agr <- parallelAgregate ts (agregMVar $ Just es)
@@ -366,19 +389,27 @@ optFromBinFile fi es kfactor = do
                 else do
                     let result = runGetPartial S.get bsne
                     (r, rbs) <- iterGet result h
-                    go (cnt + 1) (err + posError es kfactor r) rbs h
+                    -- Ignore evaluations with special functions
+                    -- putStrLn $ "Debug: " ++ show r ++ "/" ++ show kfactor
+                    let mpe = posError es kfactor r
+                    when debug $ putStrLn $ "Debug: " ++ show mpe ++ "/" ++ show cnt ++ "/" ++ show err
+                    case mpe of
+                        Nothing -> go  cnt       err       rbs h
+                        Just er -> go (cnt + 1) (err + er) rbs h
 
 -- Calculate evaluation error for one position - binary cross entropy
 -- Because this is a binary classification it is very important that we have only 2 classes of positions:
 -- won and lost. The game result can be only 1 (won) and -1 (lost)
 -- The game result is in val and it is from white point of view
 -- Our static score is from side to move point of view, so we have to change sign if black is to move
-posError :: EvalState -> Double -> (MyPos, Double) -> Double
+-- We don't use for tuning special eval (i.e. a specific evaluation function, like passed pawns or so)
+posError :: EvalState -> Double -> (MyPos, Double) -> Maybe Double
 posError es kfactor (pos, val)
-    | val ==  1 = - log myval
-    | val == -1 = - log (1 - myval)
+    | spec      = Nothing
+    | val ==  1 = Just $ - log myval
+    | val == -1 = Just $ - log (1 - myval)
     | otherwise = error $ "Position has wrong result: " ++ show val
-    where !stc = posEval pos es
+    where (!stc, spec) = posEval pos es
           !myval | moving pos == White =     logisticFunction stc kfactor
                  | otherwise           = 1 - logisticFunction stc kfactor
 
@@ -394,6 +425,37 @@ complexity :: MyPos -> Double
 complexity pos = 1 + coeff * fromIntegral atcs
     where atcs = popCount $ (myAttacs pos .&. yo pos) .|. (yoAttacs pos .&. me pos)
           coeff = 0.1
+
+-- Reverse a fen: white <-> black
+reverseFen :: String -> String
+reverseFen fen = intercalate " " [fen1r, fstmr, fcstr, fenpr, f50m]
+    where fen1:fstm:fcst:fenp:f50m:_ = fenFromString fen
+          fen1r = map revUpLow $ intercalate "/" $ reverse $ splitFenLines fen1
+          revUpLow 'p' = 'P'
+          revUpLow 'P' = 'p'
+          revUpLow 'r' = 'R'
+          revUpLow 'R' = 'r'
+          revUpLow 'n' = 'N'
+          revUpLow 'N' = 'n'
+          revUpLow 'b' = 'B'
+          revUpLow 'B' = 'b'
+          revUpLow 'q' = 'Q'
+          revUpLow 'Q' = 'q'
+          revUpLow 'k' = 'K'
+          revUpLow 'K' = 'k'
+          revUpLow x   = x
+          -- This should be a split:
+          splitFenLines s = l : if s' == "" then [] else splitFenLines (tail s') where (l, s') = break ((==) '/') s
+          fstmr | fstm == "w" = "b"
+                | fstm == "b" = "w"
+                | otherwise   = error $ "Wrong sinde to move: " ++ show fstm
+          fcstr = map revUpLow fcst
+          fenpr | f:r:_ <- fenp, f `elem` "abcdefgh", r `elem` "36"
+                            = f : reve r : []
+                | otherwise = fenp
+          reve '3' = '6'
+          reve '6' = '3'
+          reve x   = x
 
 {--
 makeMovePos :: MyState -> Maybe Handle -> String -> CtxIO (Maybe (Move, MyState))
@@ -448,3 +510,14 @@ newThread a = do
     ctx <- ask
     liftIO $ forkIO $ runReaderT a ctx
 --}
+
+checkPosRev :: EvalState -> String -> Maybe (String, Int, String, Int)
+checkPosRev es fenval
+    | eo == er  = Nothing
+    | otherwise = Just (fen, eo, fenr, er)
+    where (fen:_) = splitOn "," fenval
+          pos  = posFromFen fen
+          !fenr = reverseFen fen
+          !posr = posFromFen fenr
+          (!eo, _) = posEval pos  es
+          (!er, _) = posEval posr es

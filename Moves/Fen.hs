@@ -1,6 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 module Moves.Fen (
-    posFromFen, initPos, updatePos, setPiece
+    posFromFen, initPos, updatePos, setPiece, fenFromString
     ) where
 
 import Data.Bits
@@ -46,19 +46,19 @@ initPos = posFromFen startFen
 
 posFromFen :: String -> MyPos
 posFromFen fen = updatePos p { epcas = x, zobkey = zk }
-    where fen1:fen2:fen3:fen4:fen5:_ = fenFromString fen
+    where fen1:fstm:fcst:fenp:f50m:_ = fenFromString fen
           p  = fenToTable fen1
           x  = fyInit . castInit . epInit $ epcas0
-          (epcas0, z) = case fen2 of
+          (epcas0, z) = case fstm of
               'w':_ -> (0, 0)
               'b':_ -> (mvMask, zobMove)
               _     -> error "posFromFen: expect w or b"
-          (cK, z1) = if 'K' `elem` fen3 then ((.|. caRKiw), zobCastKw) else (id, 0)
-          (cQ, z2) = if 'Q' `elem` fen3 then ((.|. caRQuw), zobCastQw) else (id, 0)
-          (ck, z3) = if 'k' `elem` fen3 then ((.|. caRKib), zobCastKb) else (id, 0)
-          (cq, z4) = if 'q' `elem` fen3 then ((.|. caRQub), zobCastQb) else (id, 0)
+          (cK, z1) = if 'K' `elem` fcst then ((.|. caRKiw), zobCastKw) else (id, 0)
+          (cQ, z2) = if 'Q' `elem` fcst then ((.|. caRQuw), zobCastQw) else (id, 0)
+          (ck, z3) = if 'k' `elem` fcst then ((.|. caRKib), zobCastKb) else (id, 0)
+          (cq, z4) = if 'q' `elem` fcst then ((.|. caRQub), zobCastQb) else (id, 0)
           castInit = cQ . cK . cq . ck
-          (epInit, ze) = case fen4 of
+          (epInit, ze) = case fenp of
               f:r:_ | f `elem` "abcdefgh" && r `elem` "36"
                     -> let fn  = ord f - ord 'a'
                            ms' = case r of
@@ -68,7 +68,7 @@ posFromFen fen = updatePos p { epcas = x, zobkey = zk }
                            zz = zobEP fn
                        in ((.|.) ms, zz)
               _     -> (id, 0)
-          fyInit = set50Moves $ read fen5
+          fyInit = set50Moves $ read f50m
           zk = zobkey p `xor` z `xor` z1 `xor` z2 `xor` z3 `xor` z4 `xor` ze
 
 -- A primitive decomposition of the fen string
