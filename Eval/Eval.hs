@@ -221,24 +221,22 @@ fadd :: Flc -> Flc -> Flc
 fadd (Flc f1 q1) (Flc f2 q2) = Flc (f1+f2) (q1+q2)
 
 ksSide :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
-ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
-    | myq == 0  = 0
-    | otherwise = mattacs
+ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya = mattacs
     where qual a p
               | yoka == 0 = Flc 0 0
               | y == 1    = Flc 1 p
               | y == 2    = Flc 1 (p `unsafeShiftL` 1)
-              | y == 3    = Flc 1 (p `unsafeShiftL` 2)
-              | otherwise = Flc 1 (p `unsafeShiftL` 3)
+              | otherwise = Flc 1 (p `unsafeShiftL` 2)
               where !yoka = yok .&. a
                     y = popCount yoka
-          -- qualWeights = [1, 3, 3, 5, 7, 3]
+          -- qualWeights = [2, 6, 6, 10, 14, 6] -- orig
+          -- qualWeights = [1, 4, 4, 10, 13, 5]
           !qp = qual myp 1
-          !qn = qual myn 3
-          !qb = qual myb 3
-          !qr = qual myr 5
-          !qq = qual myq 7
-          !qk = qual myk 3
+          !qn = qual myn 4
+          !qb = qual myb 4
+          !qr = qual myr 10
+          !qq = qual myq 13
+          !qk = qual myk 5
           !(Flc c q) = fadd qp $ fadd qn $ fadd qb $ fadd qr $ fadd qq qk
           !mattacs
               | c == 0 = 0
@@ -247,22 +245,22 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
               --       !conce = popCount $ yok .&. mya
               -- This is equivalent to:
               where !freco = popCount $ yok `less` (yop `less` mya)
-                    !ixm = c * q `unsafeShiftR` 2
+                    !ixm = c * q `unsafeShiftR` 3
                     !ixt = ixm + c + ksShift - freco
                     ksShift = 13
 
--- We take the maximum of 272 because:
--- Quali max: 8 * (1 + 3 + 3 + 5 + 10 + 3) = 200
+-- We take the maximum of 160 because:
+-- Quali max: 4 * (1 + 4 + 4 + 10 + 13 + 5) = 188
 -- Flag max: 6
--- 6 * 200 / 4 + 6 + 13 = 319
+-- 6 * 188 / 8 + 6 + 13 = 160
 attCoef :: UArray Int Int32
-attCoef = listArray (0, 319) $ take zeros (repeat 0) ++ [ f x | x <- [0..63] ] ++ repeat (f 63)
+attCoef = listArray (0, 160) $ take zeros (repeat 0) ++ [ f x | x <- [0..63] ] ++ repeat (f 63)
     where -- Without the scaling, f will take max value of 4000 for 63
           f :: Int -> Int32
           f x = let y = fromIntegral x :: Double
                 in round $ maxks * (2.92968750 - 0.03051758*y)*y*y / 4000
           zeros = 8
-          maxks = 4200
+          maxks = 4100
 
 kingSquare :: BBoard -> BBoard -> Square
 kingSquare kingsb colorp = firstOne $ kingsb .&. colorp
