@@ -11,7 +11,7 @@ import Control.Monad (when)
 -- import Control.Concurrent
 -- import Control.Applicative ((<$>))
 -- import Data.List (intersperse, delete, isPrefixOf, stripPrefix, foldl')
-import Data.Bits ((.|.), (.&.), popCount)
+import Data.Bits
 import Data.List (intercalate, foldl')
 import Data.List.Split (splitOn)
 import Data.Maybe (catMaybes)
@@ -31,7 +31,7 @@ import System.IO
 
 import Struct.Struct
 import Struct.Status
-import Struct.Context
+-- import Struct.Context
 import Struct.Config
 -- import Hash.TransTab
 -- import Moves.BaseTypes
@@ -66,6 +66,7 @@ defaultOptions :: Options
 defaultOptions = Options {
         optConfFile = Nothing,
         optKFactor  = 0.003,	-- this gives the minimum error over k for a set of 4M positions (BCE)
+                                -- only with log in the error function!
         optParams   = [],
         -- optLogging  = DebugUci,
         optNThreads = 1,
@@ -406,8 +407,10 @@ optFromBinFile fi es kfactor = do
 posError :: EvalState -> Double -> (MyPos, Double) -> Maybe Double
 posError es kfactor (pos, val)
     | spec      = Nothing
-    | val ==  1 = Just $ - log myval
-    | val == -1 = Just $ - log (1 - myval)
+    -- | val ==  1 = Just $ - log myval / complexity pos
+    -- | val == -1 = Just $ - log (1 - myval) / complexity pos
+    | val ==  1 = Just $ (1 - myval) * (1 - myval) / complexity pos
+    | val == -1 = Just $ myval       * myval       / complexity pos
     | otherwise = error $ "Position has wrong result: " ++ show val
     where (!stc, spec) = posEval pos es
           !myval | moving pos == White =     logisticFunction stc kfactor
@@ -418,13 +421,15 @@ logisticFunction :: Int -> Double -> Double
 logisticFunction score kfactor = 1 / (1 + exp (-kfactor * fromIntegral score))
 
 -- For complex positions with many tactical moves we cannot expect the eval to be very accurate
--- To take this into account we calculate the number of attacks in a position and diminuate the
--- error more when this number is bigger
--- *** Not used for now ***
+-- We consider 2 different factors for complexity:
+-- - total number of pieces (probably far away from final)
+-- - number of attacked pieces (position is unquiet)
 complexity :: MyPos -> Double
-complexity pos = 1 + coeff * fromIntegral atcs
-    where atcs = popCount $ (myAttacs pos .&. yo pos) .|. (yoAttacs pos .&. me pos)
-          coeff = 0.1
+complexity pos = 1 + atcoeff * fromIntegral atcs + pccoeff * fromIntegral pces
+    where atcs = popCount $ (myAttacs pos .&. yo pos) .|.  (yoAttacs pos .&. me pos)
+          pces = popCount $ occup pos
+          atcoeff = 0.1
+          pccoeff = 0.01
 
 -- Reverse a fen: white <-> black
 reverseFen :: String -> String
