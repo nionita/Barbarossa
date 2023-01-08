@@ -126,6 +126,8 @@ Executable SelfPlay
       Struct.Context,
       Struct.Status,
       Struct.Struct,
+      Tune.Base,
+      Tune.Reinforce,
       Uci.UCI,
       Uci.UciGlue
   GHC-Options: -O2 -Wall

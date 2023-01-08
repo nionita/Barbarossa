@@ -21,6 +21,8 @@ colParams = foldr npColParm npColInit
 
 readParam :: String -> Maybe (String, Double)
 readParam s
+    | length s == 0 = Nothing
+    | otherwise
     = let (ns, vs) = span (/= '=') s
       in case vs of
              ('=' : rs) -> case reads (strip rs) of

@@ -33,7 +33,8 @@ import Moves.History
 import Search.CStateMonad (execCState)
 import Eval.FileParams (makeEvalState)
 -- import Eval.Eval	-- not yet needed
-import Uci.UciGlue
+import Tune.Base
+import Tune.Reinforce
 
 debug :: Bool
 debug = False
@@ -187,7 +188,8 @@ filterFile opts = do
         Just m  -> loopCount (skipLines hi m) ()
         Nothing -> return ()
     -- loopCount (oracleAndFeats (optDepth opts) hi ho (optNFens opts)) ()
-    loopCount (balancedPos hi ho (optNFens opts)) ()
+    -- loopCount (balancedPos hi ho (optNFens opts)) ()
+    loopCount (evalSearchPos hi ho (optDepth opts) (optNFens opts)) ()
     liftIO $ do
         hClose ho
         hClose hi
@@ -457,20 +459,6 @@ data Player = Player {
         plNodes :: Int
     }
 
--- We may play with or without a search nodes budget, the we must be able to
--- make some operations with ints & maybe ints
-aloNodes :: Maybe Int -> Int -> Maybe Int
-aloNodes Nothing   _  = Nothing
-aloNodes (Just n1) n2 = Just $ n1 + n2
-
-subNodes :: Maybe Int -> Int -> Int
-subNodes Nothing   _  = 0
-subNodes (Just n1) n2 = n1 - n2
-
-stopNodes :: Maybe Int -> Int -> Bool
-stopNodes Nothing _    = False
-stopNodes (Just n1) n2 = n2 >= n1
-
 -- Play the given position to the end using fixed depth with 2 configurations
 -- This function can be used only to optimize eval weights but not time or search parameters
 -- The result score is from White p.o.v.:
@@ -561,25 +549,6 @@ playGame d maybeNodes pos (ide1, eval1) (ide2, eval2) = do
                                           chg2n  = (plChg player2) { crtStatus = state2 }
                                       go j (player2 { plChg = chg2n })
                                            (player1 { plChg = chg1n, plNodes = subNodes mbNodes nodes})
-
-iterativeDeepening :: Int -> Maybe Int -> CtxIO (Maybe Int, [Move], Int)
-iterativeDeepening depth maybeMaxNodes = do
-    --when debug $ lift $ do
-    --    putStrLn $ "In iter deep: " ++ show depth
-    --    hFlush stdout
-    chg <- readChanging
-    go 1 (crtStatus chg) Nothing [] []
-    where go d sini lsc lpv rmvs = do
-              --when debug $ lift $ do
-              --    putStrLn $ "In iter deep go: " ++ show d
-              --    hFlush stdout
-              (path, sc, rmvsf, _timint, sfin, _) <- bestMoveCont d 0 0 sini lsc lpv rmvs
-              let nodes = fromIntegral $ sNodes $ mstats sfin
-              -- We don't want to search less than depth 2, because depth 1 delivers error moves
-              -- by currently not updating the best score
-              if d > 1 && (null path || d >= depth || stopNodes maybeMaxNodes nodes)
-                 then return (Just sc, path, nodes)
-                 else go (d+1) sfin (Just sc) path rmvsf
 
 -- Append error info to error file:
 collectError :: SomeException -> IO ()
