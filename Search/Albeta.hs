@@ -290,6 +290,8 @@ pvRootSearch a b d lastpath rmvs aspir = do
                  | otherwise         = (a, emptySeq)
         p = unseq pm
     -- Root is pv node, cannot fail low, except when aspiration fails!
+    when (sc < -mateScore || sc > mateScore) $ lift $ do
+        logmes $ "Bad score in root: d = " ++ show d ++ ", sc = " ++ show sc ++ ", nstf = " ++ show nstf
     if sc <= a	-- failed low or timeout when searching PV
          then do
            unless (abrt || aspir) $ lift $ informStr "Failed low at root??"
@@ -319,6 +321,7 @@ pvInnerRoot :: Int 	-- current beta
             -> Move	-- move to search
             -> Search (Bool, NodeState)
 pvInnerRoot b d nst e = timeToAbort (True, nst) $ do
+         lift $ logmes $ "Root move " ++ show e
          -- do the move
          exd <- lift $ doMove e
          if legalResult exd
@@ -337,6 +340,7 @@ pvInnerRoot b d nst e = timeToAbort (True, nst) $ do
                 lift undoMove
                 lift incrementRootMoveNumber
                 modify $ \s' -> s' { absdp = absdp old }
+                lift $ logmes $ "Root move returns " ++ show s
                 let s' = addToPath e s
                 checkFailOrPVRoot (stats old) b d e s' nst
             else return (False, nst)
@@ -382,9 +386,10 @@ checkFailOrPVRoot xstats b d e s nst = whenAbort (True, nst) $ do
            let xpvslb = insertToPvs d pvg (pvsl nst)
                nst1   = nst { movno = mn + 1, pvsl = xpvslb, killer = newKiller d s nst }
            return (False, nst1)
-       else if pathScore s >= b
+       else if pathScore s >= b && useAspirWin
                then do
                  -- what when a root move fails high? We are in aspiration
+                 when (pathScore s > mateScore) $ lift $ logmes $ "Bad score: " ++ show s ++ ", b = " ++ show b
                  lift $ do
                      let typ = 1	-- beta cut (score is lower limit) with move e
                      ttStore de typ b e nodes'
@@ -393,7 +398,7 @@ checkFailOrPVRoot xstats b d e s nst = whenAbort (True, nst) $ do
                      csc = s { pathScore = b }
                      nst1 = nst { cursc = csc, pvsl = xpvslg, rbmch = rbmch nst + 1 }
                  return (True, nst1)
-               else do	-- means: > a && < b
+               else do	-- means: > a && < b (except when score error)
                  let sc = pathScore s
                      pa = unseq $ pathMoves s
                  informPV sc (draft $ ronly sst) pa
@@ -409,14 +414,15 @@ checkFailOrPVRoot xstats b d e s nst = whenAbort (True, nst) $ do
 insertToPvs :: Int -> Pvsl -> [Pvsl] -> [Pvsl]
 insertToPvs _ p [] = [p]
 insertToPvs d p ps@(q:qs)
-    | d == 1 && (betters || equals) = p : ps
+    -- | d == 1 && (betters || equals) = p : ps
+    | d == 1 && betters             = p : ps
     | pmate && not qmate            = p : ps
     | not pmate && qmate            = q : insertToPvs d p qs
     | pmate && betters              = p : ps
     | bettern || equaln && betters  = p : ps
     | otherwise                     = q : insertToPvs d p qs
     where betters = pathScore (pvPath p) >  pathScore (pvPath q)
-          equals  = pathScore (pvPath p) == pathScore (pvPath q)
+          -- equals  = pathScore (pvPath p) == pathScore (pvPath q)
           equaln  = pvNodes p == pvNodes q
           bettern = pvNodes p > pvNodes q
           pmate   = pnearmate $ pvPath p

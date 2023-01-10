@@ -40,7 +40,7 @@ import Struct.Config
 import Moves.Fen (fenFromString)
 -- import Moves.Board (posFromFen, initPos)
 -- import Moves.History
--- import Moves.Notation
+import Moves.Notation
 -- import Search.CStateMonad (runCState)
 import Eval.FileParams (makeEvalState)
 import Eval.Eval (posEval)
@@ -190,17 +190,19 @@ main = do
         Nothing -> error "EPD input file is require"
         Just fi -> do
             let ext = takeExtension fi
-            if length ext == 0
-                then error "Cannot process input without extension"
-                else if ext == ".epd"
-                        then if optConvert opts
-                                then epdToBin fi
-                                else if optReverse opts
-                                        then checkAllFile fi
-                                        else scoreAllFile fi (optKFactor opts) (optConfFile opts) (optParams opts) False
-                        else if ext == ".bin"
-                                then scoreAllFile fi (optKFactor opts) (optConfFile opts) (optParams opts) True
-                                else error $ "Cannot process input with extension " ++ ext
+            if ext == ".epd"
+               then if optConvert opts
+                       then epdToBin fi
+                       else if optReverse opts
+                               then checkAllFile fi
+                               else scoreAllFile fi (optKFactor opts) (optConfFile opts) (optParams opts) False
+               else if ext == ".bin"
+                       then scoreAllFile fi (optKFactor opts) (optConfFile opts) (optParams opts) True
+                       else do
+                           isdir <- doesDirectoryExist fi
+                           if isdir
+                              then scoreAllDirFiles fi (optKFactor opts) (optConfFile opts) (optParams opts)
+                              else error $ "Cannot process input " ++ fi
 
 checkAllFile :: FilePath -> IO ()
 checkAllFile fi = do
@@ -221,16 +223,24 @@ scoreAllFile fi kfactor mconf params bin = do
        then optFromBinFile fi es kfactor
        else optFromEpdFile fi es kfactor
 
+scoreAllDirFiles :: FilePath -> Double -> Maybe String -> [String] -> IO ()
+scoreAllDirFiles fi kfactor mconf params = do
+    let paramList
+            | null params = []
+            | otherwise   = stringToParams $ intercalate "," params
+    (_, es) <- makeEvalState mconf paramList "progver" "progsuf"
+    optFromDirBinFiles fi es kfactor
+
 optFromEpdFile :: FilePath -> EvalState -> Double -> IO ()
 optFromEpdFile fi es kfactor = do
     putStrLn $ "Optimizing over " ++ fi
-    (cou, err) <- foldl' accumErrorCnt (0, 0) . map (posError es kfactor . makePosVal) . lines <$> readFile fi
+    (cou, err) <- foldl' accumErrorCnt (0, 0) . map (posRegrError es kfactor . makePosVal) . lines <$> readFile fi
     let ave = err / fromIntegral cou
     putStrLn $ "BCE error (cnt/sum/avg): " ++ show cou ++ " / " ++ show err ++ " / " ++ show ave
 
-accumErrorCnt :: (Int, Double) -> Maybe Double -> (Int, Double)
-accumErrorCnt (cnt, acc) Nothing    = (cnt,     acc      )
-accumErrorCnt (cnt, acc) (Just err) = (cnt + 1, acc + err)
+accumErrorCnt :: (Int, Double) -> Maybe (Double, Int) -> (Int, Double)
+accumErrorCnt (cnt, acc) Nothing         = (cnt,     acc      )
+accumErrorCnt (cnt, acc) (Just (err, _)) = (cnt + 1, acc + err)
 
 epdToBin :: FilePath -> IO ()
 epdToBin fi = do
@@ -276,7 +286,6 @@ serverPrefix = "Server value: "
 
 endOfParams :: String
 endOfParams = "EOP"
-
 
 clientMode :: [String] -> [String] -> CtxIO ()
 clientMode hostsstrs params = do
@@ -366,6 +375,7 @@ makePosVal fenval = (pos, val)
 optFromBinFile :: FilePath -> EvalState -> Double -> IO ()
 optFromBinFile fi es kfactor = do
     putStrLn $ "Optimizing over " ++ fi
+    hFlush stdout
     h <- openFile fi ReadMode
     (cou, err) <- go (0::Int) 0 B.empty h
     let ave = err / fromIntegral cou
@@ -392,11 +402,61 @@ optFromBinFile fi es kfactor = do
                     (r, rbs) <- iterGet result h
                     -- Ignore evaluations with special functions
                     -- putStrLn $ "Debug: " ++ show r ++ "/" ++ show kfactor
-                    let mpe = posError es kfactor r
+                    let mpe = posRegrError es kfactor r
+                    case mpe of
+                        Nothing       -> go  cnt       err       rbs h
+                        Just (er, st) -> do
+                            when (debug && er > 1000000) $ do
+                                putStrLn $ "Debug: " ++ posToFen (fst r)
+                                putStrLn $ "Debug: " ++ show (snd r) ++ " / " ++ show st ++ " --> " ++ show er
+                            go (cnt + 1) (err + er) rbs h
+
+-- Use the incremental interface of the Get monad, for all bin files in a directory
+optFromDirBinFiles :: FilePath -> EvalState -> Double -> IO ()
+optFromDirBinFiles fi es kfactor = do
+    putStrLn $ "Optimizing over directory " ++ fi
+    allfiles <- listDirectory fi
+    -- putStrLn $ "All files " ++ show allfiles
+    let binfiles = filter ((".bin" ==) . takeExtension) allfiles
+    -- putStrLn $ "Bin files " ++ show binfiles
+    (cnt, err) <- goFile (0::Int) 0 binfiles
+    let ave = err / fromIntegral cnt
+    putStrLn $ "BCE error (cnt/sum/avg): " ++ show cnt ++ " / " ++ show err ++ " / " ++ show ave
+    where goFile !cnt !err []     = return (cnt, err)
+          goFile !cnt !err (f:fs) = do
+              let fullf = fi ++ "/" ++ f
+              putStrLn $ "Bin file " ++ fullf
+              hFlush stdout
+              h <- openFile fullf ReadMode
+              (cnt1, err1) <- go cnt err B.empty h
+              hClose h
+              goFile cnt1 err1 fs
+          bufsize = 1024 * 8
+          iterGet result h =
+              case result of
+                  Fail msg _   -> error msg
+                  Partial cont -> do
+                      nbs <- B.hGet h bufsize
+                      iterGet (cont nbs) h
+                  Done r rbs   -> return (r, rbs)
+          go !cnt !err bs h = do
+             (diri, bsne) <- if bs == B.empty
+                                then do
+                                    bs1 <- B.hGet h bufsize
+                                    return (True, bs1)
+                                else return (False, bs)
+             if diri && bsne == B.empty
+                then return (cnt, err)
+                else do
+                    let result = runGetPartial S.get bsne
+                    (r, rbs) <- iterGet result h
+                    -- Ignore evaluations with special functions
+                    -- putStrLn $ "Debug: " ++ show r ++ "/" ++ show kfactor
+                    let mpe = posRegrError es kfactor r
                     when debug $ putStrLn $ "Debug: " ++ show mpe ++ "/" ++ show cnt ++ "/" ++ show err
                     case mpe of
-                        Nothing -> go  cnt       err       rbs h
-                        Just er -> go (cnt + 1) (err + er) rbs h
+                        Nothing       -> go  cnt       err       rbs h
+                        Just (er, _t) -> go (cnt + 1) (err + er) rbs h
 
 -- Calculate evaluation error for one position - binary cross entropy
 -- Because this is a binary classification it is very important that we have only 2 classes of positions:
@@ -430,6 +490,18 @@ complexity pos = 1 + atcoeff * fromIntegral atcs + pccoeff * fromIntegral pces
           pces = popCount $ occup pos
           atcoeff = 0.1
           pccoeff = 0.01
+
+-- Calculate evaluation error for one position - regression error
+-- The value is the one obtained by a search to some depth, in centipawns, from p.o.v. of side to move
+-- Our static score is also from side to move point of view
+-- We don't use for tuning special eval (i.e. a specific evaluation function, like passed pawns or so)
+posRegrError :: EvalState -> Double -> (MyPos, Double) -> Maybe (Double, Int)
+posRegrError es _kfactor (pos, val)
+    | mate || spec = Nothing
+    | otherwise    = Just (diff * diff, stc)
+    where (stc, spec) = posEval pos es
+          diff = val - fromIntegral stc
+          mate = val >= 20000 || val <= -20000
 
 -- Reverse a fen: white <-> black
 reverseFen :: String -> String

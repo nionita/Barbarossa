@@ -7,6 +7,7 @@ module Uci.UciGlue (
 ) where
 
 -- import Control.Monad.State.Lazy
+import Control.Monad (when)
 
 import Search.CStateMonad (runCState)
 import Search.AlbetaTypes
@@ -37,5 +38,6 @@ bestMoveCont draft sttime1 sttime stati lastsc lpv rmvs = do
     ((sc, path, rmvsf, timint, ch, seldepth), statf) <- runCState (alphaBeta abc) stati
     let n = sNodes $ mstats statf
     informGuiBM sc draft seldepth n path
+    when timint $ ctxLog LogInfo $ "Search ended with time abort"
     ctxLog LogInfo $ "seldepth " ++ show seldepth ++ " score " ++ show sc ++ " path " ++ show path
     return (path, sc, rmvsf, timint, statf, ch)
