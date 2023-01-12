@@ -51,7 +51,7 @@ debug = False
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
-        optKFactor  :: Double,		-- config file
+        optKFactor  :: Double,		-- minimum denominator
         optParams   :: [String],	-- list of eval parameter assignements
         -- optLogging  :: LogLevel,	-- logging level
         optNThreads :: Int,		-- number of threads
@@ -65,8 +65,7 @@ data Options = Options {
 defaultOptions :: Options
 defaultOptions = Options {
         optConfFile = Nothing,
-        optKFactor  = 0.003,	-- this gives the minimum error over k for a set of 4M positions (BCE)
-                                -- only with log in the error function!
+        optKFactor  = 50,	-- minimum denominator, to limit the relative error around 0 scores
         optParams   = [],
         -- optLogging  = DebugUci,
         optNThreads = 1,
@@ -495,13 +494,19 @@ complexity pos = 1 + atcoeff * fromIntegral atcs + pccoeff * fromIntegral pces
 -- The value is the one obtained by a search to some depth, in centipawns, from p.o.v. of side to move
 -- Our static score is also from side to move point of view
 -- We don't use for tuning special eval (i.e. a specific evaluation function, like passed pawns or so)
+-- We take the relative squared error and bound it around 0
 posRegrError :: EvalState -> Double -> (MyPos, Double) -> Maybe (Double, Int)
-posRegrError es _kfactor (pos, val)
+posRegrError es kfactor (pos, val)
     | mate || spec = Nothing
-    | otherwise    = Just (diff * diff, stc)
+    | otherwise    = Just (erro * erro, stc)
     where (stc, spec) = posEval pos es
           diff = val - fromIntegral stc
+          erro = diff / deno
+          deno | val >= den_min && val <= den_max = den_max
+               | otherwise                        = val
           mate = val >= 20000 || val <= -20000
+          den_min = -kfactor
+          den_max =  kfactor
 
 -- Reverse a fen: white <-> black
 reverseFen :: String -> String
