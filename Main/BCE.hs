@@ -65,7 +65,7 @@ data Options = Options {
 defaultOptions :: Options
 defaultOptions = Options {
         optConfFile = Nothing,
-        optKFactor  = 50,	-- minimum denominator, to limit the relative error around 0 scores
+        optKFactor  = 100,	-- minimum denominator, to limit the relative error around 0 scores
         optParams   = [],
         -- optLogging  = DebugUci,
         optNThreads = 1,
