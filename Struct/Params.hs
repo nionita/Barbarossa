@@ -58,10 +58,10 @@ weights = [
         ("ewRookOpen",        ( 205,  178)),	-- 20k steps, depth 4,
         ("ewRookConn",        (  89,   59)),	-- 2 games, beta=0.95, gamma=0.8,
         ("ewRook7th",         ( 201,  161)),	-- niu=0.99, eps=1E-6
-        ("ewMobilityKnight",  (  50,   56)),
-        ("ewMobilityBishop",  (  53,   33)),
-        ("ewMobilityRook",    (  16,   34)),	-- DSPSA ...
-        ("ewMobilityQueen",   (   2,   11)),
+        ("ewMobilityKnight",  (  47,   63)),
+        ("ewMobilityBishop",  (  44,   42)),
+        ("ewMobilityRook",    (  -1,   56)),	-- DSPSA ...
+        ("ewMobilityQueen",   (  -8,   52)),
         ("ewCenterPAtts",     (  73,   57)),
         ("ewCenterNAtts",     (  48,   37)),
         ("ewCenterBAtts",     (  52,   35)),
