@@ -494,17 +494,17 @@ complexity pos = 1 + atcoeff * fromIntegral atcs + pccoeff * fromIntegral pces
 -- The value is the one obtained by a search to some depth, in centipawns, from p.o.v. of side to move
 -- Our static score is also from side to move point of view
 -- We don't use for tuning special eval (i.e. a specific evaluation function, like passed pawns or so)
--- We take the relative squared error and bound it around 0
+-- We take the relative squared error and bound it around 0 - now symetric
 posRegrError :: EvalState -> Double -> (MyPos, Double) -> Maybe (Double, Int)
 posRegrError es kfactor (pos, val)
     | mate || spec = Nothing
     | otherwise    = Just (erro * erro, stc)
     where (stc, spec) = posEval pos es
           diff = val - fromIntegral stc
-          erro = diff / deno
+          erro = 1 + abs (diff / deno)
           deno | val >= den_min && val <= den_max = den_max
                | otherwise                        = val
-          mate = val >= 20000 || val <= -20000
+          mate = val >= 20000 - 100 || val <= -20000 + 100
           den_min = -kfactor
           den_max =  kfactor
 
