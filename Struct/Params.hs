@@ -54,22 +54,22 @@ weights = [
         ("ewKingPlacePwns",   (   0,    4)),
         ("ewKingPawn",        (   3,   50)),
         ("ewKingThreat",      (   0,  300)),
-        ("ewRookHOpen",       ( 162,  182)),	-- DSPSA with Adadelta
-        ("ewRookOpen",        ( 205,  178)),	-- 20k steps, depth 4,
-        ("ewRookConn",        (  89,   59)),	-- 2 games, beta=0.95, gamma=0.8,
-        ("ewRook7th",         ( 201,  161)),	-- niu=0.99, eps=1E-6
-        ("ewMobilityKnight",  (  50,   56)),
-        ("ewMobilityBishop",  (  53,   33)),
-        ("ewMobilityRook",    (  16,   34)),	-- DSPSA ...
-        ("ewMobilityQueen",   (   2,   11)),
-        ("ewCenterPAtts",     (  73,   57)),
-        ("ewCenterNAtts",     (  48,   37)),
-        ("ewCenterBAtts",     (  52,   35)),
-        ("ewCenterRAtts",     (  14,   22)),	-- DSPSA ...
-        ("ewCenterQAtts",     (  13,   53)),
-        ("ewCenterKAtts",     (   2,   62)),
+        ("ewRookHOpen",       ( 160,  129)),	-- rein3
+        ("ewRookOpen",        ( 205,  154)),	-- rein3
+        ("ewRookConn",        (  59,   59)),	-- rein3
+        ("ewRook7th",         (  90,  145)),	-- rein3
+        ("ewMobilityKnight",  (  47,   49)),	-- rein3
+        ("ewMobilityBishop",  (  43,   28)),	-- rein3
+        ("ewMobilityRook",    (  14,   30)),	-- rein3
+        ("ewMobilityQueen",   (  -1,   13)),	-- rein3
+        ("ewCenterPAtts",     (  55,   50)),	-- rein3
+        ("ewCenterNAtts",     (  35,   21)),	-- rein3
+        ("ewCenterBAtts",     (  55,   24)),	-- rein3
+        ("ewCenterRAtts",     (   6,   15)),	-- rein3
+        ("ewCenterQAtts",     (  10,   40)),	-- rein3
+        ("ewCenterKAtts",     ( -32,   64)),	-- rein3
         ("ewSpace",           (   1,    0)),
-        ("ewAdvAtts",         (   1,   17)),
+        ("ewAdvAtts",         (  -4,   13)),	-- rein3
         ("ewIsolPawns",       ( -36, -113)),
         ("ewIsolPassed",      ( -63, -143)),
         ("ewBackPawns",       (-108, -141)),
