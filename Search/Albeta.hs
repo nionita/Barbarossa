@@ -409,18 +409,18 @@ checkFailOrPVRoot xstats b d e s nst = whenAbort (True, nst) $ do
 insertToPvs :: Int -> Pvsl -> [Pvsl] -> [Pvsl]
 insertToPvs _ p [] = [p]
 insertToPvs d p ps@(q:qs)
-    | d == 1 && (betters || equals) = p : ps
-    | pmate && not qmate            = p : ps
-    | not pmate && qmate            = q : insertToPvs d p qs
-    | pmate && betters              = p : ps
-    | bettern || equaln && betters  = p : ps
-    | otherwise                     = q : insertToPvs d p qs
+    | d <= dscore && betters       = p : ps
+    | pmate && not qmate           = p : ps
+    | not pmate && qmate           = q : insertToPvs d p qs
+    | pmate && betters             = p : ps
+    | bettern || equaln && betters = p : ps
+    | otherwise                    = q : insertToPvs d p qs
     where betters = pathScore (pvPath p) >  pathScore (pvPath q)
-          equals  = pathScore (pvPath p) == pathScore (pvPath q)
           equaln  = pvNodes p == pvNodes q
           bettern = pvNodes p > pvNodes q
           pmate   = pnearmate $ pvPath p
           qmate   = pnearmate $ pvPath q
+          dscore  = 4
 
 -- PV Search
 pvSearch :: NodeState -> Int -> Int -> Int -> Search Path
