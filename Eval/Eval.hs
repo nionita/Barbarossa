@@ -897,18 +897,18 @@ pawnEndGame p
           !myking = kingSquare (kings p) (me p)
           !yoking = kingSquare (kings p) (yo p)
           (escMe, escYo, maDiff)
-              | moving p == White = (escMeWhite yoking, escYoBlack myking,   mater p)
-              | otherwise         = (escMeBlack yoking, escYoWhite myking, - mater p)
+              | moving p == White = (escWhite True yoking, escBlack False myking,   mater p)
+              | otherwise         = (escBlack True yoking, escWhite False myking, - mater p)
           mpsqs  = map escMe $ bbToSquares mfpbb	-- my pp squares & distances to promotion
-          mescds = map snd $ filter fst mpsqs		-- my escaped passed pawns
           ypsqs  = map escYo $ bbToSquares yfpbb	-- your pp squares & distances to promotion
+          mescds = map snd $ filter fst mpsqs		-- my escaped passed pawns
           yescds = map snd $ filter fst ypsqs		-- your escaped passed pawns
+          mim = fst $ minimumBy (comparing snd) mescds  -- who is promoting first?
+          miy = fst $ minimumBy (comparing snd) yescds
           dpr | mim < miy     = myrace
               | mim > miy + 1 = yorace
               | otherwise     = withQueens     -- Here: this is more complex, e.g. if check while promoting
                                                -- or direct after promotion + queen capture?
-          mim = fst $ minimumBy (comparing snd) mescds      -- who is promoting first?
-          miy = fst $ minimumBy (comparing snd) yescds
           myrace =  promoBonus - distMalus mim
           yorace = -promoBonus + distMalus miy
           promoBonus = 1000     -- i.e. almost a queen (here the unit is 1 cp)
@@ -918,66 +918,18 @@ pawnEndGame p
           -- But now we consider only the material difference (which consists only of pawns)
           withQueens = maDiff
  
-escMeWhite :: Square -> Square -> (Bool, (Square, Int))
-escMeWhite !ksq !psq = (esc, (psq, dis))
-    where !tsq = promoW psq
-          !dis = squareDistance psq tsq
-          !esc = dis < squareDistance ksq tsq
- 
-escYoWhite :: Square -> Square -> (Bool, (Square, Int))
-escYoWhite !ksq !psq = (esc, (psq, dis))
-    where !tsq = promoW psq
-          !dis = squareDistance psq tsq
-          !esc = dis < squareDistance ksq tsq - 1       -- because we move
- 
-escMeBlack :: Square -> Square -> (Bool, (Square, Int))
-escMeBlack !ksq !psq = (esc, (psq, dis))
-    where !tsq = promoB psq
-          !dis = squareDistance psq tsq
-          !esc = dis < squareDistance ksq tsq
- 
-escYoBlack :: Square -> Square -> (Bool, (Square, Int))
-escYoBlack !ksq !psq = (esc, (psq, dis))
-    where !tsq = promoB psq
-          !dis = squareDistance psq tsq
-          !esc = dis < squareDistance ksq tsq - 1       -- because we move
+-- If the pawn moves first, it escapes 1 square earlier
+escWhite :: Bool -> Square -> Square -> (Bool, (Square, Int))
+escWhite pmv !ksq !psq
+    | pmv       = (dis < squareDistance ksq tsq,     (psq, dis))
+    | otherwise = (dis < squareDistance ksq tsq - 1, (psq, dis))
+    where tsq = promoW psq
+          dis = squareDistance psq tsq
 
-{--
-simplePawnEndGame :: MyPos -> Int
-simplePawnEndGame p = d
-    where !d = mepv - yopv
-          !mepv = simplePvMe $ me p .&. pawns p
-          !yopv = simplePvYo $ yo p .&. pawns p
-          (simplePvMe, simplePvYo) | moving p == White = (simplePvWhite, simplePvBlack)
-                                   | otherwise         = (simplePvBlack, simplePvWhite)
-
--- Just a simple weighted count
-simplePvWhite :: BBoard -> Int
-simplePvWhite !bb = pv
-    where !pv = 100 * pc
-          !pc0 = popCount $ bb  .&. band
-          !bb1 = bb  `unsafeShiftL` 16
-          !pc1 = popCount $ bb1 .&. band
-          !bb2 = bb1 `unsafeShiftL` 16
-          !pc2 = popCount $ bb2 .&. band
-          !pc  = (pc0 `unsafeShiftL` 2) + (pc1 `unsafeShiftL` 1) + pc2
-          band = 0x00FFFF0000000000	-- row 6 and 7
-
-simplePvBlack :: BBoard -> Int
-simplePvBlack !bb = pv
-    where !pv = 100 * pc
-          !pc0 = popCount $ bb  .&. band
-          !bb1 = bb  `unsafeShiftR` 16
-          !pc1 = popCount $ bb1 .&. band
-          !bb2 = bb1 `unsafeShiftR` 16
-          !pc2 = popCount $ bb2 .&. band
-          !pc  = (pc0 `unsafeShiftL` 2) + (pc1 `unsafeShiftL` 1) + pc2
-          band = 0x0000000000FFFF00	-- row 2 and 3
-
-halfPawnMax :: Int -> Int -> Int
-halfPawnMax mx d
-    | steps > mx = 100 * mx
-    | otherwise  = 100 * steps
-    where steps = (d + 1) `unsafeShiftR` 1
---}
+escBlack :: Bool -> Square -> Square -> (Bool, (Square, Int))
+escBlack pmv !ksq !psq
+    | pmv       = (dis < squareDistance ksq tsq,     (psq, dis))
+    | otherwise = (dis < squareDistance ksq tsq - 1, (psq, dis))
+    where tsq = promoB psq
+          dis = squareDistance psq tsq
 --------------------------------------
