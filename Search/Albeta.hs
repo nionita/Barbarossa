@@ -420,7 +420,7 @@ insertToPvs d p ps@(q:qs)
           bettern = pvNodes p > pvNodes q
           pmate   = pnearmate $ pvPath p
           qmate   = pnearmate $ pvPath q
-          dscore  = 4
+          dscore  = 1
 
 -- PV Search
 pvSearch :: NodeState -> Int -> Int -> Int -> Search Path
