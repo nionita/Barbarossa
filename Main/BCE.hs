@@ -51,7 +51,7 @@ debug = False
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
-        optKFactor  :: Double,		-- config file
+        optKFactor  :: Double,		-- constant for error weight decay
         optParams   :: [String],	-- list of eval parameter assignements
         -- optLogging  :: LogLevel,	-- logging level
         optNThreads :: Int,		-- number of threads
@@ -65,8 +65,7 @@ data Options = Options {
 defaultOptions :: Options
 defaultOptions = Options {
         optConfFile = Nothing,
-        optKFactor  = 0.003,	-- this gives the minimum error over k for a set of 4M positions (BCE)
-                                -- only with log in the error function!
+        optKFactor  = - log 0.5 / 1200,	-- halve the error weight for a reference score of 1200 cp
         optParams   = [],
         -- optLogging  = DebugUci,
         optNThreads = 1,
@@ -80,8 +79,8 @@ defaultOptions = Options {
 setConfFile :: String -> Options -> Options
 setConfFile cf opt = opt { optConfFile = Just cf }
 
-setKFactor :: String -> Options -> Options
-setKFactor kf opt = opt { optKFactor = read kf }
+setHalf :: String -> Options -> Options
+setHalf kf opt = opt { optKFactor = - log 0.5 / read kf }
 
 addParam :: String -> Options -> Options
 addParam pa opt = opt { optParams = pa : optParams opt }
@@ -118,8 +117,7 @@ addWDir cl opt = opt { optWorkDir = Just cl }
 options :: [OptDescr (Options -> Options)]
 options = [
         Option "c" ["config"]  (ReqArg setConfFile "STRING") "Configuration file",
-        Option "k" ["kfactor"] (ReqArg setKFactor "STRING") "K Factor",
-        -- Option "l" ["loglev"]  (ReqArg setLogging "STRING")  "Logging level from 0 (debug) to 5 (never)",
+        Option "k" ["half"]    (ReqArg setHalf "STRING") "Score to halve the error weight (in cp)",
         Option "p" ["param"]   (ReqArg addParam "STRING")    "Eval/search/time parameters: name=value,...",
         Option "a" ["analyse"] (ReqArg addAFile "STRING")   "Analysis file",
         Option "t" ["threads"] (ReqArg addNThrds "STRING")  "Number of threads",
@@ -491,17 +489,23 @@ complexity pos = 1 + atcoeff * fromIntegral atcs + pccoeff * fromIntegral pces
           atcoeff = 0.1
           pccoeff = 0.01
 
--- Calculate evaluation error for one position - regression error
--- The value is the one obtained by a search to some depth, in centipawns, from p.o.v. of side to move
+-- Calculate evaluation error for one position - regression error, i.e. relative to a reference score
+-- The value (or reference score) is the one obtained by a search to some depth, in centipawns,
+-- from p.o.v. of side to move
 -- Our static score is also from side to move point of view
--- We don't use for tuning special eval (i.e. a specific evaluation function, like passed pawns or so)
+-- We don't use for tuning special eval (i.e. a specific evaluation function, like e.g. for no pawns)
+-- The error is weighted less when the reference score in very high: 100 cp difference for a reference
+-- of 200 cp is more important than 100 cp difference for a reference of 1000 cp
 posRegrError :: EvalState -> Double -> (MyPos, Double) -> Maybe (Double, Int)
-posRegrError es _kfactor (pos, val)
+posRegrError es kfactor (pos, val)
     | mate || spec = Nothing
-    | otherwise    = Just (diff * diff, stc)
+    | otherwise    = Just (ew * diff * diff, stc)
     where (stc, spec) = posEval pos es
           diff = val - fromIntegral stc
-          mate = val >= 20000 || val <= -20000
+          mate = val >= wemate || val <= yomate
+          ew   = exp (-kfactor * abs val)
+          wemate =  20000 - 100	-- minimum mate score when we mate (like "mate in 100")
+          yomate = -20000 + 100	-- minimum mate score when we are mated
 
 -- Reverse a fen: white <-> black
 reverseFen :: String -> String
