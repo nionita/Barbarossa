@@ -43,7 +43,7 @@ import Moves.Fen (fenFromString)
 import Moves.Notation
 -- import Search.CStateMonad (runCState)
 import Eval.FileParams (makeEvalState)
-import Eval.Eval (posEval)
+import Eval.Eval (posEval, posEvalSpec)
 import Moves.Fen (posFromFen)
 
 debug :: Bool
@@ -470,7 +470,7 @@ posError es kfactor (pos, val)
     | val ==  1 = Just $ (1 - myval) * (1 - myval) / complexity pos
     | val == -1 = Just $ myval       * myval       / complexity pos
     | otherwise = error $ "Position has wrong result: " ++ show val
-    where (!stc, spec) = posEval pos es
+    where (!stc, spec) = posEvalSpec pos es
           !myval | moving pos == White =     logisticFunction stc kfactor
                  | otherwise           = 1 - logisticFunction stc kfactor
 
@@ -500,7 +500,7 @@ posRegrError :: EvalState -> Double -> (MyPos, Double) -> Maybe (Double, Int)
 posRegrError es kfactor (pos, val)
     | mate || spec = Nothing
     | otherwise    = Just (ew * diff * diff, stc)
-    where (stc, spec) = posEval pos es
+    where (stc, spec) = posEvalSpec pos es
           diff = val - fromIntegral stc
           mate = val >= wemate || val <= yomate
           ew   = exp (-kfactor * abs val)
@@ -600,5 +600,5 @@ checkPosRev es fenval
           pos  = posFromFen fen
           !fenr = reverseFen fen
           !posr = posFromFen fenr
-          (!eo, _) = posEval pos  es
-          (!er, _) = posEval posr es
+          !eo   = posEval pos  es
+          !er   = posEval posr es

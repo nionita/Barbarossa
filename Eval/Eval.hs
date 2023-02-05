@@ -5,7 +5,7 @@
 
 module Eval.Eval (
     initEvalState,
-    posEval
+    posEval, posEvalSpec
 ) where
 
 import Data.Array.Base (unsafeAt)
@@ -42,20 +42,36 @@ matesc :: Int
 matesc = 20000 - 255	-- warning, this is also defined in Base.hs!!
 
 {-# INLINE posEval #-}
-posEval :: MyPos -> EvalState -> (Int, Bool)
-posEval p !sti = (scc, spec)
-    where (!sce, spec) = evalDispatch p sti
-          !scl = min matesc $ max (-matesc) sce
-          !scc = if granCoarse > 0 then (scl + granCoarse2) .&. granCoarseM else scl
+posEval :: MyPos -> EvalState -> Int
+posEval p !sti = scc
+    where sce = evalDispatch p sti
+          scl = min matesc $ max (-matesc) sce
+          scc = if granCoarse > 0 then (scl + granCoarse2) .&. granCoarseM else scl
 
-evalDispatch :: MyPos -> EvalState -> (Int, Bool)
-evalDispatch p !sti
-    | pawns p == 0            = (evalNoPawns p sti, True)
-    | pawns p .&. me p == 0 ||
-      pawns p .&. yo p == 0   = (evalSideNoPawns p sti, True)
-    | kings p .|. pawns p == occup p,
-      Just r <- pawnEndGame p = (r, True)
-    | otherwise               = (normalEval p sti, False)
+{-# INLINE posEvalSpec #-}
+posEvalSpec :: MyPos -> EvalState -> (Int, Bool)
+posEvalSpec p !sti = (scc, spec)
+    where (sce, spec) = evalDispatchSpec p sti
+          scl = min matesc $ max (-matesc) sce
+          scc = if granCoarse > 0 then (scl + granCoarse2) .&. granCoarseM else scl
+
+evalDispatch :: MyPos -> EvalState -> Int
+evalDispatch p sti
+    | pawns p == 0 = evalNoPawns p sti
+    | pawns p .&. me p == 0 || pawns p .&. yo p == 0
+                   = evalSideNoPawns p sti
+    | kings p .|. pawns p == occup p, Just r <- pawnEndGame p
+                   = r
+    | otherwise    = normalEval p sti
+
+evalDispatchSpec :: MyPos -> EvalState -> (Int, Bool)
+evalDispatchSpec p sti
+    | pawns p == 0 = (evalNoPawns p sti, True)
+    | pawns p .&. me p == 0 || pawns p .&. yo p == 0
+                   = (evalSideNoPawns p sti, True)
+    | kings p .|. pawns p == occup p, Just r <- pawnEndGame p
+                   = (r, True)
+    | otherwise    = (normalEval p sti, False)
 
 normalEval :: MyPos -> EvalState -> Int
 normalEval p !sti = sc

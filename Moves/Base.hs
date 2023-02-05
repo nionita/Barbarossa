@@ -62,15 +62,15 @@ informCtx = lift . talkToContext
 
 posToState :: MyPos -> Cache -> History -> EvalState -> MyState
 posToState p c h e = MyState {
-                       stack = [p''],
+                       stack = [p'],
                        hash = c,
                        hist = h,
                        mstats = ssts0,
                        evalst = e,
                        rootmn = 1
                    }
-    where (stsc, _) = posEval p e
-          p'' = p { staticScore = stsc }
+    where stsc = posEval p e
+          p'   = p { staticScore = stsc }
 
 posNewSearch :: MyState -> MyState
 posNewSearch p = p { hash = newGener (hash p), rootmn = 1 }
@@ -186,7 +186,7 @@ doMove m = do
         il  = occup pc `uBitClear` fromSquare m
         -- Capturing one king?
         kc  = kings pc `uBitSet` toSquare m
-        (sts, _) = posEval p (evalst s)
+        sts = posEval p (evalst s)
         p   = doFromToMove m pc { staticScore = sts }
     if (il || kc)
        then do
@@ -214,8 +214,8 @@ doQSMove :: Move -> Game Bool
 doQSMove m = do
     s <- get
     let (pc:_) = stack s	-- we never saw an empty stack error until now
-        (sts, _) = posEval p (evalst s)
-        p   = doFromToMove m pc { staticScore = sts }
+        sts  = posEval p (evalst s)
+        p    = doFromToMove m pc { staticScore = sts }
     if not $ checkOk p
        then return False
        else do
@@ -226,7 +226,7 @@ doNullMove :: Game ()
 doNullMove = do
     s <- get
     let (pc:_) = stack s	-- we never saw an empty stack error until now
-        (sts, _) = posEval p (evalst s)
+        sts = posEval p (evalst s)
         p   = reverseMoving pc { staticScore = sts }
     put s { stack = p : stack s }
 
