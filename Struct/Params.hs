@@ -47,7 +47,7 @@ params = [
 -- All weights have type MidEnd
 weights :: [EvalWeightSpec]
 weights = [
-        ("ewMaterialDiff",    (   8,    8)),
+        ("ewMaterialDiff",    (   7,    6)),
         ("ewKingSafe",        (   1,    0)),
         ("ewKingOpen",        (   2,    4)),
         ("ewKingPlaceCent",   (   8,    1)),
@@ -89,7 +89,7 @@ weights = [
         ("ewPawnBlockP",      (-112,  -92)),
         ("ewPawnBlockO",      ( -23,  -26)),
         ("ewPawnBlockA",      ( -19,  -69)),
-        ("ewPassPawnLev",     (   2,    8))
+        ("ewPassPawnLev",     (  -1,    8))
     ]
 
 -- This part is for generating the data structures and the CollectParams instances
