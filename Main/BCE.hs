@@ -4,7 +4,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Main where
+module Main (main) where
 import Control.Monad (when, forM_)
 -- import Control.Monad.Reader
 -- import Control.Monad.State
@@ -17,6 +17,7 @@ import Data.List.Split (splitOn)
 -- import Data.Maybe (catMaybes)
 -- import Data.Monoid
 -- import Data.ByteString (ByteString(..))
+import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.Serialize as S
 import Data.Serialize.Get
@@ -51,7 +52,9 @@ debug = False
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
-        optKFactor  :: Double,		-- constant for error weight decay
+        optMinWidth    :: Double,	-- luft min width (e.g. for reference score of 0)
+        optWidthGrowth :: Double,	-- growth rate of the luft width with reference score
+        optTanhScale   :: Double,	-- scale oh tanh function argument (diff - margin)
         optParams   :: [String],	-- list of eval parameter assignements
         -- optLogging  :: LogLevel,	-- logging level
         optNThreads :: Int,		-- number of threads
@@ -62,10 +65,18 @@ data Options = Options {
         optWorkDir  :: Maybe FilePath	-- working dir
     } deriving Show
 
+data HyperParams = HyperParams {
+        hpMinWidth    :: Double,	-- luft min width (e.g. for reference score of 0)
+        hpWidthGrowth :: Double,	-- growth rate of the luft width with reference score
+        hpTanhScale   :: Double		-- scale oh tanh function argument (diff - margin)
+    }
+
 defaultOptions :: Options
 defaultOptions = Options {
         optConfFile = Nothing,
-        optKFactor  = - log 0.5 / 1200,	-- halve the error weight for a reference score of 1200 cp
+        optMinWidth = 20,		-- luft min width (e.g. for reference score of 0)
+        optWidthGrowth = - log 0.5 / 400,	-- growth rate of the luft width with reference score
+        optTanhScale   = 0.05,		-- scale oh tanh function argument (diff - margin)
         optParams   = [],
         -- optLogging  = DebugUci,
         optNThreads = 1,
@@ -79,8 +90,14 @@ defaultOptions = Options {
 setConfFile :: String -> Options -> Options
 setConfFile cf opt = opt { optConfFile = Just cf }
 
-setHalf :: String -> Options -> Options
-setHalf kf opt = opt { optKFactor = - log 0.5 / read kf }
+setWidthGrowth :: String -> Options -> Options
+setWidthGrowth wg opt = opt { optWidthGrowth = - log 0.5 / read wg }
+
+setMinWidth :: String -> Options -> Options
+setMinWidth mw opt = opt { optMinWidth = read mw }
+
+setTanhScale :: String -> Options -> Options
+setTanhScale ts opt = opt { optTanhScale = read ts }
 
 addParam :: String -> Options -> Options
 addParam pa opt = opt { optParams = pa : optParams opt }
@@ -117,7 +134,9 @@ addWDir cl opt = opt { optWorkDir = Just cl }
 options :: [OptDescr (Options -> Options)]
 options = [
         Option "c" ["config"]  (ReqArg setConfFile "STRING") "Configuration file",
-        Option "k" ["half"]    (ReqArg setHalf "STRING") "Score to halve the error weight (in cp)",
+        Option "m" ["minwidth"] (ReqArg setMinWidth "STRING") "Luft width for score 0 (in cp)",
+        Option "g" ["growth"]  (ReqArg setWidthGrowth "STRING") "Score to double the luft width (in cp)",
+        Option "b" ["tanhscale"] (ReqArg setTanhScale "STRING") "Scale of the tanh argument",
         Option "p" ["param"]   (ReqArg addParam "STRING")    "Eval/search/time parameters: name=value,...",
         Option "a" ["analyse"] (ReqArg addAFile "STRING")   "Analysis file",
         Option "t" ["threads"] (ReqArg addNThrds "STRING")  "Number of threads",
@@ -134,7 +153,7 @@ theOptions = do
         (o, n, []) -> return (foldr ($) defaultOptions o, n)
         (_, _, es) -> ioError (userError (concat es ++ usageInfo header options))
     where header = "Usage: " ++ idName
-              ++ " [-c CONF] [-l LEV] [-k kfact] [-p name=val[,...]] -a AFILE [-o|-r] [-w WORKDIR]"
+              ++ " [-c CONF] [-m MINW] [-g GROWTH] [-b SCALE] [-p name=val[,...]] -a AFILE [-o|-r] [-w WORKDIR]"
           idName = "BCE"
 
 {--
@@ -193,14 +212,25 @@ main = do
                        then epdToBin fi
                        else if optReverse opts
                                then checkAllFile fi
-                               else scoreAllFile fi (optKFactor opts) (optConfFile opts) (optParams opts) False
-               else if ext == ".bin"
-                       then scoreAllFile fi (optKFactor opts) (optConfFile opts) (optParams opts) True
-                       else do
-                           isdir <- doesDirectoryExist fi
-                           if isdir
-                              then scoreAllDirFiles fi (optKFactor opts) (optConfFile opts) (optParams opts)
-                              else error $ "Cannot process input " ++ fi
+                               else do
+                                   let hp = optsToHyper opts
+                                   scoreAllFile fi hp (optConfFile opts) (optParams opts) False
+               else do
+                   let hp = optsToHyper opts
+                   if ext == ".bin"
+                      then scoreAllFile fi hp (optConfFile opts) (optParams opts) True
+                      else do
+                          isdir <- doesDirectoryExist fi
+                          if isdir
+                             then scoreAllDirFiles fi hp (optConfFile opts) (optParams opts)
+                             else error $ "Cannot process input " ++ fi
+
+optsToHyper :: Options -> HyperParams
+optsToHyper opts = HyperParams {
+        hpMinWidth    = optMinWidth opts,
+        hpWidthGrowth = optWidthGrowth opts,
+        hpTanhScale   = optTanhScale opts
+    }
 
 checkAllFile :: FilePath -> IO ()
 checkAllFile fi = do
@@ -224,28 +254,28 @@ checkAllFile fi = do
     -- putStrLn "Problems:"
     -- mapM_ (\p -> putStrLn (show p)) probs
 
-scoreAllFile :: FilePath -> Double -> Maybe String -> [String] -> Bool -> IO ()
-scoreAllFile fi kfactor mconf params bin = do
+scoreAllFile :: FilePath -> HyperParams -> Maybe String -> [String] -> Bool -> IO ()
+scoreAllFile fi hp mconf params bin = do
     let paramList
             | null params = []
             | otherwise   = stringToParams $ intercalate "," params
     (_, es) <- makeEvalState mconf paramList "progver" "progsuf"
     if bin
-       then optFromBinFile fi es kfactor
-       else optFromEpdFile fi es kfactor
+       then optFromBinFile fi es hp
+       else optFromEpdFile fi es hp
 
-scoreAllDirFiles :: FilePath -> Double -> Maybe String -> [String] -> IO ()
-scoreAllDirFiles fi kfactor mconf params = do
+scoreAllDirFiles :: FilePath -> HyperParams -> Maybe String -> [String] -> IO ()
+scoreAllDirFiles fi hp mconf params = do
     let paramList
             | null params = []
             | otherwise   = stringToParams $ intercalate "," params
     (_, es) <- makeEvalState mconf paramList "progver" "progsuf"
-    optFromDirBinFiles fi es kfactor
+    optFromDirBinFiles fi es hp
 
-optFromEpdFile :: FilePath -> EvalState -> Double -> IO ()
-optFromEpdFile fi es kfactor = do
+optFromEpdFile :: FilePath -> EvalState -> HyperParams -> IO ()
+optFromEpdFile fi es hp = do
     putStrLn $ "Optimizing over " ++ fi
-    (cou, err) <- foldl' accumErrorCnt (0, 0) . map (posRegrError es kfactor . makePosVal) . lines <$> readFile fi
+    (cou, err) <- foldl' accumErrorCnt (0, 0) . map (posRegrError es hp . makePosVal) . lines <$> readFile fi
     let ave = err / fromIntegral cou
     putStrLn $ "BCE error (cnt/sum/avg): " ++ show cou ++ " / " ++ show err ++ " / " ++ show ave
 
@@ -383,24 +413,19 @@ makePosVal fenval = (pos, val)
           val = read sval
 
 -- Use the incremental interface of the Get monad
-optFromBinFile :: FilePath -> EvalState -> Double -> IO ()
-optFromBinFile fi es kfactor = do
+optFromBinFile :: FilePath -> EvalState -> HyperParams -> IO ()
+optFromBinFile fi es hp = do
     putStrLn $ "Optimizing over " ++ fi
     hFlush stdout
     h <- openFile fi ReadMode
-    (cou, err) <- go (0::Int) 0 B.empty h
+    (cou, err) <- iterateBinFile es h hp 0 0 B.empty
     let ave = err / fromIntegral cou
     putStrLn $ "BCE error (cnt/sum/avg): " ++ show cou ++ " / " ++ show err ++ " / " ++ show ave
     hClose h
-    where bufsize = 1024 * 8
-          iterGet result h =
-              case result of
-                  Fail msg _   -> error msg
-                  Partial cont -> do
-                      nbs <- B.hGet h bufsize
-                      iterGet (cont nbs) h
-                  Done r rbs   -> return (r, rbs)
-          go !cnt !err bs h = do
+
+iterateBinFile :: EvalState -> Handle -> HyperParams -> Int -> Double -> ByteString -> IO (Int, Double)
+iterateBinFile es h hp = go
+    where go !cnt !err bs = do
              (diri, bsne) <- if bs == B.empty
                                 then do
                                     bs1 <- B.hGet h bufsize
@@ -410,21 +435,29 @@ optFromBinFile fi es kfactor = do
                 then return (cnt, err)
                 else do
                     let result = runGetPartial S.get bsne
-                    (r, rbs) <- iterGet result h
+                    (r, rbs) <- iterGet result
                     -- Ignore evaluations with special functions
-                    -- putStrLn $ "Debug: " ++ show r ++ "/" ++ show kfactor
-                    let mpe = posRegrError es kfactor r
+                    -- putStrLn $ "Debug: " ++ show r ++ "/" ++ show hp
+                    let mpe = posRegrError es hp r
                     case mpe of
-                        Nothing       -> go  cnt       err       rbs h
+                        Nothing       -> go  cnt       err       rbs
                         Just (er, st) -> do
                             when (debug && er > 1000000) $ do
                                 putStrLn $ "Debug: " ++ posToFen (fst r)
                                 putStrLn $ "Debug: " ++ show (snd r) ++ " / " ++ show st ++ " --> " ++ show er
-                            go (cnt + 1) (err + er) rbs h
+                            go (cnt + 1) (err + er) rbs
+          bufsize = 1024 * 8
+          iterGet result =
+              case result of
+                  Fail msg _   -> error msg
+                  Partial cont -> do
+                      nbs <- B.hGet h bufsize
+                      iterGet (cont nbs)
+                  Done r rbs   -> return (r, rbs)
 
 -- Use the incremental interface of the Get monad, for all bin files in a directory
-optFromDirBinFiles :: FilePath -> EvalState -> Double -> IO ()
-optFromDirBinFiles fi es kfactor = do
+optFromDirBinFiles :: FilePath -> EvalState -> HyperParams -> IO ()
+optFromDirBinFiles fi es hp = do
     putStrLn $ "Optimizing over directory " ++ fi
     allfiles <- listDirectory fi
     -- putStrLn $ "All files " ++ show allfiles
@@ -439,9 +472,10 @@ optFromDirBinFiles fi es kfactor = do
               putStrLn $ "Bin file " ++ fullf
               hFlush stdout
               h <- openFile fullf ReadMode
-              (cnt1, err1) <- go cnt err B.empty h
+              (cnt1, err1) <- iterateBinFile es h hp cnt err B.empty
               hClose h
               goFile cnt1 err1 fs
+{-
           bufsize = 1024 * 8
           iterGet result h =
               case result of
@@ -462,8 +496,8 @@ optFromDirBinFiles fi es kfactor = do
                     let result = runGetPartial S.get bsne
                     (r, rbs) <- iterGet result h
                     -- Ignore evaluations with special functions
-                    -- putStrLn $ "Debug: " ++ show r ++ "/" ++ show kfactor
-                    let mpe = posRegrError es kfactor r
+                    -- putStrLn $ "Debug: " ++ show r ++ "/" ++ show hp
+                    let mpe = posRegrError es hp r
                     when debug $ putStrLn $ "Debug: " ++ show mpe ++ "/" ++ show cnt ++ "/" ++ show err
                     case mpe of
                         Nothing       -> go  cnt       err       rbs h
@@ -475,8 +509,8 @@ optFromDirBinFiles fi es kfactor = do
 -- The game result is in val and it is from white point of view
 -- Our static score is from side to move point of view, so we have to change sign if black is to move
 -- We don't use for tuning special eval (i.e. a specific evaluation function, like passed pawns or so)
-posError :: EvalState -> Double -> (MyPos, Double) -> Maybe Double
-posError es kfactor (pos, val)
+posError :: EvalState -> HyperParams -> (MyPos, Double) -> Maybe Double
+posError es hp (pos, val)
     | spec      = Nothing
     -- | val ==  1 = Just $ - log myval / complexity pos
     -- | val == -1 = Just $ - log (1 - myval) / complexity pos
@@ -484,12 +518,12 @@ posError es kfactor (pos, val)
     | val == -1 = Just $ myval       * myval       / complexity pos
     | otherwise = error $ "Position has wrong result: " ++ show val
     where (!stc, spec) = posEvalSpec pos es
-          !myval | moving pos == White =     logisticFunction stc kfactor
-                 | otherwise           = 1 - logisticFunction stc kfactor
+          !myval | moving pos == White =     logisticFunction stc hp
+                 | otherwise           = 1 - logisticFunction stc hp
 
 -- We chose the codomain between 0 and 1
-logisticFunction :: Int -> Double -> Double
-logisticFunction score kfactor = 1 / (1 + exp (-kfactor * fromIntegral score))
+logisticFunction :: Int -> HyperParams -> Double
+logisticFunction score hp = 1 / (1 + exp (-hp * fromIntegral score))
 
 -- For complex positions with many tactical moves we cannot expect the eval to be very accurate
 -- We consider 2 different factors for complexity:
@@ -501,6 +535,7 @@ complexity pos = 1 + atcoeff * fromIntegral atcs + pccoeff * fromIntegral pces
           pces = popCount $ occup pos
           atcoeff = 0.1
           pccoeff = 0.01
+-}
 
 -- Calculate evaluation error for one position - regression error, i.e. relative to a reference score
 -- The value (or reference score) is the one obtained by a search to some depth, in centipawns,
@@ -513,21 +548,19 @@ complexity pos = 1 + atcoeff * fromIntegral atcs + pccoeff * fromIntegral pces
 --   score difference the error will be 1 at limit
 -- - the zero region is thinner for small scores: +/- 20 cp
 -- - for (absolute) higher scores the region is larger, in an exponential manner
-posRegrError :: EvalState -> Double -> (MyPos, Double) -> Maybe (Double, Int)
-posRegrError es kfactor (pos, val)
+posRegrError :: EvalState -> HyperParams -> (MyPos, Double) -> Maybe (Double, Int)
+posRegrError es hp (pos, val)
     | mate || spec = Nothing
     | otherwise    = Just (err, stc)
     where (stc, spec) = posEvalSpec pos es
           mate = val >= wemate || val <= yomate
           wemate =  20000 - 100	-- minimum mate score when we mate (like "mate in 100")
           yomate = -20000 + 100	-- minimum mate score when we are mated
-          marginMin = 20
-          tanhScale = 0.05
           stcr   = fromIntegral stc
-          margin = marginMin * exp (kfactor * abs val)
+          margin = hpMinWidth hp * exp (hpWidthGrowth hp * abs val)
           diff   = stcr - val
           err | abs diff <= margin = 0
-              | otherwise          = tanh . abs $ (diff - margin) * tanhScale
+              | otherwise          = tanh . abs $ (diff - margin) * hpTanhScale hp
 
 -- Reverse a fen: white <-> black
 reverseFen :: String -> String
