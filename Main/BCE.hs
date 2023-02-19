@@ -11,7 +11,7 @@ import Control.Monad (when, forM_)
 -- import Control.Concurrent
 -- import Control.Applicative ((<$>))
 -- import Data.List (intersperse, delete, isPrefixOf, stripPrefix, foldl')
-import Data.Bits
+-- import Data.Bits
 import Data.List (intercalate, foldl')
 import Data.List.Split (splitOn)
 -- import Data.Maybe (catMaybes)
@@ -244,6 +244,7 @@ checkAllFile fi = do
             FenRev   f1 f2 f3 -> putStrLn $ "RR: " ++ f1 ++ " <-> " ++ f2 ++ " <-> " ++ f3
             FenPos   f1 f2    -> putStrLn $ "FP: " ++ f1 ++ " <-> " ++ f2
             FenScore p1 a1 f1 s1 p2 a2 f2 s2 -> do
+                putStrLn "---> Bad reverse eval <---"
                 putStrLn $ "SC: " ++ f1 ++ ": " ++ show s1 ++ " <--> " ++ f2 ++ ": " ++ show s2
                 putStrLn $ "Pos 1: " ++ show p1
                 putStrLn $ "Ass 1: " ++ show a1
@@ -426,27 +427,28 @@ optFromBinFile fi es hp = do
 iterateBinFile :: EvalState -> Handle -> HyperParams -> Int -> Double -> ByteString -> IO (Int, Double)
 iterateBinFile es h hp = go
     where go !cnt !err bs = do
-             (diri, bsne) <- if bs == B.empty
-                                then do
-                                    bs1 <- B.hGet h bufsize
-                                    return (True, bs1)
-                                else return (False, bs)
-             if diri && bsne == B.empty
+             (didRead, bsne)
+                 <- if bs == B.empty
+                       then do
+                           bs1 <- B.hGet h bufsize
+                           return (True, bs1)
+                       else return (False, bs)
+             if didRead && bsne == B.empty
                 then return (cnt, err)
                 else do
                     let result = runGetPartial S.get bsne
                     (r, rbs) <- iterGet result
                     -- Ignore evaluations with special functions
-                    -- putStrLn $ "Debug: " ++ show r ++ "/" ++ show hp
                     let mpe = posRegrError es hp r
                     case mpe of
                         Nothing       -> go  cnt       err       rbs
                         Just (er, st) -> do
-                            when (debug && er > 1000000) $ do
+                            when (debug && abs (fromIntegral st - snd r) > 500) $ do
                                 putStrLn $ "Debug: " ++ posToFen (fst r)
-                                putStrLn $ "Debug: " ++ show (snd r) ++ " / " ++ show st ++ " --> " ++ show er
+                                putStrLn $ "Debug: ref = " ++ show (snd r) ++ " / "
+                                        ++ " sco = " ++ show st ++ " --> err = " ++ show er
                             go (cnt + 1) (err + er) rbs
-          bufsize = 1024 * 8
+          bufsize = 1024 * 16
           iterGet result =
               case result of
                   Fail msg _   -> error msg
@@ -476,33 +478,6 @@ optFromDirBinFiles fi es hp = do
               hClose h
               goFile cnt1 err1 fs
 {-
-          bufsize = 1024 * 8
-          iterGet result h =
-              case result of
-                  Fail msg _   -> error msg
-                  Partial cont -> do
-                      nbs <- B.hGet h bufsize
-                      iterGet (cont nbs) h
-                  Done r rbs   -> return (r, rbs)
-          go !cnt !err bs h = do
-             (diri, bsne) <- if bs == B.empty
-                                then do
-                                    bs1 <- B.hGet h bufsize
-                                    return (True, bs1)
-                                else return (False, bs)
-             if diri && bsne == B.empty
-                then return (cnt, err)
-                else do
-                    let result = runGetPartial S.get bsne
-                    (r, rbs) <- iterGet result h
-                    -- Ignore evaluations with special functions
-                    -- putStrLn $ "Debug: " ++ show r ++ "/" ++ show hp
-                    let mpe = posRegrError es hp r
-                    when debug $ putStrLn $ "Debug: " ++ show mpe ++ "/" ++ show cnt ++ "/" ++ show err
-                    case mpe of
-                        Nothing       -> go  cnt       err       rbs h
-                        Just (er, _t) -> go (cnt + 1) (err + er) rbs h
-
 -- Calculate evaluation error for one position - binary cross entropy
 -- Because this is a binary classification it is very important that we have only 2 classes of positions:
 -- won and lost. The game result can be only 1 (won) and -1 (lost)

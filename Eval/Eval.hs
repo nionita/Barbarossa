@@ -133,11 +133,20 @@ evalNoPawns p !sti = sc
           kaloneme = me p .&. nokings == 0
           kaloneyo = yo p .&. nokings == 0
           onlykings = kaloneme && kaloneyo
+          onealone  = kaloneme || kaloneyo
+          nomj = onealone && majorcnt == 0
+          kmk  = nomj && minorcnt == 1
+          knnk = nomj && minorcnt == 2 && bishops p == 0
+          kbbk = nomj && minorcnt == 2 && knights p == 0
+          kbnk = nomj && minorcnt == 2 && not (knnk || kbbk)
+          kMxk = onealone && majorcnt > 0
+          {--
           kmk  = (kaloneme || kaloneyo) && minorcnt == 1 && majorcnt == 0
           knnk = (kaloneme || kaloneyo) && minorcnt == 2 && majorcnt == 0 && bishops p == 0
           kbbk = (kaloneme || kaloneyo) && minorcnt == 2 && majorcnt == 0 && knights p == 0
           kbnk = (kaloneme || kaloneyo) && minorcnt == 2 && not (knnk || kbbk)
           kMxk = (kaloneme || kaloneyo) && majorcnt > 0
+          --}
           minor   = bishops p .|. knights p
           minorcnt = popCount minor
           major    = queens p .|. rooks p
