@@ -18,9 +18,11 @@ import Hash.Zobrist
 startFen :: String
 startFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR/ w KQkq - 0 1"
 
-fenToTable :: String -> MyPos
-fenToTable fen = foldr setp emptyPos $ fenToAssocs fen
+fenToTable :: String -> (MyPos, [(Square, (Color, Piece))])
+fenToTable fen = (pos, ass)
     where setp (sq, (c, p)) = setPiece sq c p
+          pos = foldr setp emptyPos ass
+          ass = fenToAssocs fen
 
 fenToAssocs :: String -> [(Square, (Color, Piece))]
 fenToAssocs str = go 56 str []
@@ -42,13 +44,13 @@ letterToPiece = [('P', Pawn), ('R', Rook), ('N', Knight), ('B', Bishop),
                     ('Q', Queen), ('K', King)]
 
 initPos :: MyPos
-initPos = posFromFen startFen
+initPos = fst $ posFromFen startFen
 
-posFromFen :: String -> MyPos
-posFromFen fen = updatePos p { epcas = x, zobkey = zk }
+posFromFen :: String -> (MyPos, [(Square, (Color, Piece))])
+posFromFen fen = (updatePos p { epcas = x, zobkey = zk }, ass)
     where fen1:fstm:fcst:fenp:f50m:_ = fenFromString fen
-          p  = fenToTable fen1
-          x  = fyInit . castInit . epInit $ epcas0
+          (p, ass) = fenToTable fen1
+          x = fyInit . castInit . epInit $ epcas0
           (epcas0, z) = case fstm of
               'w':_ -> (0, 0)
               'b':_ -> (mvMask, zobMove)

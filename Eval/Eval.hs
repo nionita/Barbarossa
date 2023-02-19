@@ -10,9 +10,9 @@ module Eval.Eval (
 
 import Data.Array.Base (unsafeAt)
 import Data.Bits
-import Data.List (minimumBy)
+-- import Data.List (minimumBy)
 import Data.Array.Unboxed
-import Data.Ord (comparing)
+-- import Data.Ord (comparing)
 import Data.Int
 
 import Struct.Struct
@@ -60,8 +60,8 @@ evalDispatch p sti
     | pawns p == 0 = evalNoPawns p sti
     | pawns p .&. me p == 0 || pawns p .&. yo p == 0
                    = evalSideNoPawns p sti
-    | kings p .|. pawns p == occup p, Just r <- pawnEndGame p
-                   = r
+    -- | kings p .|. pawns p == occup p, Just r <- pawnEndGame p
+    --                = r
     | otherwise    = normalEval p sti
 
 evalDispatchSpec :: MyPos -> EvalState -> (Int, Bool)
@@ -69,8 +69,8 @@ evalDispatchSpec p sti
     | pawns p == 0 = (evalNoPawns p sti, True)
     | pawns p .&. me p == 0 || pawns p .&. yo p == 0
                    = (evalSideNoPawns p sti, True)
-    | kings p .|. pawns p == occup p, Just r <- pawnEndGame p
-                   = (r, True)
+    -- | kings p .|. pawns p == occup p, Just r <- pawnEndGame p
+    --                = (r, True)
     | otherwise    = (normalEval p sti, False)
 
 normalEval :: MyPos -> EvalState -> Int
@@ -889,6 +889,7 @@ advPawns p !ew = mad (ewAdvPawn6 ew) ap6 .
           !ap5  = map5 - yap5
           !ap6  = map6 - yap6
 
+{--
 -- Pawn end games are treated specially
 -- We consider escaped passed pawns in 2 situations:
 -- pawn race: when both colors have at least one escaped pp
@@ -949,4 +950,4 @@ escBlack pmv !ksq !psq
     | otherwise = (dis < squareDistance ksq tsq - 1, (psq, dis))
     where tsq = promoB psq
           dis = squareDistance psq tsq
---------------------------------------
+--------------------------------------}

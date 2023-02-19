@@ -299,9 +299,9 @@ balancedPos hi ho mn k () = do
                    putStrLn $ "Positions completed: " ++ show k ++ " ("
                        ++ show (k `div` currms) ++ " positions per ms)"
                    hFlush stdout
-           let pos = posFromFen fen
            chg <- readChanging
-           let crts = crtStatus chg
+           let pos  = fst $ posFromFen fen
+               crts = crtStatus chg
                sini = posToState pos (hash crts) (hist crts) (evalst crts)
            modifyChanging $ \c -> c { crtStatus = sini }
            (msc, path, _) <- iterativeDeepening 1 Nothing
@@ -331,7 +331,7 @@ oracleAndFeats depth hi _ho mn k () = do	-- not functional yet
                    putStrLn $ "Positions completed: " ++ show k ++ " ("
                        ++ show (currms `div` k) ++ " ms per position)"
                    hFlush stdout
-           let pos = posFromFen fen
+           let pos = fst $ posFromFen fen
            msc <- autoPlayToEnd depth pos
            when debug $ lift $ do
                putStrLn $ "Rez of auto play: " ++ show msc
@@ -358,7 +358,7 @@ playEveryGame
     -> String
     -> CtxIO GameScore
 playEveryGame depth maybeNodes (id1, eval1) (id2, eval2) wdl fen = do
-    let pos = posFromFen fen
+    let pos = fst $ posFromFen fen
     gr1 <- playGame depth maybeNodes pos (id1, eval1) (id2, eval2)
     gr2 <- playGame depth maybeNodes pos (id2, eval2) (id1, eval1)
     let wdl1 = scoreGameResult id1 gr1	-- game result from

@@ -39,7 +39,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.7.0"
-progVerSuff = "reinae"
+progVerSuff = "tanho"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -321,7 +321,7 @@ doPosition fen mvs = do
 
 stateFromFen :: Pos -> Cache -> History -> EvalState -> (Maybe Int, MyState)
 stateFromFen StartPos  c h es = (Just 1,  posToState initPos c h es)
-stateFromFen (Pos fen) c h es = (Nothing, posToState (posFromFen fen) c h es)
+stateFromFen (Pos fen) c h es = (Nothing, posToState (fst $ posFromFen fen) c h es)
 
 movingColor :: Pos -> Color
 movingColor fen

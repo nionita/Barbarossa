@@ -5,7 +5,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
 module Main where
-import Control.Monad (when)
+import Control.Monad (when, forM_)
 -- import Control.Monad.Reader
 -- import Control.Monad.State
 -- import Control.Concurrent
@@ -14,7 +14,7 @@ import Control.Monad (when)
 import Data.Bits
 import Data.List (intercalate, foldl')
 import Data.List.Split (splitOn)
-import Data.Maybe (catMaybes)
+-- import Data.Maybe (catMaybes)
 -- import Data.Monoid
 -- import Data.ByteString (ByteString(..))
 import qualified Data.ByteString as B
@@ -206,10 +206,23 @@ checkAllFile :: FilePath -> IO ()
 checkAllFile fi = do
     putStrLn $ "Check reverse fens over " ++ fi
     (_, es) <- makeEvalState Nothing [] "progver" "progsuf"
-    -- probs <- catMaybes . map (checkPosRev es) . take 100 . lines <$> readFile fi
-    probs <- catMaybes . map (checkPosRev es) . lines <$> readFile fi
-    putStrLn "Problems:"
-    mapM_ (\p -> putStrLn (show p)) probs
+    -- clines <- take 10000 . lines <$> readFile fi
+    clines <- lines <$> readFile fi
+    forM_ clines $ \line -> do
+        let fcr = checkPosRev es line
+        case fcr of
+            FenRev   f1 f2 f3 -> putStrLn $ "RR: " ++ f1 ++ " <-> " ++ f2 ++ " <-> " ++ f3
+            FenPos   f1 f2    -> putStrLn $ "FP: " ++ f1 ++ " <-> " ++ f2
+            FenScore p1 a1 f1 s1 p2 a2 f2 s2 -> do
+                putStrLn $ "SC: " ++ f1 ++ ": " ++ show s1 ++ " <--> " ++ f2 ++ ": " ++ show s2
+                putStrLn $ "Pos 1: " ++ show p1
+                putStrLn $ "Ass 1: " ++ show a1
+                putStrLn $ "Pos 2: " ++ show p2
+                putStrLn $ "Ass 2: " ++ show a2
+            FenOk                -> return ()
+    -- probs <- catMaybes . map (checkPosRev es) . lines <$> readFile fi
+    -- putStrLn "Problems:"
+    -- mapM_ (\p -> putStrLn (show p)) probs
 
 scoreAllFile :: FilePath -> Double -> Maybe String -> [String] -> Bool -> IO ()
 scoreAllFile fi kfactor mconf params bin = do
@@ -366,7 +379,7 @@ instance Monoid Agreg where
 makePosVal :: String -> (MyPos, Double)
 makePosVal fenval = (pos, val)
     where (fen:sval:_) = splitOn "," fenval
-          pos = posFromFen fen
+          (pos, _) = posFromFen fen
           val = read sval
 
 -- Use the incremental interface of the Get monad
@@ -493,25 +506,36 @@ complexity pos = 1 + atcoeff * fromIntegral atcs + pccoeff * fromIntegral pces
 -- The value (or reference score) is the one obtained by a search to some depth, in centipawns,
 -- from p.o.v. of side to move
 -- Our static score is also from side to move point of view
--- We don't use for tuning special eval (i.e. a specific evaluation function, like e.g. for no pawns)
--- The error is weighted less when the reference score in very high: 100 cp difference for a reference
--- of 200 cp is more important than 100 cp difference for a reference of 1000 cp
+-- We ignore special eval (i.e. a specific evaluation function, like e.g. for no pawns) and mate scores
+-- This is how the error is calculated:
+-- - there is a region around the reference score in which the error is zero
+-- - outside of that region the error is a tanh function with some scaling, meaning that for a very large
+--   score difference the error will be 1 at limit
+-- - the zero region is thinner for small scores: +/- 20 cp
+-- - for (absolute) higher scores the region is larger, in an exponential manner
 posRegrError :: EvalState -> Double -> (MyPos, Double) -> Maybe (Double, Int)
 posRegrError es kfactor (pos, val)
     | mate || spec = Nothing
-    | otherwise    = Just (ew * diff * diff, stc)
+    | otherwise    = Just (err, stc)
     where (stc, spec) = posEvalSpec pos es
-          diff = val - fromIntegral stc
           mate = val >= wemate || val <= yomate
-          ew   = exp (-kfactor * abs val)
           wemate =  20000 - 100	-- minimum mate score when we mate (like "mate in 100")
           yomate = -20000 + 100	-- minimum mate score when we are mated
+          marginMin = 20
+          tanhScale = 0.05
+          stcr   = fromIntegral stc
+          margin = marginMin * exp (kfactor * abs val)
+          diff   = stcr - val
+          err | abs diff <= margin = 0
+              | otherwise          = tanh . abs $ (diff - margin) * tanhScale
 
 -- Reverse a fen: white <-> black
 reverseFen :: String -> String
-reverseFen fen = intercalate " " [fen1r, fstmr, fcstr, fenpr, f50m]
-    where fen1:fstm:fcst:fenp:f50m:_ = fenFromString fen
-          fen1r = map revUpLow $ intercalate "/" $ reverse $ splitFenLines fen1
+reverseFen fen = intercalate " " [fen1r, fstmr, fcstr, fenpr, f50m, fmv]
+    where fen1:fstm:fcst:fenp:f50m:fmv:_ = fenFromString fen
+          -- Tail here is because we end the fen part in "/"
+          fen1ri = map revUpLow $ intercalate "/" $ tail $ reverse $ splitFenLines fen1
+          fen1r  = fen1ri ++ "/"
           revUpLow 'p' = 'P'
           revUpLow 'P' = 'p'
           revUpLow 'r' = 'R'
@@ -529,7 +553,7 @@ reverseFen fen = intercalate " " [fen1r, fstmr, fcstr, fenpr, f50m]
           splitFenLines s = l : if s' == "" then [] else splitFenLines (tail s') where (l, s') = break ((==) '/') s
           fstmr | fstm == "w" = "b"
                 | fstm == "b" = "w"
-                | otherwise   = error $ "Wrong sinde to move: " ++ show fstm
+                | otherwise   = error $ "Wrong side to move: " ++ show fstm
           fcstr = map revUpLow fcst
           fenpr | f:r:_ <- fenp, f `elem` "abcdefgh", r `elem` "36"
                             = f : reve r : []
@@ -592,13 +616,27 @@ newThread a = do
     liftIO $ forkIO $ runReaderT a ctx
 --}
 
-checkPosRev :: EvalState -> String -> Maybe (String, Int, String, Int)
+type Assoc = [(Square, (Color, Piece))]
+data FenCheck = FenOk
+              | FenRev String String String
+              | FenPos String String
+              | FenScore MyPos Assoc String Int MyPos Assoc String Int
+
+-- Check eval for reverse fens
+-- 1: reverse reverse = original (check of the reverse fen function itself)
+-- 2: fen to pos to fen = original fen
+-- 3: eval(fen) = eval(reverse fen)
+checkPosRev :: EvalState -> String -> FenCheck
 checkPosRev es fenval
-    | eo == er  = Nothing
-    | otherwise = Just (fen, eo, fenr, er)
+    | feno /= fen = FenRev fen fenr feno
+    | fenp /= fen = FenPos fen fenp
+    | eo   /= er  = FenScore pos ass fen eo posr assr fenr er
+    | otherwise   = FenOk
     where (fen:_) = splitOn "," fenval
-          pos  = posFromFen fen
-          !fenr = reverseFen fen
-          !posr = posFromFen fenr
-          !eo   = posEval pos  es
-          !er   = posEval posr es
+          fenr = reverseFen fen
+          feno = reverseFen fenr
+          fenp = posToFen pos
+          (pos,  ass)  = posFromFen fen
+          (posr, assr) = posFromFen fenr
+          eo   = posEval pos  es
+          er   = posEval posr es

@@ -35,9 +35,9 @@ evalSearchPos hi ho depth mn k () = do
                    putStrLn $ "Positions completed: " ++ show k ++ " ("
                        ++ show (k * 1000 `div` currms) ++ " positions per second)"
                    hFlush stdout
-           let pos = posFromFen fen
            chg <- readChanging
-           let crts = crtStatus chg
+           let pos = fst $ posFromFen fen
+               crts = crtStatus chg
                sini = posToState pos (hash crts) (hist crts) (evalst crts)
            modifyChanging $ \c -> c { crtStatus = sini }
            (msc, path, _) <- iterativeDeepening depth Nothing
