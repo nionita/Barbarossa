@@ -8,19 +8,22 @@ module Main (main) where
 import Control.Monad (when, forM_)
 -- import Control.Monad.Reader
 -- import Control.Monad.State
--- import Control.Concurrent
+import Control.Concurrent (setNumCapabilities)
+import Control.Concurrent.Async
 -- import Control.Applicative ((<$>))
 -- import Data.List (intersperse, delete, isPrefixOf, stripPrefix, foldl')
 -- import Data.Bits
 import Data.List (intercalate, foldl')
 import Data.List.Split (splitOn)
--- import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes)
 -- import Data.Monoid
 -- import Data.ByteString (ByteString(..))
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import qualified Data.Serialize as S
 import Data.Serialize.Get
+import Data.Vector.Serialize()
+import qualified Data.Vector.Unboxed as U
 -- import Network
 -- import Numeric (showHex)
 import System.Console.GetOpt
@@ -153,7 +156,7 @@ theOptions = do
         (o, n, []) -> return (foldr ($) defaultOptions o, n)
         (_, _, es) -> ioError (userError (concat es ++ usageInfo header options))
     where header = "Usage: " ++ idName
-              ++ " [-c CONF] [-m MINW] [-g GROWTH] [-b SCALE] [-p name=val[,...]] -a AFILE [-o|-r] [-w WORKDIR]"
+              ++ " [-c CONF] [-m MINW] [-g GROWTH] [-b SCALE] [-p name=val[,...]] -a AFILE [-t THRDS] [-o|-r] [-w WORKDIR]"
           idName = "BCE"
 
 {--
@@ -204,7 +207,7 @@ main = do
         Nothing -> return ()
         Just wd -> setCurrentDirectory wd
     case optAFenFile opts of
-        Nothing -> error "EPD input file is require"
+        Nothing -> error ".epd or .bin input file is required"
         Just fi -> do
             let ext = takeExtension fi
             if ext == ".epd"
@@ -222,7 +225,11 @@ main = do
                       else do
                           isdir <- doesDirectoryExist fi
                           if isdir
-                             then scoreAllDirFiles fi hp (optConfFile opts) (optParams opts)
+                             then do
+                                 let n | optNThreads opts > 1 = optNThreads opts
+                                       | otherwise            = 1
+                                 setNumCapabilities n
+                                 scoreAllDirFiles n fi hp (optConfFile opts) (optParams opts)
                              else error $ "Cannot process input " ++ fi
 
 optsToHyper :: Options -> HyperParams
@@ -265,18 +272,24 @@ scoreAllFile fi hp mconf params bin = do
        then optFromBinFile fi es hp
        else optFromEpdFile fi es hp
 
-scoreAllDirFiles :: FilePath -> HyperParams -> Maybe String -> [String] -> IO ()
-scoreAllDirFiles fi hp mconf params = do
+scoreAllDirFiles :: Int -> FilePath -> HyperParams -> Maybe String -> [String] -> IO ()
+scoreAllDirFiles thrds fi hp mconf params = do
     let paramList
             | null params = []
             | otherwise   = stringToParams $ intercalate "," params
     (_, es) <- makeEvalState mconf paramList "progver" "progsuf"
-    optFromDirBinFiles fi es hp
+    -- optFromDirBinFiles fi es hp
+    parOptFromDirBinFiles thrds fi es hp
 
 optFromEpdFile :: FilePath -> EvalState -> HyperParams -> IO ()
 optFromEpdFile fi es hp = do
     putStrLn $ "Optimizing over " ++ fi
-    (cou, err) <- foldl' accumErrorCnt (0, 0) . map (posRegrError es hp . makePosVal) . lines <$> readFile fi
+    hFlush stdout
+    (cou, err) <- foldl' accumErrorCnt (0, 0)
+                  . map (posRegrError es hp)
+                  . catMaybes
+                  . map makePosVal
+                  . lines <$> readFile fi
     let ave = err / fromIntegral cou
     putStrLn $ "BCE error (cnt/sum/avg): " ++ show cou ++ " / " ++ show err ++ " / " ++ show ave
 
@@ -288,8 +301,15 @@ epdToBin :: FilePath -> IO ()
 epdToBin fi = do
     let fo = addExtension (dropExtension fi) ".bin"
     putStrLn $ "Transform " ++ fi ++ " to " ++ fo
+    hFlush stdout
     h <- openFile fo WriteMode
-    readFile fi >>= \cnt -> return (map (S.encode . makePosVal) (lines cnt)) >>= mapM_ (B.hPut h)
+    cont <- readFile fi
+    forM_ (lines cont) $ \line -> do
+        -- putStrLn line
+        let mr = makePosVal line
+        case mr of
+            Just r  -> B.hPut h $ S.encode r
+            Nothing -> return ()
     hClose h
 
 {--
@@ -407,11 +427,15 @@ instance Monoid Agreg where
                             agrCumNds = agrCumNds a + agrCumNds b }
 --}
 
-makePosVal :: String -> (MyPos, Double)
-makePosVal fenval = (pos, val)
-    where (fen:sval:_) = splitOn "," fenval
+makePosVal :: String -> Maybe (MyPos, U.Vector Double)
+makePosVal fenval
+    | length svals == 0 = Nothing
+    | otherwise         = Just (pos, vec)
+    where (fen:svals:_) = splitOn ";" fenval
           (pos, _) = posFromFen fen
-          val = read sval
+          vals :: [Int]
+          vals = map read $ splitOn "," $ filter (\c -> c /= '\r') svals
+          vec  = U.fromList $ map fromIntegral vals
 
 -- Use the incremental interface of the Get monad
 optFromBinFile :: FilePath -> EvalState -> HyperParams -> IO ()
@@ -442,11 +466,11 @@ iterateBinFile es h hp = go
                     let mpe = posRegrError es hp r
                     case mpe of
                         Nothing       -> go  cnt       err       rbs
-                        Just (er, st) -> do
-                            when (debug && abs (fromIntegral st - snd r) > 500) $ do
-                                putStrLn $ "Debug: " ++ posToFen (fst r)
-                                putStrLn $ "Debug: ref = " ++ show (snd r) ++ " / "
-                                        ++ " sco = " ++ show st ++ " --> err = " ++ show er
+                        Just (er, _st) -> do
+                            -- when (debug && abs (fromIntegral st - snd r) > 500) $ do
+                            --     putStrLn $ "Debug: " ++ posToFen (fst r)
+                            --     putStrLn $ "Debug: ref = " ++ show (snd r) ++ " / "
+                            --             ++ " sco = " ++ show st ++ " --> err = " ++ show er
                             go (cnt + 1) (err + er) rbs
           bufsize = 1024 * 16
           iterGet result =
@@ -458,9 +482,11 @@ iterateBinFile es h hp = go
                   Done r rbs   -> return (r, rbs)
 
 -- Use the incremental interface of the Get monad, for all bin files in a directory
+{--
 optFromDirBinFiles :: FilePath -> EvalState -> HyperParams -> IO ()
 optFromDirBinFiles fi es hp = do
     putStrLn $ "Optimizing over directory " ++ fi
+    hFlush stdout
     allfiles <- listDirectory fi
     -- putStrLn $ "All files " ++ show allfiles
     let binfiles = filter ((".bin" ==) . takeExtension) allfiles
@@ -477,6 +503,40 @@ optFromDirBinFiles fi es hp = do
               (cnt1, err1) <- iterateBinFile es h hp cnt err B.empty
               hClose h
               goFile cnt1 err1 fs
+--}
+
+-- Use the incremental interface of the Get monad, for all bin files in a directory
+-- Distribute the files between more threads
+parOptFromDirBinFiles :: Int -> FilePath -> EvalState -> HyperParams -> IO ()
+parOptFromDirBinFiles thrds fi es hp = do
+    putStrLn $ "Parallel optimizing over directory " ++ fi
+    hFlush stdout
+    allfiles <- listDirectory fi
+    let binfiles = filter ((".bin" ==) . takeExtension) allfiles
+        filelists = distribute thrds binfiles
+    -- forM_ filelists $ \fl -> do
+    --     putStrLn "Distribute: "
+    --     forM_ fl $ \f -> do
+    --         putStrLn $ "  - " ++ f
+    rs <- mapConcurrently (goFile (0::Int) 0) filelists
+    let (!cnt, !err) = foldr (\(c1, e1) (c2, e2) -> (c1 + c2, e1 + e2)) (0, 0) rs
+        ave = err / fromIntegral cnt
+    putStrLn $ "BCE error (cnt/sum/avg): " ++ show cnt ++ " / " ++ show err ++ " / " ++ show ave
+    where goFile !cnt !err []     = return (cnt, err)
+          goFile !cnt !err (f:fs) = do
+              let fullf = fi ++ "/" ++ f
+              -- putStrLn $ "Bin file " ++ fullf
+              -- hFlush stdout
+              h <- openFile fullf ReadMode
+              (cnt1, err1) <- iterateBinFile es h hp cnt err B.empty
+              hClose h
+              goFile cnt1 err1 fs
+          distribute n = go (take m $ repeat [])
+              where go ls     []     = ls
+                    go (l:ls) (x:xs) = go (ls ++ [x:l]) xs
+                    go []     _      = []    -- should not happen
+                    m = max 1 n
+
 {-
 -- Calculate evaluation error for one position - binary cross entropy
 -- Because this is a binary classification it is very important that we have only 2 classes of positions:
@@ -514,8 +574,10 @@ complexity pos = 1 + atcoeff * fromIntegral atcs + pccoeff * fromIntegral pces
 
 -- Calculate evaluation error for one position - regression error, i.e. relative to a reference score
 -- The value (or reference score) is the one obtained by a search to some depth, in centipawns,
--- from p.o.v. of side to move
--- Our static score is also from side to move point of view
+-- from p.o.v. of side to move - in this case we have the scores of all intermediate depths.
+-- Our static score is also from side to move point of view.
+-- We can choose as reference the score at a specified depth (less then maximum)
+-- or we can choose the score of the maximum depth but diminish the error if the score variance is high
 -- We ignore special eval (i.e. a specific evaluation function, like e.g. for no pawns) and mate scores
 -- This is how the error is calculated:
 -- - there is a region around the reference score in which the error is zero
@@ -523,17 +585,20 @@ complexity pos = 1 + atcoeff * fromIntegral atcs + pccoeff * fromIntegral pces
 --   score difference the error will be 1 at limit
 -- - the zero region is thinner for small scores: +/- 20 cp
 -- - for (absolute) higher scores the region is larger, in an exponential manner
-posRegrError :: EvalState -> HyperParams -> (MyPos, Double) -> Maybe (Double, Int)
-posRegrError es hp (pos, val)
+posRegrError :: EvalState -> HyperParams -> (MyPos, U.Vector Double) -> Maybe (Double, Int)
+posRegrError es hp (pos, vec)
     | mate || spec = Nothing
     | otherwise    = Just (err, stc)
     where (stc, spec) = posEvalSpec pos es
-          mate = val >= wemate || val <= yomate
+          maxd = U.length vec
+          vall = U.unsafeIndex vec (maxd - 1)
+          mate = vall >= wemate || vall <= yomate
           wemate =  20000 - 100	-- minimum mate score when we mate (like "mate in 100")
           yomate = -20000 + 100	-- minimum mate score when we are mated
           stcr   = fromIntegral stc
-          margin = hpMinWidth hp * exp (hpWidthGrowth hp * abs val)
-          diff   = stcr - val
+          val1   = U.unsafeIndex vec 0
+          margin = hpMinWidth hp * exp (hpWidthGrowth hp * abs val1)
+          diff   = stcr - val1
           err | abs diff <= margin = 0
               | otherwise          = tanh . abs $ (diff - margin) * hpTanhScale hp
 

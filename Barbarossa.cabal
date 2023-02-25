@@ -153,6 +153,8 @@ Executable BCE
       time,
       containers,
       cereal,
+      cereal-vector,
+      async,
       bytestring,
       filepath,
       mtl,
