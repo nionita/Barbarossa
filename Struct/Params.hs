@@ -30,15 +30,15 @@ params = [
         ("epMaterScale",        1),
         ("epMaterBonusScale",   5),
         ("epPawnBonusScale",    1),
-        ("epPassA",            12),
-        ("epPassB",           -48),
-        ("epPassC",            98),
-        ("epPassKingProx",     12),
+        ("epPassA",            10),
+        ("epPassB",           -49),
+        ("epPassC",            82),
+        ("epPassKingProx",      6),
         ("epPassBlockO",       11),
         ("epPassBlockA",       17),
         ("epPassMin",          30),
-        ("epPassMyCtrl",        6),
-        ("epPassYoCtrl",        7)
+        ("epPassMyCtrl",        9),
+        ("epPassYoCtrl",       12)
     ]
 
 -- The configurable weights we use
