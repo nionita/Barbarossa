@@ -878,6 +878,8 @@ qsInCheck !a !b !s = do
              then do
                  when collectFens $ finWithNodes "DELT"
                  return a
+             -- else pvQLoop b (max s a) edges
+             -- do not trust eval in check
              else pvQLoop b a edges
 
 qsNormal :: Int -> Int -> Int -> Bool -> Search Int
@@ -896,10 +898,8 @@ qsNormal !a !b !s front
                 if noMove edges
                    then do	-- no more captures
                        when collectFens $ finWithNodes "NOCA"
-                       return s
-                   else if s > a
-                           then pvQLoop b s edges
-                           else pvQLoop b a edges
+                       return (max s a)
+                   else pvQLoop b (max s a) edges
 
 pvQLoop :: Int -> Int -> Alt Move -> Search Int
 pvQLoop !b = go
