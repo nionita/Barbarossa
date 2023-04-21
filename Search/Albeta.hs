@@ -97,7 +97,7 @@ iidNewDepth = subtract 1
 
 -- Parameter for quiescenst search
 qsDeltaMargin :: Int
-qsDeltaMargin  = 100
+qsDeltaMargin  = 150
 
 type Search a = CState PVState Game a
 
