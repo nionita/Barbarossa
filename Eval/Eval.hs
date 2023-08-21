@@ -508,9 +508,8 @@ centerDiff p !ew = mad (ewCenterPAtts ew) pd .
           !mqa = popCount $ myQAttacs p .&. center
           !yqa = popCount $ yoQAttacs p .&. center
           !qd  = mqa - yqa
-          !mka = popCount $ myKAttacs p .&. center
-          !yka = popCount $ yoKAttacs p .&. center
-          !kd  = mka - yka
+          !kd | passed p == 0 = popCount (myKAttacs p .&. center) - popCount (yoKAttacs p .&. center)
+              | otherwise     = 0
           center = 0x0000003C3C000000
 
 -------- Space for own pieces in our courtyard -----------
