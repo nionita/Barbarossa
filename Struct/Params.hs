@@ -67,7 +67,7 @@ weights = [
         ("ewCenterBAtts",     (  52,   35)),
         ("ewCenterRAtts",     (  14,   22)),	-- DSPSA ...
         ("ewCenterQAtts",     (  13,   53)),
-        ("ewCenterKAtts",     (   0,  120)),
+        ("ewCenterKAtts",     (   0,   80)),
         ("ewSpace",           (   1,    0)),
         ("ewAdvAtts",         (   1,   17)),
         ("ewIsolPawns",       ( -36, -113)),
