@@ -221,9 +221,7 @@ fadd :: Flc -> Flc -> Flc
 fadd (Flc f1 q1) (Flc f2 q2) = Flc (f1+f2) (q1+q2)
 
 ksSide :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
-ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
-    | myq == 0  = 0
-    | otherwise = mattacs
+ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya = mattacs
     where qual a p
               | yoka == 0 = Flc 0 0
               | y == 1    = Flc 1 p
