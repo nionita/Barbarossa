@@ -84,8 +84,8 @@ weights = [
         ("ewBishopPawns",     ( -25,  -54)),
         ("ewRedundanceRook",  ( -27,  -51)),	-- DSPSA ...
         ("ewRookPawn",        ( -44,  -32)),
-        ("ewAdvPawn5",        (  14,  106)),
-        ("ewAdvPawn6",        ( 352,  333)),
+        ("ewAdvPawn5",        ( 100,  200)),
+        ("ewAdvPawn6",        ( 400,  800)),
         ("ewPawnBlockP",      (-112,  -92)),
         ("ewPawnBlockO",      ( -23,  -26)),
         ("ewPawnBlockA",      ( -19,  -69)),

@@ -855,21 +855,20 @@ kdDist :: Int -> Int
 kdDist = (kdDistArr `unsafeAt`) . (7+)
 
 
------- Advanced pawns, on 6th & 7th rows (not passed) ------
+------ Advanced pawns, on 6th & 7th rows, defended by pawns ------
  
 advPawns :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 advPawns p !ew = mad (ewAdvPawn6 ew) ap6 .
                  mad (ewAdvPawn5 ew) ap5
-    where !apbb  = pawns p `less` passed p
-          !mapbb = apbb .&. me p
-          !yapbb = apbb .&. yo p
+    where !mapbb = pawns p .&. me p
+          !yapbb = pawns p .&. yo p
           (my5, my6, yo5, yo6)
               | moving p == White = (0x000000FF00000000, 0x0000FF0000000000, 0xFF000000, 0xFF0000)
               | otherwise         = (0xFF000000, 0xFF0000, 0x000000FF00000000, 0x0000FF0000000000)
-          !map5 = popCount $ mapbb .&. my5
-          !map6 = popCount $ mapbb .&. my6
-          !yap5 = popCount $ yapbb .&. yo5
-          !yap6 = popCount $ yapbb .&. yo6
+          !map5 = popCount $ mapbb .&. my5 .&. myPAttacs p
+          !map6 = popCount $ mapbb .&. my6 .&. myPAttacs p
+          !yap5 = popCount $ yapbb .&. yo5 .&. yoPAttacs p
+          !yap6 = popCount $ yapbb .&. yo6 .&. yoPAttacs p
           !ap5  = map5 - yap5
           !ap6  = map6 - yap6
 
