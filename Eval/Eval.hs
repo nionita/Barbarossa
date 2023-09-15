@@ -228,20 +228,19 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
               | yoka == 0 = Flc 0 0
               | y == 1    = Flc 1 p
               | y == 2    = Flc 1 (p `unsafeShiftL` 1)
-              | y == 3    = Flc 1 (p `unsafeShiftL` 2)
-              | otherwise = Flc 1 (p `unsafeShiftL` 3)
+              | otherwise = Flc 1 (p `unsafeShiftL` 2)
               where !yoka = yok .&. a
                     y = popCount yoka
-          -- qualWeights = [1, 3, 3, 5, 7, 3]
+          -- qualWeights = [1, 2, 2, 6, 9, 1]
           !qp = qual myp 1
-          !qn = qual myn 3
-          !qb = qual myb 3
-          !qr = qual myr 5
-          !qq = qual myq 7
-          !qk = qual myk 3
+          !qn = qual myn 2
+          !qb = qual myb 2
+          !qr = qual myr 6
+          !qq = qual myq 9
+          !qk = qual myk 1
           !(Flc c q) = fadd qp $ fadd qn $ fadd qb $ fadd qr $ fadd qq qk
           !mattacs
-              | c == 0 = 0
+              | c == 0    = 0
               | otherwise = fromIntegral $ attCoef `unsafeAt` ixt
               -- where !freey = popCount $ yok `less` (mya .|. yop)
               --       !conce = popCount $ yok .&. mya
@@ -251,12 +250,12 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
                     !ixt = ixm + c + ksShift - freco
                     ksShift = 13
 
--- We take the maximum of 272 because:
--- Quali max: 8 * (1 + 3 + 3 + 5 + 10 + 3) = 200
+-- We take the maximum of 271 because:
+-- Quali max: 8 * (1 + 2 + 2 + 6 + 9 + 1) = 168
 -- Flag max: 6
--- 6 * 200 / 4 + 6 + 13 = 319
+-- 6 * 168 / 4 + 6 + 13 = 271
 attCoef :: UArray Int Int32
-attCoef = listArray (0, 319) $ take zeros (repeat 0) ++ [ f x | x <- [0..63] ] ++ repeat (f 63)
+attCoef = listArray (0, 271) $ take zeros (repeat 0) ++ [ f x | x <- [0..63] ] ++ repeat (f 63)
     where -- Without the scaling, f will take max value of 4000 for 63
           f :: Int -> Int32
           f x = let y = fromIntegral x :: Double
