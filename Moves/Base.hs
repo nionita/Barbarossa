@@ -399,16 +399,16 @@ canPruneMove p m
     | movePassed p m       = False
     | moveChecks p m       = False
     | myQAttacs p == 0     = True	-- the rest makes sense only with own queen on board
-    | otherwise            = not $ newQueenAttack p m
+    | otherwise            = not $ newQRAttack p m
 
--- A move that initiates a new queen attack will not be pruned
-newQueenAttack :: MyPos -> Move -> Bool
-newQueenAttack p m
-    | myAttacs  p .&. yoKAttacs p == 0 = False	-- not enough pressure
-    | myQAttacs p .&. yoKAttacs p /= 0 = False	-- already attacked
-    | movePiece m /= Queen             = False	-- not quite right: it could be a discovered new attack
-    | otherwise                        = bAttacs (occup p) (toSquare m) .&. yoKAttacs p /= 0
+-- A move that leaves the opponent king under a different attack of queen or rook
+newQRAttack :: MyPos -> Move -> Bool
+newQRAttack p m
+    | myAttacs  p .&. yoKAttacs p == 0 = False	-- not enough pressure by other attacks
+    | movePiece m == Queen             = bAttacs (occup p) (toSquare m) .&. yoKAttacs p /= 0
                                       || rAttacs (occup p) (toSquare m) .&. yoKAttacs p /= 0
+    | movePiece m == Rook              = rAttacs (occup p) (toSquare m) .&. yoKAttacs p /= 0
+    | otherwise                        = False
 
 logMes :: String -> Game ()
 logMes s = lift $ talkToContext . LogMes $ s
