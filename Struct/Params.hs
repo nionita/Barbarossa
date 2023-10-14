@@ -70,6 +70,8 @@ weights = [
         ("ewCenterKAtts",     (   2,   62)),
         ("ewSpace",           (   1,    0)),
         ("ewAdvAtts",         (   1,   17)),
+        ("ewWeakSq",          ( -16,    0)),
+        ("ewWeakSqA",         (  50,    0)),
         ("ewIsolPawns",       ( -36, -113)),
         ("ewIsolPassed",      ( -63, -143)),
         ("ewBackPawns",       (-108, -141)),
