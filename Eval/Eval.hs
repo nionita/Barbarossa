@@ -859,7 +859,8 @@ kdDist = (kdDistArr `unsafeAt`) . (7+)
  
 advPawns :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 advPawns p !ew = mad (ewAdvPawn6 ew) ap6 .
-                 mad (ewAdvPawn5 ew) ap5
+                 mad (ewAdvPawn5 ew) ap5 .
+                 mad (ewPawnsWid ew) pwd
     where !apbb  = pawns p `less` passed p
           !mapbb = apbb .&. me p
           !yapbb = apbb .&. yo p
@@ -872,6 +873,21 @@ advPawns p !ew = mad (ewAdvPawn6 ew) ap6 .
           !yap6 = popCount $ yapbb .&. yo6
           !ap5  = map5 - yap5
           !ap6  = map6 - yap6
+          -- Having pawns spread over many files is an advantage
+          files = [fileA, fileB, fileC, fileD, fileE, fileF, fileG, fileH]
+          revfi = reverse files
+          mima ismin b = go 1 $ if ismin then files else revfi
+              where go i []                    = i
+                    go i (f:fs) | b .&. f /= 0 = i
+                                | otherwise    = go (i+1) fs
+          spread part
+              | ppawns == 0 = 0
+              | otherwise   = pmd * pmd
+              where ppawns = pawns p .&. part
+                    pmi    = mima True ppawns
+                    pma    = 9 - mima False ppawns
+                    pmd    = pma - pmi
+          !pwd = spread (me p) - spread (yo p)
 
 -- Pawn end games are treated specially
 -- We consider escaped passed pawns in 2 situations:

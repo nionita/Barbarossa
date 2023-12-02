@@ -86,6 +86,7 @@ weights = [
         ("ewRookPawn",        ( -44,  -32)),
         ("ewAdvPawn5",        (  14,  106)),
         ("ewAdvPawn6",        ( 352,  333)),
+        ("ewPawnsWid",        (   0,   12)),
         ("ewPawnBlockP",      (-112,  -92)),
         ("ewPawnBlockO",      ( -23,  -26)),
         ("ewPawnBlockA",      ( -19,  -69)),
