@@ -882,12 +882,14 @@ advPawns p !ew = mad (ewAdvPawn6 ew) ap6 .
                                 | otherwise    = go (i+1) fs
           spread part
               | ppawns == 0 = 0
-              | otherwise   = pmd * pmd
+              | otherwise   = (pmd * pmd) `unsafeShiftR` oslide
               where ppawns = pawns p .&. part
                     pmi    = mima True ppawns
                     pma    = 9 - mima False ppawns
                     pmd    = pma - pmi
+                    oslide = popCount $ (occup p `less` part) .&. sli
           !pwd = spread (me p) - spread (yo p)
+          !sli = queens p .|. rooks p .|. bishops p
 
 -- Pawn end games are treated specially
 -- We consider escaped passed pawns in 2 situations:
