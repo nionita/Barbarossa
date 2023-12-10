@@ -63,12 +63,11 @@ normalEval p !sti = sc
           ew     = esEWeights sti
           !gph   = gamePhase p
           !mide1 = materDiff p ew (MidEnd 0 0)
-          !mide2 = evalRedundance p ew mide1
+          !mide2 = evalBishops p ew mide1
           !mide3 = evalRookPawn p ew mide2
           !mide4 = kingSafe p ew mide3
           !mide5 = kingPlace ep p ew mide4
-          !mide6 = lastline p ew mide5
-          !mide7 = mobiLity p ew mide6
+          !mide7 = mobiLity p ew mide5
           !mide8 = centerDiff p ew mide7
           !mide9 = spaceDiff p ew mide8
           !midea = adversDiff p ew mide9
@@ -486,6 +485,7 @@ mobDiff p mylr yolr mypb yopb ew = mad (ewMobilityKnight ew) n .
 ------ Center control ------
 
 -- This function is already optimised
+-- King & minors: take extended center
 centerDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 centerDiff p !ew = mad (ewCenterPAtts ew) pd .
                    mad (ewCenterNAtts ew) nd .
@@ -496,11 +496,11 @@ centerDiff p !ew = mad (ewCenterPAtts ew) pd .
     where !mpa = popCount $ myPAttacs p .&. center
           !ypa = popCount $ yoPAttacs p .&. center
           !pd  = mpa - ypa
-          !mna = popCount $ myNAttacs p .&. center
-          !yna = popCount $ yoNAttacs p .&. center
+          !mna = popCount $ myNAttacs p .&. excent
+          !yna = popCount $ yoNAttacs p .&. excent
           !nd  = mna - yna
-          !mba = popCount $ myBAttacs p .&. center
-          !yba = popCount $ yoBAttacs p .&. center
+          !mba = popCount $ myBAttacs p .&. excent
+          !yba = popCount $ yoBAttacs p .&. excent
           !bd  = mba - yba
           !mra = popCount $ myRAttacs p .&. center
           !yra = popCount $ yoRAttacs p .&. center
@@ -508,10 +508,11 @@ centerDiff p !ew = mad (ewCenterPAtts ew) pd .
           !mqa = popCount $ myQAttacs p .&. center
           !yqa = popCount $ yoQAttacs p .&. center
           !qd  = mqa - yqa
-          !mka = popCount $ myKAttacs p .&. center
-          !yka = popCount $ yoKAttacs p .&. center
+          !mka = popCount $ myKAttacs p .&. excent
+          !yka = popCount $ yoKAttacs p .&. excent
           !kd  = mka - yka
           center = 0x0000003C3C000000
+          excent = 0x00003C3C3C3C0000
 
 -------- Space for own pieces in our courtyard -----------
 
@@ -692,24 +693,12 @@ enPrise p !ew = mad (ewEnpHanging  ew) ha .
           !wp = popCount ywp - popCount mwp
           !wa = popCount ywa - popCount mwa
 
------- Last Line ------
-
--- Only for minor figures (queen is free to stay where it wants)
-lastline :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-lastline p !ew = mad (ewLastLinePenalty ew) cdiff
-    where !whl = popCount $ me p .&. cb
-          !bll = popCount $ yo p .&. cb
-          !cb = (knights p .|. bishops p) .&. lali
-          lali = 0xFF000000000000FF	-- approximation!
-          !cdiff = bll - whl
-
------- Redundance: bishop pair and rook redundance ------
+------ Bishops: bishop pair and bad bishops ------
 
 -- This function is optimised
-evalRedundance :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-evalRedundance p !ew = mad (ewBishopPawns    ew) pa .
-                       mad (ewBishopPair     ew) bp .
-                       mad (ewRedundanceRook ew) rr
+evalBishops :: MyPos -> EvalWeights -> MidEnd -> MidEnd
+evalBishops p !ew = mad (ewBishopPawns ew) pa .
+                    mad (ewBishopPair  ew) bp
     where !wbl = bishops p .&. me p .&. lightSquares
           !wbd = bishops p .&. me p .&. darkSquares
           !bbl = bishops p .&. yo p .&. lightSquares
@@ -726,11 +715,6 @@ evalRedundance p !ew = mad (ewBishopPawns    ew) pa .
           !ypal = bpbl * (popCount (pawns p .&. lightSquares) - pawnEven)
           !ypad = bpbd * (popCount (pawns p .&. darkSquares) - pawnEven)
           !pa = mpal + mpad - ypal - ypad
-          !wro = rooks p .&. me p
-          !bro = rooks p .&. yo p
-          !wrr = popCount wro `unsafeShiftR` 1	-- tricky here: 2, 3 are the same...
-          !brr = popCount bro `unsafeShiftR` 1	-- and here
-          !rr  = wrr - brr
           pawnEven = 6
 
 {--

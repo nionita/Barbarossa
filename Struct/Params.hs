@@ -56,18 +56,18 @@ weights = [
         ("ewKingThreat",      (   0,  300)),
         ("ewRookHOpen",       ( 162,  182)),	-- DSPSA with Adadelta
         ("ewRookOpen",        ( 205,  178)),	-- 20k steps, depth 4,
-        ("ewRookConn",        (  89,   59)),	-- 2 games, beta=0.95, gamma=0.8,
+        ("ewRookConn",        ( 110,   50)),
         ("ewRook7th",         ( 201,  161)),	-- niu=0.99, eps=1E-6
         ("ewMobilityKnight",  (  70,   54)),	-- texel2 / o: 62, 47
         ("ewMobilityBishop",  (  67,   32)),	-- texel2 / o: 61, 29
         ("ewMobilityRook",    (  32,   40)),	-- texel2 / o: 32, 39
         ("ewMobilityQueen",   (   4,   22)),	-- texel2 / o:  4, 22
         ("ewCenterPAtts",     (  73,   57)),
-        ("ewCenterNAtts",     (  48,   37)),
-        ("ewCenterBAtts",     (  52,   35)),
+        ("ewCenterNAtts",     (  25,   20)),
+        ("ewCenterBAtts",     (  25,   20)),
         ("ewCenterRAtts",     (  14,   22)),	-- DSPSA ...
         ("ewCenterQAtts",     (  13,   53)),
-        ("ewCenterKAtts",     (   2,   62)),
+        ("ewCenterKAtts",     (   0,   32)),
         ("ewSpace",           (   1,    0)),
         ("ewAdvAtts",         (   0,   12)),
         ("ewWeakSq",          ( -32,    0)),
@@ -81,10 +81,8 @@ weights = [
         ("ewEnpAttacked",     (  -2,  -14)),
         ("ewWepTotal",        ( 150,    0)),
         ("ewWepAttacked",     (   0,  200)),
-        ("ewLastLinePenalty", ( 100,    0)),
         ("ewBishopPair",      ( 386,  323)),
         ("ewBishopPawns",     ( -25,  -54)),
-        ("ewRedundanceRook",  ( -27,  -51)),	-- DSPSA ...
         ("ewRookPawn",        ( -44,  -32)),
         ("ewAdvPawn5",        (  14,  106)),
         ("ewAdvPawn6",        ( 352,  333)),
