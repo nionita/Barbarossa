@@ -210,9 +210,11 @@ bnMateDistance wbish sq = min (squareDistance sq ocor1) (squareDistance sq ocor2
 kingSafe :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 kingSafe p !ew = mad (ewKingSafe ew) ksafe
     where !ksafe = ksSide (yo p) (yoKAttacs p) (myPAttacs p) (myNAttacs p) (myBAttacs p) (myRAttacs p) 
-                          (myQAttacs p) (myKAttacs p) (myAttacs p)
+                          (myQAttacs p) (myKAttacs p) (myAttacs p) yho yoo
                  - ksSide (me p) (myKAttacs p) (yoPAttacs p) (yoNAttacs p) (yoBAttacs p) (yoRAttacs p) 
-                          (yoQAttacs p) (yoKAttacs p) (yoAttacs p)
+                          (yoQAttacs p) (yoKAttacs p) (yoAttacs p) mho moo
+          (mho, moo) = halfOpenKing (pawns p) (pawns p .&. yo p) (kings p .&. me p)
+          (yho, yoo) = halfOpenKing (pawns p) (pawns p .&. me p) (kings p .&. yo p)
 
 -- To make the sum and count in one pass
 data Flc = Flc !Int !Int
@@ -220,8 +222,10 @@ data Flc = Flc !Int !Int
 fadd :: Flc -> Flc -> Flc
 fadd (Flc f1 q1) (Flc f2 q2) = Flc (f1+f2) (q1+q2)
 
-ksSide :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> Int
-ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
+-- Consider also half open and open files around the king
+ksSide :: BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard
+    -> Int -> Int -> Int
+ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya yho yoo
     | myq == 0  = 0
     | otherwise = mattacs
     where qual a p
@@ -233,30 +237,28 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
               where !yoka = yok .&. a
                     y = popCount yoka
           -- qualWeights = [1, 3, 3, 5, 7, 3]
-          !qp = qual myp 1
-          !qn = qual myn 3
-          !qb = qual myb 3
-          !qr = qual myr 5
-          !qq = qual myq 7
-          !qk = qual myk 3
-          !(Flc c q) = fadd qp $ fadd qn $ fadd qb $ fadd qr $ fadd qq qk
-          !mattacs
-              | c == 0 = 0
-              | otherwise = fromIntegral $ attCoef `unsafeAt` ixt
+          qp = qual myp 1
+          qn = qual myn 3
+          qb = qual myb 3
+          qr = qual myr 5
+          qq = qual myq 7
+          qk = qual myk 3
+          (Flc c q) = fadd qp $ fadd qn $ fadd qb $ fadd qr $ fadd qq qk
+          mattacs = fromIntegral $ attCoef `unsafeAt` ixt
               -- where !freey = popCount $ yok `less` (mya .|. yop)
               --       !conce = popCount $ yok .&. mya
               -- This is equivalent to:
               where !freco = popCount $ yok `less` (yop `less` mya)
                     !ixm = c * q `unsafeShiftR` 2
-                    !ixt = ixm + c + ksShift - freco
+                    !ixt = ixm + c + ksShift - freco + ((yho + (yoo `unsafeShiftL` 2)) `unsafeShiftR` 1)
                     ksShift = 13
 
--- We take the maximum of 272 because:
--- Quali max: 8 * (1 + 3 + 3 + 5 + 10 + 3) = 200
+-- We take the maximum of 289 because:
+-- Quali max: 8 * (1 + 3 + 3 + 5 + 7 + 3) = 176
 -- Flag max: 6
--- 6 * 200 / 4 + 6 + 13 = 319
+-- 6 * 176 / 4 + 6 + 13 + 6 = 289
 attCoef :: UArray Int Int32
-attCoef = listArray (0, 319) $ take zeros (repeat 0) ++ [ f x | x <- [0..63] ] ++ repeat (f 63)
+attCoef = listArray (0, 289) $ take zeros (repeat 0) ++ [ f x | x <- [0..63] ] ++ repeat (f 63)
     where -- Without the scaling, f will take max value of 4000 for 63
           f :: Int -> Int32
           f x = let y = fromIntegral x :: Double
@@ -418,10 +420,10 @@ evalRookPlc p !ew = mad (ewRook7th   ew) r7 .
                     mad (ewRookConn  ew) rc
     where !mRs = rooks p .&. me p
           !mPs = pawns p .&. me p
-          (mho, mop) = foldr (perRook (pawns p) mPs) (0, 0) $ bbToSquares mRs
+          (mho, mop) = foldr (halfOpenFile (pawns p) mPs) (0, 0) $ bbToSquares mRs
           !yRs = rooks p .&. yo p
           !yPs = pawns p .&. yo p
-          (yho, yop) = foldr (perRook (pawns p) yPs) (0, 0) $ bbToSquares yRs
+          (yho, yop) = foldr (halfOpenFile (pawns p) yPs) (0, 0) $ bbToSquares yRs
           !ho = mho - yho
           !op = mop - yop
           !mrc | myRAttacs p .&. me p .&. rooks p == 0 = 0
@@ -437,16 +439,27 @@ evalRookPlc p !ew = mad (ewRook7th   ew) r7 .
           !r7y | me p .&. kings p .&. yo8 == 0 = 0
                | otherwise                     = popCount $ yo p .&. rooks p .&. yo7
 
-perRook :: BBoard -> BBoard -> Square -> (Int, Int) -> (Int, Int)
-perRook allp myp rsq (ho, op)
-    | rco .&. allp == 0 = (ho,  op')
-    | rco .&. myp  == 0 = (ho', op)
-    | otherwise         = (ho,  op)
+-- Count half-open and open files for a given square and all / side pawns
+-- When a file contains
+-- no pawns: open
+-- only opponent pawns: half open
+halfOpenFile :: BBoard -> BBoard -> Square -> (Int, Int) -> (Int, Int)
+halfOpenFile allp myp rsq (ho, op)
+    | rco .&. allp == 0 = (ho,     op + 1)	-- no pawns: open
+    | rco .&. myp  == 0 = (ho + 1, op)		-- only opponent pawns: half open
+    | otherwise         = (ho,     op)
     where !rco = rcolls `unsafeAt` (rsq .&. 0x7)
-          ho'  = ho + 1
-          op'  = op + 1
           rcolls :: UArray Int BBoard
-          rcolls = listArray (0, 7) [ fileA, fileB, fileC, fileD, fileE, fileF, fileG, fileH ]
+          rcolls = listArray (0, 7) [fileA, fileB, fileC, fileD, fileE, fileF, fileG, fileH]
+
+-- Given all pawns, your pawns & my king bitboard
+-- calculate the number of half open and open files around my king
+-- King neighbour files without pawns are very dangerous
+-- and half open files (i.e. without opponent pawns) are dangerous
+-- as long as there are opponent queen and rooks on the board
+halfOpenKing :: BBoard -> BBoard -> BBoard -> (Int, Int)
+halfOpenKing allp yop mkb = foldr (halfOpenFile allp yop) (0, 0) $ bbToSquares
+                                $ bbLeft mkb .|. bbRight mkb .|. mkb
 
 ------ Mobility ------
 
