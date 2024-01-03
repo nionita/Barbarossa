@@ -486,9 +486,11 @@ mobDiff p mylr yolr mypb yopb ew = mad (ewMobilityKnight ew) n .
 
 -- This function is already optimised
 -- King & minors: take extended center
+-- For knights: also position on extended center
 centerDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 centerDiff p !ew = mad (ewCenterPAtts ew) pd .
                    mad (ewCenterNAtts ew) nd .
+                   mad (ewCenterNOcc  ew) no .
                    mad (ewCenterBAtts ew) bd .
                    mad (ewCenterRAtts ew) rd .
                    mad (ewCenterQAtts ew) qd .
@@ -499,6 +501,9 @@ centerDiff p !ew = mad (ewCenterPAtts ew) pd .
           !mna = popCount $ myNAttacs p .&. excent
           !yna = popCount $ yoNAttacs p .&. excent
           !nd  = mna - yna
+          !mno = popCount $ me p .&. excent .&. knights p
+          !yno = popCount $ yo p .&. excent .&. knights p
+          !no  = mno - yno
           !mba = popCount $ myBAttacs p .&. excent
           !yba = popCount $ yoBAttacs p .&. excent
           !bd  = mba - yba

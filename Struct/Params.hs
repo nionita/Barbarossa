@@ -63,11 +63,12 @@ weights = [
         ("ewMobilityRook",    (  32,   40)),	-- texel2 / o: 32, 39
         ("ewMobilityQueen",   (   4,   22)),	-- texel2 / o:  4, 22
         ("ewCenterPAtts",     (  73,   57)),
-        ("ewCenterNAtts",     (  25,   20)),
+        ("ewCenterNAtts",     (  35,   30)),
         ("ewCenterBAtts",     (  25,   20)),
         ("ewCenterRAtts",     (  14,   22)),	-- DSPSA ...
         ("ewCenterQAtts",     (  13,   53)),
         ("ewCenterKAtts",     (   0,   32)),
+        ("ewCenterNOcc",      ( 100,    0)),
         ("ewSpace",           (   1,    0)),
         ("ewAdvAtts",         (   0,   12)),
         ("ewWeakSq",          ( -32,    0)),
