@@ -886,7 +886,7 @@ advPawns p !ew = mad (ewAdvPawn6 ew) ap6 .
               where ppawns = pawns p .&. part
                     pmi    = mima True ppawns
                     pma    = 9 - mima False ppawns
-                    pmd    = pma - pmi
+                    pmd    = pma - pmi + 1
           !pwd = spread (me p) - spread (yo p)
 
 -- Pawn end games are treated specially
