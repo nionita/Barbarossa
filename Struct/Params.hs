@@ -63,11 +63,12 @@ weights = [
         ("ewMobilityRook",    (  16,   34)),	-- DSPSA ...
         ("ewMobilityQueen",   (   2,   11)),
         ("ewCenterPAtts",     (  73,   57)),
-        ("ewCenterNAtts",     (  25,   20)),
+        ("ewCenterNAtts",     (  35,   30)),
         ("ewCenterBAtts",     (  25,   20)),
         ("ewCenterRAtts",     (  14,   22)),	-- DSPSA ...
         ("ewCenterQAtts",     (  13,   53)),
         ("ewCenterKAtts",     (   0,   32)),
+        ("ewCenterNOcc",      ( 100,    0)),
         ("ewSpace",           (   1,    0)),
         ("ewAdvAtts",         (   1,   17)),
         ("ewIsolPawns",       ( -36, -113)),
