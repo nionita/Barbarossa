@@ -338,8 +338,8 @@ kingPlace ep p !ew = mad (ewKingPawn      ew) kpa .
           pmktr = popCount (myKAttacs p .&. yo p .&. nopawns `less` yoPAttacs p)
           pyktr = popCount (yoKAttacs p .&. me p .&. nopawns `less` myPAttacs p)
           !ktr = pmktr - pyktr
-          !kmd = popCount (myKAttacs p `less` (occup p .|. yoAttacs p))
-               - popCount (yoKAttacs p `less` (occup p .|. myAttacs p))
+          !kmd = popCount (myKAttacs p `less` (me p .|. yoAttacs p))
+               - popCount (yoKAttacs p `less` (yo p .|. myAttacs p))
 
 promoW, promoB :: Square -> Square
 promoW s = 56 + (s .&. 7)
