@@ -552,25 +552,21 @@ spaceVals = listArray (0, 24) $ map f [1..25]
     where f x = round $ spf * (sqrt x - 1)
           spf = 270 :: Double
 
--------- Attacks to adverse squares ----------
+-------- Attacks to squares ----------
 
 adversDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 adversDiff p !ew = mad (ewAdvAtts   ew) abd .
                    mad (ewAdvAttsUP ew) upd .
                    mad (ewAdvAttsUn ew) udd
     where !abd = mbd - ybd
-          !mbd = popCount $ myAttacs p .&. yoH
-          !ybd = popCount $ yoAttacs p .&. myH
+          !mbd = popCount $ myAttacs p
+          !ybd = popCount $ yoAttacs p
           !upd = mpd - ypd
-          !mpd = popCount $ myAttacs p .&. (yoH `less` yoPAttacs p)
-          !ypd = popCount $ yoAttacs p .&. (myH `less` myPAttacs p)
+          !mpd = popCount $ myAttacs p `less` yoPAttacs p
+          !ypd = popCount $ yoAttacs p `less` myPAttacs p
           !udd = mdd - ydd
-          !mdd = popCount $ myAttacs p .&. (yoH `less` yoAttacs p)
-          !ydd = popCount $ yoAttacs p .&. (myH `less` myAttacs p)
-          (myH, yoH) | moving p == White = (ah14, ah58)
-                     | otherwise         = (ah58, ah14)
-          ah14 = 0xFFFFFFFF
-          ah58 = 0xFFFFFFFF00000000
+          !mdd = popCount $ myAttacs p `less` yoAttacs p
+          !ydd = popCount $ yoAttacs p `less` myAttacs p
 
 -------- Isolated pawns --------
 
