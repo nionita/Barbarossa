@@ -555,10 +555,18 @@ spaceVals = listArray (0, 24) $ map f [1..25]
 -------- Attacks to adverse squares ----------
 
 adversDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-adversDiff p !ew = mad (ewAdvAtts ew) ad
-    where !ad = md - yd
-          !md = popCount $ myAttacs p .&. yoH
-          !yd = popCount $ yoAttacs p .&. myH
+adversDiff p !ew = mad (ewAdvAtts   ew) abd .
+                   mad (ewAdvAttsUP ew) upd .
+                   mad (ewAdvAttsUn ew) udd
+    where !abd = mbd - ybd
+          !mbd = popCount $ myAttacs p .&. yoH
+          !ybd = popCount $ yoAttacs p .&. myH
+          !upd = mpd - ypd
+          !mpd = popCount $ myAttacs p .&. (yoH `less` yoPAttacs p)
+          !ypd = popCount $ yoAttacs p .&. (myH `less` myPAttacs p)
+          !udd = mdd - ydd
+          !mdd = popCount $ myAttacs p .&. (yoH `less` yoAttacs p)
+          !ydd = popCount $ yoAttacs p .&. (myH `less` myAttacs p)
           (myH, yoH) | moving p == White = (ah14, ah58)
                      | otherwise         = (ah58, ah14)
           ah14 = 0xFFFFFFFF
