@@ -287,8 +287,7 @@ kingPlace ep p !ew = mad (ewKingPawn      ew) kpa .
                      mad (ewKingThreat    ew) ktr .
                      mad (ewKingOpen      ew) ko .
                      mad (ewKingPlaceCent ew) kcd .
-                     mad (ewKingPlacePwns ew) kpd .
-                     mad (ewKingMobility  ew) kmd
+                     mad (ewKingPlacePwns ew) kpd
     where !kcd = (mpl - ypl) `unsafeShiftR` epMaterBonusScale ep
           !kpd = (mpi - ypi) `unsafeShiftR` epPawnBonusScale  ep
           !mks = kingSquare (kings p) $ me p
@@ -338,8 +337,6 @@ kingPlace ep p !ew = mad (ewKingPawn      ew) kpa .
           pmktr = popCount (myKAttacs p .&. yo p .&. nopawns `less` yoPAttacs p)
           pyktr = popCount (yoKAttacs p .&. me p .&. nopawns `less` myPAttacs p)
           !ktr = pmktr - pyktr
-          !kmd = popCount (myKAttacs p `less` (me p .|. yoAttacs p))
-               - popCount (yoKAttacs p `less` (yo p .|. myAttacs p))
 
 promoW, promoB :: Square -> Square
 promoW s = 56 + (s .&. 7)
