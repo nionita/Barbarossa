@@ -860,27 +860,29 @@ qSearchFound !a !b !tp !hsc front = do
 qSearchNotFound :: Int -> Int -> Bool -> Search Int
 qSearchNotFound !a !b front = reFail >> qSearchLims a b front
 
+-- Here we still trust somehow the eval in check, when it is very low
+-- In another variant we could go further and even not evaluate when in check
+-- but directly call qsInCheck, which would fail low when we have no moves,
+-- in which case we are mated
 qSearchLims :: Int -> Int -> Bool -> Search Int
 qSearchLims !a !b front = do
     pos <- lift getPos
-    if tacticalPos pos
-       then qsInCheck a b (staticScore pos)
-       else qsNormal  a b (staticScore pos) front
+    let !s = staticScore pos
+    !dcut <- lift $ qsDelta $ a - s - qsDeltaMargin
+    if dcut
+       then do
+           when collectFens $ finWithNodes "DELT"
+           return a
+       else if tacticalPos pos
+               then qsInCheck a b
+               else qsNormal  a b s front
 
-qsInCheck :: Int -> Int -> Int -> Search Int
-qsInCheck !a !b !s = do
+qsInCheck :: Int -> Int -> Search Int
+qsInCheck !a !b = do
     edges <- Alt <$> lift genEscapeMoves
-    if noMove edges
-       then return mated
-       else do
-          !dcut <- lift $ qsDelta $ a - s - qsDeltaMargin
-          if dcut
-             then do
-                 when collectFens $ finWithNodes "DELT"
-                 return a
-             -- else pvQLoop b (max s a) edges
-             -- do not trust eval in check
-             else pvQLoop b a edges
+    -- pvQLoop b (max s a) edges -- NO: do not trust eval in check
+    -- pvQLoop will fail low if we don't have any moves (aka we are mated)
+    pvQLoop b a edges
 
 qsNormal :: Int -> Int -> Int -> Bool -> Search Int
 qsNormal !a !b !s front
@@ -888,18 +890,12 @@ qsNormal !a !b !s front
          when collectFens $ finWithNodes "BETA"
          return b
     | otherwise = do
-         !dcut <- lift $ qsDelta $ a - s - qsDeltaMargin
-         if dcut
-            then do
-                when collectFens $ finWithNodes "DELT"
-                return a
-            else do
-                edges <- Alt <$> lift (genTactMoves front)
-                if noMove edges
-                   then do	-- no more captures
-                       when collectFens $ finWithNodes "NOCA"
-                       return (max s a)
-                   else pvQLoop b (max s a) edges
+         edges <- Alt <$> lift (genTactMoves front)
+         if noMove edges
+            then do	-- no more captures
+                when collectFens $ finWithNodes "NOCA"
+                return (max s a)
+            else pvQLoop b (max s a) edges
 
 pvQLoop :: Int -> Int -> Alt Move -> Search Int
 pvQLoop !b = go
