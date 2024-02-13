@@ -363,7 +363,9 @@ ttStore !deep !tp !sc !bestm !nds = do
     s <- get
     p <- getPos
     -- We use the type: 0 - upper limit, 1 - lower limit, 2 - exact score
-    liftIO $ writeCache (hash s) (zobkey p) deep tp sc bestm nds
+    -- Warning: depth has 6 bit in TT (so max 64)! We are currently still far from this,
+    -- but by summing different paths this could happen: so limit it here
+    liftIO $ writeCache (hash s) (zobkey p) (min 40 deep) tp sc bestm nds
 
 -- History heuristic table update when beta cut
 betaCut :: Int -> Move -> Game ()
