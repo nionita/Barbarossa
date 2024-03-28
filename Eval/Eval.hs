@@ -546,7 +546,7 @@ spaceBlack !mpawns !matts !ypatts !yatts = sv
 spaceVals :: UArray Int Int32
 spaceVals = listArray (0, 24) $ map f [1..25]
     where f x = round $ spf * (sqrt x - 1)
-          spf = 243 :: Double
+          spf = 297 :: Double
 
 -------- Attacks to adverse squares ----------
 
