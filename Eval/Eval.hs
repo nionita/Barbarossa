@@ -517,16 +517,12 @@ centerDiff p !ew = mad (ewCenterPAtts ew) pd .
 
 spaceDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 spaceDiff p !ew = mad (ewSpace ew) sd
-    where !sd = ms - ys
-          (ms, ys)
-              | moving p == White = (
-                  spaceWhite (pawns p .&. me p) (myAttacs p) (yoPAttacs p) (yoAttacs p),
-                  spaceBlack (pawns p .&. yo p) (yoAttacs p) (myPAttacs p) (myAttacs p)
-                  )
-              | otherwise = (
-                  spaceBlack (pawns p .&. me p) (myAttacs p) (yoPAttacs p) (yoAttacs p),
-                  spaceWhite (pawns p .&. yo p) (yoAttacs p) (myPAttacs p) (myAttacs p)
-                  )
+    where sd | moving p == White =
+                 spaceWhite (pawns p .&. me p) (myAttacs p) (yoPAttacs p) (yoAttacs p)
+               - spaceBlack (pawns p .&. yo p) (yoAttacs p) (myPAttacs p) (myAttacs p)
+             | otherwise =
+                 spaceBlack (pawns p .&. me p) (myAttacs p) (yoPAttacs p) (yoAttacs p)
+               - spaceWhite (pawns p .&. yo p) (yoAttacs p) (myPAttacs p) (myAttacs p)
 
 {-# INLINE spaceWhite #-}
 spaceWhite :: BBoard -> BBoard -> BBoard -> BBoard -> Int
@@ -550,7 +546,7 @@ spaceBlack !mpawns !matts !ypatts !yatts = sv
 spaceVals :: UArray Int Int32
 spaceVals = listArray (0, 24) $ map f [1..25]
     where f x = round $ spf * (sqrt x - 1)
-          spf = 270 :: Double
+          spf = 243 :: Double
 
 -------- Attacks to adverse squares ----------
 
