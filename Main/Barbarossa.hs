@@ -39,7 +39,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.7.0"
-progVerSuff = "defi2"
+progVerSuff = "mino"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -422,7 +422,7 @@ compTime tim tpm fixmtg cursc rept
           rtimprc = fctm / max frtim fctm
           rtimfrc = remTimeFracIni + remTimeFracDev * rtimprc
           tmxt = round $ fctm + rtimfrc * frtim
-          tmx  = min tmxt $ max 0 $ tim - timeReserved
+          tmx  = min tmxt $ max 1 $ tim - timeReserved
 
 estMvsToGo :: Array Int Int
 estMvsToGo = listArray (0, 8) [50, 36, 24, 15, 10, 7, 5, 3, 2]

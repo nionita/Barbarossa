@@ -285,12 +285,17 @@ kingPlace :: EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
 kingPlace ep p !ew = mad (ewKingPawn      ew) kpa .
                      mad (ewKingThreat    ew) ktr .
                      mad (ewKingOpen      ew) ko .
+                     mad (ewKingMinorPrx  ew) kmp .
                      mad (ewKingPlaceCent ew) kcd .
                      mad (ewKingPlacePwns ew) kpd
     where !kcd = (mpl - ypl) `unsafeShiftR` epMaterBonusScale ep
           !kpd = (mpi - ypi) `unsafeShiftR` epPawnBonusScale  ep
           !mks = kingSquare (kings p) $ me p
           !yks = kingSquare (kings p) $ yo p
+          -- We need a few times the minors
+          !minors = bishops p .|. knights p
+          !myminors = minors .&. me p
+          !yominors = minors .&. yo p
           !mkm = materFun yminor yrooks yqueens
           !ykm = materFun mminor mrooks mqueens
           (!mpl, !ypl, !mpi, !ypi)
@@ -306,10 +311,10 @@ kingPlace ep p !ew = mad (ewKingPawn      ew) kpa .
                                     )
           !mrooks  = popCount $ rooks p .&. me p
           !mqueens = popCount $ queens p .&. me p
-          !mminor  = popCount $ (bishops p .|. knights p) .&. me p
+          !mminor  = popCount myminors
           !yrooks  = popCount $ rooks p .&. yo p
           !yqueens = popCount $ queens p .&. yo p
-          !yminor  = popCount $ (bishops p .|. knights p) .&. yo p
+          !yminor  = popCount yominors
           !mpawns  = pawns p .&. me p
           !ypawns  = pawns p .&. yo p
           !mpassed = passed p .&. me p
@@ -330,12 +335,16 @@ kingPlace ep p !ew = mad (ewKingPawn      ew) kpa .
           -- King on pawns: more is better (now linear)
           pmkpa = popCount (myKAttacs p .&. pawns p)
           pykpa = popCount (yoKAttacs p .&. pawns p)
-          !kpa = pmkpa - pykpa
+          !kpa  = pmkpa - pykpa
           -- Threat by king only pieces:
           -- pieces attacked by king and not defended by a pawn
           pmktr = popCount (myKAttacs p .&. yo p .&. nopawns `less` yoPAttacs p)
           pyktr = popCount (yoKAttacs p .&. me p .&. nopawns `less` myPAttacs p)
-          !ktr = pmktr - pyktr
+          !ktr  = pmktr - pyktr
+          -- King minor proxy: better when B/N or their attacks are in king area
+          !mkmp = popCount $ myKAttacs p .&. (myminors .|. myNAttacs p .|. myBAttacs p)
+          !ykmp = popCount $ yoKAttacs p .&. (yominors .|. yoNAttacs p .|. yoBAttacs p)
+          !kmp  = mkmp - ykmp
 
 promoW, promoB :: Square -> Square
 promoW s = 56 + (s .&. 7)
