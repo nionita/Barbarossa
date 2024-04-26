@@ -54,7 +54,7 @@ weights = [
         ("ewKingPlacePwns",   (   0,    4)),
         ("ewKingPawn",        (   3,   50)),
         ("ewKingThreat",      (   0,  300)),
-        ("ewKingMinorPrx",    ( 100,    0)),
+        ("ewKingMinorPrx",    ( -80,    0)),
         ("ewRookHOpen",       ( 162,  182)),	-- DSPSA with Adadelta
         ("ewRookOpen",        ( 205,  178)),	-- 20k steps, depth 4,
         ("ewRookConn",        (  98,    1)),
