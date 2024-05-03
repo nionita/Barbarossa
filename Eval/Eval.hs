@@ -622,17 +622,24 @@ backDiff p !ew mide
           !bpod = popCount bpob - popCount bpow
       in mad (ewBackPawns ew) bpd  $! mad (ewBackPOpen ew) bpod mide
 
+-- The stop is the square direct in front of the pawn (where it would move one step)
+-- If its stop is attacked by one or 2 opponent pawns and cannot be attacked by a friendly pawn
+-- anymore, the pawn is backward, which is bad. If there is no opponent pawn ahead af it,
+-- it is even worse (but only if the opponent has rooks or queen?)
+-- We consider only such pawns on 2nd & 3rd rank
+-- As a variation, it would be interesting to consider only the current situation, i.e.
+-- the stop is not attacked by a friendly pawn now (but may be in the future)
 backPawns :: Color -> BBoard -> BBoard -> BBoard -> (BBoard, BBoard)
 backPawns White !mp !op !opa = (bp, bpo)
-    where fa = frontAttacksWhite mp
+    where fa    = frontAttacksWhite mp
           stops = mp `unsafeShiftL` 8
-          !bp  = stops .&. opa .&. complement fa;
-          !bpo = bp `less` shadowDown op
+          !bp   = ((stops .&. opa .&. complement fa) `unsafeShiftR` 8) .&. (row2 .|. row3)
+          !bpo  = bp `less` shadowDown op
 backPawns Black !mp !op !opa = (bp, bpo)
-    where fa = frontAttacksBlack mp
+    where fa    = frontAttacksBlack mp
           stops = mp `unsafeShiftR` 8
-          !bp = stops .&. opa .&. complement fa;
-          !bpo = bp `less` shadowUp op
+          !bp   = ((stops .&. opa .&. complement fa) `unsafeShiftL` 8) .&. (row6 .|. row7)
+          !bpo  = bp `less` shadowUp op
 
 frontAttacksWhite :: BBoard -> BBoard
 frontAttacksWhite !b = fa
@@ -644,7 +651,7 @@ frontAttacksBlack :: BBoard -> BBoard
 frontAttacksBlack !b = fa
     where fal = bbLeft b
           far = bbRight b
-          !fa = shadowDown (fal .|. far)	-- shadowUp is exclusive the original!
+          !fa = shadowDown (fal .|. far)	-- shadowDown is exclusive the original!
 
 ------ En prise ------
 -- enpHanging and enpEnPrise optimised (only mean) with Clop by running 4222
