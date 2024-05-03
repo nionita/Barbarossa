@@ -88,11 +88,11 @@ genMoves d = do
        else do
             h <- gets hist
             let l0 = genMoveCast p
-                l1 = genMovePromo p
+                (l1q, l1r) = genMovePromo p
                 (l2w, l2l) = genMoveCaptWL p
                 l3 = histSortMoves d h $ genMoveNCapt p
             -- Loosing captures after non-captures
-            return (l1 ++ l2w, l0 ++ l3 ++ l2l)
+            return (l1q ++ l2w, l1r ++ l0 ++ l3 ++ l2l)
 
 -- Generate only tactical moves, i.e. promotions & captures
 -- Needed only in QS, when we know we are not in check
@@ -101,12 +101,12 @@ genMoves d = do
 genTactMoves :: Bool -> Game [Move]
 genTactMoves front = do
     p <- getPos
-    let l1  = genMovePromo p
+    let (l1q, _) = genMovePromo p
         l2w = fst $ genMoveCaptWL p
         l3  = genMoveNCaptToCheck p
     if front
-       then return $ l1 ++ l2w ++ l3
-       else return $ l1 ++ l2w
+       then return $ l1q ++ l2w ++ l3
+       else return $ l1q ++ l2w
 
 -- Generate only escape moves: needed only in QS when we know we have to escape
 genEscapeMoves :: Game [Move]
