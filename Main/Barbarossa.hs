@@ -39,7 +39,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.7.0"
-progVerSuff = "defi2"
+progVerSuff = "timer"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -394,8 +394,8 @@ getUCITime cs c
 
 -- These parameters should be optimised (i.e.: first made options)
 remTimeFracIni, remTimeFracFin, remTimeFracDev :: Double
-remTimeFracIni = 0.15	-- fraction of remaining time which we can consume at once - initial value
-remTimeFracFin = 0.5	-- same at final (when remaining time is near zero)
+remTimeFracIni = 0.14	-- fraction of remaining time which we can consume at once - initial value
+remTimeFracFin = 0.48	-- same at final (when remaining time is near zero)
 remTimeFracDev = remTimeFracFin - remTimeFracIni
 
 timeReserved :: Int
@@ -417,15 +417,15 @@ compTime tim tpm fixmtg cursc rept
               | otherwise = mtg
           ctn = tpm + tim `div` mtr
           ctm = if tim > 0 && tim < 2000 || tim == 0 && tpm < 700 then 300 else ctn
-          frtim = fromIntegral $ max 0 $ tim - ctm	-- rest time after this move
+          frtim = fromIntegral $ max 1 $ tim - ctm	-- rest time after this move
           fctm  = fromIntegral ctm :: Double
           rtimprc = fctm / max frtim fctm
           rtimfrc = remTimeFracIni + remTimeFracDev * rtimprc
           tmxt = round $ fctm + rtimfrc * frtim
-          tmx  = min tmxt $ max 0 $ tim - timeReserved
+          tmx  = min tmxt $ max 1 $ tim - timeReserved
 
 estMvsToGo :: Array Int Int
-estMvsToGo = listArray (0, 8) [50, 36, 24, 15, 10, 7, 5, 3, 2]
+estMvsToGo = listArray (0, 8) [60, 40, 24, 15, 10, 7, 5, 3, 2]
 
 estimateMovesToGo :: Int -> Int
 estimateMovesToGo sc = estMvsToGo ! mvidx
