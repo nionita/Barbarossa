@@ -411,10 +411,13 @@ matKCArr = listArray (0, 63) $ [0, 0, 0, 1, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12] ++ 
 ------ Rook placement points ------
 
 evalRookPlc :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-evalRookPlc p !ew = mad (ewRook7th   ew) r7 .
-                    mad (ewRookHOpen ew) ho .
-                    mad (ewRookOpen  ew) op .
-                    mad (ewRookConn  ew) rc
+evalRookPlc p !ew = mad (ewRookLines1 ew) rl1 .
+                    mad (ewRookLines2 ew) rl2 .
+                    mad (ewRookLiAtt1 ew) ra1 .
+                    mad (ewRookLiAtt2 ew) ra2 .
+                    mad (ewRookHOpen  ew) ho .
+                    mad (ewRookOpen   ew) op .
+                    mad (ewRookConn   ew) rc
     where !mRs = rooks p .&. me p
           !mPs = pawns p .&. me p
           (mho, mop) = foldr (perRook (pawns p) mPs) (0, 0) $ bbToSquares mRs
@@ -428,13 +431,21 @@ evalRookPlc p !ew = mad (ewRook7th   ew) r7 .
           !yrc | yoRAttacs p .&. yo p .&. rooks p == 0 = 0
                | otherwise                             = 1
           !rc = mrc - yrc
-          !r7 = r7m - r7y
-          (!my7, !my8, !yo7, !yo8) | moving p == White = (row7, row8, row2, row1)
-                                   | otherwise         = (row2, row1, row7, row8)
-          !r7m | yo p .&. kings p .&. my8 == 0 = 0
-               | otherwise                     = popCount $ me p .&. rooks p .&. my7
-          !r7y | me p .&. kings p .&. yo8 == 0 = 0
-               | otherwise                     = popCount $ yo p .&. rooks p .&. yo7
+          -- rooks on ranks 1, 2, 7 and 8 get bonus, also rook attacks on that lines
+          rookLines1 = row1 .|. row8
+          rookLines2 = row2 .|. row7
+          !rl1  = rlm1 - rly1
+          !rlm1 = popCount $ me p .&. rooks p .&. rookLines1
+          !rly1 = popCount $ yo p .&. rooks p .&. rookLines1
+          !rl2  = rlm2 - rly2
+          !rlm2 = popCount $ me p .&. rooks p .&. rookLines2
+          !rly2 = popCount $ yo p .&. rooks p .&. rookLines2
+          !ra1  = ram1 - ray1
+          !ram1 = popCount $ myRAttacs p .&. rookLines1
+          !ray1 = popCount $ yoRAttacs p .&. rookLines1
+          !ra2  = ram2 - ray2
+          !ram2 = popCount $ myRAttacs p .&. rookLines2
+          !ray2 = popCount $ yoRAttacs p .&. rookLines2
 
 perRook :: BBoard -> BBoard -> Square -> (Int, Int) -> (Int, Int)
 perRook allp myp rsq (ho, op)

@@ -57,7 +57,10 @@ weights = [
         ("ewRookHOpen",       ( 162,  182)),	-- DSPSA with Adadelta
         ("ewRookOpen",        ( 205,  178)),	-- 20k steps, depth 4,
         ("ewRookConn",        (  98,    1)),
-        ("ewRook7th",         ( 201,  161)),	-- niu=0.99, eps=1E-6
+        ("ewRookLines1",      ( 100,    0)),
+        ("ewRookLines2",      (  50,    0)),
+        ("ewRookLiAtt1",      (  10,    0)),
+        ("ewRookLiAtt2",      (   5,    0)),
         ("ewMobilityKnight",  (  70,   54)),	-- texel2 / o: 62, 47
         ("ewMobilityBishop",  (  67,   32)),	-- texel2 / o: 61, 29
         ("ewMobilityRook",    (  32,   40)),	-- texel2 / o: 32, 39
@@ -65,7 +68,7 @@ weights = [
         ("ewCenterPAtts",     (  73,   57)),
         ("ewCenterNAtts",     (  33,    0)),
         ("ewCenterBAtts",     (  78,   11)),
-        ("ewCenterRAtts",     (  14,   22)),	-- DSPSA ...
+        ("ewCenterRAtts",     (   0,   22)),	-- DSPSA ...
         ("ewCenterQAtts",     (  13,   53)),
         ("ewCenterKAtts",     (   0,   40)),
         ("ewCenterNOcc",      ( 130,    0)),
