@@ -49,7 +49,7 @@ lmrInitLv  = 8
 lmrInitLim = 8500
 lmrLevMin  = 0
 lmrLevMax  = 15
-lmrNoDepth = 1
+lmrNoDepth = 2
 
 -- The late move reduction is variable and regulated by the number of re-searches
 -- Lower levels (towards 0) means less reductions, higher - more
@@ -63,7 +63,8 @@ varImp :: Double -> Double -> Int
 varImp lev w = round $ go 0 lev w
     where go :: Double -> Double -> Double -> Double
           go !lv !b !i | i <= b    = lv
-                       | otherwise = go (lv+1) (b*1.2) (i-b)
+                       | otherwise = go (lv+1) (b*bcoef) (i-b)
+              where bcoef = 1.18	-- more reduces less
 
 -- Parameters for futility pruning:
 maxFutilDepth :: Int
