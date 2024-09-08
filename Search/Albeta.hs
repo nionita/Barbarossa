@@ -64,7 +64,7 @@ varImp lev w = round $ go 0 lev w
     where go :: Double -> Double -> Double -> Double
           go !lv !b !i | i <= b    = lv
                        | otherwise = go (lv+1) (b*bcoef) (i-b)
-              where bcoef = 1.18	-- more reduces less
+              where bcoef = 1.15	-- more reduces less
 
 -- Parameters for futility pruning:
 maxFutilDepth :: Int
