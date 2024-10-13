@@ -7,7 +7,7 @@ module Search.Albeta (
 
 import Control.Monad
 import Control.Monad.State hiding (gets, modify)
-import Data.Array.Base (unsafeAt)
+-- import Data.Array.Base (unsafeAt)
 import Data.Array.Unboxed
 import Data.Bits
 import Data.Int
@@ -81,7 +81,7 @@ futMinVal = 24
 nulMargin, nulSubmrg, nulTrig :: Int
 nulMargin = 1		-- margin to search the null move (over beta) (in scoreGrain units!)
 nulSubmrg = 2		-- improved margin (in scoreGrain units!)
-nulTrig   = -15	-- static margin to beta, to trigger null move (in scoreGrain units!)
+nulTrig   = -40		-- static margin to beta, to trigger null move
 nulSubAct :: Bool
 nulSubAct = True
 
@@ -555,16 +555,14 @@ nullMoveFailsHigh pos nst b d
       || crtnt nst == AllNode = return NoNullMove	-- no null move in all nodes
     | otherwise = do
         let v = staticScore pos
-        if v < b + nulTrig * scoreGrain
+        if v < b + nulTrig
            then return NoNullMove
            else do
                when nulDebug $ incReBe 1
                lift doNullMove	-- do null move
                newNode d
                let nst' = deepNSt nst
-               val <- if v > b + bigDiff
-                         then pnextlev <$> pvZeroW nst' (-nma) d2
-                         else pnextlev <$> pvZeroW nst' (-nma) d1
+               val <- pnextlev <$> pvZeroW nst' (-nma) (d - 3)
                lift undoMove	-- undo null move
                if pathScore val >= nmb
                   then return NullMoveHigh
@@ -577,17 +575,8 @@ nullMoveFailsHigh pos nst b d
                        if nullSeq (pathMoves val)
                           then return $ NullMoveLow
                           else return $ NullMoveThreat val
-    where d1  = nmDArr1 `unsafeAt` d	-- here we have always d >= 1
-          d2  = nmDArr2 `unsafeAt` d	-- this is for bigger differences
-          nmb = if nulSubAct then b - (nulSubmrg * scoreGrain) else b
+    where nmb = if nulSubAct then b - (nulSubmrg * scoreGrain) else b
           nma = nmb - (nulMargin * scoreGrain)
-          bigDiff = 500	-- if we are very far ahead
-
--- This is now more than reduction 3 for depth over 9
-nmDArr1, nmDArr2 :: UArray Int Int
-------------------------------0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16  17  18  19  20
-nmDArr1 = listArray (0, 20) [ 0, 0, 0, 0, 0, 1, 2, 3, 4, 4, 5, 6, 7, 7, 8, 9, 9, 10, 11, 11, 12 ]
-nmDArr2 = listArray (0, 20) [ 0, 0, 0, 0, 0, 0, 1, 2, 3, 3, 4, 5, 6, 6, 7, 8, 8,  9, 10, 10, 11 ]
 
 isCut :: Int -> NodeState -> Bool
 isCut b nst = pathScore (cursc nst) >= b
