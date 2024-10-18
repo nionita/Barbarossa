@@ -78,10 +78,12 @@ futMinVal :: Int
 futMinVal = 24
 
 -- Parameters for null move pruning
-nulMargin, nulSubmrg, nulTrig :: Int
+nulMargin, nulSubmrg, nulTrig, nulConst, nulDepth :: Int
 nulMargin = 1		-- margin to search the null move (over beta) (in scoreGrain units!)
 nulSubmrg = 2		-- improved margin (in scoreGrain units!)
-nulTrig   = -40		-- static margin to beta, to trigger null move
+nulTrig   = -40		-- static margin to beta, to trigger null move, for cut nodes
+nulConst  = 400		-- constant part of the null move triggen for all nodes
+nulDepth  = 23		-- depth dependent part of the margin for all nodes
 nulSubAct :: Bool
 nulSubAct = True
 
@@ -551,11 +553,14 @@ data NullMoveResult = NoNullMove | NullMoveHigh | NullMoveLow | NullMoveThreat P
 
 nullMoveFailsHigh :: MyPos -> NodeState -> Int -> Int -> Search NullMoveResult
 nullMoveFailsHigh pos nst b d
-    | d < 2 || tacticalPos pos || zugZwang pos		-- no null move at d < 2
-      || crtnt nst == AllNode = return NoNullMove	-- no null move in all nodes
+    -- no null move at d < 2
+    | d < 2 || tacticalPos pos || zugZwang pos = return NoNullMove
     | otherwise = do
         let v = staticScore pos
-        if v < b + nulTrig
+            -- different null move margin in all nodes / cut nodes
+            m | crtnt nst == AllNode = b + nulConst - d * nulDepth
+              | otherwise            = b + nulTrig
+        if v < m
            then return NoNullMove
            else do
                when nulDebug $ incReBe 1
