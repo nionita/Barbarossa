@@ -286,6 +286,7 @@ kingPlace ep p !ew = mad (ewKingPawn      ew) kpa .
                      mad (ewKingThreat    ew) ktr .
                      mad (ewKingOpen      ew) ko .
                      mad (ewKingMinorPrx  ew) kmp .
+                     mad (ewKingMinorDef  ew) kmd .
                      mad (ewKingPlaceCent ew) kcd .
                      mad (ewKingPlacePwns ew) kpd
     where !kcd = (mpl - ypl) `unsafeShiftR` epMaterBonusScale ep
@@ -341,10 +342,16 @@ kingPlace ep p !ew = mad (ewKingPawn      ew) kpa .
           pmktr = popCount (myKAttacs p .&. yo p .&. nopawns `less` yoPAttacs p)
           pyktr = popCount (yoKAttacs p .&. me p .&. nopawns `less` myPAttacs p)
           !ktr  = pmktr - pyktr
-          -- King minor proxy: better when B/N or their attacks are in king area
-          !mkmp = popCount $ myKAttacs p .&. (myminors .|. myNAttacs p .|. myBAttacs p)
-          !ykmp = popCount $ yoKAttacs p .&. (yominors .|. yoNAttacs p .|. yoBAttacs p)
+          -- King minor proxy: better when some B/N are in king area
+          !mkmp | myKAttacs p .&. myminors /= 0 = 1
+                | otherwise                     = 0
+          !ykmp | yoKAttacs p .&. yominors /= 0 = 1
+                | otherwise                     = 0
           !kmp  = mkmp - ykmp
+          -- King minor defends: better when B/N attacks are in king area
+          !mkmd = popCount $ myKAttacs p .&. (myNAttacs p .|. myBAttacs p)
+          !ykmd = popCount $ yoKAttacs p .&. (yoNAttacs p .|. yoBAttacs p)
+          !kmd  = mkmd - ykmd
 
 promoW, promoB :: Square -> Square
 promoW s = 56 + (s .&. 7)
