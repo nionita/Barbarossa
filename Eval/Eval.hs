@@ -261,7 +261,7 @@ attCoef = listArray (0, 283) $ take zeros (repeat 0) ++ [ f x | x <- [0..63] ] +
           f x = let y = fromIntegral x :: Double
                 in round $ maxks * (2.92968750 - 0.03051758*y)*y*y / 4000
           zeros = 8
-          maxks = 4500
+          maxks = 4600
 
 kingSquare :: BBoard -> BBoard -> Square
 kingSquare kingsb colorp = firstOne $ kingsb .&. colorp
@@ -321,9 +321,9 @@ kingPlace ep p !ew = mad (ewKingPawn      ew) kpa .
           -- Long term: with pawns as blockers
           !kol = kingOpen yks (pawns p) mrooks mqueens
                - kingOpen mks (pawns p) yrooks yqueens
-          -- Short term: with own pieces as blockers
-          !kos = kingOpen yks (me p) mrooks mqueens
-               - kingOpen mks (yo p) yrooks yqueens
+          -- Short term: with own pieces and pawns as blockers
+          !kos = kingOpen yks (yo p .|. pawns p) mrooks mqueens
+               - kingOpen mks (me p .|. pawns p) yrooks yqueens
           -- King on pawns: more is better (now linear)
           pmkpa = popCount (myKAttacs p .&. pawns p)
           pykpa = popCount (yoKAttacs p .&. pawns p)
