@@ -284,7 +284,8 @@ materDiff p !ew = mad (ewMaterialDiff ew) md
 kingPlace :: EvalParams -> MyPos -> EvalWeights -> MidEnd -> MidEnd
 kingPlace ep p !ew = mad (ewKingPawn      ew) kpa .
                      mad (ewKingThreat    ew) ktr .
-                     mad (ewKingOpen      ew) ko .
+                     mad (ewKingOpenLong  ew) kol .
+                     mad (ewKingOpenShort ew) kos .
                      mad (ewKingPlaceCent ew) kcd .
                      mad (ewKingPlacePwns ew) kpd
     where !kcd = (mpl - ypl) `unsafeShiftR` epMaterBonusScale ep
@@ -316,26 +317,31 @@ kingPlace ep p !ew = mad (ewKingPawn      ew) kpa .
           !ypassed = passed p .&. yo p
           materFun m r q = (m * epMaterMinor ep + r * epMaterRook ep + q * epMaterQueen ep)
                                `unsafeShiftR` epMaterScale ep
-          !ko = adv - own
-          mwb = popCount $ bAttacs (pawns p) mks .&. nopawns
-          mwr = popCount $ rAttacs (pawns p) mks .&. nopawns
-          ywb = popCount $ bAttacs (pawns p) yks .&. nopawns
-          ywr = popCount $ rAttacs (pawns p) yks .&. nopawns
-          nopawns = complement $ pawns p
-          comb !oR !oQ !wb !wr = let r = oR * wr
-                                     q = oQ * (wb + wr)
-                                 in r + q*q
-          own = comb yrooks yqueens mwb mwr
-          adv = comb mrooks mqueens ywb ywr
+          -- King opennes - more is worse
+          -- Long term: with pawns as blockers
+          !kol = kingOpen yks (pawns p) mrooks mqueens
+               - kingOpen mks (pawns p) yrooks yqueens
+          -- Short term: with own pieces as blockers
+          !kos = kingOpen yks (me p) mrooks mqueens
+               - kingOpen mks (yo p) yrooks yqueens
           -- King on pawns: more is better (now linear)
           pmkpa = popCount (myKAttacs p .&. pawns p)
           pykpa = popCount (yoKAttacs p .&. pawns p)
           !kpa = pmkpa - pykpa
           -- Threat by king only pieces:
           -- pieces attacked by king and not defended by a pawn
+          nopawns = complement $ pawns p
           pmktr = popCount (myKAttacs p .&. yo p .&. nopawns `less` yoPAttacs p)
           pyktr = popCount (yoKAttacs p .&. me p .&. nopawns `less` myPAttacs p)
           !ktr = pmktr - pyktr
+
+kingOpen :: Square -> BBoard -> Int -> Int -> Int
+kingOpen !mks !blo !oR !oQ = r + q * q
+    where !r  = oR * wr
+          !q  = oQ * (wb + wr)
+          !wb = popCount $ bAttacs blo mks .&. nbl
+          !wr = popCount $ rAttacs blo mks .&. nbl
+          !nbl = complement blo
 
 promoW, promoB :: Square -> Square
 promoW s = 56 + (s .&. 7)
