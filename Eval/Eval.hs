@@ -336,12 +336,15 @@ kingPlace ep p !ew = mad (ewKingPawn      ew) kpa .
           !ktr = pmktr - pyktr
 
 kingOpen :: Square -> BBoard -> Int -> Int -> Int
-kingOpen !mks !blo !oR !oQ = r + q * q
-    where !r  = oR * wr
-          !q  = oQ * (wb + wr)
-          !wb = popCount $ bAttacs blo mks .&. nbl
-          !wr = popCount $ rAttacs blo mks .&. nbl
-          !nbl = complement blo
+kingOpen !mks !blo !oR !oQ
+    | oR == 0 && oQ == 0 = 0
+    | otherwise          = comb oR oQ
+    where comb cr cq = r + q * q
+              where !r  = cr * wr
+                    !q  = cq * (wb + wr)
+                    !wb = popCount $ bAttacs blo mks .&. nbl
+                    !wr = popCount $ rAttacs blo mks .&. nbl
+                    !nbl = complement blo
 
 promoW, promoB :: Square -> Square
 promoW s = 56 + (s .&. 7)
