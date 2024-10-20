@@ -50,7 +50,7 @@ weights = [
         ("ewMaterialDiff",    (   8,    8)),
         ("ewKingSafe",        (   1,    0)),
         ("ewKingOpenLong",    (   2,    0)),
-        ("ewKingOpenShort",   (   1,    4)),
+        ("ewKingOpenShort",   (   2,    4)),
         ("ewKingPlaceCent",   (   8,    1)),
         ("ewKingPlacePwns",   (   0,    4)),
         ("ewKingPawn",        (   3,   50)),
