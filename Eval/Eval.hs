@@ -261,7 +261,7 @@ attCoef = listArray (0, 283) $ take zeros (repeat 0) ++ [ f x | x <- [0..63] ] +
           f x = let y = fromIntegral x :: Double
                 in round $ maxks * (2.92968750 - 0.03051758*y)*y*y / 4000
           zeros = 8
-          maxks = 4000
+          maxks = 5000
 
 kingSquare :: BBoard -> BBoard -> Square
 kingSquare kingsb colorp = firstOne $ kingsb .&. colorp
