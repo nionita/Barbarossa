@@ -250,17 +250,10 @@ countRepetitions s = length f6 - uniq
 undoMove :: Game ()
 undoMove = modify $ \s -> s { stack = tail $ stack s }
 
--- We extend when last move:
--- - gives check
--- - captures last queen
--- - captures last rook when no queens
+-- We extend only when last move gives check
 exten :: MyPos -> MyPos -> Int
-exten p1 p2 | inCheck p2     = 1
-            | queens p2 /= 0 = 0
-            | queens p1 /= 0 = 1
-            | rooks  p2 /= 0 = 0
-            | rooks  p1 /= 0 = 1
-            | otherwise      = 0
+exten _ p2 | inCheck p2     = 1
+           | otherwise      = 0
 
 {--
 -- Parameters for pawn threats
