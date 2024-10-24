@@ -254,13 +254,17 @@ undoMove = modify $ \s -> s { stack = tail $ stack s }
 -- - gives check
 -- - captures last queen
 -- - captures last rook when no queens
+-- - captures last piece when no rooks
 exten :: MyPos -> MyPos -> Int
 exten p1 p2 | inCheck p2     = 1
             | queens p2 /= 0 = 0
             | queens p1 /= 0 = 1
             | rooks  p2 /= 0 = 0
             | rooks  p1 /= 0 = 1
+            | minors p2 /= 0 = 0
+            | minors p1 /= 0 = 1
             | otherwise      = 0
+    where minors p = knights p .|. bishops p
 
 {--
 -- Parameters for pawn threats
