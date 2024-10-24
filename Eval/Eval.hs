@@ -516,8 +516,8 @@ centerDiff p !ew = mad (ewCenterPAtts ew) pd .
           !mka = popCount $ myKAttacs p .&. excent
           !yka = popCount $ yoKAttacs p .&. excent
           !kd  = mka - yka
-          center = 0x0000003C3C000000
-          excent = 0x00003C3C3C3C0000
+          center = (fileD .|. fileE) .&. (row4 .|. row5)
+          excent = (fileC .|. fileD .|. fileE .|. fileF) .&. (row3 .|. row4 .|. row5 .|. row6)
 
 -------- Space for own pieces in our courtyard -----------
 

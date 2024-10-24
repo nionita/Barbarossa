@@ -67,14 +67,14 @@ weights = [
         ("ewCenterBAtts",     (  78,   11)),
         ("ewCenterRAtts",     (  14,   22)),	-- DSPSA ...
         ("ewCenterQAtts",     (  13,   53)),
-        ("ewCenterKAtts",     (   0,   40)),
+        ("ewCenterKAtts",     (   0,   50)),	-- 25% more - guess
         ("ewCenterNOcc",      ( 130,    0)),
         ("ewSpace",           (   1,    0)),
         ("ewAdvAtts",         (   0,   12)),
         ("ewWeakSq",          ( -32,    0)),
         ("ewWeakSqA",         ( 100,    0)),
-        ("ewIsolPawns",       ( -36, -113)),
-        ("ewIsolPassed",      ( -63, -143)),
+        ("ewIsolPawns",       ( -62, -160)),	-- guess
+        ("ewIsolPassed",      ( -62, -160)),	-- same as normal isolated - guess
         ("ewBackPawns",       (-108, -141)),
         ("ewBackPOpen",       ( -21,  -27)),
         ("ewEnpHanging",      ( -19,  -27)),
