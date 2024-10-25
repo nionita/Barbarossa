@@ -270,9 +270,13 @@ kingSquare kingsb colorp = firstOne $ kingsb .&. colorp
 ------ Material ------
 
 materDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-materDiff p !ew = mad (ewMaterialDiff ew) md
+materDiff p !ew = mad (ewMaterialDiff ew) md .
+                  mad (ewPieceNumber  ew) pd
     where !md | moving p == White =   mater p
               | otherwise         = - mater p
+          !pd = mypc - yopc
+          !mypc = popCount $ me p `less` pawns p
+          !yopc = popCount $ yo p `less` pawns p
 
 ------ King placement and opennes ------
 
