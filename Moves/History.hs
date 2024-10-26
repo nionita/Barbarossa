@@ -65,14 +65,13 @@ newHist = do
     U.thaw $ U.fromList $ map fromIntegral $ take vsize $ smallVals g
 
 -- History value: exponential
--- d is absolute depth, root = 1, so that cuts near root count more
--- For max depth = 20 we assume we will not get absolute depths over 30
--- (But if yes, we don't know what happens when dm is negative)
+-- d is absolute depth, root = 1, so cuts near root count more
+-- Limit the depth to avoid negative shift arguments
 {-# INLINE histw #-}
 histw :: Int -> Int32
 histw !d = 1 `unsafeShiftL` dm
-    where !dm = maxd - d
-          maxd = 31
+    where !dm = maxd - (min d maxd)
+          maxd = 30
 
 -- We don't use negative history (i.e. when move did not cut)
 toHist :: History -> Move -> Int -> IO ()

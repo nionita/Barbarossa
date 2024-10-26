@@ -327,21 +327,19 @@ incrementRootMoveNumber = modify $ \s -> s { rootmn = rootmn s + 1 }
 
 -- {-# INLINE qsDelta #-}
 qsDelta :: Int -> Game Bool
-qsDelta !a = do
-    p <- getPos
-    if matPiece White Bishop >= a
-       then return False
-       else if matPiece White Queen < a
-               then return True
-               else do
-                   let !ua = yo p .&. myAttacs p	-- under attack!
-                   if ua .&. queens p /= 0	-- TODO: need to check also pawns on 7th!
-                      then return False
-                      else if matPiece White Rook < a
-                              then return True
-                              else if ua .&. rooks p /= 0
-                                      then return False
-                                      else return True
+qsDelta !a
+    | matPiece White Bishop >= a = return False
+    | matPiece White Queen  <  a = return True
+    | otherwise = do
+         p <- getPos
+         let !ua = yo p .&. myAttacs p	-- under attack!
+         if ua .&. queens p /= 0	-- TODO: need to check also pawns on 7th!
+            then return False
+            else if matPiece White Rook < a
+                    then return True
+                    else if ua .&. rooks p /= 0
+                            then return False
+                            else return True
 
 {-# INLINE ttRead #-}
 ttRead :: Game (Int, Int, Int, Move, Int64)
