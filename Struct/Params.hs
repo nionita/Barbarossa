@@ -50,46 +50,46 @@ weights = [
         ("ewMaterialDiff",    (   8,    8)),
         ("ewKingSafe",        (   1,    0)),
         ("ewKingOpen",        (   2,    4)),
-        ("ewKingPlaceCent",   (   8,    1)),
-        ("ewKingPlacePwns",   (   0,    4)),
-        ("ewKingPawn",        (   3,   50)),
+        ("ewKingPlaceCent",   (   4,    1)),
+        ("ewKingPlacePwns",   (   0,    2)),
+        ("ewKingPawn",        (   1,   25)),
         ("ewKingThreat",      (   0,  300)),
-        ("ewRookHOpen",       ( 162,  182)),	-- DSPSA with Adadelta
-        ("ewRookOpen",        ( 205,  178)),	-- 20k steps, depth 4,
-        ("ewRookConn",        (  98,    1)),
-        ("ewRook7th",         ( 201,  161)),	-- niu=0.99, eps=1E-6
-        ("ewMobilityKnight",  (  70,   54)),	-- texel2 / o: 62, 47
-        ("ewMobilityBishop",  (  67,   32)),	-- texel2 / o: 61, 29
-        ("ewMobilityRook",    (  32,   40)),	-- texel2 / o: 32, 39
-        ("ewMobilityQueen",   (   4,   22)),	-- texel2 / o:  4, 22
-        ("ewCenterPAtts",     (  73,   57)),
-        ("ewCenterNAtts",     (  33,    0)),
-        ("ewCenterBAtts",     (  78,   11)),
-        ("ewCenterRAtts",     (  14,   22)),	-- DSPSA ...
-        ("ewCenterQAtts",     (  13,   53)),
-        ("ewCenterKAtts",     (   0,   40)),
-        ("ewCenterNOcc",      ( 130,    0)),
+        ("ewRookHOpen",       (  81,   91)),	-- half
+        ("ewRookOpen",        ( 102,   89)),	-- half
+        ("ewRookConn",        (  49,    0)),
+        ("ewRook7th",         ( 100,   80)),	-- half
+        ("ewMobilityKnight",  (  35,   27)),	-- half
+        ("ewMobilityBishop",  (  34,   16)),	-- half
+        ("ewMobilityRook",    (  16,   20)),	-- half
+        ("ewMobilityQueen",   (   2,   11)),	-- half
+        ("ewCenterPAtts",     (  36,   28)),
+        ("ewCenterNAtts",     (  16,    0)),
+        ("ewCenterBAtts",     (  39,    5)),
+        ("ewCenterRAtts",     (   7,   11)),	-- half
+        ("ewCenterQAtts",     (   6,   26)),
+        ("ewCenterKAtts",     (   0,   20)),
+        ("ewCenterNOcc",      (  65,    0)),
         ("ewSpace",           (   1,    0)),
-        ("ewAdvAtts",         (   0,   12)),
-        ("ewWeakSq",          ( -32,    0)),
-        ("ewWeakSqA",         ( 100,    0)),
-        ("ewIsolPawns",       ( -36, -113)),
-        ("ewIsolPassed",      ( -63, -143)),
-        ("ewBackPawns",       (-108, -141)),
-        ("ewBackPOpen",       ( -21,  -27)),
-        ("ewEnpHanging",      ( -19,  -27)),
-        ("ewEnpEnPrise",      ( -29,  -26)),
-        ("ewEnpAttacked",     (  -2,  -14)),
-        ("ewWepTotal",        ( 150,    0)),
-        ("ewWepAttacked",     (   0,  200)),
-        ("ewBishopPair",      ( 386,  323)),
-        ("ewBishopPawns",     ( -25,  -54)),
-        ("ewRookPawn",        ( -44,  -32)),
-        ("ewAdvPawn5",        (  14,  106)),
-        ("ewAdvPawn6",        ( 352,  333)),
-        ("ewPawnBlockP",      (-112,  -92)),
-        ("ewPawnBlockO",      ( -23,  -26)),
-        ("ewPawnBlockA",      ( -19,  -69)),
+        ("ewAdvAtts",         (   0,    6)),
+        ("ewWeakSq",          ( -16,    0)),
+        ("ewWeakSqA",         (  50,    0)),
+        ("ewIsolPawns",       ( -18,  -56)),
+        ("ewIsolPassed",      ( -31,  -71)),
+        ("ewBackPawns",       ( -54,  -70)),
+        ("ewBackPOpen",       ( -10,  -13)),
+        ("ewEnpHanging",      (  -9,  -13)),
+        ("ewEnpEnPrise",      ( -14,  -13)),
+        ("ewEnpAttacked",     (  -1,   -7)),
+        ("ewWepTotal",        (  75,    0)),
+        ("ewWepAttacked",     (   0,  100)),
+        ("ewBishopPair",      ( 193,  161)),
+        ("ewBishopPawns",     ( -12,  -27)),
+        ("ewRookPawn",        ( -22,  -16)),
+        ("ewAdvPawn5",        (   7,   53)),
+        ("ewAdvPawn6",        ( 176,  161)),
+        ("ewPawnBlockP",      ( -56,  -46)),
+        ("ewPawnBlockO",      ( -12,  -13)),
+        ("ewPawnBlockA",      (  -9,  -35)),
         ("ewPassPawnLev",     (   2,    8))
     ]
 
