@@ -1,10 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 module Moves.Moves (
-    movesInit, pAttacs, pawnWhiteAttacks, pawnBlackAttacks,
-    fAttacs,
-    pMovs,
-    kAttacs, qAttacs, rAttacs, bAttacs, nAttacs,
-    pAll1Moves, pAll2Moves
+    movesInit, pAttacs, pawnWhiteAttacks, pawnBlackAttacks, targetPawnMoves,
+    fAttacs, kAttacs, qAttacs, rAttacs, bAttacs, nAttacs
     ) where
 
 import Data.Array.Base
@@ -81,30 +78,6 @@ rAttacs = smoves rookMoves
 bAttacs = smoves bishopMoves
 qAttacs occ sq = smoves bishopMoves occ sq .|. smoves rookMoves occ sq
 
--- The moves of a white pawn (no captures)
-pawnSlideW :: Square -> BBoard -> BBoard
-pawnSlideW !sq oc
-    | bb1 .&. oc /= 0               = 0
-    | row /= sec || bb2 .&. oc /= 0 = bb1
-    | otherwise                     = bb12
-    where bb1 = 1 `unsafeShiftL` (sq + 8)
-          !bb2 = bb1 `unsafeShiftL` 8
-          !bb12 = bb1 .|. bb2
-          !row = sq `unsafeShiftR` 3
-          sec = 1
-
--- The moves of a black pawn (no captures)
-pawnSlideB :: Square -> BBoard -> BBoard
-pawnSlideB !sq oc
-    | bb1 .&. oc /= 0               = 0
-    | row /= sec || bb2 .&. oc /= 0 = bb1
-    | otherwise                     = bb12
-    where bb1 = 1 `unsafeShiftL` (sq - 8)	-- here L is ok! Replaces a 'bit sq `shiftR` 8'
-          !bb2 = bb1 `unsafeShiftR` 8
-          !bb12 = bb1 .|. bb2
-          !row = sq `unsafeShiftR` 3
-          sec = 6
-
 -- Pawn attacs
 pawnWhiteAttacks, pawnBlackAttacks :: BBoard -> BBoard
 pawnWhiteAttacks !b = (bbLeft b .|. bbRight b) `unsafeShiftL` 8
@@ -117,25 +90,32 @@ pAttacs White sq = pawnWhiteAttacks $ uBit sq
 pAttacs Black sq = pawnBlackAttacks $ uBit sq
 {-# INLINE pAttacs #-}
 
-pMovs :: Square -> Color -> BBoard -> BBoard
-pMovs s White o = pawnSlideW s o
-pMovs s Black o = pawnSlideB s o
+-- From / to regular pawn moves (no captures) to the given squares (bitboard)
+-- Used to block a check by a pawn move
+-- Because some pawns can be moved 2 squares, we must have the occupancy
+-- We go back from the target squares to find the source squares
+{-# INLINE targetPawnMoves #-}
+targetPawnMoves :: Color -> BBoard -> BBoard -> BBoard -> [(Square, Square)]
+targetPawnMoves White pws occ bb = pAll1Moves White (pws .&. bb1) ++ pAll2Moves White (pws .&. bb2)
+    where bb1 = (bb `less` occ) `unsafeShiftR` 8
+          bb2 = ((bb1 `less` occ) `unsafeShiftR` 8) .&. row2
+targetPawnMoves Black pws occ bb = pAll1Moves Black (pws .&. bb1) ++ pAll2Moves Black (pws .&. bb2)
+    where bb1 = (bb `less` occ) `unsafeShiftL` 8
+          bb2 = ((bb1 `less` occ) `unsafeShiftL` 8) .&. row7
 
-pAll1Moves :: Color -> BBoard -> BBoard -> [(Square, Square)]
-pAll1Moves White !ps !occ = map f $ bbToSquares $ (ps `unsafeShiftL` 8) `less` occ
-    where f !x = (x - 8, x)
-pAll1Moves Black !ps !occ = map f $ bbToSquares $ (ps `unsafeShiftR` 8) `less` occ
-    where f !x = (x + 8, x)
+-- Generate from / to regular pawn moves with 1 step, given only pawns that are not blocked
+-- This is not the general case! To generate all possible pawn moves, use targetPawnMoves with
+-- whole board (0xFFFF...) as a target
+pAll1Moves :: Color -> BBoard -> [(Square, Square)]
+pAll1Moves White ps = map (\x -> (x - 8, x)) $ bbToSquares $ ps `unsafeShiftL` 8
+pAll1Moves Black ps = map (\x -> (x + 8, x)) $ bbToSquares $ ps `unsafeShiftR` 8
 
-pAll2Moves :: Color -> BBoard -> BBoard -> [(Square, Square)]
-pAll2Moves White ps occ = map f $ bbToSquares $ (ps2 `unsafeShiftL` 16) `less` occ2
-    where ps2 = ps .&. 0x000000000000FF00
-          occ2 = occ .|. (occ `unsafeShiftL` 8)
-          f !x = (x - 16, x)
-pAll2Moves Black ps occ = map f $ bbToSquares $ (ps2 `unsafeShiftR` 16) `less` occ2
-    where ps2 = ps .&. 0x00FF000000000000
-          occ2 = occ .|. (occ `unsafeShiftR` 8)
-          f !x = (x + 16, x)
+-- Generate from / to regular pawn moves with 2 steps, given only pawns on second rank that are not blocked
+-- This is not the general case! To generate all possible pawn moves, use targetPawnMoves with
+-- whole board (0xFFFF...) as a target
+pAll2Moves :: Color -> BBoard -> [(Square, Square)]
+pAll2Moves White ps = map (\x -> (x - 16, x)) $ bbToSquares $ ps `unsafeShiftL` 16
+pAll2Moves Black ps = map (\x -> (x + 16, x)) $ bbToSquares $ ps `unsafeShiftR` 16
 
 {-# INLINE fAttacs #-}
 fAttacs :: Square -> Piece -> BBoard -> BBoard  -- piece attacs except pawn

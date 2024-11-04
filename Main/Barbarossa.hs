@@ -38,7 +38,7 @@ import Eval.FileParams (makeEvalState)
 progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
-progVersion = "0.6.0"
+progVersion = "0.7.0"
 progVerSuff = ""
 
 data Options = Options {
@@ -48,11 +48,14 @@ data Options = Options {
         optAFenFile :: Maybe FilePath	-- annotated fen file for self analysis
     }
 
+logOptDefault :: LogLevel
+logOptDefault = if length progVerSuff == 0 then LogNever else LogInfo
+
 defaultOptions :: Options
 defaultOptions = Options {
         optConfFile = Nothing,
         optParams   = [],
-        optLogging  = LogNever,
+        optLogging  = logOptDefault,
         optAFenFile = Nothing
     }
 
@@ -78,10 +81,10 @@ addAFile fi opt = opt { optAFenFile = Just fi }
 
 options :: [OptDescr (Options -> Options)]
 options = [
-        Option "c" ["config"] (ReqArg setConfFile "STRING") "Configuration file",
-        Option "l" ["loglev"] (ReqArg setLogging "STRING")  "Logging level from 0 (debug) to 5 (never)",
-        Option "p" ["param"]  (ReqArg addParam "STRING")    "Eval/search/time parameters: name=value,...",
-        Option "a" ["analyse"] (ReqArg addAFile "STRING")   "Analysis file"
+        Option "c" ["config"]  (ReqArg setConfFile "STRING") "Configuration file",
+        Option "l" ["loglev"]  (ReqArg setLogging "STRING")  "Logging level from 0 (debug) to 5 (never)",
+        Option "p" ["param"]   (ReqArg addParam "STRING")    "Eval/search/time parameters: name=value,...",
+        Option "a" ["analyse"] (ReqArg addAFile "STRING")    "Analysis file"
     ]
 
 theOptions :: IO (Options, [String])

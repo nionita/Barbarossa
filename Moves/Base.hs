@@ -35,6 +35,7 @@ import Eval.Eval
 import Moves.ShowMe
 import Moves.History
 import Moves.Notation
+import Moves.Moves
 
 {-# INLINE nearmate #-}
 nearmate :: Int -> Bool
@@ -87,11 +88,11 @@ genMoves d = do
        else do
             h <- gets hist
             let l0 = genMoveCast p
-                l1 = genMovePromo p
+                (l1q, l1r) = genMovePromo p
                 (l2w, l2l) = genMoveCaptWL p
                 l3 = histSortMoves d h $ genMoveNCapt p
             -- Loosing captures after non-captures
-            return (l1 ++ l2w, l0 ++ l3 ++ l2l)
+            return (l1q ++ l2w, l1r ++ l0 ++ l3 ++ l2l)
 
 -- Generate only tactical moves, i.e. promotions & captures
 -- Needed only in QS, when we know we are not in check
@@ -100,12 +101,12 @@ genMoves d = do
 genTactMoves :: Bool -> Game [Move]
 genTactMoves front = do
     p <- getPos
-    let l1  = genMovePromo p
+    let (l1q, _) = genMovePromo p
         l2w = fst $ genMoveCaptWL p
         l3  = genMoveNCaptToCheck p
     if front
-       then return $ l1 ++ l2w ++ l3
-       else return $ l1 ++ l2w
+       then return $ l1q ++ l2w ++ l3
+       else return $ l1q ++ l2w
 
 -- Generate only escape moves: needed only in QS when we know we have to escape
 genEscapeMoves :: Game [Move]
@@ -362,7 +363,9 @@ ttStore !deep !tp !sc !bestm !nds = do
     s <- get
     p <- getPos
     -- We use the type: 0 - upper limit, 1 - lower limit, 2 - exact score
-    liftIO $ writeCache (hash s) (zobkey p) deep tp sc bestm nds
+    -- Warning: depth has 6 bit in TT (so max 64)! We are currently still far from this,
+    -- but by summing different paths this could happen: so limit it here
+    liftIO $ writeCache (hash s) (zobkey p) (min 40 deep) tp sc bestm nds
 
 -- History heuristic table update when beta cut
 betaCut :: Int -> Move -> Game ()
@@ -396,7 +399,18 @@ canPruneMove p m
     | not (moveIsNormal m) = False
     | moveIsCapture p m    = False
     | movePassed p m       = False
-    | otherwise            = not $ moveChecks p m
+    | moveChecks p m       = False
+    | myQAttacs p == 0     = True	-- the rest makes sense only with own queen on board
+    | otherwise            = not $ newQueenAttack p m
+
+-- A move that initiates a new queen attack will not be pruned
+newQueenAttack :: MyPos -> Move -> Bool
+newQueenAttack p m
+    | myAttacs  p .&. yoKAttacs p == 0 = False	-- not enough pressure
+    | myQAttacs p .&. yoKAttacs p /= 0 = False	-- already attacked
+    | movePiece m /= Queen             = False	-- not quite right: it could be a discovered new attack
+    | otherwise                        = bAttacs (occup p) (toSquare m) .&. yoKAttacs p /= 0
+                                      || rAttacs (occup p) (toSquare m) .&. yoKAttacs p /= 0
 
 logMes :: String -> Game ()
 logMes s = lift $ talkToContext . LogMes $ s
@@ -411,10 +425,10 @@ showStack :: Int -> [MyPos] -> String
 showStack n = concatMap showMyPos . take n
 
 talkToContext :: Comm -> CtxIO ()
-talkToContext (LogMes s)       = ctxLog LogInfo s
-talkToContext (BestMv a b c d) = informGui a b c d
-talkToContext (CurrMv a b)     = informGuiCM a b
-talkToContext (InfoStr s)      = informGuiString s
+talkToContext (LogMes s)         = ctxLog LogInfo s
+talkToContext (BestMv a b c d e) = informGuiBM a b c d e
+talkToContext (CurrMv a b)       = informGuiCM a b
+talkToContext (InfoStr s)        = informGuiSt s
 
 timeFromContext :: CtxIO Int
 timeFromContext = do

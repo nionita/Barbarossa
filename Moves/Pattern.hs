@@ -1,5 +1,5 @@
 module Moves.Pattern (
-        genArray,
+        genArray, regPawnsBB,
         row1,  row2,  row3,  row4,  row5,  row6,  row7,  row8,
         fileA, fileB, fileC, fileD, fileE, fileF, fileG, fileH,
         bbLeft, bbRight,
@@ -30,6 +30,9 @@ fileE = 0x1010101010101010
 fileF = 0x2020202020202020
 fileG = 0x4040404040404040
 fileH = 0x8080808080808080
+
+regPawnsBB :: BBoard
+regPawnsBB = row2 .|. row3 .|. row4 .|. row5 .|. row6 .|. row7
 
 rookFiles :: BBoard
 rookFiles = fileA .|. fileH

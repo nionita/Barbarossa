@@ -63,12 +63,11 @@ normalEval p !sti = sc
           ew     = esEWeights sti
           !gph   = gamePhase p
           !mide1 = materDiff p ew (MidEnd 0 0)
-          !mide2 = evalRedundance p ew mide1
+          !mide2 = evalBishops p ew mide1
           !mide3 = evalRookPawn p ew mide2
           !mide4 = kingSafe p ew mide3
           !mide5 = kingPlace ep p ew mide4
-          !mide6 = lastline p ew mide5
-          !mide7 = mobiLity p ew mide6
+          !mide7 = mobiLity p ew mide5
           !mide8 = centerDiff p ew mide7
           !mide9 = spaceDiff p ew mide8
           !midea = adversDiff p ew mide9
@@ -251,18 +250,18 @@ ksSide !yop !yok !myp !myn !myb !myr !myq !myk !mya
                     !ixt = ixm + c + ksShift - freco
                     ksShift = 13
 
--- We take the maximum of 272 because:
--- Quali max: 8 * (1 + 3 + 3 + 5 + 10 + 3) = 200
+-- We take the maximum of 283 because:
+-- Quali max: 8 * (1 + 3 + 3 + 5 + 7 + 3) = 176
 -- Flag max: 6
--- 6 * 200 / 4 + 6 + 13 = 319
+-- 6 * 176 / 4 + 6 + 13 = 283
 attCoef :: UArray Int Int32
-attCoef = listArray (0, 319) $ take zeros (repeat 0) ++ [ f x | x <- [0..63] ] ++ repeat (f 63)
+attCoef = listArray (0, 283) $ take zeros (repeat 0) ++ [ f x | x <- [0..63] ] ++ repeat (f 63)
     where -- Without the scaling, f will take max value of 4000 for 63
           f :: Int -> Int32
           f x = let y = fromIntegral x :: Double
                 in round $ maxks * (2.92968750 - 0.03051758*y)*y*y / 4000
           zeros = 8
-          maxks = 4200
+          maxks = 4500
 
 kingSquare :: BBoard -> BBoard -> Square
 kingSquare kingsb colorp = firstOne $ kingsb .&. colorp
@@ -486,9 +485,12 @@ mobDiff p mylr yolr mypb yopb ew = mad (ewMobilityKnight ew) n .
 ------ Center control ------
 
 -- This function is already optimised
+-- King & minors: take extended center
+-- For knights: also position on extended center
 centerDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 centerDiff p !ew = mad (ewCenterPAtts ew) pd .
                    mad (ewCenterNAtts ew) nd .
+                   mad (ewCenterNOcc  ew) no .
                    mad (ewCenterBAtts ew) bd .
                    mad (ewCenterRAtts ew) rd .
                    mad (ewCenterQAtts ew) qd .
@@ -496,11 +498,14 @@ centerDiff p !ew = mad (ewCenterPAtts ew) pd .
     where !mpa = popCount $ myPAttacs p .&. center
           !ypa = popCount $ yoPAttacs p .&. center
           !pd  = mpa - ypa
-          !mna = popCount $ myNAttacs p .&. center
-          !yna = popCount $ yoNAttacs p .&. center
+          !mna = popCount $ myNAttacs p .&. excent
+          !yna = popCount $ yoNAttacs p .&. excent
           !nd  = mna - yna
-          !mba = popCount $ myBAttacs p .&. center
-          !yba = popCount $ yoBAttacs p .&. center
+          !mno = popCount $ me p .&. excent .&. knights p
+          !yno = popCount $ yo p .&. excent .&. knights p
+          !no  = mno - yno
+          !mba = popCount $ myBAttacs p .&. excent
+          !yba = popCount $ yoBAttacs p .&. excent
           !bd  = mba - yba
           !mra = popCount $ myRAttacs p .&. center
           !yra = popCount $ yoRAttacs p .&. center
@@ -508,10 +513,11 @@ centerDiff p !ew = mad (ewCenterPAtts ew) pd .
           !mqa = popCount $ myQAttacs p .&. center
           !yqa = popCount $ yoQAttacs p .&. center
           !qd  = mqa - yqa
-          !mka = popCount $ myKAttacs p .&. center
-          !yka = popCount $ yoKAttacs p .&. center
+          !mka = popCount $ myKAttacs p .&. excent
+          !yka = popCount $ yoKAttacs p .&. excent
           !kd  = mka - yka
           center = 0x0000003C3C000000
+          excent = 0x00003C3C3C3C0000
 
 -------- Space for own pieces in our courtyard -----------
 
@@ -555,14 +561,23 @@ spaceVals = listArray (0, 24) $ map f [1..25]
 -------- Attacks to adverse squares ----------
 
 adversDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-adversDiff p !ew = mad (ewAdvAtts ew) ad
+adversDiff p !ew = mad (ewAdvAtts ew) ad .
+                   mad (ewWeakSq  ew) ws .
+                   mad (ewWeakSqA ew) wa
     where !ad = md - yd
           !md = popCount $ myAttacs p .&. yoH
           !yd = popCount $ yoAttacs p .&. myH
+          !ws = popCount wsm - popCount wsy
+          !wsm = myH `less` (myAttacs p .|. ah45)
+          !wsy = yoH `less` (yoAttacs p .|. ah45)
+          !wa  = wam - way
+          !wam = popCount $ myAttacs p .&. wsy
+          !way = popCount $ yoAttacs p .&. wsm
           (myH, yoH) | moving p == White = (ah14, ah58)
                      | otherwise         = (ah58, ah14)
           ah14 = 0xFFFFFFFF
           ah58 = 0xFFFFFFFF00000000
+          ah45 = row4 .|. row5
 
 -------- Isolated pawns --------
 
@@ -683,24 +698,12 @@ enPrise p !ew = mad (ewEnpHanging  ew) ha .
           !wp = popCount ywp - popCount mwp
           !wa = popCount ywa - popCount mwa
 
------- Last Line ------
-
--- Only for minor figures (queen is free to stay where it wants)
-lastline :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-lastline p !ew = mad (ewLastLinePenalty ew) cdiff
-    where !whl = popCount $ me p .&. cb
-          !bll = popCount $ yo p .&. cb
-          !cb = (knights p .|. bishops p) .&. lali
-          lali = 0xFF000000000000FF	-- approximation!
-          !cdiff = bll - whl
-
------- Redundance: bishop pair and rook redundance ------
+------ Bishops: bishop pair and bad bishops ------
 
 -- This function is optimised
-evalRedundance :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-evalRedundance p !ew = mad (ewBishopPawns    ew) pa .
-                       mad (ewBishopPair     ew) bp .
-                       mad (ewRedundanceRook ew) rr
+evalBishops :: MyPos -> EvalWeights -> MidEnd -> MidEnd
+evalBishops p !ew = mad (ewBishopPawns ew) pa .
+                    mad (ewBishopPair  ew) bp
     where !wbl = bishops p .&. me p .&. lightSquares
           !wbd = bishops p .&. me p .&. darkSquares
           !bbl = bishops p .&. yo p .&. lightSquares
@@ -717,11 +720,6 @@ evalRedundance p !ew = mad (ewBishopPawns    ew) pa .
           !ypal = bpbl * (popCount (pawns p .&. lightSquares) - pawnEven)
           !ypad = bpbd * (popCount (pawns p .&. darkSquares) - pawnEven)
           !pa = mpal + mpad - ypal - ypad
-          !wro = rooks p .&. me p
-          !bro = rooks p .&. yo p
-          !wrr = popCount wro `unsafeShiftR` 1	-- tricky here: 2, 3 are the same...
-          !brr = popCount bro `unsafeShiftR` 1	-- and here
-          !rr  = wrr - brr
           pawnEven = 6
 
 {--

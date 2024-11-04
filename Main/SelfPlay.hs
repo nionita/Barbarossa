@@ -43,8 +43,9 @@ data Options = Options {
         optPlayer2  :: Maybe String,	-- player 2 config file
         optConfFile :: Maybe String,	-- config file
         optParams   :: [String],	-- list of eval parameter assignements
-        optNThreads :: Int,		-- number of threads - not used for self play now
+        -- optNThreads :: Int,		-- number of threads - not used for self play now
         optDepth    :: Int,		-- search depth for self play
+        optLogLev   :: LogLevel,		-- log level: 0 (debug) to 5 (never)
         optNodes    :: Maybe Int,	-- search nodes per move for self play
         optNSkip    :: Maybe Int,	-- number of fens to skip (Nothing = none)
         optNFens    :: Maybe Int,	-- number of fens (Nothing = all)
@@ -59,8 +60,9 @@ defaultOptions = Options {
         optPlayer2  = Nothing,
         optConfFile = Nothing,
         optParams   = [],
-        optNThreads = 1,
+        -- optNThreads = 1,
         optDepth    = 1,
+        optLogLev   = LogNever,		-- default: never log
         optNodes    = Nothing,
         optNSkip    = Nothing,
         optNFens    = Nothing,
@@ -81,14 +83,16 @@ setConfFile cf opt = opt { optConfFile = Just cf }
 addParam :: String -> Options -> Options
 addParam pa opt = opt { optParams = pa : optParams opt }
 
-addNThrds :: String -> Options -> Options
-addNThrds ns opt = opt { optNThreads = read ns }
+-- addNThrds :: String -> Options -> Options
+-- addNThrds ns opt = opt { optNThreads = read ns }
 
 addDepth :: String -> Options -> Options
 addDepth ns opt = opt { optDepth = read ns }
 
+-- When we use nodes, set the depth high enough to ignore it
+-- If we want to limit also the depth: set depth after nodes
 addNodes :: String -> Options -> Options
-addNodes ns opt = opt { optNodes = Just $ read ns }
+addNodes ns opt = opt { optNodes = Just $ read ns, optDepth = 40 }
 
 addNSkip :: String -> Options -> Options
 addNSkip ns opt = opt { optNSkip = Just $ read ns }
@@ -105,20 +109,32 @@ addIFile fi opt = opt { optAFenFile = fi }
 addOFile :: FilePath -> Options -> Options
 addOFile fi opt = opt { optFOutFile = fi }
 
+setLogLev :: String -> Options -> Options
+setLogLev lv opt = opt { optLogLev = llev }
+    where llev = case levi of
+                     0 -> DebugSearch
+                     1 -> DebugUci
+                     2 -> LogInfo
+                     3 -> LogWarning
+                     4 -> LogError
+                     _ -> if levi < 0 then DebugSearch else LogNever
+          levi = read lv :: Int
+
 options :: [OptDescr (Options -> Options)]
 options = [
         Option "a" ["player1"] (ReqArg setPlayer1 "STRING") "Configuration file for player 1",
         Option "b" ["player2"] (ReqArg setPlayer2 "STRING") "Configuration file for player 2",
         Option "c" ["config"]  (ReqArg setConfFile "STRING") "Configuration file",
-        Option "p" ["param"]   (ReqArg addParam "STRING")    "Eval/search/time params: name=value,...",
-        Option "m" ["match"]   (ReqArg addMatch "STRING") "Start match between 2 configs in the given directory",
-        Option "i" ["input"]   (ReqArg addIFile "STRING")     "Input (fen) file",
-        Option "o" ["output"]  (ReqArg addOFile "STRING")    "Output file",
-        Option "d" ["depth"]   (ReqArg addDepth "STRING")  "Search depth",
-        Option "n" ["nodes"]   (ReqArg addNodes "STRING")  "Search nodes budget per move",
-        Option "t" ["threads"] (ReqArg addNThrds "STRING")  "Number of threads",
-        Option "s" ["skip"]    (ReqArg addNSkip "STRING")      "Number of fens to skip",
-        Option "f" ["fens"]    (ReqArg addNFens "STRING")      "Number of fens to play"
+        Option "p" ["param"]   (ReqArg addParam "STRING") "Eval/search/time params: name=value,...",
+        Option "m" ["match"]   (ReqArg addMatch "STRING") "Match between 2 configs in the given directory",
+        Option "i" ["input"]   (ReqArg addIFile "STRING") "Input (fen) file",
+        Option "o" ["output"]  (ReqArg addOFile "STRING") "Output file",
+        Option "d" ["depth"]   (ReqArg addDepth "STRING") "Search depth",
+        Option "n" ["nodes"]   (ReqArg addNodes "STRING") "Search nodes budget per move",
+        -- Option "t" ["threads"] (ReqArg addNThrds "STRING") "Number of threads",
+        Option "s" ["skip"]    (ReqArg addNSkip "STRING")  "Number of fens to skip",
+        Option "f" ["fens"]    (ReqArg addNFens "STRING")  "Number of fens to play",
+        Option "l" ["log"]     (ReqArg setLogLev "STRING") "Log leven from 0 to 5 (debug to never)"
     ]
 
 theOptions :: IO (Options, [String])
@@ -156,7 +172,7 @@ initContext opts = do
             writer = wchan,
             strttm = clktm,
             change = ctxVar,
-            loglev = if debug then DebugSearch else LogNever,
+            loglev = if debug then DebugSearch else optLogLev opts,
             evpid  = parc
          }
     return context
@@ -208,9 +224,9 @@ matchFile opts dir = do
             liftIO $ putStrLn "For a match we need 2 configs as players"
             return (GameScore 0 0 0)
         Just (id1, id2) -> do
-            ctxLog LogInfo $ "Players from directory " ++ dir
-            ctxLog LogInfo $ "Player 1 " ++ id1
-            ctxLog LogInfo $ "Player 2 " ++ id2
+            ctxLog LogWarning $ "Players from directory " ++ dir
+            ctxLog LogWarning $ "Player 1 " ++ id1
+            ctxLog LogWarning $ "Player 2 " ++ id2
             fens <- getFens (optAFenFile opts) (fromMaybe 0 (optNSkip opts)) (fromMaybe 1 (optNFens opts))
             (eval1, eval2) <- liftIO $ do
                 (_, eval1) <- makeEvalState (Just id1) [] "progver" "progsuf"
@@ -302,12 +318,8 @@ balancedPos hi ho mn k () = do
            let crts = crtStatus chg
                sini = posToState pos (hash crts) (hist crts) (evalst crts)
            modifyChanging $ \c -> c { crtStatus = sini }
-           (msc, path, _) <- iterativeDeepening 1 Nothing
-           case msc of
-               Nothing -> return ()
-               Just sc -> if null path
-                             then return ()
-                             else when (abs sc <= 150) $ lift $ hPutStrLn ho fen
+           (sc, path, _) <- iterativeDeepening 1 Nothing
+           when (not (null path) && abs sc <= 150) $ lift $ hPutStrLn ho fen
            return (True, ())
 
 oracleAndFeats :: Int -> Handle -> Handle -> Maybe Int -> Int -> () -> CtxIO (Bool, ())
@@ -415,40 +427,36 @@ autoPlayToEnd d pos = do
     go (0::Int)
     where go i = do
               -- Search to depth:
-              (msc, path, _) <- iterativeDeepening d Nothing
+              (sc, path, _) <- iterativeDeepening d Nothing
               if null path
                  then do
                      when (i>0) $ ctxLog LogError $ "Empty path when playing"
                      return Nothing	-- should not happen when i > 0
-                 else case msc of
-                          Nothing -> do
-                              when (i>0) $ ctxLog LogError $ "No score when playing"
-                              return Nothing
-                          Just sc -> do
-                              let j = i+1
-                                  m = head path
-                              ctxLog LogInfo $ "Real move " ++ show j ++ ": " ++ show m
-                              chg   <- readChanging
-                              sfin' <- execCState (doRealMove m) (crtStatus chg)
-                              let p = head $ stack sfin'
-                              if sc == 19999	-- mate in 1
-                                 then if tacticalPos p
-                                         then do
-                                             let r = if moving p == White then -1 else 1
-                                             ctxLog LogInfo $ "Mate (" ++ show r ++ ")"
-                                             return $ Just r
-                                         else do
-                                             ctxLog LogError $ "Mate announced, not in check!"
-                                             return Nothing
-                                 else if remis50Moves p
-                                         then do
-                                             ctxLog LogInfo $ "Remis 50 moves"
-                                             return $ Just 0
-                                         else do
-                                             hi <- liftIO newHist
-                                             let sfin = sfin' { hist = hi }
-                                             modifyChanging $ \s -> s { crtStatus = sfin }
-                                             go j
+                 else do
+                     let j = i+1
+                         m = head path
+                     ctxLog LogInfo $ "Real move " ++ show j ++ ": " ++ show m
+                     chg   <- readChanging
+                     sfin' <- execCState (doRealMove m) (crtStatus chg)
+                     let p = head $ stack sfin'
+                     if sc == 19999	-- mate in 1
+                        then if tacticalPos p
+                                then do
+                                    let r = if moving p == White then -1 else 1
+                                    ctxLog LogInfo $ "Mate (" ++ show r ++ ")"
+                                    return $ Just r
+                                else do
+                                    ctxLog LogError $ "Mate announced, not in check!"
+                                    return Nothing
+                        else if remis50Moves p
+                                then do
+                                    ctxLog LogInfo $ "Remis 50 moves"
+                                    return $ Just 0
+                                else do
+                                    hi <- liftIO newHist
+                                    let sfin = sfin' { hist = hi }
+                                    modifyChanging $ \s -> s { crtStatus = sfin }
+                                    go j
 
 -- Status kept for each "player" during a game
 data Player = Player {
@@ -471,16 +479,13 @@ stopNodes :: Maybe Int -> Int -> Bool
 stopNodes Nothing _    = False
 stopNodes (Just n1) n2 = n2 >= n1
 
--- Play the given position to the end using fixed depth with 2 configurations
--- This function can be used only to optimize eval weights but not time or search parameters
--- The result score is from White p.o.v.:
---  0: remis
--- +1: white wins
--- -1: black wins
+-- Play the given position to the end using node budget or fixed depth with 2 configurations
+-- It can be used only to optimize eval weights but not time or search parameters
+-- The result contains the winner (if any) and a reason for termination
 playGame :: Int -> Maybe Int -> MyPos -> (String, EvalState) -> (String, EvalState) -> CtxIO GameResult
 playGame d maybeNodes pos (ide1, eval1) (ide2, eval2) = do
-    ctxLog LogInfo "--------------------------"
-    ctxLog LogInfo $ "Setup new game between " ++ ide1 ++ " and " ++ ide2
+    ctxLog LogWarning "--------------------------"
+    ctxLog LogWarning $ "Setup new game between " ++ ide1 ++ " and " ++ ide2
     chg <- readChanging
     let crts = crtStatus chg
     (hash1, hash2, hist0) <- liftIO $ do
@@ -498,8 +503,8 @@ playGame d maybeNodes pos (ide1, eval1) (ide2, eval2) = do
                      myColor = color2, totBmCh = 0, lastChDr = 0, lmvScore = Nothing }
         player1 = Player { plName = ide1, plChg = chg1, plNodes = 0 }
         player2 = Player { plName = ide2, plChg = chg2, plNodes = 0 }
-    ctxLog LogInfo $ "Color for " ++ ide1 ++ ": " ++ show color1
-    ctxLog LogInfo $ "Starting position: " ++ posToFen pos
+    ctxLog LogWarning $ "Color for " ++ ide1 ++ ": " ++ show color1
+    ctxLog LogWarning $ "Starting position: " ++ posToFen pos
     go (0::Int) player1 player2
     where go i player1 player2 = do
               start  <- asks strttm
@@ -509,60 +514,89 @@ playGame d maybeNodes pos (ide1, eval1) (ide2, eval2) = do
               modifyChanging $ const (plChg player1) { forGui = Nothing, srchStrtMs = currms,
                                             totBmCh = 0, lastChDr = 0 }
               let mbNodes = aloNodes maybeNodes (plNodes player1)
+                  curfen  = posToFen (head . stack . crtStatus . plChg $ player1)
               ctxLog LogInfo $ "Real ply " ++ show j ++ " engine " ++ plName player1
                   ++ " (nodes budget: " ++ show mbNodes ++ ")"
-              ctxLog LogInfo $ "Current fen: " ++ posToFen (head . stack . crtStatus . plChg $ player1)
+              ctxLog LogInfo $ "Current fen: " ++ curfen
               -- Search to depth or node budget:
-              (msc, path, nodes) <- iterativeDeepening d mbNodes
-              ctxLog LogInfo $ "Real ply " ++ show j ++ " returns " ++ show msc ++ " / " ++ show path
+              (sc, path, nodes) <- iterativeDeepening d mbNodes
+              ctxLog LogInfo $ "Real ply " ++ show j ++ " returns " ++ show sc ++ " / " ++ show path
                   ++ " / " ++ show nodes
               if null path
-                 then do
-                     ctxLog LogError $ "Empty path when playing"
-                     return $ GameAborted "Empty path when playing"
-                 else case msc of
-                          Nothing -> do
-                              ctxLog LogError $ "No score when playing"
-                              return $ GameAborted "No score when playing"
-                          Just sc -> do
-                              let m = head path
-                              ctxLog LogInfo $ "Real move " ++ show j
-                                            ++ " from " ++ plName player1 ++ ": " ++ show m
-                              chg1f <- readChanging
-                              s1fin <- execCState (doRealMove m) (crtStatus chg1f)
-                              s2ini <- execCState (doRealMove m) (crtStatus (plChg player2))
-                              let p = head $ stack s1fin
-                              -- Using length path here could be a problem
-                              -- in case of a TT cut which is on path
-                              if | sc == mateScore && length path == 1	-- mate in 1
-                                   -> if tacticalPos p
-                                         then do
-                                             ctxLog LogInfo $ "Mate (" ++ plName player1 ++ " wins)"
-                                             return $ GameWin (plName player1) "Mate"
-                                         else do
-                                             ctxLog LogError $ "Mate announced, but not in check!"
-                                             return $ GameAborted "Mate announced, but not in check"
-                                 | remis50Moves p -> do
-                                      ctxLog LogInfo $ "Remis 50 moves"
-                                      return $ GameRemis "Remis 50 moves rule"
-                                 | remis3Repetitions p $ stack s1fin -> do
-                                      ctxLog LogInfo $ "Remis 3 repetitions"
-                                      return $ GameRemis "Remis 3 repetitions rule"
-                                 | sc == 0 && length path == 1 -> do	-- this should be patt
-                                      ctxLog LogInfo $ "Remis (patt)"
-                                      return $ GameRemis "Remis (patt)"
-                                 | noMatingMaterial p -> do
-                                      ctxLog LogInfo $ "Remis no mating material"
-                                      return $ GameRemis "Remis no mating material"
-                                 | otherwise -> do
-                                      hi <- liftIO newHist
-                                      let state2 = s2ini { hist = hi, mstats = ssts0 }
-                                          chg1n  = chg1f { crtStatus = s1fin }
-                                          chg2n  = (plChg player2) { crtStatus = state2 }
-                                      go j (player2 { plChg = chg2n })
-                                           (player1 { plChg = chg1n, plNodes = subNodes mbNodes nodes})
+                 then if sc == 0 && nodes == 0	-- can't make move: mated or stale mated
+                         then do
+                             let p = head . stack . crtStatus . plChg $ player1
+                             if tacticalPos p
+                                then do
+                                    ctxLog LogWarning $ "Mated (" ++ plName player2 ++ " wins)"
+                                    ctxLog LogWarning $ "Fen: " ++ curfen
+                                    ctxLog LogWarning $ "Rezult: ply " ++ show j ++ " sc " ++ show sc
+                                         ++ " path " ++ show path ++ " nodes " ++ show nodes
+                                    return $ GameWin (plName player2) "Mate"
+                                else do
+                                    ctxLog LogWarning $ "Remis: patt"
+                                    ctxLog LogWarning $ "Fen: " ++ curfen
+                                    ctxLog LogWarning $ "Rezult: ply " ++ show j ++ " sc " ++ show sc
+                                         ++ " path " ++ show path ++ " nodes " ++ show nodes
+                                    return $ GameRemis "Remis (patt)"
+                         else do
+                             ctxLog LogError $ "Aborted: unexpected empty path when playing"
+                             ctxLog LogError $ "Fen: " ++ curfen
+                             ctxLog LogError $ "Rezult: ply " ++ show j ++ " sc " ++ show sc
+                                  ++ " path " ++ show path ++ " nodes " ++ show nodes
+                             return $ GameAborted "Empty path when playing"
+                 else do
+                     let m = head path
+                     ctxLog LogInfo $ "Real move " ++ show j
+                          ++ " from " ++ plName player1 ++ ": " ++ show m
+                     chg1f <- readChanging
+                     s1fin <- execCState (doRealMove m) (crtStatus chg1f)
+                     s2ini <- execCState (doRealMove m) (crtStatus (plChg player2))
+                     let p = head $ stack s1fin
+                     -- Using length path here could be a problem
+                     -- in case of a TT cut which is on path
+                     if | sc == mateScore && length path == 1	-- mate in 1
+                          -> if tacticalPos p
+                                then do
+                                    ctxLog LogWarning $ "Mate (" ++ plName player1 ++ " wins)"
+                                    ctxLog LogWarning $ "Fen: " ++ curfen
+                                    ctxLog LogWarning $ "Rezult: ply " ++ show j ++ " sc " ++ show sc
+                                         ++ " path " ++ show path ++ " nodes " ++ show nodes
+                                    return $ GameWin (plName player1) "Mate"
+                                else do
+                                    ctxLog LogError $ "Aborted: mate announced, but not in check!"
+                                    ctxLog LogError $ "Fen: " ++ curfen
+                                    ctxLog LogError $ "Rezult: ply " ++ show j ++ " sc " ++ show sc
+                                         ++ " path " ++ show path ++ " nodes " ++ show nodes
+                                    return $ GameAborted "Mate announced, but not in check"
+                        | remis50Moves p -> do
+                             ctxLog LogWarning $ "Remis: 50 moves"
+                             return $ GameRemis "Remis 50 moves rule"
+                        | remis3Repetitions p $ stack s1fin -> do
+                             ctxLog LogWarning $ "Remis: 3 repetitions"
+                             return $ GameRemis "Remis 3 repetitions rule"
+                        | noMatingMaterial p -> do
+                             ctxLog LogWarning $ "Remis: no mating material"
+                             ctxLog LogWarning $ "Fen: " ++ curfen
+                             ctxLog LogWarning $ "Rezult: ply " ++ show j ++ " sc " ++ show sc
+                                  ++ " path " ++ show path ++ " nodes " ++ show nodes
+                             return $ GameRemis "Remis no mating material"
+                        -- Under 1200 cp we consider resignation
+                        | sc < -1200 -> do
+                             ctxLog LogWarning $ "Resign (" ++ plName player2 ++ " wins)"
+                             ctxLog LogWarning $ "Fen: " ++ curfen
+                             ctxLog LogWarning $ "Rezult: ply " ++ show j ++ " sc " ++ show sc
+                                  ++ " path " ++ show path ++ " nodes " ++ show nodes
+                             return $ GameWin (plName player2) "Resignation"
+                        | otherwise -> do
+                             hi <- liftIO newHist
+                             let state2 = s2ini { hist = hi, mstats = ssts0 }
+                                 chg1n  = chg1f { crtStatus = s1fin }
+                                 chg2n  = (plChg player2) { crtStatus = state2 }
+                             go j (player2 { plChg = chg2n })
+                                  (player1 { plChg = chg1n, plNodes = subNodes mbNodes nodes})
 
-iterativeDeepening :: Int -> Maybe Int -> CtxIO (Maybe Int, [Move], Int)
+iterativeDeepening :: Int -> Maybe Int -> CtxIO (Int, [Move], Int)
 iterativeDeepening depth maybeMaxNodes = do
     --when debug $ lift $ do
     --    putStrLn $ "In iter deep: " ++ show depth
@@ -575,10 +609,10 @@ iterativeDeepening depth maybeMaxNodes = do
               --    hFlush stdout
               (path, sc, rmvsf, _timint, sfin, _) <- bestMoveCont d 0 0 sini lsc lpv rmvs
               let nodes = fromIntegral $ sNodes $ mstats sfin
-              -- We don't want to search less than depth 2, because depth 1 delivers error moves
-              -- by currently not updating the best score
+              -- We don't want to search less than depth 2, because depth 1 delivers
+              -- erroneus moves by currently not updating the best score
               if d > 1 && (null path || d >= depth || stopNodes maybeMaxNodes nodes)
-                 then return (Just sc, path, nodes)
+                 then return (sc, path, nodes)
                  else go (d+1) sfin (Just sc) path rmvsf
 
 -- Append error info to error file:

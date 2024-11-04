@@ -8,7 +8,7 @@ module Struct.Context (
     levToPrf, readChanging, modifyChanging, ctxLog, logging,
     getMyTime, formatMyTime, startSecond, currMilli,
     answer, bestMove, infos,
-    informGui, informGuiCM, informGuiDepth, informGuiString
+    informGuiBM, informGuiCM, informGuiDraft, informGuiSt
 ) where
 
 import Control.Concurrent.Chan
@@ -105,25 +105,25 @@ currMilli ref = do
     return $ truncate $ diffUTCTime utc ref * 1000
 
 -- A few functions to communicate with the GUI
--- Communicate the best path so far
-informGui :: Int -> Int -> Int64 -> [Move] -> CtxIO ()
-informGui sc depth nds path = do
+-- Communicate best path so far
+informGuiBM :: Int -> Int -> Int -> Int64 -> [Move] -> CtxIO ()
+informGuiBM sc depth seld nds path = do
     ctx <- ask
     chg <- readChanging
     currt <- lift $ currMilli $ strttm ctx
     let infoTime = currt - srchStrtMs chg
-    answer $ formInfo sc depth infoTime nds path
+    answer $ formInfoBM sc depth seld infoTime nds path
 
 -- Communicate the current move
 informGuiCM :: Move -> Int -> CtxIO ()
 informGuiCM m = answer . formInfoCM m
 
 -- Communicate the current depth
-informGuiDepth :: Int -> CtxIO ()
-informGuiDepth = answer . formInfoDepth
+informGuiDraft :: Int -> CtxIO ()
+informGuiDraft = answer . formInfoDraft
 
-informGuiString :: String -> CtxIO ()
-informGuiString = answer . infos
+informGuiSt :: String -> CtxIO ()
+informGuiSt = answer . infos
 
 -- Helper: Answers the GUI with a string
 answer :: String -> CtxIO ()
@@ -137,13 +137,12 @@ bestMove m mp = s
     where s = "bestmove " ++ toString m ++ sp
           sp = maybe "" (\v -> " ponder " ++ toString v) mp
 
--- Info answers:
--- sel.depth nicht implementiert
-formInfo :: Int -> Int -> Int -> Int64 -> [Move] -> String
-formInfo sc depth time nodes path = "info"
+-- Format best move info:
+formInfoBM :: Int -> Int -> Int -> Int -> Int64 -> [Move] -> String
+formInfoBM sc depth seld time nodes path = "info"
     ++ formScore esc
     ++ " depth " ++ show depth
-    -- ++ " seldepth " ++ show idp
+    ++ " seldepth " ++ show seld
     ++ " time " ++ show time
     ++ " nodes " ++ show nodes
     ++ nps'
@@ -174,45 +173,12 @@ formScore :: ExternScore -> String
 formScore (Score s) = " score cp " ++ show s
 formScore (Mate n)  = " score mate " ++ show n
 
--- sel.depth nicht implementiert
--- formInfo2 :: InfoToGui -> String
--- formInfo2 itg = "info"
---     ++ " depth " ++ show (infoDepth itg)
---     ++ " time " ++ show (infoTime itg)
---     ++ " nodes " ++ show (infoNodes itg)
---     ++ nps'
---     -- ++ " pv" ++ concatMap (\m -> ' ' : toString m) (infoPv itg)
---     where nps' = case infoTime itg of
---                      0 -> ""
---                      x -> " nps " ++ show (infoNodes itg * 1000 `div` x)
-
--- formInfoNps :: InfoToGui -> Maybe String
--- formInfoNps itg
---     = case infoTime itg of
---           0 -> Nothing
---           x -> Just $ "info nps " ++ show (infoNodes itg `div` x * 1000)
-
-formInfoDepth :: Int -> String
-formInfoDepth depth
-    = "info depth " ++ show depth
-      --  ++ " seldepth " ++ show (infoDepth itg)
+formInfoDraft :: Int -> String
+formInfoDraft depth = "info depth " ++ show depth
 
 formInfoCM :: Move -> Int -> String
 formInfoCM mv n
     = "info currmove " ++ toString mv ++ " currmovenumber " ++ show n
-
--- depth :: Int -> Int -> String
--- depth d _ = "info depth " ++ show d
-
--- inodes :: Int -> String
--- inodes n = "info nodes " ++ show n
-
--- pv :: Int -> [Move] -> String
--- pv t mvs = "info time " ++ show t ++ " pv"
---     ++ concatMap (\m -> ' ' : toString m) mvs
-
--- nps :: Int -> String
--- nps n = "info nps " ++ show n
 
 infos :: String -> String
 infos s = "info string " ++ s

@@ -1,11 +1,11 @@
 Name:                Barbarossa
-Version:             0.6.0
+Version:             0.7.0
 Synopsis:            UCI chess engine written in Haskell
 License:             BSD3
 License-file:        LICENSE
 Author:              Nicu Ionita
 Maintainer:          nicu.ionita@acons.at
-Copyright:           Nicu Ionita 2013 - 2019
+Copyright:           Nicu Ionita 2013 - 2021
 Category:            Game
 Build-type:          Simple
 Cabal-version:       >=1.8

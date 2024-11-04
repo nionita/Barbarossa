@@ -34,8 +34,8 @@ useAspirWin = False
 -- Some fix search parameter
 scoreGrain, depthForCM, minPvDepth :: Int
 scoreGrain  = 4	-- score granularity
-depthForCM  = 7 -- from this depth inform current move
-minPvDepth  = 2		-- from this depth we use alpha beta search
+depthForCM  = 8 -- from this depth inform current move
+minPvDepth  = 2	-- from this depth we use pv search
 useTTinPv :: Bool
 useTTinPv   = False	-- retrieve from TT in PV?
 
@@ -113,8 +113,8 @@ data Pvsl = Pvsl {
 newtype Killer = Killer [Move] deriving Show
 
 -- Read only parameters of the search, so that we can change them programatically
-data PVReadOnly
-    = PVReadOnly {
+data PVStRO
+    = PVStRO {
           draft  :: !Int,	-- root search depth
           albest :: !Bool,	-- always choose the best move (i.e. first)
           abmil1 :: !Int,	-- abort after this millisecond when in first root move
@@ -123,9 +123,10 @@ data PVReadOnly
 
 data PVState
     = PVState {
-          ronly   :: PVReadOnly,	-- read only parameters
+          ronly   :: PVStRO,	-- read only parameters
           stats   :: SStats,	-- search statistics
           absdp   :: !Int,	-- absolute depth (root = 0)
+          maxdp   :: !Int,	-- maximum reached depth (>= absdp)
           abort   :: !Bool,	-- search aborted (time)
           lmrhi   :: !Int,	-- upper limit of nodes to raise the lmr level
           lmrlv   :: !Int,	-- LMR level
@@ -173,9 +174,11 @@ data Path
          pathMoves :: Seq Move
       } deriving Show
 
+mated :: Int
+mated = - mateScore
 drawPath, matedPath :: Path
-drawPath  = Path { pathScore = 0, pathDepth = 0, pathMoves = Seq [] }
-matedPath = Path { pathScore = -mateScore, pathDepth = 0, pathMoves = Seq [] }
+drawPath  = Path { pathScore = 0, pathDepth = 20, pathMoves = Seq [] }
+matedPath = Path { pathScore = mated, pathDepth = 20, pathMoves = Seq [] }
 
 -- Making a path from a plain score:
 pathFromScore :: Int -> Path
@@ -201,7 +204,7 @@ emptySeq :: Seq Move
 emptySeq = Seq []
 
 pvsInit :: PVState
-pvsInit = PVState { ronly = pvro00, stats = ssts0, absdp = 0, abort = False,
+pvsInit = PVState { ronly = pvro00, stats = ssts0, absdp = 0, maxdp = 0, abort = False,
                     lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
 nst0 :: NodeState
 nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore 0, rbmch = -1,
@@ -212,10 +215,10 @@ nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore 0, rbmch = -1
 resetNSt :: Path -> Killer -> NodeState -> NodeState
 resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, rbmch = 0 }
 
-pvro00 :: PVReadOnly
-pvro00 = PVReadOnly { draft = 0, albest = False, abmil1 = 0, abmili = 0 }
+pvro00 :: PVStRO
+pvro00 = PVStRO { draft = 0, albest = False, abmil1 = 0, abmili = 0 }
 
-alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int)
+alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int, Int)
 alphaBeta abc = do
     let !d = maxdepth abc
         rmvs = Alt $ rootmvs abc
@@ -223,34 +226,35 @@ alphaBeta abc = do
         searchReduced a b = pvRootSearch a      b     d lpv rmvs True
         -- We have lastpath as a parameter here (can change after fail low or high)
         searchFull    lp  = pvRootSearch alpha0 beta0 d lp  rmvs False
-        pvro = PVReadOnly { draft = d, albest = best abc,
+        pvro = PVStRO { draft = d, albest = best abc,
                             abmil1 = stoptime1 abc, abmili = stoptime abc }
         pvs0 = pvsInit { ronly = pvro }	-- :: PVState
-    r <- if useAspirWin
-         then case lastscore abc of
-             Just sp -> do
-                let !alpha1 = sp - window abc
-                    !beta1  = sp + window abc
-                -- informStr $ "+++ Aspi search with d = " ++ show d
-                --                ++ " alpha = " ++ show alpha1
-                --                ++ " beta = " ++ show beta1
-                -- aspirWin alpha1 beta1 d lpv rmvs aspTries
-                r1@((s1, es1, _, _), pvsf)
-                    <- runCState (searchReduced alpha1 beta1) pvs0
-                if abort pvsf || (s1 > alpha1 && s1 < beta1 && not (nullSeq es1))
-                    then return r1
-                    else if nullSeq es1
-                        then runCState (searchFull lpv) pvs0
-                        else runCState (searchFull es1) pvs0
-             Nothing -> runCState (searchFull lpv) pvs0
-         else runCState (searchFull lpv) pvs0
-    let timint = abort (snd r)
-    -- when aborted, return the last found good move
-    -- we have to trust that abort is never done in draft 1!
-    case fst r of
-        (s, Seq path, Alt rmvs', ch) -> if null path
-           then return (fromMaybe 0 $ lastscore abc, lastpv abc, [], timint, 0)
-           else return (s, path, rmvs', timint, ch)
+    -- We will get a result and a final state:
+    (r, s) <- if useAspirWin
+                 then case lastscore abc of
+                     Just sp -> do
+                        let !alpha1 = sp - window abc
+                            !beta1  = sp + window abc
+                        -- informStr $ "+++ Aspi search with d = " ++ show d
+                        --                ++ " alpha = " ++ show alpha1
+                        --                ++ " beta = " ++ show beta1
+                        -- aspirWin alpha1 beta1 d lpv rmvs aspTries
+                        r1@((s1, es1, _, _), pvsf)
+                            <- runCState (searchReduced alpha1 beta1) pvs0
+                        if abort pvsf || (s1 > alpha1 && s1 < beta1 && not (nullSeq es1))
+                            then return r1
+                            else if nullSeq es1
+                                then runCState (searchFull lpv) pvs0
+                                else runCState (searchFull es1) pvs0
+                     Nothing -> runCState (searchFull lpv) pvs0
+                 else runCState (searchFull lpv) pvs0
+    let timint   = abort s
+        seldepth = maxdp s
+    -- When aborted, return the last found good move
+    -- We have to trust that abort is never done in draft 1!
+    case r of (sc, Seq path, Alt rmvs', ch) -> if null path
+                  then return (fromMaybe 0 $ lastscore abc, lastpv abc, [], timint, 0, 0)
+                  else return (sc, path, rmvs', timint, ch, seldepth)
 
 {--
 aspirWin :: Int -> Int -> Int -> Seq Move -> Alt Move -> Int -> m (Int, Seq Move, Alt Move)
@@ -273,7 +277,7 @@ pvRootSearch :: Int -> Int -> Int -> Seq Move -> Alt Move -> Bool
 pvRootSearch a b d lastpath rmvs aspir = do
     pos <- lift getPos
     edges <- if null (unalt rmvs)	-- only when d==1, but we could have lastpath from the previous real move
-                then genAndSort nst0 { cpos = pos } Nothing a b d	-- no IID here as d==1
+                then genAndPick nst0 { cpos = pos } Nothing a b d	-- no IID here as d==1
                 else case lastpath of
                          Seq []    -> return rmvs	-- does this happen? - check to simplify!
                          Seq (e:_) -> return $ Alt $ e : delete e (unalt rmvs)
@@ -322,7 +326,9 @@ pvInnerRoot b d nst e = timeToAbort (True, nst) $ do
                 old <- get
                 when (draft (ronly old) >= depthForCM) $ lift $ informCM e $ movno nst
                 newNode d
-                modify $ \s -> s { absdp = absdp s + 1 }
+                let adp = absdp old + 1
+                    mdp = max (maxdp old) adp
+                modify $ \s -> s { absdp = adp, maxdp = mdp }
                 s <- case exd of
                          Exten exd' _ _ -> pvInnerRootExten b d exd' (deepNSt nst)
                          Final   -> return drawPath
@@ -337,13 +343,13 @@ pvInnerRoot b d nst e = timeToAbort (True, nst) $ do
 
 pvInnerRootExten :: Int -> Int -> Int -> NodeState -> Search Path
 pvInnerRootExten b d !exd nst = do
-    let !inPv = crtnt nst == PVNode
+    let !pvnode = crtnt nst == PVNode
         !d1   = d + exd - 1	-- this is the normal (unreduced) depth for the next search
         a     = pathScore $ cursc nst
-    if inPv || d <= minPvDepth	-- search of principal variation
+    if pvnode || d <= minPvDepth	-- search of principal variation
        then do
            -- Set albe only when not in PV and not already set (to spare a copy)
-           let nst' = if not (inPv || albe nst) then nst { albe = True } else nst
+           let nst' = if not (pvnode || albe nst) then nst { albe = True } else nst
            pnextlev <$> pvSearch nst' (-b) (-a) d1
        else do
            -- no futility pruning & no LMR for root moves!
@@ -368,7 +374,7 @@ checkFailOrPVRoot xstats b d e s nst = whenAbort (True, nst) $ do
         !nodes1 = sNodes (stats sst) + sRSuc (stats sst)
         !nodes' = nodes1 - nodes0
         pvg     = Pvsl s nodes'	-- the good
-        de = max d $ pathDepth s
+        -- de = max d $ pathDepth s
     -- Treat all depth the same
     -- This also means, we do not have a known score for every root move
     if pathScore s <= a
@@ -378,10 +384,10 @@ checkFailOrPVRoot xstats b d e s nst = whenAbort (True, nst) $ do
            return (False, nst1)
        else if pathScore s >= b
                then do
-                 -- what when a root move fails high? We are in aspiration
+                 -- what when a root move fails high? We must be in aspiration
                  lift $ do
                      let typ = 1	-- beta cut (score is lower limit) with move e
-                     ttStore de typ b e nodes'
+                     ttStore d typ b e nodes'
                      betaCut (absdp sst) e
                  let xpvslg = insertToPvs d pvg (pvsl nst)	-- the good
                      csc = s { pathScore = b }
@@ -393,7 +399,7 @@ checkFailOrPVRoot xstats b d e s nst = whenAbort (True, nst) $ do
                  informPV sc (draft $ ronly sst) pa
                  lift $ do
                      let typ = 2	-- best move so far (score is exact)
-                     ttStore de typ sc e nodes'
+                     ttStore d typ sc e nodes'
                      betaCut (absdp sst) e	-- not really cut, but good move
                  let xpvslg = insertToPvs d pvg (pvsl nst)	-- the good
                      nst1 = nst { cursc = s, nxtnt = nextNodeType (nxtnt nst),
@@ -403,18 +409,18 @@ checkFailOrPVRoot xstats b d e s nst = whenAbort (True, nst) $ do
 insertToPvs :: Int -> Pvsl -> [Pvsl] -> [Pvsl]
 insertToPvs _ p [] = [p]
 insertToPvs d p ps@(q:qs)
-    | d == 1 && (betters || equals) = p : ps
-    | pmate && not qmate            = p : ps
-    | not pmate && qmate            = q : insertToPvs d p qs
-    | pmate && betters              = p : ps
-    | bettern || equaln && betters  = p : ps
-    | otherwise                     = q : insertToPvs d p qs
+    | d <= dscore && betters       = p : ps
+    | pmate && not qmate           = p : ps
+    | not pmate && qmate           = q : insertToPvs d p qs
+    | pmate && betters             = p : ps
+    | bettern || equaln && betters = p : ps
+    | otherwise                    = q : insertToPvs d p qs
     where betters = pathScore (pvPath p) >  pathScore (pvPath q)
-          equals  = pathScore (pvPath p) == pathScore (pvPath q)
           equaln  = pvNodes p == pvNodes q
           bettern = pvNodes p > pvNodes q
           pmate   = pnearmate $ pvPath p
           qmate   = pnearmate $ pvPath q
+          dscore  = 1
 
 -- PV Search
 pvSearch :: NodeState -> Int -> Int -> Int -> Search Path
@@ -422,18 +428,20 @@ pvSearch _ !a !b !d | d <= 0 = do
     v <- pvQSearch a b
     return $! pathFromScore v	-- ok: fail hard in QS
 pvSearch nst !a !b !d = do
-    let !inPv = crtnt nst == PVNode
-        ab    = albe nst
+    let pvnode = crtnt nst == PVNode
     -- Here we are always in PV if enough depth:
-    when (not $ inPv || ab) $ lift $ absurd $ "pvSearch: not inPv, not ab, nst = " ++ show nst
+    when (not $ pvnode || albe nst) $ lift $ absurd $ "pvSearch: not pvnode, not albe, nst = " ++ show nst
     -- Check first for a TT entry of the position to search
     (hdeep, tp, hsc, e, nodes') <- reTrieve >> lift ttRead
-    -- tp == 1 => score >= hsc, so if hsc >= asco then we improved,
-    --    but can we use hsc in PV? This score is not exact!
-    --    Idea: return only if better than beta, else search for exact score
-    -- tp == 0 => score <= hsc, so if hsc <= asco then we fail low and
+    -- Here we search for an exact score, either by alpha/beta search in the first few depths,
+    -- or by PV search, in all the higher depths. Looking in the TT we can get 3 cases:
+    -- tp == 2 => we got an exact score with the right depth: use it (return)
+    -- tp == 1 => score >= hsc, so if hsc >= a then we improved,
+    --    but we can't we use hsc in PV: the score is not exact!
+    --    So we use it (return) only if better than beta; otherwise search for exact score
+    -- tp == 0 => score <= hsc, so if hsc <= a then we fail low and
     --    can terminate the search
-    if (useTTinPv || ab) && hdeep >= d && (
+    if hdeep >= d && (useTTinPv || albe nst) && (
             tp == 2		-- exact score: always good
          || tp == 1 && hsc >= b	-- we will fail high
          || tp == 0 && hsc <= a	-- we will fail low
@@ -447,34 +455,39 @@ pvSearch nst !a !b !d = do
            reSucc nodes' >> return ttpath
        else do
            when (hdeep < 0) reFail
-           -- Here: when ab we should do null move search
+           -- TODO: when albe, we should do null move search
            pos <- lift getPos
            -- Use the found TT move as best move
            let mttmv = if hdeep > 0 then Just e else Nothing
                !nst'  = nst { cpos = pos }
-           edges <- genAndSort nst' mttmv a b d
+           edges <- genAndPick nst' mttmv a b d
            if noMove edges
               then return $! failHardNoValidMove a b pos
               else do
                 nodes0 <- gets (sNodes . stats)
-                -- futility pruning:
+                -- Here we could maybe raise alpha when we got tp == 1 from TT, but with hsc < b:
+                -- if hsc > a then we know there must be something better than a, so we could search for it
+                -- If we do so, we should put a' = hsc - scoreGrain, so that we get at least
+                -- one variation. But the question is: is it possible that we don't find one?
+                -- And if yes: what to do in that case?
+                -- Futility pruning:
                 let !prune = isPruneFutil d a True (staticScore pos)
+                    !nsti  = resetNSt (pathFromScore a) (Killer []) nst'
                 -- Loop thru the moves
-                let !nsti = resetNSt (pathFromScore a) (Killer []) nst'
                 !nstf <- pvSLoop b d False prune nsti edges
                 let s = cursc nstf
                 whenAbort s $
                     if movno nstf == 1
                        then return $! failHardNoValidMove a b pos
                        else do
-                           let de = max d $ pathDepth s
+                           -- let de = max d $ pathDepth s
                            nodes1 <- gets (sNodes . stats)
                            lift $ do
                                let !deltan = nodes1 - nodes0
                                    mvs = pathMoves s
                                    mv | nullSeq mvs = head $ unalt edges	-- not null - on "else" of noMove
                                       | otherwise   = head $ unseq mvs
-                               ttStore de (rbmch nstf) (pathScore s) mv deltan
+                               ttStore d (rbmch nstf) (pathScore s) mv deltan
                            return s
 
 -- PV Zero Window
@@ -505,7 +518,7 @@ pvZeroW !nst !b !d = do
                    -- Use the TT move as best move
                    let mttmv = if hdeep > 0 then Just e else Nothing
                        !nst' = nst { cpos = pos }
-                   edges <- genAndSort nst' mttmv bGrain b d
+                   edges <- genAndPick nst' mttmv bGrain b d
                    if noMove edges
                       then return $! failHardNoValidMove bGrain b pos
                       else do
@@ -523,14 +536,14 @@ pvZeroW !nst !b !d = do
                             if movno nstf == 1
                                then return $! failHardNoValidMove bGrain b pos
                                else do
-                                   let !de = max d $ pathDepth s
+                                   -- let !de = max d $ pathDepth s
                                    !nodes1 <- gets (sNodes . stats)
                                    lift $ do
                                        let !deltan = nodes1 - nodes0
                                            mvs = pathMoves s
                                            mv | nullSeq mvs = head $ unalt edges	-- not null - on "else" of noMove
                                               | otherwise   = head $ unseq mvs
-                                       ttStore de (rbmch nstf) (pathScore s) mv deltan
+                                       ttStore d (rbmch nstf) (pathScore s) mv deltan
                                    return s
     where !bGrain = b - scoreGrain
 
@@ -598,17 +611,18 @@ pvInnerLoop :: Int 	-- current beta
             -> NodeState 	-- node status
             -> Move	-- move to search
             -> Search NodeState
-pvInnerLoop b d zw prune nst e = timeToAbort nst $ do
-    let !canPrune = canPruneMove (cpos nst) e
-    if prune && (zw || movno nst > 1) && canPrune
+pvInnerLoop b d zw prune nst e = timeToAbort nst $
+    if prune && (zw || movno nst > 1) && canPruneMove (cpos nst) e
        then return $! nst { movno = movno nst + 1 }
        else do
-           old <- get
            !exd <- lift $ doMove e	-- do the move
            if legalResult exd
               then do
                   newNode d
-                  modify $ \s -> s { absdp = absdp s + 1 }
+                  old <- get
+                  let adp = absdp old + 1
+                      mdp = max (maxdp old) adp
+                  modify $ \s -> s { absdp = adp, maxdp = mdp }
                   (s, nst1) <- case exd of
                       Exten exd' cap nolmr -> do
                           -- Resetting means we reduce less (only with distance to last capture)
@@ -633,18 +647,18 @@ resetSpc nst = nst { spcno = movno nst }
 
 pvInnerLoopExten :: Int -> Int -> Bool -> Int -> NodeState -> Search Path
 pvInnerLoopExten b d spec !exd nst = do
-    old <- get
-    let !inPv = crtnt nst == PVNode
+    let !pvnode = crtnt nst == PVNode
         !d1   = d + exd - 1	-- this is the normal (unreduced) depth for next search
         a     = pathScore $ cursc nst
-    if inPv || d <= minPvDepth
+    if pvnode || d <= minPvDepth
        then do
            -- Set albe only when not in PV and not already set (to spare a copy)
-           let nst' = if not (inPv || albe nst) then nst { albe = True } else nst
+           let nst' = if not (pvnode || albe nst) then nst { albe = True } else nst
            pnextlev <$> pvSearch nst' (-b) (-a) d1
        else do
            -- Here we must be in a Cut node (will fail low)
            -- and we should have: crtnt = CutNode, nxtnt = AllNode
+           old <- get
            let !d' = reduceLmr (nearmate b) spec d1 (lmrlv old) (movno nst - spcno nst)
            !s1 <- zeroWithLMR d' d1 (-a) (a+scoreGrain) nst
            whenAbort s1 $
@@ -708,8 +722,8 @@ checkFailOrPVLoop b d e s nst = whenAbort nst $ do
                else do	-- means: > a && < b
                    lift $ do
                        betaCut (absdp sst) e -- not really a cut, but good move here
-                       let de = max d $ pathDepth s
-                       ttStore de 1 (pathScore s) e 0	-- best move so far (score is lower limit)
+                       -- let de = max d $ pathDepth s
+                       ttStore d 1 (pathScore s) e 0	-- best move so far (score is lower limit)
                    let nnt  = nextNodeType (nxtnt nst)
                    return $! nst { cursc = s, nxtnt = nnt, movno = mn+1, rbmch = 2 }
 
@@ -742,10 +756,10 @@ newTKiller pos d s
       isTKillCand pos km = Killer [km]
     | otherwise          = Killer []
 
--- We don't sort the moves here, they have to come sorted from genMoves
--- But we consider the best move first (TT or IID) and the killers
-genAndSort :: NodeState -> Maybe Move -> Int -> Int -> Int -> Search (Alt Move)
-genAndSort !nst mttmv !a !b !d = do
+-- We generate the moves, which come already sorted from genMoves
+-- But we pick the best move (TT or IID) and the killers first
+genAndPick :: NodeState -> Maybe Move -> Int -> Int -> Int -> Search (Alt Move)
+genAndPick !nst mttmv !a !b !d = do
     path <- case mttmv of
                 Just mv -> return [mv]
                 Nothing -> bestMoveFromIID nst a b d	-- it will do nothing for AllNode
@@ -821,33 +835,57 @@ pvQSearch !a !b = do
 qSearch :: Int -> Int -> Bool -> Search Int
 qSearch !a !b front = do
     (hdeep, tp, hsc, _, _) <- reTrieve >> lift ttRead
-    -- tp == 1 => score >= hsc, so if hsc > a then we improved
-    -- tp == 0 => score <= hsc, so if hsc <= asco then we fail low and
-    --    can terminate the search
-    if hdeep >= 0 && (
-            tp == 2		-- exact score: always good
-         || tp == 1 && hsc >= b	-- we will fail high
-         || tp == 0 && hsc <= a	-- we will fail low
-       )
-       then reSucc 1 >> return hsc
+    if hdeep >= 0
+       then qSearchFound    a b tp hsc front
+       else qSearchNotFound a b        front
+
+-- When we found a TT entry, we sometimes may terminate the QS immediately,
+-- and sometimes we may at least improve the search limits
+qSearchFound :: Int -> Int -> Int -> Int -> Bool -> Search Int
+qSearchFound !a !b !tp !hsc front = do
+    reSucc 1
+    -- tp == 2 => we have an exact score
+    -- tp == 1 => score >= hsc, so if hsc >  a then we at least improved
+    -- tp == 0 => score <= hsc, so if hsc <= a then we fail low
+    if    tp == 2		-- exact score: always good, terminate
+       || tp == 1 && hsc >= b	-- we will fail high
+       || tp == 0 && hsc <= a	-- we will fail low
+       then return hsc
        else do
-           when (hdeep < 0) reFail
-           pos <- lift getPos
-           if tacticalPos pos
-              then qsInCheck a b (staticScore pos)
-              else qsNormal a b (staticScore pos) front
+           -- Here we have one and only one of:
+           -- tp == 1 && hsc < b
+           -- tp == 0 && hsc > a
+           -- We can possibly improve one of the limit
+           -- This cannot happen in zero window search!
+           if a + scoreGrain == b
+              then qSearchLims a b front
+              else if tp == 1
+                      then qSearchLims (max a hsc) b           front
+                      else qSearchLims a           (min b hsc) front
+
+qSearchNotFound :: Int -> Int -> Bool -> Search Int
+qSearchNotFound !a !b front = reFail >> qSearchLims a b front
+
+qSearchLims :: Int -> Int -> Bool -> Search Int
+qSearchLims !a !b front = do
+    pos <- lift getPos
+    if tacticalPos pos
+       then qsInCheck a b (staticScore pos)
+       else qsNormal  a b (staticScore pos) front
 
 qsInCheck :: Int -> Int -> Int -> Search Int
 qsInCheck !a !b !s = do
     edges <- Alt <$> lift genEscapeMoves
     if noMove edges
-       then return $! -mateScore
+       then return mated
        else do
           !dcut <- lift $ qsDelta $ a - s - qsDeltaMargin
           if dcut
              then do
                  when collectFens $ finWithNodes "DELT"
                  return a
+             -- else pvQLoop b (max s a) edges
+             -- do not trust eval in check
              else pvQLoop b a edges
 
 qsNormal :: Int -> Int -> Int -> Bool -> Search Int
@@ -866,10 +904,8 @@ qsNormal !a !b !s front
                 if noMove edges
                    then do	-- no more captures
                        when collectFens $ finWithNodes "NOCA"
-                       return s
-                   else if s > a
-                           then pvQLoop b s edges
-                           else pvQLoop b a edges
+                       return (max s a)
+                   else pvQLoop b (max s a) edges
 
 pvQLoop :: Int -> Int -> Alt Move -> Search Int
 pvQLoop !b = go
@@ -1052,7 +1088,8 @@ logmes s = informCtx (LogMes s)
 
 informPV :: Int -> Int -> [Move] -> Search ()
 informPV s d es = do
-    ss <- gets stats
+    st <- get
+    let ss = stats st
     lift $ do
         n <- curNodes $ sNodes ss
-        informCtx (BestMv s d n es)
+        informCtx (BestMv s d (maxdp st) n es)
