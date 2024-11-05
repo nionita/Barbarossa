@@ -15,6 +15,7 @@ import Control.Concurrent.Chan
 import Control.Concurrent
 import Control.Monad.State.Strict
 import Control.Monad.Reader
+import Control.Monad (when)
 import Data.Int
 import Data.Time.Clock (UTCTime(..), getCurrentTime, diffUTCTime)
 import Data.Time.Format (formatTime, defaultTimeLocale)

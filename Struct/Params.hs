@@ -129,7 +129,7 @@ genSetParamExp mphase field = do
 
 -- This will generate a function to collect all parameters or weights, in form of:
 -- \ (s, v) rec -> lookApply s v rec [ ("field", \v rec -> ... ) ... ]
--- The list contains one pair field name / assign function per data filed for params,
+-- The list contains one pair field name / assign function per data field for params,
 -- and 2 two pairs per data field for weights, one with the assignment for the mid
 -- and one for the end value, while in this case the string will have the corresponding
 -- prefix, "mid." or "end."
@@ -149,7 +149,7 @@ genCollectEvalParamsExp names withPhase = do
                             else do
                                 sfs <- mapM (genSetParamExp Nothing) names
                                 return (names, sfs)
-    let nfTups = zipWith (\p f -> TupE [LitE (StringL p), f]) newNames setFs
+    let nfTups = zipWith (\p f -> TupE [Just (LitE (StringL p)), Just f]) newNames setFs
     return $ LamE [TupP [VarP strName, VarP valName], VarP recName]
                   (AppE (AppE (AppE (AppE (VarE lookApp) (VarE strName))
                                     (VarE valName))

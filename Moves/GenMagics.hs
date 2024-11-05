@@ -65,10 +65,10 @@ genSlMask isrook sq = ma1 .|. ma2 .|. ma3 .|. ma4
                           else toSoEa  q4 sq all1
 
 movKnights :: MaArray
-movKnights = array (0, 63) $ genArray 0x0000000A1100110A 18
+movKnights = array (0, 63) $ genMovesArray 0x0000000A1100110A 18
 
 movKings :: MaArray
-movKings = array (0, 63) $ genArray 0x0000000000070507 9
+movKings = array (0, 63) $ genMovesArray 0x0000000000070507 9
 
 -- Generate the list of bishop moves by occupancy for one square
 genBishop :: Square -> [(Int, BBoard)]

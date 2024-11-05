@@ -297,9 +297,9 @@ pvRootSearch a b d lastpath rmvs aspir = do
          else do
             -- lift $ mapM_ (\m -> informStr $ "Root move: " ++ show m) (pvsl nstf)
             -- when (d < depthForCM) $ informPV sc d p
-            let (best':_) = p
-                allrmvs = if sc >= b then unalt edges else map pvslToMove (pvsl nstf)
-                xrmvs = Alt $ best' : delete best' allrmvs	-- best on top
+            let allrmvs = if sc >= b then unalt edges else map pvslToMove (pvsl nstf)
+                xrmvs | (best':_) <- p = Alt $ best' : delete best' allrmvs	-- best on top
+                      | otherwise      = Alt allrmvs
             return (sc, Seq p, xrmvs, rbmch nstf)
 
 pvslToMove :: Pvsl -> Move
@@ -1050,10 +1050,8 @@ incReMi :: Search ()
 incReMi = modStat $ \s -> s { sReMi = sReMi s + 1 }
 
 bestFirst :: [Move] -> [Move] -> ([Move], [Move]) -> [Move]
-bestFirst path kl (es1, es2)
-    | null path = es1 ++ kl ++ chainUniqFilters kl es2
-    | otherwise = e : uniqFilter e es1 ++ kl ++ chainUniqFilters (e : kl) es2
-    where (e:_)  = path
+bestFirst []    kl (es1, es2) = es1 ++ kl ++ chainUniqFilters kl es2
+bestFirst (e:_) kl (es1, es2) = e : uniqFilter e es1 ++ kl ++ chainUniqFilters (e : kl) es2
 
 -- When filtering the TT & killer moves from the generated ones
 -- we use delete, which has a bit of an inefficiency because

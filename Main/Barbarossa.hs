@@ -9,7 +9,7 @@ import Control.Monad.Reader
 import Control.Concurrent
 import Control.Exception
 import Data.Array.Unboxed
-import Data.Foldable (foldrM)
+-- import Data.Foldable (foldrM)
 import Data.List (intersperse)
 import Data.Maybe
 import Data.Time.Clock (UTCTime)
@@ -38,8 +38,8 @@ import Eval.FileParams (makeEvalState)
 progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
-progVersion = "0.7.0"
-progVerSuff = ""
+progVersion = "0.8.0"
+progVerSuff = "base080"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -152,6 +152,9 @@ interMachine = do
     beforeProgExit
 
 analysingMachine :: FilePath -> CtxIO ()
+-- Comment this out as not used since a while
+analysingMachine _ = return ()
+{--
 analysingMachine fi = do
     ctx <- ask
     let logFileName = progLogName ++ "-" ++ show (startSecond ctx) ++ ".log"
@@ -161,6 +164,7 @@ analysingMachine fi = do
     fileReader fi
     -- whatever to do when ending:
     beforeProgExit
+--}
 
 -- The logger will be startet anyway, but will open a file
 -- only when it has to write the first message
@@ -262,7 +266,7 @@ doIsReady = do
 
 doSetOption :: Option -> CtxIO ()
 doSetOption opt = do
-    let NameValue on ov = unifyOption opt
+    let (on, ov) = unifyOption opt
     chg <- readChanging
     if working chg
        then ctxLog LogWarning "GUI sent SetOption while I'm working..."
@@ -271,9 +275,9 @@ doSetOption opt = do
                 _      -> ctxLog LogWarning
                               $ "Unknown option from engine: " ++ on ++ " with value " ++ ov
 
-unifyOption :: Option -> Option
-unifyOption (Name on) = NameValue on "true"
-unifyOption o         = o
+unifyOption :: Option -> (String, String)
+unifyOption (Name on)         = (on, "true")
+unifyOption (NameValue on ov) = (on, ov)
 
 setOptionHash :: String -> CtxIO ()
 setOptionHash sval =
@@ -355,9 +359,10 @@ data Agreg = Agreg {
          -- agrFenNOk :: !Int	-- number of fens aborted
      } deriving Show
 
+-- Comment this out as not used since a while
 -- The file reader reads an annotated analysis file
--- and analyses every fen, cummulating the error
--- and reporting it
+-- and analyses every fen, acummulating the error and reporting it
+{--
 fileReader :: FilePath -> CtxIO ()
 fileReader fi = do
     inp <- liftIO $ readFile fi
@@ -383,6 +388,7 @@ aggregateError :: Agreg -> Int -> Int -> Agreg
 aggregateError agr refsc sc
     = agr { agrCumErr = agrCumErr agr + fromIntegral (dif * dif), agrFenOk = agrFenOk agr + 1 }
     where dif = sc - refsc
+--}
 
 getUCITime :: [GoCmds] -> Color -> (Int, Int, Int)
 getUCITime cs c

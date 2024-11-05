@@ -20,6 +20,7 @@ import Data.Int
 import Data.List (nub)
 import Control.Monad.State
 import Control.Monad.Reader (ask)
+import Control.Monad (when)
 -- import Numeric
 
 import Moves.BaseTypes
@@ -152,8 +153,8 @@ uBitClear bb sq = bb .&. uBit sq == 0
 -- Move from a node to a descendent - the real move version
 doRealMove :: Move -> Game DoResult
 doRealMove m = do
-    s  <- get
-    let (pc:_) = stack s	-- we never saw an empty stack error until now
+    s <- get
+    let pc  = head $ stack s	-- we never saw an empty stack error until now
         !m1 = checkCastle (checkEnPas m pc) pc
         -- Moving a non-existent piece?
         il = occup pc `uBitClear` fromSquare m1
@@ -181,7 +182,7 @@ doRealMove m = do
 doMove :: Move -> Game DoResult
 doMove m = do
     s <- get
-    let (pc:_) = stack s	-- we never saw an empty stack error until now
+    let pc = head $ stack s	-- we never saw an empty stack error until now
         -- Moving a non-existent piece?
         il  = occup pc `uBitClear` fromSquare m
         -- Capturing one king?
@@ -213,7 +214,7 @@ doMove m = do
 doQSMove :: Move -> Game Bool
 doQSMove m = do
     s <- get
-    let (pc:_) = stack s	-- we never saw an empty stack error until now
+    let pc  = head $ stack s	-- we never saw an empty stack error until now
         sts = posEval p (evalst s)
         p   = doFromToMove m pc { staticScore = sts }
     if not $ checkOk p
@@ -225,7 +226,7 @@ doQSMove m = do
 doNullMove :: Game ()
 doNullMove = do
     s <- get
-    let (pc:_) = stack s	-- we never saw an empty stack error until now
+    let pc  = head $ stack s	-- we never saw an empty stack error until now
         sts = posEval p (evalst s)
         p   = reverseMoving pc { staticScore = sts }
     put s { stack = p : stack s }
@@ -312,10 +313,8 @@ isTKillCand p mm = not $ moveIsCapture p mm
 finNode :: String -> Int64 -> Game ()
 finNode str nodes =
     when (printEvalInt /= 0 && (nodes .&. printEvalInt == 0)) $ do
-        s <- get
-        let (p:_) = stack s	-- we never saw an empty stack error until now
-            fen = posToFen p
-        logMes $ str ++ " Score: " ++ show (staticScore p) ++ " Fen: " ++ fen
+        p <- getPos	-- we never saw an empty stack error until now
+        logMes $ str ++ " Score: " ++ show (staticScore p) ++ " Fen: " ++ posToFen p
 
 {-# INLINE getRootMoveNumber #-}
 getRootMoveNumber :: Game Int

@@ -7,6 +7,7 @@
 
 module Main where
 import Control.Monad.Reader
+import Control.Monad (when, void)
 import Control.Concurrent
 import Control.Exception
 import Data.Foldable (foldlM)

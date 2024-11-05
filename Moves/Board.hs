@@ -516,6 +516,7 @@ doFromToMove m !p | moveIsNormal m
                                  ++ showTab (black p) (slide p) (kkrq p) (diag p)
                                  ++ "resulting pos:\n"
                                  ++ showTab tblack tslide tkkrq tdiag
+
 doFromToMove m !p | moveIsEnPas m
     = updatePos p {
           black = tblack, slide = tslide, kkrq  = tkkrq,  diag  = tdiag,
@@ -531,15 +532,18 @@ doFromToMove m !p | moveIsEnPas m
           tkkrq  = mvBit src dst (kkrq p) .&. nbdel
           tdiag  = mvBit src dst (diag p) .&. nbdel
           tepcas = reset50Moves $ moveAndClearEp $ epcas p
-          Busy col fig  = tabla p src	-- identify the moving piece
           !epcl = epClrZob $ epcas p
           !zk = zobkey p `xor` epcl
-          CA tzobkey tmater = chainAccum (CA zk (mater p)) [
+          CA tzobkey tmater
+              | Busy col fig <- tabla p src	-- identify the moving piece
+                = chainAccum (CA zk (mater p)) [
                                 accumClearSq src p,
                                 accumClearSq del p,
                                 accumSetPiece dst col fig p,
                                 accumMoving p
                             ]
+              | otherwise = error "doFromToMove en-passant"
+
 doFromToMove m !p | moveIsCastle m
     = updatePos p {
           black = tblack, slide = tslide, kkrq  = tkkrq,  diag  = tdiag,
@@ -564,17 +568,20 @@ doFromToMove m !p | moveIsCastle m
           !srcbb = uBit src	-- source clears cast rights
           (clearcast, zobcast) = clearCast (epcas p) srcbb
           tepcas = reset50Moves $ moveAndClearEp $ epcas p `less` clearcast
-          Busy col King = tabla p src	-- identify the moving piece (king)
-          Busy co1 Rook = tabla p csr	-- identify the moving rook
           !epcl = epClrZob $ epcas p
           !zob = zobkey p `xor` epcl `xor` zobcast
-          CA tzobkey tmater = chainAccum (CA zob (mater p)) [
+          CA tzobkey tmater
+              | Busy col King <- tabla p src,	-- identify the moving piece (king)
+                Busy co1 Rook <- tabla p csr	-- identify the moving rook
+                = chainAccum (CA zob (mater p)) [
                                 accumClearSq src p,
                                 accumSetPiece dst col King p,
                                 accumClearSq csr p,
                                 accumSetPiece cds co1 Rook p,
                                 accumMoving p
                             ]
+              | otherwise = error "doFromToMove King + Rook"
+
 doFromToMove m !p | moveIsPromo m
     = updatePos p0 {
           black = tblack, slide = tslide, kkrq = tkkrq, diag = tdiag,
@@ -601,6 +608,7 @@ doFromToMove m !p | moveIsPromo m
                                 accumSetPiece dst col pie p0,
                                 accumMoving p0
                             ]
+
 doFromToMove _ _ = error "doFromToMove: wrong move type"
 
 reverseMoving :: MyPos -> MyPos
@@ -800,15 +808,17 @@ genEPCapts !pos
 
 perCaptFieldWL :: MyPos -> BBoard -> BBoard -> Square -> ([LMove], [LMove]) -> ([LMove], [LMove])
 perCaptFieldWL pos mypc advdefence sq mvlst
-    | hanging   = let mvlst1 = foldr (addHanging  pos pcto sq) mvlst  reAgrsqs
-                  in           foldr (addHangingP     pcto sq) mvlst1 prAgrsqs	-- for promotions
-    | otherwise = let mvlst1 = foldr (perCaptWL pos myAttRec False pcto valto sq) mvlst  reAgrsqs
+    | Busy _ pcto <- tabla pos sq
+        = if defended
+             then let valto  = seeValue pcto
+                      mvlst1 = foldr (perCaptWL pos myAttRec False pcto valto sq) mvlst  reAgrsqs
                   in           foldr (perCaptWL pos myAttRec True  pcto valto sq) mvlst1 prAgrsqs
-    where !myAttRec = theAttacs pos sq
+             else let mvlst1 = foldr (addHanging  pos pcto sq) mvlst  reAgrsqs
+                  in           foldr (addHangingP     pcto sq) mvlst1 prAgrsqs	-- for promotions
+    | otherwise = error "perCaptFieldWL pattern"
+    where !myAttRec = theAttacs pos sq	-- is this strictnes necessary?
           myattacs = mypc .&. atAtt myAttRec
-          Busy _ pcto = tabla pos sq
-          valto = seeValue pcto
-          hanging = not (advdefence `testBit` sq)
+          defended = advdefence `testBit` sq
           prAgrsqs = bbToSquares prPawns
           reAgrsqs = bbToSquares reAtts
           (prPawns, reAtts)
@@ -829,20 +839,23 @@ perCaptWL :: MyPos -> Attacks -> Bool -> Piece -> Int -> Square -> Square
           -> ([LMove], [LMove]) -> ([LMove], [LMove])
 perCaptWL !pos !attacks promo vict !gain0 !sq !sqfa (wsqs, lsqs)
     | promo = (map (moveToLMove Pawn vict) promos ++ wsqs, lsqs)
-    | approx || adv <= gain0 = (ss:wsqs, lsqs)
-    | otherwise = (wsqs, ss:lsqs)
-    where ss = moveToLMove attc vict $ moveAddPiece attc $ moveFromTo sqfa sq
-          approx = approximateEasyCapts && gain0 >= v0
-          Busy _ attc = tabla pos sqfa
-          v0  = seeValue attc
-          adv = seeMoveValue pos attacks sqfa sq v0
-          promos = map (\p -> makePromo p sqfa sq) [Queen, Rook, Bishop, Knight]
+    | Busy _ attc <- tabla pos sqfa
+        = let v0  = seeValue attc
+              ss  = moveToLMove attc vict $ moveAddPiece attc $ moveFromTo sqfa sq
+              adv = seeMoveValue pos attacks sqfa sq v0
+              approx = approximateEasyCapts && gain0 >= v0
+          in if approx || adv <= gain0
+                then (ss:wsqs, lsqs)
+                else (wsqs, ss:lsqs)
+    | otherwise = error "perCaptWL pattern"
+    where promos = map (\p -> makePromo p sqfa sq) [Queen, Rook, Bishop, Knight]
 
 -- Captures of hanging pieces are always winning
 addHanging :: MyPos -> Piece -> Square -> Square -> ([LMove], [LMove]) -> ([LMove], [LMove])
 addHanging pos vict to from (wsqs, lsqs)
-    = ((moveToLMove apiece vict $ moveAddPiece apiece (moveFromTo from to)) : wsqs, lsqs)
-    where Busy _ apiece = tabla pos from
+    | Busy _ apiece <- tabla pos from
+          = ((moveToLMove apiece vict $ moveAddPiece apiece (moveFromTo from to)) : wsqs, lsqs)
+    | otherwise = error "addHanging pattern"
 
 addHangingP :: Piece -> Square -> Square -> ([LMove], [LMove]) -> ([LMove], [LMove])
 addHangingP vict to from (wsqs, lsqs) = (map (moveToLMove Pawn vict) promos ++ wsqs, lsqs)

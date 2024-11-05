@@ -1,5 +1,5 @@
 module Moves.Pattern (
-        genArray, regPawnsBB,
+        genMovesArray, regPawnsBB,
         row1,  row2,  row3,  row4,  row5,  row6,  row7,  row8,
         fileA, fileB, fileC, fileD, fileE, fileF, fileG, fileH,
         bbLeft, bbRight,
@@ -7,7 +7,7 @@ module Moves.Pattern (
     ) where
 
 import Data.Bits
-import Data.Array.Unboxed
+import Data.Array.Unboxed (UArray, listArray, (!))
 
 import Struct.Struct
 
@@ -64,8 +64,8 @@ up      = flip shiftL 8
 
 type Elem = (Int, BBoard)
 
-genArray :: BBoard -> Int -> [Elem]
-genArray b i = concatMap genRow $ genFile e
+genMovesArray :: BBoard -> Int -> [Elem]
+genMovesArray b i = concatMap genRow $ genFile e
     where e = (i, b)
 
 genDir :: (Elem -> Elem) -> (Elem -> Bool) -> Elem -> [Elem]
