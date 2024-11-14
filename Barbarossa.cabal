@@ -65,7 +65,7 @@ Executable Barbarossa
                -threaded
                -rtsopts -with-rtsopts=-N1
                -fspec-constr-count=24
-               -funfolding-use-threshold=32
+        --     -funfolding-use-threshold=32
                -fno-warn-tabs
                -msse4.2
                -optl-s
@@ -127,7 +127,7 @@ Executable SelfPlay
                -threaded
                -rtsopts -with-rtsopts=-N1
                -fspec-constr-count=24
-               -funfolding-use-threshold=32
+          --   -funfolding-use-threshold=32
                -fno-warn-tabs
                -msse4.2
                -optl-s

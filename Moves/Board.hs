@@ -730,14 +730,14 @@ data SEEPars = SEEPars {
 -- the source square of the first capture, the destination of the captures
 -- and the value of the first captured piece
 seeMoveValue :: MyPos -> Attacks -> Square -> Square -> Int -> Int
-seeMoveValue pos !attacks sqfirstmv sqto gain0 = v
+seeMoveValue !pos !attacks !sqfirstmv !sqto !gain0 = v
     where v = go sp0 [gain0]
           go :: SEEPars -> [Int] -> Int
-          go seepars acc =
-             let !gain'   = seeVal  seepars -     seeGain seepars
-                 !moved'  = seeMovd seepars .|.   seeFrom seepars
-                 !attacs1 = seeAtts seepars `xor` seeFrom seepars
-                 (!from', !val') = chooseAttacker pos (attacs1 .&. seeAgrs seepars)
+          go !seepars acc =
+             let gain'   = seeVal  seepars -     seeGain seepars
+                 moved'  = seeMovd seepars .|.   seeFrom seepars
+                 attacs1 = seeAtts seepars `xor` seeFrom seepars
+                 (from', val') = chooseAttacker pos (attacs1 .&. seeAgrs seepars)
                  attacs2  = newAttacs sqto moved' (seeAttsRec seepars)
                  acc' = gain' : acc
                  seepars1 = SEEPars { seeGain = gain', seeVal = val', seeAtts = attacs1,
