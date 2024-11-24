@@ -1,27 +1,38 @@
 {-# LANGUAGE BangPatterns #-}
 module Struct.Struct (
-         BBoard, Square, ZKey, ShArray, MaArray, DbArray, Move(..),
-         Piece(..), Color(..), TabCont(..), MyPos(..), LazyBits(..),
-         other, moving, epMask, fyMask, fyIncr, fyZero, mvMask, caRiMa,
-         caRKiw, caRQuw, caRMKw, caRMQw, caRAKw, caRAQw, caRKib, caRQub, caRMKb, caRMQb, caRAKb, caRAQb,
-         tabla, emptyPos, isReversible, remis50Moves, set50Moves, reset50Moves, get50Moves, addHalfMove,
-         fromSquare, toSquare, isSlide, isDiag, isKkrq,
-         moveIsNormal, moveIsCastle, moveIsPromo, moveIsEnPas, moveColor, movePiece,
-         movePromoPiece, moveEnPasDel, makeEnPas, moveAddColor, moveAddPiece,
-         moveHisAdr, moveHisOfs,
-         makeCastleFor, makePromo, moveFromTo, showWord64,
-         activatePromo, fromColRow, checkCastle, checkEnPas, toString,
-         myAttacs, yoAttacs, check,
-         myPAttacs, myNAttacs, myBAttacs, myRAttacs, myQAttacs, myKAttacs,
-         yoPAttacs, yoNAttacs, yoBAttacs, yoRAttacs, yoQAttacs, yoKAttacs
-    ) where
+    BBoard, Square, ZKey, ShArray, MaArray, DbArray, Move(..),
+    Piece(..), Color(..), TabCont(..), MyPos(..), LazyBits(..),
+    other, moving,
+    isCheck, inCheck, checkOk, clearCast, genMoveCast, castKingRookOk, castQueenRookOk,
+    lsbBBoard, bbToSquares, less, firstOne, bbToSquaresBB,
+    shadowDown, shadowUp, uTestBit, uBit,
+    zobMove, zobPiece, zobCastKw, zobCastQw, zobCastKb, zobCastQb, zobEP,
+    epMask, mvMask, halfMoves, get50Moves,
+    decodeCastWhiteKing, decodeCastBlackKing, decodeCastWhiteQueen, decodeCastBlackQueen,
+    -- fyMask, fyIncr, fyZero,
+    -- caRiMa, caRKiw, caRQuw, caRMKw, caRMQw, caRAKw, caRAQw, caRKib, caRQub, caRMKb, caRMQb, caRAKb, caRAQb,
+    tabla, emptyPos, isReversible, remis50Moves, set50Moves, reset50Moves, addHalfMove,
+    fromSquare, toSquare, isSlide, isDiag, isKkrq,
+    moveIsNormal, moveIsCastle, moveIsPromo, moveIsEnPas, moveColor, movePiece,
+    movePromoPiece, moveEnPasDel, makeEnPas, moveAddColor, moveAddPiece,
+    moveHisAdr, moveHisOfs,
+    makeCastleFor, makePromo, moveFromTo, showWord64,
+    activatePromo, fromColRow, checkCastle, checkEnPas, toString,
+    myAttacs, yoAttacs, check,
+    myPAttacs, myNAttacs, myBAttacs, myRAttacs, myQAttacs, myKAttacs,
+    yoPAttacs, yoNAttacs, yoBAttacs, yoRAttacs, yoQAttacs, yoKAttacs
+) where
 
 import Data.Array.Unboxed
 import Data.Array.Base
-import Data.Char (ord, chr)
-import Data.Word
 import Data.Bits
+import Data.Char (ord, chr)
+import Data.List (unfoldr)
+import Data.Word
 import Numeric
+import GHC.Arr (unsafeIndex)
+import System.Random
+-- import Control.Exception (assert)
 
 -- The very basic data types used in the modules
 type BBoard = Word64
@@ -170,14 +181,17 @@ newtype Move = Move Word16 deriving Eq
 instance Show Move where
     show = toString
 
--- some constant bitboards for additional conditions like
+-- Some constant bitboards for additional conditions like
 -- en-passant, castle rights and 50 moves rule
+fyBit :: Int
 epMask, fyMask, fyIncr, fyZero, fyMaxi, mvMask, caRiMa :: BBoard
 caRKiw, caRQuw, caRMKw, caRMQw, caRAKw, caRAQw :: BBoard
 caRKib, caRQub, caRMKb, caRMQb, caRAKb, caRAQb :: BBoard
+fyBit  = 8                      -- bit number (beginning with 0) which holds the move increment
 epMask = 0x0000FF0000FF0000	-- en passant mask
 fyMask = 0x000000000000FF00	-- mask for 50 moves rules
-fyIncr = 0x0000000000000100	-- 50 moves rule increment
+-- fyIncr = 0x0000000000000100	-- 50 moves rule increment
+fyIncr = uBit fyBit        	-- 50 moves rule increment
 fyZero = complement fyMask	-- to reset the 50 moves count
 fyMaxi = 0x0000000000006400	-- to compare if we reaches 100 halfmoves
 mvMask = 0x0080000000000000	-- Moving mask (1 in that bit means black moves)
@@ -235,6 +249,10 @@ get50Moves p = fromIntegral $ (epcas p .&. fyMask) `unsafeShiftR` 8
 {-# INLINE addHalfMove #-}
 addHalfMove :: BBoard -> BBoard
 addHalfMove b = b + fyIncr
+
+{-# INLINE halfMoves #-}
+halfMoves :: MyPos -> BBoard
+halfMoves p = (epcas p .&. fyMask) `unsafeShiftR` fyBit
 
 {-# INLINE isSlide #-}
 isSlide :: Piece -> Bool
@@ -493,3 +511,228 @@ toString m = col sc : row sr : col dc : row dr : promo
           pcToCh Knight = 'n'
           pcToCh Pawn   = 'p'	-- is used not only for promotion!
           pcToCh King   = 'k'
+
+-- Is color c in check in position p?
+{-# INLINE isCheck #-}
+isCheck :: MyPos -> Color -> Bool
+isCheck p White | inCheck p = check p .&. black p == 0
+                | otherwise = False
+isCheck p Black | check p .&. black p == 0 = False
+                | otherwise                = True
+
+{-# INLINE inCheck #-}
+inCheck :: MyPos -> Bool
+inCheck = (/= 0) . check
+
+{-# INLINE clearCast #-}
+clearCast :: BBoard -> BBoard -> (BBoard, ZKey)
+clearCast cas sd
+    | sdposs == 0 || sdcas == 0 = (0, 0)	-- most of the time
+    | otherwise = clearingCast sdcas cas	-- complicated cases
+    where sdposs = sd .&. caRiMa	-- moving from/to king/rook position?
+          sdcas  = sdposs .&. cas	-- first time touched
+
+{-# INLINE clearingCast #-}
+clearingCast :: BBoard -> BBoard -> (BBoard, ZKey)
+clearingCast sdcas cas = (cascl, zobcl)
+    where (casw, zobw) | casrw == 0 = (0, 0)	-- cast rights & changes for white
+                       | casrw == wkqb = if sdcas .&. wkqb /= 0
+                                            then (wkqb, zobCastQw)
+                                            else (0, 0)
+                       | casrw == wkkb = if sdcas .&. wkkb /= 0
+                                            then (wkkb, zobCastKw)
+                                            else (0, 0)
+                       | otherwise     = if sdcas .&. wkbb /= 0
+                                            then (wkqb .|. wkkb, zobCastQw `xor` zobCastKw)
+                                            else if sdcas .&. wqrb /= 0
+                                                    then (wqrb, zobCastQw)
+                                                    else if sdcas .&. wkrb /= 0
+                                                            then (wkrb, zobCastKw)
+                                                            else (0, 0)
+          (casb, zobb) | casrb == 0 = (0, 0)	-- cast rights & changes for white
+                       | casrb == bkqb = if sdcas .&. bkqb /= 0
+                                            then (bkqb, zobCastQb)
+                                            else (0, 0)
+                       | casrb == bkkb = if sdcas .&. bkkb /= 0
+                                            then (bkkb, zobCastKb)
+                                            else (0, 0)
+                       | otherwise     = if sdcas .&. bkbb /= 0
+                                            then (bkqb .|. bkkb, zobCastQb `xor` zobCastKb)
+                                            else if sdcas .&. bqrb /= 0
+                                                    then (bqrb, zobCastQb)
+                                                    else if sdcas .&. bkrb /= 0
+                                                            then (bkrb, zobCastKb)
+                                                            else (0, 0)
+          !casr  = cas .&. caRiMa
+          !casrw = casr .&. 0xFF
+          !casrb = casr .&. 0xFF00000000000000
+          !cascl = casw .|. casb
+          !zobcl = zobw `xor` zobb
+          wkqb = 0x11	-- king & queen rook for white
+          wkkb = 0x90	-- king & king rook for white
+          wkbb = 0x10	-- white king
+          wqrb = 0x01	-- white queen rook
+          wkrb = 0x80	-- white king rook
+          bkqb = 0x1100000000000000	-- king & queen rook for black
+          bkkb = 0x9000000000000000	-- king & king rook for black
+          bkbb = 0x1000000000000000	-- black king
+          bqrb = 0x0100000000000000	-- black queen rook
+          bkrb = 0x8000000000000000	-- black king rook
+
+-- Generate the castle moves
+genMoveCast :: MyPos -> [Move]
+genMoveCast p
+    | inCheck p = []
+    | otherwise = kingside ++ queenside
+    where (cmidk, cmidq, cattk, cattq)
+              | c == White = (caRMKw, caRMQw, caRAKw, caRAQw)
+              | otherwise  = (caRMKb, caRMQb, caRAKb, caRAQb)
+          kingside  = if castKingRookOk p c && (occup p .&. cmidk == 0) && (yoAttacs p .&. cattk == 0)
+                         then [caks] else []
+          queenside = if castQueenRookOk p c && (occup p .&. cmidq == 0) && (yoAttacs p .&. cattq == 0)
+                         then [caqs] else []
+          caks = makeCastleFor c True
+          caqs = makeCastleFor c False
+          c = moving p
+
+{-# INLINE castKingRookOk #-}
+castKingRookOk :: MyPos -> Color -> Bool
+castKingRookOk !p White = epcas p .&.  b7 /= 0 where b7 = uBit 7
+castKingRookOk !p Black = epcas p .&. b63 /= 0 where b63 = uBit 63
+
+{-# INLINE castQueenRookOk #-}
+castQueenRookOk :: MyPos -> Color -> Bool
+castQueenRookOk !p White = epcas p .&.  b0 /= 0 where b0 = 1 
+castQueenRookOk !p Black = epcas p .&. b56 /= 0 where b56 = uBit 56
+
+{-# INLINE checkOk #-}
+checkOk :: MyPos -> Bool
+checkOk p = yo p .&. kings p .&. myAttacs p == 0
+
+-- A bitboard with only one bit set from the argument (least significant bit)
+{-# INLINE lsbBBoard #-}
+lsbBBoard :: BBoard -> BBoard
+lsbBBoard = uBit . firstOne
+
+{-# INLINE less #-}
+less :: BBoard -> BBoard -> BBoard
+less w1 w2 = w1 .&. complement w2
+
+-- First set bit number (lsb order)
+{-# INLINE firstOne #-}
+firstOne :: BBoard -> Square
+firstOne = countTrailingZeros
+
+{-# INLINE bbToSquares #-}
+bbToSquares :: BBoard -> [Square]
+bbToSquares = unfoldr f
+    where f :: BBoard -> Maybe (Square, BBoard)
+          f 0 = Nothing
+          f b = Just $ extractSquare b
+
+-- Which implementation is better?
+{-# INLINE bbToSquaresBB #-}
+bbToSquaresBB :: (Square -> BBoard) -> BBoard -> BBoard
+bbToSquaresBB f = foldr (\sq w -> f sq .|. w) 0 . bbToSquares
+{-
+bbToSquaresBB f = go 0
+    where go w 0 = w
+          go w b = let (sq, b') = extractSquare b
+                       !w' = f sq .|. w
+                   in go w' b'
+-}
+
+{-# INLINE extractSquare #-}
+extractSquare :: BBoard -> (Square, BBoard)
+extractSquare b = let !sq = firstOne b
+                  in (sq, b `xor` uBit sq)
+
+-- Because the normal bits operations are all safe
+-- we define here the unsafe versions specialized for BBoard
+{-# INLINE uTestBit #-}
+uTestBit :: BBoard -> Int -> Bool
+uTestBit w b = w .&. uBit b /= 0
+
+{-# INLINE uBit #-}
+uBit :: Square -> BBoard
+uBit = unsafeShiftL 1
+
+{-# INLINE shadowDown #-}
+shadowDown :: BBoard -> BBoard
+shadowDown !wp = wp3
+    where !wp0 =          wp  `unsafeShiftR`  8
+          !wp1 = wp0 .|. (wp0 `unsafeShiftR`  8)
+          !wp2 = wp1 .|. (wp1 `unsafeShiftR` 16)
+          !wp3 = wp2 .|. (wp2 `unsafeShiftR` 32)
+
+{-# INLINE shadowUp #-}
+shadowUp :: BBoard -> BBoard
+shadowUp !wp = wp3
+    where !wp0 =          wp  `unsafeShiftL`  8
+          !wp1 = wp0 .|. (wp0 `unsafeShiftL`  8)
+          !wp2 = wp1 .|. (wp1 `unsafeShiftL` 16)
+          !wp3 = wp2 .|. (wp2 `unsafeShiftL` 32)
+
+
+genInit, zLen :: Int
+genInit = 118863
+zLen = 781
+
+zobrist :: UArray Int ZKey
+zobrist = listArray (0, zLen-1) $ take zLen $ randoms (mkStdGen genInit)
+
+-- When black is moving: xor with that number
+zobMove :: ZKey
+zobMove = fromIntegral $ zobrist `unsafeAt` (12*64)
+
+-- For every pice type of every color on every valid
+-- field: one index in zobrist (0 to 12*64-1)
+{-# INLINE zobPiece #-}
+zobPiece :: Color -> Piece -> Square -> ZKey
+zobPiece White p sq = zobrist `unsafeAt` idx
+    where !idx = (p2intw `unsafeAt` unsafeIndex (Pawn, King) p) + sq
+zobPiece Black p sq = zobrist `unsafeAt` idx
+    where !idx = (p2intb `unsafeAt` unsafeIndex (Pawn, King) p) + sq
+
+p2intw, p2intb :: UArray Piece Int
+p2intw = array (Pawn, King) $ zip [Pawn .. King] [0, 64 .. ]
+p2intb = array (Pawn, King) $ zip [Pawn .. King] [b0, b1 .. ]
+    where b0 = p2intw!King + 64
+          b1 = b0 + 64
+
+zobCastBegin :: Int
+zobCastBegin = 12*64+1
+
+zobCastKw, zobCastQw, zobCastKb, zobCastQb :: ZKey
+zobCastKw = zobrist `unsafeAt` zobCastBegin
+zobCastQw = zobrist `unsafeAt` (zobCastBegin + 1)
+zobCastKb = zobrist `unsafeAt` (zobCastBegin + 2)
+zobCastQb = zobrist `unsafeAt` (zobCastBegin + 3)
+
+{-# INLINE zobEP #-}
+zobEP :: Int -> ZKey
+zobEP x = zobrist `unsafeAt` (zobCastBegin + 4 + x)
+
+{-# INLINE decodeCastWhiteKing #-}
+decodeCastWhiteKing :: String -> ((BBoard -> BBoard), BBoard)
+decodeCastWhiteKing fen3
+    | 'K' `elem` fen3 = ((.|. caRKiw), zobCastKw)
+    | otherwise       = (id, 0)
+
+{-# INLINE decodeCastBlackKing #-}
+decodeCastBlackKing :: String -> ((BBoard -> BBoard), BBoard)
+decodeCastBlackKing fen3
+    | 'k' `elem` fen3 = ((.|. caRKib), zobCastKb)
+    | otherwise       = (id, 0)
+
+{-# INLINE decodeCastWhiteQueen #-}
+decodeCastWhiteQueen :: String -> ((BBoard -> BBoard), BBoard)
+decodeCastWhiteQueen fen3
+    | 'Q' `elem` fen3 = ((.|. caRQuw), zobCastQw)
+    | otherwise       = (id, 0)
+
+{-# INLINE decodeCastBlackQueen #-}
+decodeCastBlackQueen :: String -> ((BBoard -> BBoard), BBoard)
+decodeCastBlackQueen fen3
+    | 'q' `elem` fen3 = ((.|. caRQub), zobCastQb)
+    | otherwise       = (id, 0)

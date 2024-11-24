@@ -30,7 +30,6 @@ import Struct.Context
 import Struct.Status
 import Hash.TransTab
 import Moves.Board
-import Moves.BitBoard (less, uBit)
 import Eval.BasicEval
 import Eval.Eval
 import Moves.ShowMe

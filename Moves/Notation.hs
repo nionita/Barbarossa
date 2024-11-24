@@ -6,7 +6,6 @@ import Data.Bits
 import Data.Char (ord, chr, toLower)
 
 import Struct.Struct
-import Moves.BitBoard
 import Moves.Pattern
 import Moves.Moves
 import Moves.Board
@@ -404,7 +403,7 @@ colRowToSquare :: Int -> Int -> Int
 colRowToSquare x y = y*8 + x
 
 posToFen :: MyPos -> String
-posToFen pos = unwords [lns, tmv, correct cast, ep, halb, rest]
+posToFen pos = unwords [lns, tmv, correct cast, ep, half, rest]
     where lns :: String
           lns = concat $ map (extline . foldl tra ("", 0))
                        $ map (\s -> map (tabla pos) [s..s+7]) $ reverse [0, 8 .. 56]
@@ -426,7 +425,7 @@ posToFen pos = unwords [lns, tmv, correct cast, ep, halb, rest]
              | otherwise = let sq = firstOne epbb
                                (r, c) = sq `divMod` 8
                            in chr (ord 'a' + c) : chr (ord '1' + r) : []
-          halb = show $ (epcas pos .&. fyMask) `div` fyIncr
+          half = show $ halfMoves pos
           rest = "1"	-- rest not yet implemented
           correct "----" = "-"
           correct x = filter ((/=) '-') x

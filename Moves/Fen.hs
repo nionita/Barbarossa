@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE PatternGuards #-}
 module Moves.Fen (
     posFromFen, initPos, updatePos, setPiece
     ) where
@@ -10,10 +11,8 @@ import Data.Maybe (fromJust)
 
 import Struct.Struct
 import Moves.Moves
-import Moves.BitBoard
 import Moves.Pattern
 import Eval.BasicEval
-import Hash.Zobrist
 
 startFen :: String
 startFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR/ w KQkq - 0 1"
@@ -45,18 +44,22 @@ initPos :: MyPos
 initPos = posFromFen startFen
 
 posFromFen :: String -> MyPos
-posFromFen fen = updatePos p { epcas = x, zobkey = zk }
-    where fen1:fen2:fen3:fen4:fen5:_ = fenFromString fen
-          p  = fenToTable fen1
+posFromFen fen
+    | fen1:fen2:fen3:fen4:fen5:_ <- fenFromString fen = posFromFenOk fen1 fen2 fen3 fen4 fen5
+    | otherwise                                       = error $ "Wrong fen: " ++ fen
+
+posFromFenOk :: String -> String -> String -> String -> String -> MyPos
+posFromFenOk fen1 fen2 fen3 fen4 fen5 = updatePos p { epcas = x, zobkey = zk }
+    where p  = fenToTable fen1
           x  = fyInit . castInit . epInit $ epcas0
           (epcas0, z) = case fen2 of
               'w':_ -> (0, 0)
               'b':_ -> (mvMask, zobMove)
               _     -> error "posFromFen: expect w or b"
-          (cK, z1) = if 'K' `elem` fen3 then ((.|. caRKiw), zobCastKw) else (id, 0)
-          (cQ, z2) = if 'Q' `elem` fen3 then ((.|. caRQuw), zobCastQw) else (id, 0)
-          (ck, z3) = if 'k' `elem` fen3 then ((.|. caRKib), zobCastKb) else (id, 0)
-          (cq, z4) = if 'q' `elem` fen3 then ((.|. caRQub), zobCastQb) else (id, 0)
+          (cK, z1) = decodeCastWhiteKing  fen3
+          (cQ, z2) = decodeCastWhiteQueen fen3
+          (ck, z3) = decodeCastBlackKing  fen3
+          (cq, z4) = decodeCastBlackQueen fen3
           castInit = cQ . cK . cq . ck
           (epInit, ze) = case fen4 of
               f:r:_ | f `elem` "abcdefgh" && r `elem` "36"

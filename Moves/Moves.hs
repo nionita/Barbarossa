@@ -2,7 +2,7 @@
 module Moves.Moves (
     movesInit, pAttacs, pawnWhiteAttacks, pawnBlackAttacks, targetPawnMoves,
     fAttacs, kAttacs, qAttacs, rAttacs, bAttacs, nAttacs
-    ) where
+) where
 
 import Data.Array.Base
 import Data.Bits
@@ -10,7 +10,6 @@ import Data.Bits
 import Struct.Struct
 import Moves.GenMagics
 import Moves.Magics
-import Moves.BitBoard
 import Moves.Pattern
 
 -- Used to compute all the needed tables by initialiasation:

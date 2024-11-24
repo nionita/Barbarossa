@@ -1,15 +1,13 @@
 {-# LANGUAGE TypeSynonymInstances, MultiParamTypeClasses, PatternGuards, BangPatterns #-}
 module Moves.Board (
     posFromFen, initPos,
-    isCheck, inCheck,
     movePassed, moveIsCapture,
-    castKingRookOk, castQueenRookOk,
-    genMoveCast, genMoveNCapt, genMovePromo, genMoveFCheck, genMoveCaptWL,
+    genMoveNCapt, genMovePromo, genMoveFCheck, genMoveCaptWL,
     genMoveNCaptToCheck,
     updatePos, checkOk, moveChecks,
     legalMove, alternateMoves,
     doFromToMove, reverseMoving
-    ) where
+) where
 
 import Data.Bits
 import Data.List (sort, foldl')
@@ -18,24 +16,9 @@ import Data.Word
 import Struct.Struct
 import Moves.Pattern
 import Moves.Moves
-import Moves.BitBoard
 import Moves.ShowMe
 import Eval.BasicEval
-import Hash.Zobrist
 import Moves.Fen
-
--- Is color c in check in position p?
-{-# INLINE isCheck #-}
-isCheck :: MyPos -> Color -> Bool
-isCheck p White | check p .&. white == 0 = False
-                | otherwise              = True
-    where !white = occup p `less` black p
-isCheck p Black | check p .&. black p == 0 = False
-                | otherwise                = True
-
-{-# INLINE inCheck #-}
-inCheck :: MyPos -> Bool
-inCheck = (/= 0) . check
 
 {-# INLINE movePassed #-}
 movePassed :: MyPos -> Move -> Bool
@@ -285,36 +268,6 @@ genMoveNCaptDirCheck p
 genMoveNCaptIndirCheck :: MyPos -> [Move]
 genMoveNCaptIndirCheck _ = []
 
--- Generate the castle moves
-genMoveCast :: MyPos -> [Move]
-genMoveCast p
-    | inCheck p = []
-    | otherwise = kingside ++ queenside
-    where (cmidk, cmidq, cattk, cattq)
-              | c == White = (caRMKw, caRMQw, caRAKw, caRAQw)
-              | otherwise  = (caRMKb, caRMQb, caRAKb, caRAQb)
-          kingside  = if castKingRookOk  p c && (occup p .&. cmidk == 0) && (yoAttacs p .&. cattk == 0)
-                         then [caks] else []
-          queenside = if castQueenRookOk p c && (occup p .&. cmidq == 0) && (yoAttacs p .&. cattq == 0)
-                         then [caqs] else []
-          caks = makeCastleFor c True
-          caqs = makeCastleFor c False
-          c = moving p
-
-{-# INLINE castKingRookOk #-}
-castKingRookOk :: MyPos -> Color -> Bool
-castKingRookOk !p White = epcas p .&.  b7 /= 0 where b7 = uBit 7
-castKingRookOk !p Black = epcas p .&. b63 /= 0 where b63 = uBit 63
-
-{-# INLINE castQueenRookOk #-}
-castQueenRookOk :: MyPos -> Color -> Bool
-castQueenRookOk !p White = epcas p .&.  b0 /= 0 where b0 = 1 
-castQueenRookOk !p Black = epcas p .&. b56 /= 0 where b56 = uBit 56
-
-{-# INLINE checkOk #-}
-checkOk :: MyPos -> Bool
-checkOk p = yo p .&. kings p .&. myAttacs p == 0
-
 data ChangeAccum = CA !ZKey !Int
 
 -- Accumulate a set of changes in MyPos (except BBoards) due to setting a piece on a square
@@ -352,61 +305,6 @@ changePining p src dst = kings p `testBit` src	-- king is moving
                       || slide p `testBit` src -- pining piece is moving
                       || slide p `testBit` dst -- pining piece is captured
 -}
-
-{-# INLINE clearCast #-}
-clearCast :: BBoard -> BBoard -> (BBoard, ZKey)
-clearCast cas sd
-    | sdposs == 0 || sdcas == 0 = (0, 0)	-- most of the time
-    | otherwise = clearingCast sdcas cas	-- complicated cases
-    where !sdposs = sd .&. caRiMa	-- moving from/to king/rook position?
-          sdcas = sdposs .&. cas	-- first time touched
-
-{-# INLINE clearingCast #-}
-clearingCast :: BBoard -> BBoard -> (BBoard, ZKey)
-clearingCast sdcas cas = (cascl, zobcl)
-    where (casw, zobw) | casrw == 0 = (0, 0)	-- cast rights & changes for white
-                       | casrw == wkqb = if sdcas .&. wkqb /= 0
-                                            then (wkqb, zobCastQw)
-                                            else (0, 0)
-                       | casrw == wkkb = if sdcas .&. wkkb /= 0
-                                            then (wkkb, zobCastKw)
-                                            else (0, 0)
-                       | otherwise     = if sdcas .&. wkbb /= 0
-                                            then (wkqb .|. wkkb, zobCastQw `xor` zobCastKw)
-                                            else if sdcas .&. wqrb /= 0
-                                                    then (wqrb, zobCastQw)
-                                                    else if sdcas .&. wkrb /= 0
-                                                            then (wkrb, zobCastKw)
-                                                            else (0, 0)
-          (casb, zobb) | casrb == 0 = (0, 0)	-- cast rights & changes for white
-                       | casrb == bkqb = if sdcas .&. bkqb /= 0
-                                            then (bkqb, zobCastQb)
-                                            else (0, 0)
-                       | casrb == bkkb = if sdcas .&. bkkb /= 0
-                                            then (bkkb, zobCastKb)
-                                            else (0, 0)
-                       | otherwise     = if sdcas .&. bkbb /= 0
-                                            then (bkqb .|. bkkb, zobCastQb `xor` zobCastKb)
-                                            else if sdcas .&. bqrb /= 0
-                                                    then (bqrb, zobCastQb)
-                                                    else if sdcas .&. bkrb /= 0
-                                                            then (bkrb, zobCastKb)
-                                                            else (0, 0)
-          !casr  = cas .&. caRiMa
-          !casrw = casr .&. 0xFF
-          !casrb = casr .&. 0xFF00000000000000
-          !cascl = casw .|. casb
-          !zobcl = zobw `xor` zobb
-          wkqb = 0x11	-- king & queen rook for white
-          wkkb = 0x90	-- king & king rook for white
-          wkbb = 0x10	-- white king
-          wqrb = 0x01	-- white queen rook
-          wkrb = 0x80	-- white king rook
-          bkqb = 0x1100000000000000	-- king & queen rook for black
-          bkkb = 0x9000000000000000	-- king & king rook for black
-          bkbb = 0x1000000000000000	-- black king
-          bqrb = 0x0100000000000000	-- black queen rook
-          bkrb = 0x8000000000000000	-- black king rook
 
 -- Just for a dumb debug: a quick check if two consecutive moves
 -- can be part of a move sequence
