@@ -5,7 +5,8 @@
 
 module Eval.Eval (
     initEvalState,
-    posEval
+    posEval,
+    makeFeatures
 ) where
 
 import Data.Array.Base (unsafeAt)
@@ -14,6 +15,14 @@ import Data.List (minimumBy)
 import Data.Array.Unboxed
 import Data.Ord (comparing)
 import Data.Int
+
+import Data.Vector.Unboxed.Mutable (MVector, PrimMonad, PrimState)
+import Data.Vector.Unboxed         (Vector)
+import qualified Data.Vector.Unboxed.Mutable as V
+import qualified Data.Vector.Unboxed         as U
+
+import Control.Monad (foldM_)
+import Control.Monad.ST
 
 import Struct.Struct
 import Struct.Status
@@ -56,6 +65,28 @@ evalDispatch p !sti
     | kings p .|. pawns p == occup p,
       Just r <- pawnEndGame p = r
     | otherwise    = normalEval p sti
+
+type Features = Vector Int32
+type VFeatures m = MVector (PrimState m) Int32
+
+-- The length of a feature vector (for one side) ist the sum of the
+-- different features types that we define in separate functions
+featuresLength :: Int
+featuresLength = materFeatsCount + mobilFeatsCount + ksafeFeatsCount
+
+-- Given a position, create 2 vectors with the features for me & you
+makeFeatures :: MyPos -> (Features, Features)
+makeFeatures p = runST $ do
+    featMe <- V.new featuresLength
+    featYo <- V.new featuresLength
+    foldM_ (\ i f -> f i) 0 [
+            materFeats p featMe featYo,
+            mobilFeats p featMe featYo,
+            ksafeFeats p featMe featYo
+        ]
+    ufMe <- U.unsafeFreeze featMe
+    ufYo <- U.unsafeFreeze featYo
+    return (ufMe, ufYo)
 
 normalEval :: MyPos -> EvalState -> Int
 normalEval p !sti = sc
@@ -263,6 +294,28 @@ attCoef = listArray (0, 283) $ take zeros (repeat 0) ++ [ f x | x <- [0..63] ] +
           zeros = 8
           maxks = 4500
 
+-- Write the feature vectors for king safety
+-- We consider the number of attacks of every piece type in the opponent king area
+-- in order pawn, knight, bishop, rook, queen, king
+ksafeFeats :: PrimMonad m => MyPos -> VFeatures m -> VFeatures m -> Int -> m Int
+ksafeFeats p featMe featYo i = do
+    V.write featMe (i + 0) $ fromIntegral $ popCount $ myPAttacs p .&. yoKAttacs p
+    V.write featMe (i + 1) $ fromIntegral $ popCount $ myNAttacs p .&. yoKAttacs p
+    V.write featMe (i + 2) $ fromIntegral $ popCount $ myBAttacs p .&. yoKAttacs p
+    V.write featMe (i + 3) $ fromIntegral $ popCount $ myRAttacs p .&. yoKAttacs p
+    V.write featMe (i + 4) $ fromIntegral $ popCount $ myQAttacs p .&. yoKAttacs p
+    V.write featMe (i + 5) $ fromIntegral $ popCount $ myKAttacs p .&. yoKAttacs p
+    V.write featYo (i + 0) $ fromIntegral $ popCount $ yoPAttacs p .&. myKAttacs p
+    V.write featYo (i + 1) $ fromIntegral $ popCount $ yoNAttacs p .&. myKAttacs p
+    V.write featYo (i + 2) $ fromIntegral $ popCount $ yoBAttacs p .&. myKAttacs p
+    V.write featYo (i + 3) $ fromIntegral $ popCount $ yoRAttacs p .&. myKAttacs p
+    V.write featYo (i + 4) $ fromIntegral $ popCount $ yoQAttacs p .&. myKAttacs p
+    V.write featYo (i + 5) $ fromIntegral $ popCount $ yoKAttacs p .&. myKAttacs p
+    return (i + 6)
+
+ksafeFeatsCount :: Int
+ksafeFeatsCount = 6
+
 kingSquare :: BBoard -> BBoard -> Square
 kingSquare kingsb colorp = firstOne $ kingsb .&. colorp
 {-# INLINE kingSquare #-}
@@ -273,6 +326,24 @@ materDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 materDiff p !ew = mad (ewMaterialDiff ew) md
     where !md | moving p == White =   mater p
               | otherwise         = - mater p
+
+-- Write the feature vectors for material, in order pawns, knights, bishops, rooks & queens
+materFeats :: PrimMonad m => MyPos -> VFeatures m -> VFeatures m -> Int -> m Int
+materFeats p featMe featYo i = do
+    V.write featMe (i + 0) $ fromIntegral $ popCount $ pawns   p .&. me p
+    V.write featMe (i + 1) $ fromIntegral $ popCount $ knights p .&. me p
+    V.write featMe (i + 2) $ fromIntegral $ popCount $ bishops p .&. me p
+    V.write featMe (i + 3) $ fromIntegral $ popCount $ rooks   p .&. me p
+    V.write featMe (i + 4) $ fromIntegral $ popCount $ queens  p .&. me p
+    V.write featYo (i + 0) $ fromIntegral $ popCount $ pawns   p .&. yo p
+    V.write featYo (i + 1) $ fromIntegral $ popCount $ knights p .&. yo p
+    V.write featYo (i + 2) $ fromIntegral $ popCount $ bishops p .&. yo p
+    V.write featYo (i + 3) $ fromIntegral $ popCount $ rooks   p .&. yo p
+    V.write featYo (i + 4) $ fromIntegral $ popCount $ queens  p .&. yo p
+    return (i + 5)
+
+materFeatsCount :: Int
+materFeatsCount = 5
 
 ------ King placement and opennes ------
 
@@ -481,6 +552,26 @@ mobDiff p mylr yolr mypb yopb ew = mad (ewMobilityKnight ew) n .
           !b = myB - yoB
           !r = myR - yoR
           !q = myQ - yoQ
+
+-- Write the feature vectors for mobility, in order for knights, bishops, rooks & queens
+-- Here we simplify: just the number of attacks of that piece type, except own pieces
+-- (i.e. number of possible moves, not taking pinning into consideration)
+mobilFeats :: PrimMonad m => MyPos -> VFeatures m -> VFeatures m -> Int -> m Int
+mobilFeats p featMe featYo i = do
+    let notMe = complement $ me p
+    V.write featMe (i + 0) $ fromIntegral $ popCount $ myNAttacs p .&. notMe
+    V.write featMe (i + 1) $ fromIntegral $ popCount $ myBAttacs p .&. notMe
+    V.write featMe (i + 2) $ fromIntegral $ popCount $ myRAttacs p .&. notMe
+    V.write featMe (i + 3) $ fromIntegral $ popCount $ myQAttacs p .&. notMe
+    let notYo = complement $ yo p
+    V.write featYo (i + 0) $ fromIntegral $ popCount $ yoNAttacs p .&. notYo
+    V.write featYo (i + 1) $ fromIntegral $ popCount $ yoBAttacs p .&. notYo
+    V.write featYo (i + 2) $ fromIntegral $ popCount $ yoRAttacs p .&. notYo
+    V.write featYo (i + 3) $ fromIntegral $ popCount $ yoQAttacs p .&. notYo
+    return (i + 4)
+
+mobilFeatsCount :: Int
+mobilFeatsCount = 4
 
 ------ Center control ------
 
