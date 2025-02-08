@@ -6,7 +6,7 @@
 module Eval.Eval (
     initEvalState,
     posEval,
-    makeFeatures
+    posToIndexes
 ) where
 
 import Data.Array.Base (unsafeAt)
@@ -68,6 +68,51 @@ evalDispatch p !sti
 
 type Features = Vector Int32
 type VFeatures m = MVector (PrimState m) Int32
+
+-- The simplest NN structure: one partial layer sees only its own pieces
+-- (in own forward direction) and an arbiter net evaluates the position:
+--
+-- 6x64 -> L1 \
+--             | 2*L1 -> L2 -> 1
+-- 6x64 -> L1 /
+--
+-- which means:
+-- input has 12x64 = 768 inputs (0 or 1) where the first 384 describe the part to move
+-- and the next 384 describe the passive part
+-- The input is sparse, we have at most 32 ones (4.16%)
+-- The layout per color is: P, N, B, R, Q, K in order to compute the index quickly
+-- from the ord function of the piece
+
+posToIndexes :: MyPos -> [Int]
+posToIndexes pos
+    | moving pos == White =                partToIndexes pos (me pos) White
+                         ++ map toPassive (partToIndexes pos (yo pos) Black)
+    | otherwise           =                partToIndexes pos (me pos) Black
+                         ++ map toPassive (partToIndexes pos (yo pos) White)
+
+partToIndexes :: MyPos -> BBoard -> Color -> [Int]
+partToIndexes pos part col
+    =  pieceToIndexes Pawn   (part .&. pawns   pos) col
+    ++ pieceToIndexes Knight (part .&. knights pos) col
+    ++ pieceToIndexes Bishop (part .&. bishops pos) col
+    ++ pieceToIndexes Rook   (part .&. rooks   pos) col
+    ++ pieceToIndexes Queen  (part .&. queens  pos) col
+    ++ pieceToIndexes King   (part .&. kings   pos) col
+
+pieceToIndexes :: Piece -> BBoard -> Color -> [Int]
+pieceToIndexes p bb col
+    | col == White = map ((+) offset) $ bbToSquares bb
+    | otherwise    = map ((+) offset) $ map blackPerspective $ bbToSquares bb
+    where offset = fromEnum p * 64
+
+-- Change the square number as from black perspective (mirror)
+-- file remains unchanged, the rank is complemented (000 <-> 111)
+blackPerspective :: Square -> Square
+blackPerspective sq = (sq .&. 7) .|. (complement (sq .&. 56) .&. 56)
+
+-- Index mapping for the passive part
+toPassive :: Int -> Int
+toPassive = (+) 384
 
 -- The length of a feature vector (for one side) ist the sum of the
 -- different features types that we define in separate functions

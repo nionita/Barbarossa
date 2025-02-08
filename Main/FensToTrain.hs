@@ -175,8 +175,7 @@ featurePos hi hof hot mn k () = do
                hFlush stdout
            let pos = posFromFen fen
                targ = tail rest
-               (featMe, featYo) = makeFeatures pos
-           hPutStrLn hof $ concat $ intersperse "," $ map show $ toList featMe ++ toList featYo
-           -- hPutStrLn hof $ concat $ map show $ toList featMe ++ toList featYo
+               idxs = posToIndexes pos
+           hPutStrLn hof $ concat $ intersperse "," $ map show idxs
            hPutStrLn hot targ
            return (True, ())
