@@ -4,7 +4,7 @@ module Struct.Struct (
          Piece(..), Color(..), TabCont(..), MyPos(..), LazyBits(..),
          other, moving, epMask, fyMask, fyIncr, fyZero, mvMask, caRiMa,
          caRKiw, caRQuw, caRMKw, caRMQw, caRAKw, caRAQw, caRKib, caRQub, caRMKb, caRMQb, caRAKb, caRAQb,
-         tabla, emptyPos, isReversible, remis50Moves, set50Moves, reset50Moves, addHalfMove,
+         tabla, emptyPos, isReversible, remis50Moves, set50Moves, reset50Moves, get50Moves, addHalfMove,
          fromSquare, toSquare, isSlide, isDiag, isKkrq,
          moveIsNormal, moveIsCastle, moveIsPromo, moveIsEnPas, moveColor, movePiece,
          movePromoPiece, moveEnPasDel, makeEnPas, moveAddColor, moveAddPiece,
@@ -227,6 +227,10 @@ reset50Moves b = b .&. fyZero
 {-# INLINE set50Moves #-}
 set50Moves :: Int -> BBoard -> BBoard
 set50Moves i b = reset50Moves b .|. (fromIntegral i `shift` 8 .&. fyMask)
+
+{-# INLINE get50Moves #-}
+get50Moves :: MyPos -> Int
+get50Moves p = fromIntegral $ (epcas p .&. fyMask) `unsafeShiftR` 8
 
 {-# INLINE addHalfMove #-}
 addHalfMove :: BBoard -> BBoard

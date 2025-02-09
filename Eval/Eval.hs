@@ -6,7 +6,7 @@
 module Eval.Eval (
     initEvalState,
     posEval,
-    posToIndexes
+    posToIndexes, prettyQuiet
 ) where
 
 import Data.Array.Base (unsafeAt)
@@ -113,6 +113,24 @@ blackPerspective sq = (sq .&. 7) .|. (complement (sq .&. 56) .&. 56)
 -- Index mapping for the passive part
 toPassive :: Int -> Int
 toPassive = (+) 384
+
+-- Function to filter training data for NNUE
+-- We want a pretty quiet position, but really quite is probably too much
+prettyQuiet :: MyPos -> Bool
+prettyQuiet p
+    | yoat == 0          = True		-- I have no attacks at all - really quiet
+    | yoat .&. noya /= 0 = False	-- you have hanging pieces
+    | epM /= 0           = False	-- minors en prise by pawns
+    | epR /= 0           = False	-- rooks en prise by pawns or minors
+    | epQ /= 0           = False	-- queens en prise by pawns, minors or rooks
+    | otherwise          = True
+    where !yoat = myAttacs p .&. yo p
+          noya = complement (yoAttacs p)
+          epM  = yo p .&. (knights p .|. bishops p) .&. myPAttacs p	-- minors attacked by pawns
+          epR  = yo p .&. rooks  p .&. myA1	-- rooks attacked by pawns or minors
+          epQ  = yo p .&. queens p .&. myA2	-- queens attacked by other than queens
+          myA1 = myPAttacs p .|. myNAttacs p .|. myBAttacs p
+          myA2 = myA1 .|. myRAttacs p
 
 -- The length of a feature vector (for one side) ist the sum of the
 -- different features types that we define in separate functions

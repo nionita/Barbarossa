@@ -23,7 +23,7 @@ import System.IO
 
 import Data.Vector.Unboxed (toList)
 
--- import Struct.Struct
+import Struct.Struct (get50Moves)
 -- import Struct.Status
 -- import Struct.Context
 -- import Struct.Config
@@ -95,11 +95,14 @@ filterFile inFileName outFileDir = do
         else do
             let outFeat = makeFileName inFileName outFileDir "-feat.txt"
                 outTarg = makeFileName inFileName outFileDir "-targ.txt"
+                outChk  = makeFileName inFileName outFileDir "-filt.csv"
             putStrLn $ inFileName ++ " --> " ++ outFeat ++ " & " ++ outTarg
             hi  <- openFile inFileName ReadMode
             hof <- openFile outFeat WriteMode
             hot <- openFile outTarg WriteMode
-            loopCount (featurePos hi hof hot Nothing) ()
+            hoc <- openFile outChk  WriteMode
+            wr  <- loopCount (featurePos hi hof hot hoc Nothing) 0
+            putStrLn $ show wr ++ " records written"
             hClose hof
             hClose hot
             hClose hi
@@ -154,13 +157,14 @@ skipLines hi m k () = do
            return (True, ())
 
 -- Eval position and write features & target
-featurePos :: Handle -> Handle -> Handle -> Maybe Int -> Int -> () -> IO (Bool, ())
-featurePos hi hof hot mn k () = do
+-- Filter non quiet positions and the ones with too high quiet moves (50 move rule)
+featurePos :: Handle -> Handle -> Handle -> Handle -> Maybe Int -> Int -> Int -> IO (Bool, Int)
+featurePos hi hof hot hoc mn k i = do
     end <- case mn of
                Nothing -> hIsEOF hi
                Just n  -> if k <= n then hIsEOF hi else return True
     if end
-       then return (False, ())
+       then return (False, i)
        else do
            line <- hGetLine hi
            when (k `mod` 100000 == 0) $ do
@@ -174,8 +178,12 @@ featurePos hi hof hot mn k () = do
                putStrLn $ "Fen: " ++ fen
                hFlush stdout
            let pos = posFromFen fen
-               targ = tail rest
-               idxs = posToIndexes pos
-           hPutStrLn hof $ concat $ intersperse "," $ map show idxs
-           hPutStrLn hot targ
-           return (True, ())
+           if (get50Moves pos <= 90 && prettyQuiet pos)
+               then do
+                   let targ = tail rest
+                       idxs = posToIndexes pos
+                   hPutStrLn hof $ concat $ intersperse "," $ map show idxs
+                   hPutStrLn hot targ
+                   hPutStrLn hoc line
+                   return (True, i+1)
+               else return (True, i)
