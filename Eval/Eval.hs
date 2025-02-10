@@ -69,15 +69,13 @@ evalDispatch p !sti
 type Features = Vector Int32
 type VFeatures m = MVector (PrimState m) Int32
 
--- The simplest NN structure: one partial layer sees only its own pieces
--- (in own forward direction) and an arbiter net evaluates the position:
+-- Direct NN structure: input layer sees all pieces from it pov
 --
--- 6x64 -> L1 \
---             | 2*L1 -> L2 -> 1
--- 6x64 -> L1 /
+-- 12x64 -> L1 -> L2 -> 1
 --
 -- which means:
--- input has 12x64 = 768 inputs (0 or 1) where the first 384 describe the part to move
+-- input has 12x64 = 768 inputs (0 or 1) where
+-- the first 384 describe the part to move
 -- and the next 384 describe the passive part
 -- The input is sparse, we have at most 32 ones (4.16%)
 -- The layout per color is: P, N, B, R, Q, K in order to compute the index quickly
@@ -86,9 +84,9 @@ type VFeatures m = MVector (PrimState m) Int32
 posToIndexes :: MyPos -> [Int]
 posToIndexes pos
     | moving pos == White =                partToIndexes pos (me pos) White
-                         ++ map toPassive (partToIndexes pos (yo pos) Black)
-    | otherwise           =                partToIndexes pos (me pos) Black
                          ++ map toPassive (partToIndexes pos (yo pos) White)
+    | otherwise           =                partToIndexes pos (me pos) Black
+                         ++ map toPassive (partToIndexes pos (yo pos) Black)
 
 partToIndexes :: MyPos -> BBoard -> Color -> [Int]
 partToIndexes pos part col
