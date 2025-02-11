@@ -21,7 +21,7 @@ import System.FilePath
 import System.IO
 -- import System.Time
 
-import Data.Vector.Unboxed (toList)
+-- import Data.Vector.Unboxed (toList)
 
 import Struct.Struct (get50Moves)
 -- import Struct.Status
@@ -36,6 +36,8 @@ import Moves.Fen
 -- import Search.CStateMonad (execCState)
 -- import Eval.FileParams (makeEvalState)
 import Eval.Eval
+import Eval.NNUE
+import Eval.Model (model)
 -- import Uci.UciGlue
 
 debug :: Bool
@@ -44,13 +46,15 @@ debug = False
 data Options = Options {
         -- optNThreads :: Int,	-- number of threads - not used for self play now
         optCsvPath :: FilePath,	-- CSV file or directoy with files to vectorize (fen, score, rezult)
-        optOutDir  :: FilePath	-- output directory for training files
+        optOutDir  :: FilePath,	-- output directory for training files
+        optTeste   :: Bool    	-- test NNUE
     }
 
 defaultOptions :: Options
 defaultOptions = Options {
         optCsvPath = "",
-        optOutDir = ""
+        optOutDir = "",
+        optTeste  = False
     }
 
 addIFile :: FilePath -> Options -> Options
@@ -59,10 +63,14 @@ addIFile fi opt = opt { optCsvPath = fi }
 addOFile :: FilePath -> Options -> Options
 addOFile fi opt = opt { optOutDir = fi }
 
+addTeste :: Options -> Options
+addTeste opt = opt { optTeste = True }
+
 options :: [OptDescr (Options -> Options)]
 options = [
         Option "i" ["input"]  (ReqArg addIFile "STRING") "Input file or directory",
-        Option "o" ["output"] (ReqArg addOFile "STRING") "Output directory"
+        Option "o" ["output"] (ReqArg addOFile "STRING") "Output directory",
+        Option "t" ["test"]   (NoArg addTeste) "Test NNUE function"
     ]
 
 theOptions :: IO (Options, [String])
@@ -77,7 +85,12 @@ theOptions = do
 main :: IO ()
 main = do
     (opts, _) <- theOptions
-    filterFile (optCsvPath opts) (optOutDir opts)
+    if optTeste opts
+        then do
+            let ok = teste
+            putStrLn $ "NNUE works: " ++ show ok
+            evalFile (optCsvPath opts)
+        else filterFile (optCsvPath opts) (optOutDir opts)
 
 -- Read a CSV file with fen, score, rezult and write in the output directory 2 files,
 -- one with the features and one with the training target:
@@ -156,7 +169,7 @@ skipLines hi m k () = do
                hFlush stdout
            return (True, ())
 
--- Eval position and write features & target
+-- Calculate indexes (features) of the position and write features & target
 -- Filter non quiet positions and the ones with too high quiet moves (50 move rule)
 featurePos :: Handle -> Handle -> Handle -> Handle -> Maybe Int -> Int -> Int -> IO (Bool, Int)
 featurePos hi hof hot hoc mn k i = do
@@ -187,3 +200,43 @@ featurePos hi hof hot hoc mn k i = do
                    hPutStrLn hoc line
                    return (True, i+1)
                else return (True, i)
+
+-- Read a file of FENs and evaluate them by NNUE
+evalFile :: FilePath -> IO ()
+evalFile inFileName = do
+    fex <- doesFileExist inFileName
+    if not fex
+        then putStrLn $ "File " ++ inFileName ++ " does not exist"
+        else do
+            putStrLn $ "Eval " ++ inFileName
+            hi  <- openFile inFileName ReadMode
+            ev  <- loopCount (evalPos hi (Just 5)) 0
+            putStrLn $ show ev ++ " records evaluated"
+            hClose hi
+
+-- Calculate indexes (features) of a position and the accumulator, then evaluate the NNUE score
+evalPos :: Handle -> Maybe Int -> Int -> Int -> IO (Bool, Int)
+evalPos hi mn k i = do
+    end <- case mn of
+               Nothing -> hIsEOF hi
+               Just n  -> if k <= n then hIsEOF hi else return True
+    if end
+       then return (False, i)
+       else do
+           line <- hGetLine hi
+           when (k `mod` 100000 == 0) $ do
+               putStrLn $ "Positions completed: " ++ show k
+               hFlush stdout
+           when debug $ do
+               putStrLn $ "Line: " ++ line
+               hFlush stdout
+           let (fen, _) = break ((==) ',') line
+               pos = posFromFen fen
+               idxs = posToIndexes pos
+               accum = accumFromList model idxs
+               score = applyNNUE model accum
+           putStrLn $ "Fen: " ++ fen ++ " indexes: " ++ show idxs
+           putStrLn $ "- accum: " ++ show accum
+           putStrLn $ "- score: " ++ show score
+           hFlush stdout
+           return (True, i+1)

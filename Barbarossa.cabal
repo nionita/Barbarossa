@@ -158,6 +158,8 @@ Executable FensToTrain
   Other-modules:
       Eval.BasicEval,
       Eval.Eval,
+      Eval.NNUE,
+      Eval.Model,
       Eval.FileParams,
       Hash.TransTab,
       Hash.Zobrist,
