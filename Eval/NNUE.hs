@@ -111,7 +111,7 @@ makeFinalLayer a f = FinalLayer { flWeights = a, flBias = f }
 -- check dimensions!
 makeNNUE :: Matrix -> Accum -> [Layer] -> FinalLayer -> NNUE
 makeNNUE m ai ls fl
-    = NNUE { nnueAccums = m, nnueBias = ai, nnueNonlin = hardsigmoid, nnueLayers = ls, nnueFinal = fl }
+    = NNUE { nnueAccums = m, nnueBias = ai, nnueNonlin = relu, nnueLayers = ls, nnueFinal = fl }
 
 addIndex :: NNUE -> Int -> Accum -> Accum
 addIndex nnue i = acadd (nnueAccums nnue ! i)
