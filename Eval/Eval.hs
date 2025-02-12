@@ -32,6 +32,9 @@ import Moves.Moves
 import Moves.BitBoard
 import Moves.Pattern
 
+import Eval.NNUE
+import Eval.Model (model)
+
 ------------------------------------------------------------------
 -- Parameters of this module ------------
 granCoarse, granCoarse2, granCoarseM, shift2Cp :: Int
@@ -50,10 +53,11 @@ initEvalState sds = EvalState {
 matesc :: Int
 matesc = 20000 - 255	-- warning, this is also defined in Base.hs!!
 
+-- Eval with NNUE!
 {-# INLINE posEval #-}
 posEval :: MyPos -> EvalState -> Int
 posEval p !sti = scc
-    where !sce = evalDispatch p sti
+    where !sce = round $ applyNNUE model $ accumFromList model $ posToIndexes p
           !scl = min matesc $ max (-matesc) sce
           !scc = if granCoarse > 0 then (scl + granCoarse2) .&. granCoarseM else scl
 

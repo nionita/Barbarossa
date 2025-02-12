@@ -58,9 +58,10 @@ multip m a = U.fromList $ T.toList $ T.map (scalar a) m
 type Nonlin = Accum -> Accum
 
 relu :: Nonlin
-relu = U.map f
-    where f x | x > 0     = x
-              | otherwise = 0
+relu = U.map (max 0)
+
+hardsigmoid :: Nonlin
+hardsigmoid = U.map (max 0 . min 1 . (\x -> (x + 3) / 6))
 
 makeAccum :: [Float] -> Accum
 makeAccum = U.fromList
@@ -81,50 +82,53 @@ teste = round (U.sum b0) == (60 :: Int)
           b0 = acsub b2 b1
 
 data Layer = Layer {
-        weights :: Matrix,	-- the weights matrix (vector of rows)
-        bias    :: Accum,	-- bias
-        nonlin  :: Nonlin	-- the non linearity
+        laWeights :: Matrix,	-- the weights matrix (vector of rows)
+        laBias    :: Accum,	-- bias
+        laNonlin  :: Nonlin	-- the non linearity
     }
 
 data FinalLayer = FinalLayer {
-        fweights :: Accum,	-- just an accumulator
-        fbias    :: Float	-- bias - a float
+        flWeights :: Accum,	-- just an accumulator
+        flBias    :: Float	-- bias - a float
     }
 
 data NNUE = NNUE {
-        accums :: Matrix,	-- the accumulators - length must be 768
-        accumi :: Accum,	-- the initial accumulator
-        layers :: [Layer],	-- the list of intermediate layers
-        final  :: FinalLayer	-- the final layer
+        nnueAccums :: Matrix,	-- the accumulators - length must be 768
+        nnueBias   :: Accum,	-- the initial accumulator
+        nnueNonlin :: Nonlin,	-- non linearity of the first layer
+        nnueLayers :: [Layer],	-- list of further intermediate layers
+        nnueFinal  :: FinalLayer	-- the final layer
     }
 
 -- check dimensions!
 makeLayer :: Matrix -> Accum -> Layer
-makeLayer m a = Layer { weights = m, bias = a, nonlin = relu }
+makeLayer m a = Layer { laWeights = m, laBias = a, laNonlin = relu }
 
 -- check dimensions!
 makeFinalLayer :: Accum -> Float -> FinalLayer
-makeFinalLayer a f = FinalLayer { fweights = a, fbias = f }
+makeFinalLayer a f = FinalLayer { flWeights = a, flBias = f }
 
 -- check dimensions!
 makeNNUE :: Matrix -> Accum -> [Layer] -> FinalLayer -> NNUE
-makeNNUE m ai ls fl = NNUE { accums = m, accumi = ai, layers = ls, final = fl }
+makeNNUE m ai ls fl
+    = NNUE { nnueAccums = m, nnueBias = ai, nnueNonlin = hardsigmoid, nnueLayers = ls, nnueFinal = fl }
 
 addIndex :: NNUE -> Int -> Accum -> Accum
-addIndex nnue i = acadd (accums nnue ! i)
+addIndex nnue i = acadd (nnueAccums nnue ! i)
 
 subIndex :: NNUE -> Int -> Accum -> Accum
-subIndex nnue i = acsub (accums nnue ! i)
+subIndex nnue i = acsub (nnueAccums nnue ! i)
 
 applyLayer :: Layer -> Accum -> Accum
-applyLayer layer a = nonlin layer $ acadd (multip (weights layer) a) (bias layer)
+applyLayer layer a = laNonlin layer $ acadd (multip (laWeights layer) a) (laBias layer)
 
 applyFinalLayer :: FinalLayer -> Accum -> Float
-applyFinalLayer layer a = scalar (fweights layer) a + fbias layer
+applyFinalLayer layer a = scalar (flWeights layer) a + flBias layer
 
 applyNNUE :: NNUE -> Accum -> Float
-applyNNUE nnue a = applyFinalLayer (final nnue) $ foldr applyLayer a (reverse $ layers nnue)
+applyNNUE nnue a = applyFinalLayer (nnueFinal nnue)
+                       $ foldr applyLayer (nnueNonlin nnue a) (reverse $ nnueLayers nnue)
 
 -- Calculate an accumulator from scratch from a list of indices
 accumFromList :: NNUE -> [Int] -> Accum
-accumFromList nnue = foldr (addIndex nnue) (accumi nnue)
+accumFromList nnue = foldr (addIndex nnue) (nnueBias nnue)
