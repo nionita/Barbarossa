@@ -12,7 +12,7 @@ import Data.Maybe (fromJust)
 import Struct.Struct
 import Moves.Moves
 import Moves.Pattern
-import Eval.BasicEval
+-- import Eval.BasicEval
 import Eval.Eval
 import Eval.Model
 import Eval.NNUE
@@ -48,15 +48,17 @@ initPos = posFromFen startFen
 
 posFromFen :: String -> MyPos
 posFromFen fen
-    | fen1:fen2:fen3:fen4:fen5:_ <- fenFromString fen = posFromFenOk fen1 fen2 fen3 fen4 fen5
-    | otherwise                                       = error $ "Wrong fen: " ++ fen
+    | fen1:fen2:fen3:fen4:fen5:_ <- fenFromString fen
+        = let p   = posFromFenOk fen1 fen2 fen3 fen4 fen5
+              mya = accumFromList model $ posToIndexes p (moving p)
+              yoa = accumFromList model $ posToIndexes p (other $ moving p)
+          in p { myAccum = mya, yoAccum = yoa}
+    | otherwise = error $ "Wrong fen: " ++ fen
 
 posFromFenOk :: String -> String -> String -> String -> String -> MyPos
-posFromFenOk fen1 fen2 fen3 fen4 fen5 = updatePos p { epcas = x, zobkey = zk, myAccum = mya, yoAccum = yoa}
+posFromFenOk fen1 fen2 fen3 fen4 fen5 = updatePos p { epcas = x, zobkey = zk }
     where p = fenToTable fen1
           x = fyInit . castInit . epInit $ epcas0
-          mya = accumFromList model $ posToIndexes p (moving p)
-          yoa = accumFromList model $ posToIndexes p (other $ moving p)
           (epcas0, z) = case fen2 of
               'w':_ -> (0, 0)
               'b':_ -> (mvMask, zobMove)

@@ -24,7 +24,7 @@ import System.IO
 -- import Data.Vector.Unboxed (toList)
 
 import Struct.Status (EvalState(..))
-import Struct.Struct (get50Moves, moving)
+import Struct.Struct (get50Moves, moving, myAccum, yoAccum)
 -- import Struct.Context
 -- import Struct.Config
 -- import Hash.TransTab
@@ -243,11 +243,12 @@ evalPos model hi mn k i = do
                hFlush stdout
            let (fen, _) = break ((==) ',') line
                pos   = posFromFen fen
-               idxs = posToIndexes pos (moving pos)
+               idxs  = posToIndexes pos (moving pos)
                accum = accumFromList model idxs
                score = applyNNUE model accum
            putStrLn $ "Fen: " ++ fen ++ " indexes: " ++ show idxs
-           putStrLn $ "- accum: " ++ show accum
-           putStrLn $ "- score: " ++ show score
+           putStrLn $ "- accumi: " ++ show (myAccum pos)
+           putStrLn $ "- accuml: " ++ show accum
+           putStrLn $ "- score:  " ++ show score
            hFlush stdout
            return (True, i+1)
