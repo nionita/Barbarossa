@@ -2,7 +2,7 @@
 module Struct.Struct (
     BBoard, Square, ZKey, ShArray, MaArray, DbArray, Move(..),
     Piece(..), Color(..), TabCont(..), MyPos(..), LazyBits(..),
-    other, moving,
+    other, moving, myAccum,
     isCheck, inCheck, checkOk, clearCast, genMoveCast, castKingRookOk, castQueenRookOk,
     lsbBBoard, bbToSquares, less, firstOne, bbToSquaresBB,
     shadowDown, shadowUp, uTestBit, uBit,
@@ -57,7 +57,7 @@ data MyPos = MyPos {
     zobkey :: !ZKey,	-- hash key
     me, yo, occup, kings, pawns :: !BBoard,	-- further heavy used bitboards computed for efficiency
     queens, rooks, bishops, knights, passed :: !BBoard,
-    myAccum, yoAccum :: Accum,	-- the 2 NNUE accumulators
+    whAccum, blAccum :: Accum,	-- the 2 NNUE accumulators
     staticScore :: Int,	-- lazy, not always needed
     lazyBits :: LazyBits	-- lazy of course
     }
@@ -212,7 +212,7 @@ caRAQb = 0x0C00000000000000	-- black: not attacked fields for queenside castle
 emptyPos :: MyPos
 emptyPos = MyPos {
         black = 0, slide = 0, kkrq = 0, diag = 0, epcas = 0,
-        zobkey = 0, myAccum = zeroAccum, yoAccum = zeroAccum,
+        zobkey = 0, whAccum = zeroAccum, blAccum = zeroAccum,
         me = 0, yo = 0, occup = 0, kings = 0, pawns = 0,
         queens = 0, rooks = 0, bishops = 0, knights = 0,
         staticScore = 0, passed = 0, lazyBits = leb
@@ -736,3 +736,7 @@ decodeCastBlackQueen :: String -> ((BBoard -> BBoard), BBoard)
 decodeCastBlackQueen fen3
     | 'q' `elem` fen3 = ((.|. caRQub), zobCastQb)
     | otherwise       = (id, 0)
+
+myAccum :: MyPos -> Accum
+myAccum pos | moving pos == White = whAccum pos
+            | otherwise           = blAccum pos

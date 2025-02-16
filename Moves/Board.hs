@@ -289,24 +289,25 @@ chainAccum :: ZKey -> [ZKey -> ZKey] -> ZKey
 chainAccum = foldl (flip ($))
 
 -- When we update the NNUE accumulators incrementally, we have pairs of indices
--- (active part, pasive part) but with different signs: adding a piece
--- is with plus, clearing a piece is with minus
--- Per move we have more such pairs and we need to collect tme together
+-- (white, black) with 2 possible signs:
+-- adding a piece is with plus
+-- clearing a piece is with minus
+-- Per move we have more such pairs and we need to collect them together
 data AccumChange = AccumChange Bool Int Int
 
-pieceToAccumAdd :: Piece -> Color -> Color -> Square -> AccumChange
-pieceToAccumAdd piece pccol mycol sq = AccumChange True x y
-    where (x, y) = pieceToIdx piece pccol mycol sq
+pieceToAccumAdd :: Piece -> Color -> Square -> AccumChange
+pieceToAccumAdd piece pccol sq = AccumChange True x y
+    where (x, y) = pieceToIdx piece pccol sq
 
-pieceToAccumSub :: Piece -> Color -> Color -> Square -> AccumChange
-pieceToAccumSub piece pccol mycol sq = AccumChange False x y
-    where (x, y) = pieceToIdx piece pccol mycol sq
+pieceToAccumSub :: Piece -> Color -> Square -> AccumChange
+pieceToAccumSub piece pccol sq = AccumChange False x y
+    where (x, y) = pieceToIdx piece pccol sq
 
 updateAccumulators :: Accum -> Accum -> [AccumChange] -> (Accum, Accum)
 updateAccumulators myacc yoacc = foldr f (myacc, yoacc)
-    where f (AccumChange isadd x y) (mya, yoa)
-              | isadd     = (addIndex model x mya, addIndex model y yoa)
-              | otherwise = (subIndex model x mya, subIndex model y yoa)
+    where f (AccumChange isadd x y) (wha, bla)
+              | isadd     = (addIndex model x wha, addIndex model y bla)
+              | otherwise = (subIndex model x wha, subIndex model y bla)
 
 {-
 changePining :: MyPos -> Square -> Square -> Bool
@@ -388,7 +389,7 @@ doFromToMove :: Move -> MyPos -> MyPos
 doFromToMove m !p | moveIsNormal m
     = updatePos p {
           black = tblack, slide = tslide, kkrq  = tkkrq,  diag  = tdiag,
-          epcas = tepcas, zobkey = tzobkey, myAccum = tyoacc, yoAccum = tmyacc
+          epcas = tepcas, zobkey = tzobkey, whAccum = twhacc, blAccum = tblacc
       }
     where src = fromSquare m
           dst = toSquare m
@@ -415,7 +416,7 @@ doFromToMove m !p | moveIsNormal m
           !zob = zobkey p `xor` epcl `xor` epst `xor` zobcast
           (dstclear, accs1) = case tabla p dst of
               Empty      -> ([], [])
-              Busy co fo -> ([accumClearSq dst co fo], [pieceToAccumSub fo co (moving p) dst])
+              Busy co fo -> ([accumClearSq dst co fo], [pieceToAccumSub fo co dst])
           (tzobkey, accs2)
                = case tabla p src of	-- identify the moving piece
                    Busy col fig -> (chainAccum zob $ dstclear ++ [
@@ -423,20 +424,20 @@ doFromToMove m !p | moveIsNormal m
                                        accumSetPiece dst col fig,
                                        accumMoving
                                    ], [
-                                       pieceToAccumSub fig col (moving p) src,
-                                       pieceToAccumAdd fig col (moving p) dst
+                                       pieceToAccumSub fig col src,
+                                       pieceToAccumAdd fig col dst
                                    ]
                                    )
                    _ -> error $ "Src field empty: " ++ show m ++ " in pos\n"
                                  ++ showTab (black p) (slide p) (kkrq p) (diag p)
                                  ++ "resulting pos:\n"
                                  ++ showTab tblack tslide tkkrq tdiag
-          (tmyacc, tyoacc) = updateAccumulators (myAccum p) (yoAccum p) $ accs1 ++ accs2
+          (twhacc, tblacc) = updateAccumulators (whAccum p) (blAccum p) $ accs1 ++ accs2
 
 doFromToMove m !p | moveIsEnPas m
     = updatePos p {
           black = tblack, slide = tslide, kkrq  = tkkrq,  diag  = tdiag,
-          epcas = tepcas, zobkey = tzobkey, myAccum = tyoacc, yoAccum = tmyacc
+          epcas = tepcas, zobkey = tzobkey, whAccum = twhacc, blAccum = tblacc
       }
     where src = fromSquare m
           dst = toSquare m
@@ -461,17 +462,17 @@ doFromToMove m !p | moveIsEnPas m
                                 accumMoving
                               ],
                    [
-                       pieceToAccumSub Pawn col (moving p) src,
-                       pieceToAccumSub Pawn co1 (moving p) del,
-                       pieceToAccumAdd Pawn col (moving p) dst
+                       pieceToAccumSub Pawn col src,
+                       pieceToAccumSub Pawn co1 del,
+                       pieceToAccumAdd Pawn col dst
                    ])
               | otherwise = error "doFromToMove en-passant"
-          (tmyacc, tyoacc) = updateAccumulators (myAccum p) (yoAccum p) accs2
+          (twhacc, tblacc) = updateAccumulators (whAccum p) (blAccum p) accs2
 
 doFromToMove m !p | moveIsCastle m
     = updatePos p {
           black = tblack, slide = tslide, kkrq  = tkkrq,  diag  = tdiag,
-          epcas = tepcas, zobkey = tzobkey, myAccum = tyoacc, yoAccum = tmyacc
+          epcas = tepcas, zobkey = tzobkey, whAccum = twhacc, blAccum = tblacc
       }
     where src = fromSquare m
           dst = toSquare m
@@ -497,7 +498,7 @@ doFromToMove m !p | moveIsCastle m
           (tzobkey, accs2)
               | Busy col King <- tabla p src,	-- identify the moving piece (king)
                 Busy co1 Rook <- tabla p csr,	-- identify the moving rook
-                col == co1
+                col == co1			-- should be same color
                 = (chainAccum zob [
                                 accumClearSq  src col King,
                                 accumSetPiece dst col King,
@@ -506,18 +507,18 @@ doFromToMove m !p | moveIsCastle m
                                 accumMoving
                               ],
                    [
-                       pieceToAccumSub King col (moving p) src,
-                       pieceToAccumSub Rook co1 (moving p) csr,
-                       pieceToAccumAdd King col (moving p) dst,
-                       pieceToAccumSub Rook co1 (moving p) cds
+                       pieceToAccumSub King col src,
+                       pieceToAccumAdd King col dst,
+                       pieceToAccumSub Rook co1 csr,
+                       pieceToAccumAdd Rook co1 cds
                    ])
               | otherwise = error "doFromToMove King + Rook"
-          (tmyacc, tyoacc) = updateAccumulators (myAccum p) (yoAccum p) accs2
+          (twhacc, tblacc) = updateAccumulators (whAccum p) (blAccum p) accs2
 
 doFromToMove m !p | moveIsPromo m
     = updatePos p0 {
           black = tblack, slide = tslide, kkrq = tkkrq, diag = tdiag,
-          epcas = tepcas, zobkey = tzobkey, myAccum = tyoacc, yoAccum = tmyacc
+          epcas = tepcas, zobkey = tzobkey, whAccum = twhacc, blAccum = tblacc
       }
     where srank = if moving p == White then 6 else 1
           sfile = fromSquare m .&. 0x7	-- see new coding!
@@ -537,28 +538,28 @@ doFromToMove m !p | moveIsPromo m
           !zk = zobkey p0 `xor` epcl `xor` zobcast
           (dstclear, accs1) = case tabla p dst of
               Empty      -> ([], [])
-              Busy co fo -> ([accumClearSq dst co fo], [pieceToAccumSub fo co (moving p) dst])
+              Busy co fo -> ([accumClearSq dst co fo], [pieceToAccumSub fo co dst])
           (tzobkey, accs2) = (chainAccum zk $ dstclear ++ [
                                 accumClearSq  src (moving p) Pawn,
                                 accumSetPiece dst (moving p) pie,
                                 accumMoving
                              ], [
-                                pieceToAccumSub Pawn (moving p) (moving p) src,
-                                pieceToAccumAdd pie  (moving p) (moving p) dst
+                                pieceToAccumSub Pawn (moving p) src,
+                                pieceToAccumAdd pie  (moving p) dst
                              ]
                              )
-          (tmyacc, tyoacc) = updateAccumulators (myAccum p) (yoAccum p) $ accs1 ++ accs2
+          (twhacc, tblacc) = updateAccumulators (whAccum p) (blAccum p) $ accs1 ++ accs2
 
 doFromToMove _ _ = error "doFromToMove: wrong move type"
 
 reverseMoving :: MyPos -> MyPos
-reverseMoving p = updatePos p { epcas = tepcas, zobkey = z, myAccum = tyoacc, yoAccum = tmyacc }
+reverseMoving p = updatePos p { epcas = tepcas, zobkey = z, whAccum = twhacc, blAccum = tblacc }
     where tepcas = moveAndClearEp $ epcas p
           epcl = epClrZob $ epcas p
           zk = zobkey p `xor` epcl
           z = chainAccum zk [accumMoving]
-          tmyacc = myAccum p
-          tyoacc = yoAccum p
+          twhacc = whAccum p
+          tblacc = blAccum p
 
 -- Find pinning lines for a piece type, given the king & piece squares
 -- the queen is very hard, so we solve it as a composition of rook and bishop

@@ -45,16 +45,19 @@ granCoarseM   = complement (granCoarse - 1)
 matesc :: Int
 matesc = 20000 - 255	-- warning, this is also defined in Base.hs!!
 
+prod :: Bool
+prod = True
+
 -- Eval with NNUE!
 {-# INLINE posEval #-}
 posEval :: MyPos -> EvalState -> Int
 posEval p (EvalState model)
-    | sce == sca = scc
-    | otherwise  = error $ "Wrong sce = " ++ show sce ++ " correct would be: " ++ show sca
-    where !sca = fromIntegral $ applyNNUE model $ accumFromList model $ posToIndexes p (moving p)
-          !sce = fromIntegral $ applyNNUE model $ myAccum p
+    | prod || sce == sca = scc
+    | otherwise          = error $ "Wrong sce = " ++ show sce ++ " correct would be: " ++ show sca
+    where !sce = fromIntegral $ applyNNUE model $ myAccum p
           !scl = min matesc $ max (-matesc) sce
           !scc = if granCoarse > 0 then (scl + granCoarse2) .&. granCoarseM else scl
+          sca = fromIntegral $ applyNNUE model $ accumFromList model $ posToIndexes p (moving p)
 
 -- Direct NN structure: input layer sees all pieces from it pov
 --
@@ -69,11 +72,8 @@ posEval p (EvalState model)
 -- from the ord function of the piece
 
 posToIndexes :: MyPos -> Color -> [Int]
-posToIndexes pos col
-    | col == White =                partToIndexes pos (me pos) White
-                  ++ map toPassive (partToIndexes pos (yo pos) White)
-    | otherwise    =                partToIndexes pos (me pos) Black
-                  ++ map toPassive (partToIndexes pos (yo pos) Black)
+posToIndexes pos col = partToIndexes pos (me pos) col
+     ++ map toPassive (partToIndexes pos (yo pos) col)
 
 partToIndexes :: MyPos -> BBoard -> Color -> [Int]
 partToIndexes pos part col
@@ -92,15 +92,14 @@ pieceToIndexes p bb povcol
     | otherwise       = map ((+) offset) $ map mirror $ bbToSquares bb
     where offset = fromEnum p * 64
 
--- Piece index for incremental update for both perspectives (myindex, yourindex)
-pieceToIdx :: Piece -> Color -> Color -> Square -> (Int, Int)
-pieceToIdx piece color mycol sq
-    | color == mycol = (          offset + sqm, passive + offset + sqy)
-    | otherwise      = (passive + offset + sqm,           offset + sqy)
+-- Piece index for incremental update for both perspectives (white, black)
+pieceToIdx :: Piece -> Color -> Square -> (Int, Int)
+pieceToIdx piece color sq
+    | color == White = (          offset + sq, passive + offset + sqm)
+    | otherwise      = (passive + offset + sq,           offset + sqm)
     where offset  = fromEnum piece * 64
           passive = 384
-          (sqm, sqy) | mycol == White = (sq, mirror sq)
-                     | otherwise      = (mirror sq, sq)
+          sqm = mirror sq
 
 -- Change the square number as from black perspective (mirror)
 -- file remains unchanged, the rank is complemented (000 <-> 111)

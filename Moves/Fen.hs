@@ -50,9 +50,9 @@ posFromFen :: String -> MyPos
 posFromFen fen
     | fen1:fen2:fen3:fen4:fen5:_ <- fenFromString fen
         = let p   = posFromFenOk fen1 fen2 fen3 fen4 fen5
-              mya = accumFromList model $ posToIndexes p (moving p)
-              yoa = accumFromList model $ posToIndexes p (other $ moving p)
-          in p { myAccum = mya, yoAccum = yoa}
+              wha = accumFromList model $ posToIndexes p White
+              bla = accumFromList model $ posToIndexes p Black
+          in p { whAccum = wha, blAccum = bla}
     | otherwise = error $ "Wrong fen: " ++ fen
 
 posFromFenOk :: String -> String -> String -> String -> String -> MyPos
