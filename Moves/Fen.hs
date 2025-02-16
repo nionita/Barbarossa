@@ -13,6 +13,9 @@ import Struct.Struct
 import Moves.Moves
 import Moves.Pattern
 import Eval.BasicEval
+import Eval.Eval
+import Eval.Model
+import Eval.NNUE
 
 startFen :: String
 startFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR/ w KQkq - 0 1"
@@ -49,9 +52,11 @@ posFromFen fen
     | otherwise                                       = error $ "Wrong fen: " ++ fen
 
 posFromFenOk :: String -> String -> String -> String -> String -> MyPos
-posFromFenOk fen1 fen2 fen3 fen4 fen5 = updatePos p { epcas = x, zobkey = zk }
-    where p  = fenToTable fen1
-          x  = fyInit . castInit . epInit $ epcas0
+posFromFenOk fen1 fen2 fen3 fen4 fen5 = updatePos p { epcas = x, zobkey = zk, myAccum = mya, yoAccum = yoa}
+    where p = fenToTable fen1
+          x = fyInit . castInit . epInit $ epcas0
+          mya = accumFromList model $ posToIndexes p (moving p)
+          yoa = accumFromList model $ posToIndexes p (other $ moving p)
           (epcas0, z) = case fen2 of
               'w':_ -> (0, 0)
               'b':_ -> (mvMask, zobMove)
@@ -168,21 +173,20 @@ blackPassed !wp !bp = bpa
           !sha = shadowUp wb0	-- erase
           !bpa = bp `less` sha
 
--- Set a piece on a square of the table
+-- Set a piece on a square of the table updating only the basic position fields
 setPiece :: Square -> Color -> Piece -> MyPos -> MyPos
 setPiece sq c f !p
     = p { black = setCond (c == Black) $ black p,
           slide = setCond (isSlide f)  $ slide p,
           kkrq  = setCond (isKkrq f)   $ kkrq p,
           diag  = setCond (isDiag f)   $ diag p,
-          zobkey = nzob, mater = nmat }
+          zobkey = nzob
+      }
     where setCond cond = if cond then (.|. bsq) else (.&. nbsq)
           nzob = zobkey p `xor` zold `xor` znew
-          nmat = mater p - mold + mnew
-          (!zold, !mold) = case tabla p sq of
-                             Empty      -> (0, 0)
-                             Busy co fo -> (zobPiece co fo sq, matPiece co fo)
+          !zold = case tabla p sq of
+                      Empty      -> 0
+                      Busy co fo -> zobPiece co fo sq
           !znew = zobPiece c f sq
-          !mnew = matPiece c f
           bsq = uBit sq
           !nbsq = complement bsq

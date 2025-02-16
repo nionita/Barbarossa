@@ -8,7 +8,8 @@ module Eval.NNUE (
     Matrix, Accum, Layer, FinalLayer, NNUE,
     makeAccum, makeMatrix, makeLayer, makeFinalLayer, makeNNUE,
     addIndex, subIndex, applyNNUE, accumFromList,
-    modelSave, modelLoad
+    modelSave, modelLoad,
+    zeroAccum
 ) where
 
 import Data.Bits (unsafeShiftR)
@@ -25,8 +26,10 @@ import GHC.Generics
 -- Accumulator is a vector of floats
 type Accum = Vector Int32
 
--- Matrix is a generic vector of unboxed vectors, each of them beeing a matrix row
+-- Matrix is a generic vector of matrix rows (row == unboxed vector)
 type Matrix = T.Vector Accum
+
+type Nonlin = Accum -> Accum
 
 -- Sum 2 accumulators
 acadd :: Accum -> Accum -> Accum
@@ -42,8 +45,6 @@ scalar a b = U.sum $ U.zipWith (*) a b
 
 multip :: Matrix -> Accum -> Accum
 multip m a = U.fromList $ T.toList $ T.map (scalar a) m
-
-type Nonlin = Accum -> Accum
 
 -- We cannot serialize functions so we must find another reprezentation for nonlinearities
 nonlinExec :: String -> Accum -> Accum
@@ -144,3 +145,6 @@ modelLoad :: FilePath -> IO (Either String NNUE)
 modelLoad filepath = do
     bs <- B.readFile filepath
     return $ decode bs
+
+zeroAccum :: Accum
+zeroAccum = U.empty

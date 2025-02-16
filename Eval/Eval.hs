@@ -5,7 +5,7 @@
 
 module Eval.Eval (
     posEval,
-    posToIndexes, prettyQuiet
+    posToIndexes, pieceToIdx, prettyQuiet
 ) where
 
 import Data.Array.Base (unsafeAt)
@@ -34,11 +34,12 @@ import Eval.NNUE
 
 ------------------------------------------------------------------
 -- Parameters of this module ------------
-granCoarse, granCoarse2, granCoarseM, shift2Cp :: Int
+granCoarse, granCoarse2, granCoarseM :: Int
+-- granCoarse, granCoarse2, granCoarseM, shift2Cp :: Int
 granCoarse    = 4	-- coarse granularity
 granCoarse2   = granCoarse `div` 2
 granCoarseM   = complement (granCoarse - 1)
-shift2Cp      = 3	-- we have 2^shift2Cp units per centipawn
+-- shift2Cp      = 3	-- we have 2^shift2Cp units per centipawn
 -----------------------------------------------
 
 matesc :: Int
@@ -47,8 +48,11 @@ matesc = 20000 - 255	-- warning, this is also defined in Base.hs!!
 -- Eval with NNUE!
 {-# INLINE posEval #-}
 posEval :: MyPos -> EvalState -> Int
-posEval p (EvalState model) = scc
-    where !sce = fromIntegral $ applyNNUE model $ accumFromList model $ posToIndexes p
+posEval p (EvalState model)
+    | sce == sca = scc
+    | otherwise  = error $ "Wrong sce = " ++ show sce ++ " correct would be: " ++ show sca
+    where !sca = fromIntegral $ applyNNUE model $ accumFromList model $ posToIndexes p (moving p)
+          !sce = fromIntegral $ applyNNUE model $ myAccum p
           !scl = min matesc $ max (-matesc) sce
           !scc = if granCoarse > 0 then (scl + granCoarse2) .&. granCoarseM else scl
 
@@ -64,12 +68,12 @@ posEval p (EvalState model) = scc
 -- The layout per color is: P, N, B, R, Q, K in order to compute the index quickly
 -- from the ord function of the piece
 
-posToIndexes :: MyPos -> [Int]
-posToIndexes pos
-    | moving pos == White =                partToIndexes pos (me pos) White
-                         ++ map toPassive (partToIndexes pos (yo pos) White)
-    | otherwise           =                partToIndexes pos (me pos) Black
-                         ++ map toPassive (partToIndexes pos (yo pos) Black)
+posToIndexes :: MyPos -> Color -> [Int]
+posToIndexes pos col
+    | col == White =                partToIndexes pos (me pos) White
+                  ++ map toPassive (partToIndexes pos (yo pos) White)
+    | otherwise    =                partToIndexes pos (me pos) Black
+                  ++ map toPassive (partToIndexes pos (yo pos) Black)
 
 partToIndexes :: MyPos -> BBoard -> Color -> [Int]
 partToIndexes pos part col
@@ -80,16 +84,29 @@ partToIndexes pos part col
     ++ pieceToIndexes Queen  (part .&. queens  pos) col
     ++ pieceToIndexes King   (part .&. kings   pos) col
 
+-- bbToSquares delivers the square number from white POV
+-- so when we want the black perspective we have to mirror
 pieceToIndexes :: Piece -> BBoard -> Color -> [Int]
-pieceToIndexes p bb col
-    | col == White = map ((+) offset) $ bbToSquares bb
-    | otherwise    = map ((+) offset) $ map blackPerspective $ bbToSquares bb
+pieceToIndexes p bb povcol
+    | povcol == White = map ((+) offset) $ bbToSquares bb
+    | otherwise       = map ((+) offset) $ map mirror $ bbToSquares bb
     where offset = fromEnum p * 64
+
+-- Piece index for incremental update for both perspectives (myindex, yourindex)
+pieceToIdx :: Piece -> Color -> Color -> Square -> (Int, Int)
+pieceToIdx piece color mycol sq
+    | color == mycol = (          offset + sqm, passive + offset + sqy)
+    | otherwise      = (passive + offset + sqm,           offset + sqy)
+    where offset  = fromEnum piece * 64
+          passive = 384
+          (sqm, sqy) | mycol == White = (sq, mirror sq)
+                     | otherwise      = (mirror sq, sq)
 
 -- Change the square number as from black perspective (mirror)
 -- file remains unchanged, the rank is complemented (000 <-> 111)
-blackPerspective :: Square -> Square
-blackPerspective sq = (sq .&. 7) .|. (complement (sq .&. 56) .&. 56)
+mirror :: Square -> Square
+-- mirror sq = (sq .&. 7) .|. (complement (sq .&. 56) .&. 56)
+mirror = xor 56
 
 -- Index mapping for the passive part
 toPassive :: Int -> Int
@@ -114,6 +131,7 @@ prettyQuiet p
           myA2 = myA1 .|. myRAttacs p
 
 {--
+-- This is the old evaluation part
 evalDispatch :: MyPos -> EvalState -> Int
 evalDispatch p !sti
     | pawns p == 0 = evalNoPawns p sti
@@ -122,9 +140,6 @@ evalDispatch p !sti
     | kings p .|. pawns p == occup p,
       Just r <- pawnEndGame p = r
     | otherwise    = normalEval p sti
-
-type Features = Vector Int32
-type VFeatures m = MVector (PrimState m) Int32
 
 normalEval :: MyPos -> EvalState -> Int
 normalEval p !sti = sc
@@ -249,15 +264,6 @@ squareDistance !sq1 !sq2 = fromIntegral $ squareDistArr `unsafeAt` sqSqIdx sq1 s
 
 sqSqIdx :: Square -> Square -> Int
 sqSqIdx !sq1 !sq2 = (sq1 `unsafeShiftL` 6) + sq2
-
-{--
-squareDistance :: Square -> Square -> Int
-squareDistance f t = max (abs (fr - tr)) (abs (fc - tc))
-    where fr = f `unsafeShiftR` 3
-          tr = t `unsafeShiftR` 3
-          fc = f .&. 7
-          tc = t .&. 7
---}
 
 -- This center distance should be pre calculated
 centerDistance :: Int -> Int

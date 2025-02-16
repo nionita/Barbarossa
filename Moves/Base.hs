@@ -32,6 +32,7 @@ import Hash.TransTab
 import Moves.Board
 import Eval.BasicEval
 import Eval.Eval
+-- import Eval.Model (model)
 import Moves.ShowMe
 import Moves.History
 import Moves.Notation

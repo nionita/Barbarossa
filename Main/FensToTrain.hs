@@ -23,8 +23,8 @@ import System.IO
 
 -- import Data.Vector.Unboxed (toList)
 
-import Struct.Struct (get50Moves)
 import Struct.Status (EvalState(..))
+import Struct.Struct (get50Moves, moving)
 -- import Struct.Context
 -- import Struct.Config
 -- import Hash.TransTab
@@ -202,7 +202,7 @@ featurePos hi hof hot hoc mn k i = do
            if (get50Moves pos <= 90 && prettyQuiet pos)
                then do
                    let targ = tail rest
-                       idxs = posToIndexes pos
+                       idxs = posToIndexes pos (moving pos)
                    hPutStrLn hof $ concat $ intersperse "," $ map show idxs
                    hPutStrLn hot targ
                    hPutStrLn hoc line
@@ -243,7 +243,7 @@ evalPos model hi mn k i = do
                hFlush stdout
            let (fen, _) = break ((==) ',') line
                pos   = posFromFen fen
-               idxs  = posToIndexes pos
+               idxs = posToIndexes pos (moving pos)
                accum = accumFromList model idxs
                score = applyNNUE model accum
            putStrLn $ "Fen: " ++ fen ++ " indexes: " ++ show idxs
