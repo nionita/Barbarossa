@@ -156,7 +156,7 @@ initContext opts = do
     ha <- newCache 1	-- it will take the minimum number of entries
     hi <- newHist
     let paramList = stringToParams $ concat $ intersperse "," $ optParams opts
-    (parc, evs) <- makeEvalState (optConfFile opts) paramList "progver" "progsuf"
+    (evs, mes) <- makeEvalState (optConfFile opts)	-- we should deliver an id
     let chg = Chg {
             working = False,
             compThread = Nothing,
@@ -174,7 +174,7 @@ initContext opts = do
             strttm = clktm,
             change = ctxVar,
             loglev = if debug then DebugSearch else optLogLev opts,
-            evpid  = parc
+            evpid  = "model"
          }
     return context
 
@@ -226,16 +226,16 @@ matchFile opts dir = do
             return (GameScore 0 0 0)
         Just (id1, id2) -> do
             ctxLog LogWarning $ "Players from directory " ++ dir
-            ctxLog LogWarning $ "Player 1 " ++ id1
-            ctxLog LogWarning $ "Player 2 " ++ id2
+            ctxLog LogWarning $ "Player 1 " ++ id1	-- should be a model file
+            ctxLog LogWarning $ "Player 2 " ++ id2	-- should be a model file
             fens <- getFens (optAFenFile opts) (fromMaybe 0 (optNSkip opts)) (fromMaybe 1 (optNFens opts))
-            (eval1, eval2) <- liftIO $ do
-                (_, eval1) <- makeEvalState (Just id1) [] "progver" "progsuf"
-                (_, eval2) <- makeEvalState (Just id2) [] "progver" "progsuf"
+            (eval1, eval2) <- do
+                (eval1, mes1) <- liftIO $ makeEvalState (Just id1)
+                (eval2, mes2) <- liftIO $ makeEvalState (Just id2)
+                when debug $ do
+                    ctxLog LogInfo $ "Player 1 config: " ++ show mes1
+                    ctxLog LogInfo $ "Player 2 config: " ++ show mes2
                 return (eval1, eval2)
-            when debug $ do
-                ctxLog LogInfo $ "Player 1 config: " ++ show eval1
-                ctxLog LogInfo $ "Player 2 config: " ++ show eval2
             foldlM (playEveryGame (optDepth opts) (optNodes opts) (id1, eval1) (id2, eval2))
                    (GameScore 0 0 0) fens
 

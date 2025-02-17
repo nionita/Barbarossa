@@ -39,7 +39,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.8.0"
-progVerSuff = "stru"
+progVerSuff = "seri"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -103,10 +103,8 @@ initContext opts = do
     wchan  <- newChan
     ha <- newCache 1	-- it will take the minimum number of entries
     hi <- newHist
-    let paramList
-            | null $ optParams opts = []
-            | otherwise             = stringToParams $ concat $ intersperse "," $ optParams opts
-    (parc, evs) <- makeEvalState (optConfFile opts) paramList progVersion progVerSuff
+    (evs, mes) <- makeEvalState (optConfFile opts)
+    putStrLn mes
     let chg = Chg {
             working = False,
             compThread = Nothing,
@@ -124,7 +122,7 @@ initContext opts = do
             strttm = clktm,
             change = ctxVar,
             loglev = llev,
-            evpid  = parc
+            evpid  = "model"
          }
     return context
 
@@ -644,8 +642,8 @@ beforeReadLoop :: CtxIO ()
 beforeReadLoop = do
     chg <- readChanging
     let evst = evalst $ crtStatus chg
-    ctxLog LogInfo "Eval parameters and weights:"
-    ctxLog LogInfo $ show (esEParams evst)
+    -- ctxLog LogInfo "Eval parameters and weights:"
+    -- ctxLog LogInfo $ show (esEParams evst)
     -- forM_ (zip3 weightNames (esDWeightsM evst) (esDWeightsE evst))
     --    $ \(n, vm, ve) -> ctxLog LogInfo $! n ++ "\t" ++ show vm ++ "\t" ++ show ve
     bm <- liftIO $ hGetBuffering stdin

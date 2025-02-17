@@ -4,7 +4,6 @@
 {-# LANGUAGE TypeFamilies #-}
 
 module Eval.Eval (
-    initEvalState,
     posEval,
     posToIndexes, prettyQuiet
 ) where
@@ -32,7 +31,6 @@ import Moves.Moves
 import Moves.Pattern
 
 import Eval.NNUE
-import Eval.Model (model)
 
 ------------------------------------------------------------------
 -- Parameters of this module ------------
@@ -43,34 +41,16 @@ granCoarseM   = complement (granCoarse - 1)
 shift2Cp      = 3	-- we have 2^shift2Cp units per centipawn
 -----------------------------------------------
 
-initEvalState :: [(String, Double)] -> EvalState
-initEvalState sds = EvalState {
-        esEParams  = npSetParm (colParams sds :: CollectFor EvalParams),
-        esEWeights = npSetParm (colParams sds :: CollectFor EvalWeights)
-    }
-
 matesc :: Int
 matesc = 20000 - 255	-- warning, this is also defined in Base.hs!!
 
 -- Eval with NNUE!
 {-# INLINE posEval #-}
 posEval :: MyPos -> EvalState -> Int
-posEval p !sti = scc
+posEval p (EvalState model) = scc
     where !sce = round $ applyNNUE model $ accumFromList model $ posToIndexes p
           !scl = min matesc $ max (-matesc) sce
           !scc = if granCoarse > 0 then (scl + granCoarse2) .&. granCoarseM else scl
-
-evalDispatch :: MyPos -> EvalState -> Int
-evalDispatch p !sti
-    | pawns p == 0 = evalNoPawns p sti
-    | pawns p .&. me p == 0 ||
-      pawns p .&. yo p == 0 = evalSideNoPawns p sti
-    | kings p .|. pawns p == occup p,
-      Just r <- pawnEndGame p = r
-    | otherwise    = normalEval p sti
-
-type Features = Vector Int32
-type VFeatures m = MVector (PrimState m) Int32
 
 -- Direct NN structure: input layer sees all pieces from it pov
 --
@@ -133,24 +113,18 @@ prettyQuiet p
           myA1 = myPAttacs p .|. myNAttacs p .|. myBAttacs p
           myA2 = myA1 .|. myRAttacs p
 
--- The length of a feature vector (for one side) ist the sum of the
--- different features types that we define in separate functions
-featuresLength :: Int
-featuresLength = materFeatsCount + mobilFeatsCount + ksafeFeatsCount
+{--
+evalDispatch :: MyPos -> EvalState -> Int
+evalDispatch p !sti
+    | pawns p == 0 = evalNoPawns p sti
+    | pawns p .&. me p == 0 ||
+      pawns p .&. yo p == 0 = evalSideNoPawns p sti
+    | kings p .|. pawns p == occup p,
+      Just r <- pawnEndGame p = r
+    | otherwise    = normalEval p sti
 
--- Given a position, create 2 vectors with the features for me & you
-makeFeatures :: MyPos -> (Features, Features)
-makeFeatures p = runST $ do
-    featMe <- V.new featuresLength
-    featYo <- V.new featuresLength
-    foldM_ (\ i f -> f i) 0 [
-            materFeats p featMe featYo,
-            mobilFeats p featMe featYo,
-            ksafeFeats p featMe featYo
-        ]
-    ufMe <- U.unsafeFreeze featMe
-    ufYo <- U.unsafeFreeze featYo
-    return (ufMe, ufYo)
+type Features = Vector Int32
+type VFeatures m = MVector (PrimState m) Int32
 
 normalEval :: MyPos -> EvalState -> Int
 normalEval p !sti = sc
@@ -1094,7 +1068,7 @@ escYoBlack !ksq !psq = (esc, (psq, dis))
     where !tsq = promoB psq
           !dis = squareDistance psq tsq
           !esc = dis < squareDistance ksq tsq - 1       -- because we move
-
+--}
 {--
 simplePawnEndGame :: MyPos -> Int
 simplePawnEndGame p = d

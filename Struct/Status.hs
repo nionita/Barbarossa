@@ -4,21 +4,16 @@
 module Struct.Status (
     MyState(..),
     EvalState(..),
-    EvalParams(..),
-    EvalWeights(..)
 ) where
 
 import Struct.Struct
 import Struct.Config
-import Struct.Params
+-- import Struct.Params
 import Struct.MidEnd
 import Moves.History
 import Hash.TransTab
 import Search.AlbetaTypes
-
--- Here we generate the data types EvalParams and EvalWeights with instances for CollectParams
-$(genEvalParams)
-$(genEvalWeights)
+import Eval.NNUE (NNUE)
 
 data MyState = MyState {
         stack  :: [MyPos],	-- stack of played positions
@@ -29,7 +24,4 @@ data MyState = MyState {
         rootmn :: !Int		-- root move number
     }
 
-data EvalState = EvalState {
-        esEParams   :: EvalParams,
-        esEWeights  :: EvalWeights
-    } deriving Show
+data EvalState = EvalState NNUE

@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -6,22 +7,26 @@
 module Eval.NNUE (
     teste, Matrix, Accum, Layer, FinalLayer, NNUE,
     makeAccum, makeMatrix, makeLayer, makeFinalLayer, makeNNUE,
-    addIndex, subIndex, applyNNUE, accumFromList
+    addIndex, subIndex, applyNNUE, accumFromList,
+    modelSave, modelLoad
 ) where
 
 -- import Data.Array.Base (unsafeAt)
--- import Data.Bits
 -- import Data.List (minimumBy)
 -- import Data.Array.Unboxed
 -- import Data.Ord (comparing)
 -- import Data.Int
 
+import qualified Data.ByteString as B
+import Data.Serialize
+import GHC.Generics
 -- import Data.Vector.Unboxed.Mutable (MVector, PrimMonad, PrimState)
 import Data.Vector.Unboxed         (Vector)
 import Data.Vector                 ((!))
 -- import qualified Data.Vector.Unboxed.Mutable as V
 import qualified Data.Vector.Unboxed         as U
 import qualified Data.Vector                 as T
+import Data.Vector.Serialize
 
 -- import Control.Monad (foldM_)
 -- import Control.Monad.ST
@@ -57,6 +62,13 @@ multip m a = U.fromList $ T.toList $ T.map (scalar a) m
 
 type Nonlin = Accum -> Accum
 
+-- We cannot serialize functions so we must find another reprezentation for nonlinearities
+nonlinExecutor :: String -> Accum -> Accum
+nonlinExecutor nl x
+    | nl == "ReLU"        = relu x
+    | nl == "Hardsigmoid" = hardsigmoid x
+    | otherwise           = error $ "nonlin Executor: unknown Nonlin: " ++ nl
+
 relu :: Nonlin
 relu = U.map (max 0)
 
@@ -84,25 +96,31 @@ teste = round (U.sum b0) == (60 :: Int)
 data Layer = Layer {
         laWeights :: Matrix,	-- the weights matrix (vector of rows)
         laBias    :: Accum,	-- bias
-        laNonlin  :: Nonlin	-- the non linearity
-    }
+        laNonlin  :: String	-- the non linearity
+    } deriving Generic
+
+instance Serialize Layer
 
 data FinalLayer = FinalLayer {
         flWeights :: Accum,	-- just an accumulator
         flBias    :: Float	-- bias - a float
-    }
+    } deriving Generic
+
+instance Serialize FinalLayer
 
 data NNUE = NNUE {
         nnueAccums :: Matrix,	-- the accumulators - length must be 768
         nnueBias   :: Accum,	-- the initial accumulator
-        nnueNonlin :: Nonlin,	-- non linearity of the first layer
+        nnueNonlin :: String,	-- non linearity of the first layer
         nnueLayers :: [Layer],	-- list of further intermediate layers
         nnueFinal  :: FinalLayer	-- the final layer
-    }
+    } deriving Generic
+
+instance Serialize NNUE
 
 -- check dimensions!
 makeLayer :: Matrix -> Accum -> Layer
-makeLayer m a = Layer { laWeights = m, laBias = a, laNonlin = relu }
+makeLayer m a = Layer { laWeights = m, laBias = a, laNonlin = "ReLU" }
 
 -- check dimensions!
 makeFinalLayer :: Accum -> Float -> FinalLayer
@@ -111,7 +129,7 @@ makeFinalLayer a f = FinalLayer { flWeights = a, flBias = f }
 -- check dimensions!
 makeNNUE :: Matrix -> Accum -> [Layer] -> FinalLayer -> NNUE
 makeNNUE m ai ls fl
-    = NNUE { nnueAccums = m, nnueBias = ai, nnueNonlin = relu, nnueLayers = ls, nnueFinal = fl }
+    = NNUE { nnueAccums = m, nnueBias = ai, nnueNonlin = "ReLU", nnueLayers = ls, nnueFinal = fl }
 
 addIndex :: NNUE -> Int -> Accum -> Accum
 addIndex nnue i = acadd (nnueAccums nnue ! i)
@@ -120,15 +138,23 @@ subIndex :: NNUE -> Int -> Accum -> Accum
 subIndex nnue i = acsub (nnueAccums nnue ! i)
 
 applyLayer :: Layer -> Accum -> Accum
-applyLayer layer a = laNonlin layer $ acadd (multip (laWeights layer) a) (laBias layer)
+applyLayer layer a = nonlinExecutor (laNonlin layer) $ acadd (multip (laWeights layer) a) (laBias layer)
 
 applyFinalLayer :: FinalLayer -> Accum -> Float
 applyFinalLayer layer a = scalar (flWeights layer) a + flBias layer
 
 applyNNUE :: NNUE -> Accum -> Float
 applyNNUE nnue a = applyFinalLayer (nnueFinal nnue)
-                       $ foldr applyLayer (nnueNonlin nnue a) (reverse $ nnueLayers nnue)
+                       $ foldr applyLayer (nonlinExecutor (nnueNonlin nnue) a) (reverse $ nnueLayers nnue)
 
 -- Calculate an accumulator from scratch from a list of indices
 accumFromList :: NNUE -> [Int] -> Accum
 accumFromList nnue = foldr (addIndex nnue) (nnueBias nnue)
+
+modelSave :: NNUE -> FilePath -> IO ()
+modelSave nnue filepath = B.writeFile filepath $ encode nnue
+
+modelLoad :: FilePath -> IO (Either String NNUE)
+modelLoad filepath = do
+    bs <- B.readFile filepath
+    return $ decode bs

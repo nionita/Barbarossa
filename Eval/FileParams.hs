@@ -1,49 +1,24 @@
 module Eval.FileParams (
-    makeEvalState,
-    fileToState
+    makeEvalState
   ) where
 
 -- import Data.Char (isSpace)
 import Data.List (tails, intersperse)
 import System.Directory
 
-import Struct.Status(EvalState)
+import Struct.Status(EvalState(..))
 import Struct.Config
-import Eval.Eval (initEvalState)
+import Eval.NNUE (modelLoad, modelSave)
+import Eval.Model (model)
 
--- Opens a parameter file for eval, read it and create an eval state
-makeEvalState :: Maybe FilePath -> [(String, Double)] -> String -> String -> IO (FilePath, EvalState)
-makeEvalState argfile assigns pver psuff = do
-    -- putStrLn $ "makeEvalState: " ++ show argfile
-    case argfile of
-        Just afn -> do	-- config file as argument
-            fex <- doesFileExist afn
-            if fex then filState afn afn assigns else error $ "makeEvalState: no such file: " ++ afn
-        Nothing  -> go $ configFileNames pver psuff
-    where defState = return ("", initEvalState assigns)
-          go [] = defState
-          go (f:fs) = do
-             fex <- doesFileExist f
-             if fex then filState f "" assigns else go fs
-
-filState :: FilePath -> String -> [(String, Double)] -> IO (String, EvalState)
-filState fn ident ass = do
-    est <- fileToState fn ass
-    return (ident, est)
-
-fileToState :: FilePath -> [(String, Double)] -> IO EvalState
-fileToState fn ass = do
-    fCont <- readFile fn
-    -- putStrLn $ "This is the file " ++ fn ++ ":" ++ fCont
-    let ies = initEvalState $ ass ++ fileToParams fCont
-    -- putStrLn $ "This is state: " ++ show ies
-    return ies
-
--- This produces a list of config file names depending on
--- program version and programm version suffix
--- The most specific will be first, the most general last
-configFileNames :: String -> String -> [String]
-configFileNames pver psuff = map cfname $ tails [psuff, pver]
-    where fnprf = "evalParams"
-          fnsuf = ".txt"
-          cfname = concat . (++ [fnsuf]) . intersperse "-" . (fnprf :) . reverse
+-- Opens a model file for eval, read it and create an eval state
+makeEvalState :: Maybe FilePath -> IO (EvalState, String)
+makeEvalState argfile
+    | Just filename <- argfile = do
+        emodel <- modelLoad filename
+        case emodel of
+            Left mes -> return (EvalState model, "Load from " ++ show filename ++ ": " ++ mes)
+            Right mo -> return (EvalState mo, "Model from " ++ show filename ++ " loaded")
+    | otherwise = do
+        modelSave model "model.bin"
+        return (EvalState model, "No model path given, use default model")
