@@ -10,7 +10,7 @@ import Control.Concurrent
 import Control.Exception
 import Data.Array.Unboxed
 -- import Data.Foldable (foldrM)
-import Data.List (intersperse)
+-- import Data.List (intersperse)
 import Data.Maybe
 import Data.Time.Clock (UTCTime)
 import Data.Typeable
@@ -22,7 +22,7 @@ import System.Random
 import Struct.Struct
 import Struct.Status
 import Struct.Context
-import Struct.Config
+-- import Struct.Config
 import Hash.TransTab
 import Uci.UCI
 import Uci.UciGlue
@@ -269,9 +269,10 @@ doSetOption opt = do
     if working chg
        then ctxLog LogWarning "GUI sent SetOption while I'm working..."
        else case on of
-                "Hash" -> setOptionHash ov
-                _      -> ctxLog LogWarning
-                              $ "Unknown option from engine: " ++ on ++ " with value " ++ ov
+                "Hash"     -> setOptionHash ov
+                "EvalFile" -> setOptionEvalFile ov
+                _          -> ctxLog LogWarning
+                                  $ "Unknown option from engine: " ++ on ++ " with value " ++ ov
 
 unifyOption :: Option -> (String, String)
 unifyOption (Name on)         = (on, "true")
@@ -288,6 +289,14 @@ setOptionHash sval =
             ctxLog LogInfo $ "Cache was set on " ++ sval ++ " MB"
         _           -> ctxLog LogError $ "GUI: wrong number of MB for option Hash: " ++ sval
     
+
+setOptionEvalFile :: String -> CtxIO ()
+setOptionEvalFile fn = do
+    (evs, mes) <- liftIO $ makeEvalState (Just fn)
+    chg <- readChanging
+    let st = crtStatus chg
+    modifyChanging $ \c -> c { crtStatus = st { evalst = evs }}
+    ctxLog LogInfo mes
 
 ignore :: CtxIO ()
 ignore = notImplemented "ignored"
@@ -641,7 +650,7 @@ giveBestMove mvs = do
 beforeReadLoop :: CtxIO ()
 beforeReadLoop = do
     chg <- readChanging
-    let evst = evalst $ crtStatus chg
+    -- let evst = evalst $ crtStatus chg
     -- ctxLog LogInfo "Eval parameters and weights:"
     -- ctxLog LogInfo $ show (esEParams evst)
     -- forM_ (zip3 weightNames (esDWeightsM evst) (esDWeightsE evst))
@@ -689,6 +698,7 @@ data UciGUIOptionType = UGOTRange String String
 guiUciOptions :: [(String, String, String, UciGUIOptionType)]
 guiUciOptions = [
         ("Hash", "spin", "16", UGOTRange "16" "1024")	-- hash size in MB
+      , ("EvalFile", "string", "intern", UGOTNone)	-- Network eval file (.bin)
     ]
 
 sendOption :: (String, String, String, UciGUIOptionType) -> CtxIO ()
