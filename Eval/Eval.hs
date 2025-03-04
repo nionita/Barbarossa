@@ -48,7 +48,7 @@ matesc = 20000 - 255	-- warning, this is also defined in Base.hs!!
 {-# INLINE posEval #-}
 posEval :: MyPos -> EvalState -> Int
 posEval p (EvalState model) = scc
-    where !sce = round $ applyNNUE model $ accumFromList model $ posToIndexes p
+    where !sce = fromIntegral $ applyNNUE model $ accumFromList model $ posToIndexes p
           !scl = min matesc $ max (-matesc) sce
           !scc = if granCoarse > 0 then (scl + granCoarse2) .&. granCoarseM else scl
 

@@ -95,10 +95,7 @@ main :: IO ()
 main = do
     (opts, _) <- theOptions
     if optTeste opts
-        then do
-            let ok = teste
-            putStrLn $ "NNUE works: " ++ show ok
-            evalFile (optCsvPath opts) (optConFile opts)
+        then evalFile (optCsvPath opts) (optConFile opts)
         else if optGener opts
                 then filterFile (optCsvPath opts) (optOutDir opts)
                 else putStrLn $ "No useful option, should be one of -t or -g"
