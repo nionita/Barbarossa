@@ -331,7 +331,7 @@ doPosition fen mvs = do
           myCol = if even (length mvs) then fenColor else other fenColor
 
 stateFromFen :: Pos -> Cache -> History -> EvalState -> (Maybe Int, MyState)
-stateFromFen StartPos  c h es = (Just 1,  posToState initPos c h es)
+stateFromFen StartPos  c h es = (Just 1,  posToState initPos          c h es)
 stateFromFen (Pos fen) c h es = (Nothing, posToState (posFromFen fen) c h es)
 
 movingColor :: Pos -> Color

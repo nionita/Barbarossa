@@ -13,14 +13,16 @@ import Data.Bits
 import Data.List (sort, foldl')
 import Data.Word
 
+import Debug.Trace (trace)
+
 import Struct.Struct
+import Struct.Status (EvalState(..))
 import Moves.Pattern
 import Moves.Moves
 import Moves.ShowMe
 import Eval.BasicEval
 import Eval.Eval (pieceToIdx)
 import Eval.NNUE
-import Eval.Model (model)
 import Moves.Fen
 
 {-# INLINE movePassed #-}
@@ -294,6 +296,7 @@ chainAccum = foldl (flip ($))
 -- clearing a piece is with minus
 -- Per move we have more such pairs and we need to collect them together
 data AccumChange = AccumChange Bool Int Int
+    -- deriving Show
 
 pieceToAccumAdd :: Piece -> Color -> Square -> AccumChange
 pieceToAccumAdd piece pccol sq = AccumChange True x y
@@ -303,11 +306,17 @@ pieceToAccumSub :: Piece -> Color -> Square -> AccumChange
 pieceToAccumSub piece pccol sq = AccumChange False x y
     where (x, y) = pieceToIdx piece pccol sq
 
-updateAccumulators :: Accum -> Accum -> [AccumChange] -> (Accum, Accum)
-updateAccumulators myacc yoacc = foldr f (myacc, yoacc)
+updateAccumulators :: NNUE -> Accum -> Accum -> [AccumChange] -> (Accum, Accum)
+updateAccumulators model whacc blacc acs = trace tr $ foldr f (whacc, blacc) acs
     where f (AccumChange isadd x y) (wha, bla)
               | isadd     = (addIndex model x wha, addIndex model y bla)
               | otherwise = (subIndex model x wha, subIndex model y bla)
+          tr = "ACS:" ++ concatMap (showAccumChange model) acs
+
+showAccumChange :: NNUE -> AccumChange -> String
+showAccumChange model (AccumChange plus x y)
+    = " ACh " ++ show plus ++ " W " ++ show x ++ " -> " ++ show (accumVal model x)
+        ++ " B " ++ show y ++ " -> " ++ show (accumVal model y)
 
 {-
 changePining :: MyPos -> Square -> Square -> Bool
@@ -385,8 +394,8 @@ epSetZob :: Square -> BBoard
 epSetZob = zobEP . (.&. 0x7)
 
 -- Copy one square to another and clear the source square
-doFromToMove :: Move -> MyPos -> MyPos
-doFromToMove m !p | moveIsNormal m
+doFromToMove :: EvalState -> Move -> MyPos -> MyPos
+doFromToMove (EvalState model) m !p | moveIsNormal m
     = updatePos p {
           black = tblack, slide = tslide, kkrq  = tkkrq,  diag  = tdiag,
           epcas = tepcas, zobkey = tzobkey, whAccum = twhacc, blAccum = tblacc
@@ -432,9 +441,9 @@ doFromToMove m !p | moveIsNormal m
                                  ++ showTab (black p) (slide p) (kkrq p) (diag p)
                                  ++ "resulting pos:\n"
                                  ++ showTab tblack tslide tkkrq tdiag
-          (twhacc, tblacc) = updateAccumulators (whAccum p) (blAccum p) $ accs1 ++ accs2
+          (twhacc, tblacc) = updateAccumulators model (whAccum p) (blAccum p) $ accs1 ++ accs2
 
-doFromToMove m !p | moveIsEnPas m
+doFromToMove (EvalState model) m !p | moveIsEnPas m
     = updatePos p {
           black = tblack, slide = tslide, kkrq  = tkkrq,  diag  = tdiag,
           epcas = tepcas, zobkey = tzobkey, whAccum = twhacc, blAccum = tblacc
@@ -467,9 +476,9 @@ doFromToMove m !p | moveIsEnPas m
                        pieceToAccumAdd Pawn col dst
                    ])
               | otherwise = error "doFromToMove en-passant"
-          (twhacc, tblacc) = updateAccumulators (whAccum p) (blAccum p) accs2
+          (twhacc, tblacc) = updateAccumulators model (whAccum p) (blAccum p) accs2
 
-doFromToMove m !p | moveIsCastle m
+doFromToMove (EvalState model) m !p | moveIsCastle m
     = updatePos p {
           black = tblack, slide = tslide, kkrq  = tkkrq,  diag  = tdiag,
           epcas = tepcas, zobkey = tzobkey, whAccum = twhacc, blAccum = tblacc
@@ -513,9 +522,9 @@ doFromToMove m !p | moveIsCastle m
                        pieceToAccumAdd Rook co1 cds
                    ])
               | otherwise = error "doFromToMove King + Rook"
-          (twhacc, tblacc) = updateAccumulators (whAccum p) (blAccum p) accs2
+          (twhacc, tblacc) = updateAccumulators model (whAccum p) (blAccum p) accs2
 
-doFromToMove m !p | moveIsPromo m
+doFromToMove (EvalState model) m !p | moveIsPromo m
     = updatePos p0 {
           black = tblack, slide = tslide, kkrq = tkkrq, diag = tdiag,
           epcas = tepcas, zobkey = tzobkey, whAccum = twhacc, blAccum = tblacc
@@ -548,9 +557,9 @@ doFromToMove m !p | moveIsPromo m
                                 pieceToAccumAdd pie  (moving p) dst
                              ]
                              )
-          (twhacc, tblacc) = updateAccumulators (whAccum p) (blAccum p) $ accs1 ++ accs2
+          (twhacc, tblacc) = updateAccumulators model (whAccum p) (blAccum p) $ accs1 ++ accs2
 
-doFromToMove _ _ = error "doFromToMove: wrong move type"
+doFromToMove _ _ _ = error "doFromToMove: wrong move type"
 
 reverseMoving :: MyPos -> MyPos
 reverseMoving p = updatePos p { epcas = tepcas, zobkey = z, whAccum = twhacc, blAccum = tblacc }

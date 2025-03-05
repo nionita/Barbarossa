@@ -12,10 +12,8 @@ import Data.Maybe (fromJust)
 import Struct.Struct
 import Moves.Moves
 import Moves.Pattern
--- import Eval.BasicEval
-import Eval.Eval
-import Eval.Model
-import Eval.NNUE
+-- import Eval.Eval
+-- import Eval.NNUE
 
 startFen :: String
 startFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR/ w KQkq - 0 1"
@@ -49,10 +47,7 @@ initPos = posFromFen startFen
 posFromFen :: String -> MyPos
 posFromFen fen
     | fen1:fen2:fen3:fen4:fen5:_ <- fenFromString fen
-        = let p   = posFromFenOk fen1 fen2 fen3 fen4 fen5
-              wha = accumFromList model $ posToIndexes p White
-              bla = accumFromList model $ posToIndexes p Black
-          in p { whAccum = wha, blAccum = bla}
+                = posFromFenOk fen1 fen2 fen3 fen4 fen5
     | otherwise = error $ "Wrong fen: " ++ fen
 
 posFromFenOk :: String -> String -> String -> String -> String -> MyPos

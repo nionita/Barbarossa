@@ -9,7 +9,7 @@ module Eval.NNUE (
     makeAccum, makeMatrix, makeLayer, makeFinalLayer, makeNNUE,
     addIndex, subIndex, applyNNUE, accumFromList,
     modelSave, modelLoad,
-    zeroAccum
+    zeroAccum, accumVal
 ) where
 
 import Data.Bits (unsafeShiftR)
@@ -20,7 +20,7 @@ import Data.Vector.Unboxed         (Vector)
 import Data.Vector                 ((!))
 import qualified Data.Vector.Unboxed         as U
 import qualified Data.Vector                 as T
-import Data.Vector.Serialize
+import Data.Vector.Serialize()
 import GHC.Generics
 
 -- Accumulator is a vector of floats
@@ -118,6 +118,9 @@ addIndex nnue i = acadd (nnueAccums nnue ! i)
 
 subIndex :: NNUE -> Int -> Accum -> Accum
 subIndex nnue i = acsub (nnueAccums nnue ! i)
+
+accumVal :: NNUE -> Int -> Accum
+accumVal nnue i = nnueAccums nnue ! i
 
 applyLayer :: Layer -> Accum -> Accum
 applyLayer layer a = U.map (flip unsafeShiftR (laQuant layer))

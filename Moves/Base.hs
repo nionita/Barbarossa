@@ -32,6 +32,7 @@ import Hash.TransTab
 import Moves.Board
 import Eval.BasicEval
 import Eval.Eval
+import Eval.NNUE
 -- import Eval.Model (model)
 import Moves.ShowMe
 import Moves.History
@@ -61,17 +62,20 @@ getPos = gets (head . stack)
 informCtx :: Comm -> Game ()
 informCtx = lift . talkToContext
 
+-- Initialized the accumulators
 posToState :: MyPos -> Cache -> History -> EvalState -> MyState
-posToState p c h e = MyState {
-                       stack = [p''],
+posToState p c h e@(EvalState model) = MyState {
+                       stack = [pas],
                        hash = c,
                        hist = h,
                        mstats = ssts0,
                        evalst = e,
                        rootmn = 1
                    }
-    where stsc = posEval p e
-          p'' = p { staticScore = stsc }
+    where sts = posEval p e
+          wha = accumFromList model $ posToIndexes p White
+          bla = accumFromList model $ posToIndexes p Black
+          pas = p { staticScore = sts, whAccum = wha, blAccum = bla}
 
 posNewSearch :: MyState -> MyState
 posNewSearch p = p { hash = newGener (hash p), rootmn = 1 }
@@ -160,7 +164,7 @@ doRealMove m = do
         il = occup pc `uBitClear` fromSquare m1
         -- Capturing one king?
         kc = kings pc `uBitSet` toSquare m1
-        p' = doFromToMove m1 pc
+        p' = doFromToMove (evalst s) m1 pc
         cok = checkOk p'
     -- If the move is real and one of those conditions occur,
     -- then we are really in trouble...
@@ -181,6 +185,7 @@ doRealMove m = do
 -- Move from a node to a descendent - the normal search version
 doMove :: Move -> Game DoResult
 doMove m = do
+    logMes $ "doMove " ++ show m
     s <- get
     let pc = head $ stack s	-- we never saw an empty stack error until now
         -- Moving a non-existent piece?
@@ -188,7 +193,7 @@ doMove m = do
         -- Capturing one king?
         kc  = kings pc `uBitSet` toSquare m
         sts = posEval p (evalst s)
-        p   = doFromToMove m pc { staticScore = sts }
+        p   = doFromToMove (evalst s) m (pc { staticScore = sts })
     if (il || kc)
        then do
            logMes $ "Illegal move or position: move = " ++ show m
@@ -200,6 +205,17 @@ doMove m = do
        else if not $ checkOk p
                then return Illegal
                else do
+                   -- Debug:
+                   let idxsb = posToIndexes pc (moving pc)
+                   logMes $ "Before:"
+                   logMes $ "All indexes: " ++ show idxsb
+                   logMes $ "Accum White: " ++ show (whAccum pc)
+                   logMes $ "Accum Black: " ++ show (blAccum pc)
+                   let idxsa = posToIndexes p (moving p)
+                   logMes $ "After:"
+                   logMes $ "All indexes: " ++ show idxsa
+                   logMes $ "Accum White: " ++ show (whAccum p)
+                   logMes $ "Accum Black: " ++ show (blAccum p)
                    put s { stack = p : stack s }
                    if checkRemisRules p (stack s)
                       then return Final
@@ -216,7 +232,7 @@ doQSMove m = do
     s <- get
     let pc  = head $ stack s	-- we never saw an empty stack error until now
         sts = posEval p (evalst s)
-        p   = doFromToMove m pc { staticScore = sts }
+        p   = doFromToMove (evalst s) m (pc { staticScore = sts })
     if not $ checkOk p
        then return False
        else do

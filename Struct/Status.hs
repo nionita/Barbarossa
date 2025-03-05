@@ -4,16 +4,18 @@
 module Struct.Status (
     MyState(..),
     EvalState(..),
+    defaultEvalState
 ) where
 
 import Struct.Struct
-import Struct.Config
+-- import Struct.Config
 -- import Struct.Params
-import Struct.MidEnd
+-- import Struct.MidEnd
 import Moves.History
 import Hash.TransTab
 import Search.AlbetaTypes
 import Eval.NNUE (NNUE)
+import Eval.Model (model)
 
 data MyState = MyState {
         stack  :: [MyPos],	-- stack of played positions
@@ -25,3 +27,6 @@ data MyState = MyState {
     }
 
 data EvalState = EvalState NNUE
+
+defaultEvalState :: EvalState
+defaultEvalState = EvalState model

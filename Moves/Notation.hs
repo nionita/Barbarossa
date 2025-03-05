@@ -6,6 +6,7 @@ import Data.Bits
 import Data.Char (ord, chr, toLower)
 
 import Struct.Struct
+import Struct.Status (defaultEvalState)
 import Moves.Pattern
 import Moves.Moves
 import Moves.Board
@@ -34,7 +35,7 @@ toNiceNotation p m
               | otherwise     = ""	-- king
           dst = col dc : row dr : ""
           promo = if moveIsPromo m then pcToCh False (movePromoPiece m) else ""
-          p' = doFromToMove m p
+          p' = doFromToMove defaultEvalState m p
           chk = if isCheck p' (other fcol) then "+" else ""
           orda = ord 'a'
           ord1 = ord '1'
