@@ -13,7 +13,7 @@ import Data.Bits
 import Data.List (sort, foldl')
 import Data.Word
 
-import Debug.Trace (trace)
+-- import Debug.Trace (trace)
 
 import Struct.Struct
 import Struct.Status (EvalState(..))
@@ -300,14 +300,17 @@ data AccumChange = AccumChange Bool Int Int
 
 pieceToAccumAdd :: Piece -> Color -> Square -> AccumChange
 pieceToAccumAdd piece pccol sq = AccumChange True x y
-    where (x, y) = pieceToIdx piece pccol sq
+    where x = pieceToIdx White sq piece pccol
+          y = pieceToIdx Black sq piece pccol
 
 pieceToAccumSub :: Piece -> Color -> Square -> AccumChange
 pieceToAccumSub piece pccol sq = AccumChange False x y
-    where (x, y) = pieceToIdx piece pccol sq
+    where x = pieceToIdx White sq piece pccol
+          y = pieceToIdx Black sq piece pccol
 
 updateAccumulators :: NNUE -> Accum -> Accum -> [AccumChange] -> (Accum, Accum)
-updateAccumulators model whacc blacc acs = trace tr $ foldr f (whacc, blacc) acs
+updateAccumulators model whacc blacc acs = -- trace tr $
+    foldr f (whacc, blacc) acs
     where f (AccumChange isadd x y) (wha, bla)
               | isadd     = (addIndex model x wha, addIndex model y bla)
               | otherwise = (subIndex model x wha, subIndex model y bla)

@@ -73,8 +73,12 @@ posToState p c h e@(EvalState model) = MyState {
                        rootmn = 1
                    }
     where sts = posEval p e
-          wha = accumFromList model $ posToIndexes p White
-          bla = accumFromList model $ posToIndexes p Black
+          pr  = reverseMoving p
+          -- Index lists from 2 perspectives
+          (whl, bll) | moving p == White = (posToIndexes p,  posToIndexes pr)
+                     | otherwise         = (posToIndexes pr, posToIndexes p)
+          wha = accumFromList model whl
+          bla = accumFromList model bll
           pas = p { staticScore = sts, whAccum = wha, blAccum = bla}
 
 posNewSearch :: MyState -> MyState
@@ -185,7 +189,7 @@ doRealMove m = do
 -- Move from a node to a descendent - the normal search version
 doMove :: Move -> Game DoResult
 doMove m = do
-    logMes $ "doMove " ++ show m
+    -- logMes $ "doMove " ++ show m
     s <- get
     let pc = head $ stack s	-- we never saw an empty stack error until now
         -- Moving a non-existent piece?
@@ -206,16 +210,16 @@ doMove m = do
                then return Illegal
                else do
                    -- Debug:
-                   let idxsb = posToIndexes pc (moving pc)
-                   logMes $ "Before:"
-                   logMes $ "All indexes: " ++ show idxsb
-                   logMes $ "Accum White: " ++ show (whAccum pc)
-                   logMes $ "Accum Black: " ++ show (blAccum pc)
-                   let idxsa = posToIndexes p (moving p)
-                   logMes $ "After:"
-                   logMes $ "All indexes: " ++ show idxsa
-                   logMes $ "Accum White: " ++ show (whAccum p)
-                   logMes $ "Accum Black: " ++ show (blAccum p)
+                   -- let idxsb = posToIndexes pc
+                   -- logMes $ "Before:"
+                   -- logMes $ "All indexes: " ++ show idxsb
+                   -- logMes $ "Accum White: " ++ show (whAccum pc)
+                   -- logMes $ "Accum Black: " ++ show (blAccum pc)
+                   -- let idxsa = posToIndexes p
+                   -- logMes $ "After:"
+                   -- logMes $ "All indexes: " ++ show idxsa
+                   -- logMes $ "Accum White: " ++ show (whAccum p)
+                   -- logMes $ "Accum Black: " ++ show (blAccum p)
                    put s { stack = p : stack s }
                    if checkRemisRules p (stack s)
                       then return Final

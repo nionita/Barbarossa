@@ -9,7 +9,7 @@ module Eval.Eval (
 ) where
 
 import Data.Bits
-import Debug.Trace (trace)
+-- import Debug.Trace (trace)
 
 import Struct.Struct
 import Struct.Status
@@ -30,7 +30,7 @@ matesc :: Int
 matesc = 20000 - 255	-- warning, this is also defined in Base.hs!!
 
 prod :: Bool
-prod = False
+prod = True
 
 -- Eval with NNUE!
 {-# INLINE posEval #-}
@@ -39,9 +39,9 @@ posEval p (EvalState model)
     | prod || sce == sca = scc
     | otherwise          = error $ "Wrong sce = " ++ show sce ++ " correct would be: " ++ show sca
     where !sca = fromIntegral $ applyNNUE model ala
-          ala = accumFromList model $ posToIndexes p (moving p)
-          !sce = trace ("Eval: ala = " ++ show ala ++ ", mya = " ++ show (myAccum p))
-              $ fromIntegral $ applyNNUE model $ myAccum p
+          ala = accumFromList model $ posToIndexes p
+          !sce = -- trace ("Eval: ala = " ++ show ala ++ ", mya = " ++ show (myAccum p)) $
+              fromIntegral $ applyNNUE model $ myAccum p
           !scl = min matesc $ max (-matesc) sce
           !scc = if granCoarse > 0 then (scl + granCoarse2) .&. granCoarseM else scl
 
@@ -57,44 +57,39 @@ posEval p (EvalState model)
 -- The layout per color is: P, N, B, R, Q, K in order to compute the index quickly
 -- from the ord function of the piece
 
-posToIndexes :: MyPos -> Color -> [Int]
-posToIndexes pos col = partToIndexes pos (me pos) col
-     ++ map toPassive (partToIndexes pos (yo pos) col)
+posToIndexes :: MyPos -> [Int]
+posToIndexes pos = partToIndexes pos (me pos) (moving pos)
+                ++ partToIndexes pos (yo pos) (other $ moving pos)
 
 partToIndexes :: MyPos -> BBoard -> Color -> [Int]
 partToIndexes pos part col
-    =  pieceToIndexes Pawn   (part .&. pawns   pos) col
-    ++ pieceToIndexes Knight (part .&. knights pos) col
-    ++ pieceToIndexes Bishop (part .&. bishops pos) col
-    ++ pieceToIndexes Rook   (part .&. rooks   pos) col
-    ++ pieceToIndexes Queen  (part .&. queens  pos) col
-    ++ pieceToIndexes King   (part .&. kings   pos) col
+    =  pieceToIndexes (moving pos) Pawn   (part .&. pawns   pos) col
+    ++ pieceToIndexes (moving pos) Knight (part .&. knights pos) col
+    ++ pieceToIndexes (moving pos) Bishop (part .&. bishops pos) col
+    ++ pieceToIndexes (moving pos) Rook   (part .&. rooks   pos) col
+    ++ pieceToIndexes (moving pos) Queen  (part .&. queens  pos) col
+    ++ pieceToIndexes (moving pos) King   (part .&. kings   pos) col
 
 -- bbToSquares delivers the square number from white POV
 -- so when we want the black perspective we have to mirror
-pieceToIndexes :: Piece -> BBoard -> Color -> [Int]
-pieceToIndexes p bb povcol
-    | povcol == White = map ((+) offset) $ bbToSquares bb
-    | otherwise       = map ((+) offset) $ map mirror $ bbToSquares bb
-    where offset = fromEnum p * 64
+pieceToIndexes :: Color -> Piece -> BBoard -> Color -> [Int]
+pieceToIndexes perspective p bb col
+    = map (\sq -> pieceToIdx perspective sq p col) $ bbToSquares bb
 
--- Piece index for incremental update for both perspectives (white, black)
-pieceToIdx :: Piece -> Color -> Square -> (Int, Int)
-pieceToIdx piece color sq
-    | color == White = (          offset + sq, passive + offset + sqm)
-    | otherwise      = (passive + offset + sq,           offset + sqm)
+-- Piece index for incremental update per perspective
+pieceToIdx :: Color -> Square -> Piece -> Color -> Int
+pieceToIdx perspective sq piece color = sidev * passive + offset + sqv
     where offset  = fromEnum piece * 64
+          side | color == White = 0
+               | otherwise      = 1
           passive = 384
-          sqm = mirror sq
+          (sidev, sqv) | perspective == White = (side,            sq)
+                       | otherwise            = (1 - side, mirror sq)
 
 -- Change the square number as from black perspective (mirror)
 -- file remains unchanged, the rank is complemented (000 <-> 111)
 mirror :: Square -> Square
 mirror = xor 56
-
--- Index mapping for the passive part
-toPassive :: Int -> Int
-toPassive = (+) 384
 
 -- Function to filter training data for NNUE
 -- We want a pretty quiet position, but really quite is probably too much
