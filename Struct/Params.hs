@@ -7,7 +7,9 @@
 
 module Struct.Params (
     genEvalParams,
-    genEvalWeights
+    genEvalWeights,
+    optSpaceNames,
+    optSpaceInit,
 ) where
 
 import Language.Haskell.TH
@@ -15,6 +17,16 @@ import Language.Haskell.TH.Syntax
 
 type EvalParamSpec  = (String, Integer)
 type EvalWeightSpec = (String, (Integer, Integer))
+
+-- The names of the parameters to be optimized
+optSpaceNames :: [String]
+optSpaceNames = zipWith (++) (repeat "mid.") names
+             ++ zipWith (++) (repeat "end.") names
+    where names = map fst weights
+
+optSpaceInit :: [Double]
+optSpaceInit = map fromIntegral $ map fst tups ++ map snd tups
+    where tups = map snd weights
 
 -- The configurable parameters we use
 -- Every parameter has only one value (i.e. it does not depend on game phase)

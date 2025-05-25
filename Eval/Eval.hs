@@ -5,7 +5,8 @@
 
 module Eval.Eval (
     initEvalState,
-    posEval
+    posEval,
+    posExactEval,
 ) where
 
 import Data.Array.Base (unsafeAt)
@@ -47,6 +48,10 @@ posEval p !sti = scc
     where !sce = evalDispatch p sti
           !scl = min matesc $ max (-matesc) sce
           !scc = if granCoarse > 0 then (scl + granCoarse2) .&. granCoarseM else scl
+
+{-# INLINE posExactEval #-}
+posExactEval :: MyPos -> EvalState -> Int
+posExactEval = evalDispatch
 
 evalDispatch :: MyPos -> EvalState -> Int
 evalDispatch p !sti
