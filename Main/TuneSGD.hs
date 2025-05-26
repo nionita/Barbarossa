@@ -34,7 +34,7 @@ data Options = Options {
         optOutDir  :: FilePath,	-- output directory for training files
         optConFile :: Maybe FilePath,	-- model file to load
         optGener   :: Bool,    	-- generate NNUE features
-        optTrain   :: Bool,    	-- test NNUE
+        optTrain   :: Int,    	-- test NNUE
         optLR      :: Double,	-- learning rate
         optLRDecay :: Double,	-- learning rate decay
         optBatchSz :: Int,	-- batch size
@@ -48,7 +48,7 @@ defaultOptions = Options {
         optOutDir  = "",
         optConFile = Nothing,
         optGener   = False,
-        optTrain   = False,
+        optTrain   = 0,
         optLR      = 0.1,
         optLRDecay = 0.999,
         optBatchSz = 1024,
@@ -68,24 +68,28 @@ addConf fi opt = opt { optConFile = Just fi }
 addGener :: Options -> Options
 addGener opt = opt { optGener = True }
 
-addTrain :: Options -> Options
-addTrain opt = opt { optTrain = True }
+addTrain :: String -> Options -> Options
+addTrain ba opt = opt { optTrain = read ba }
 
-addBatches :: String -> Options -> Options
-addBatches ba opt = opt { optBatches = read ba }
+addBatchSz :: String -> Options -> Options
+addBatchSz ba opt = opt { optBatchSz = read ba }
 
 addLR :: String -> Options -> Options
 addLR lr opt = opt { optLR = read lr }
 
+addValidBa :: String -> Options -> Options
+addValidBa ba opt = opt { optValidBa = read ba }
+
 options :: [OptDescr (Options -> Options)]
 options = [
-        Option "i" ["input"]   (ReqArg addIFile "STRING") "Input file or directory",
-        Option "o" ["output"]  (ReqArg addOFile "STRING") "Output directory",
-        Option "c" ["config"]  (ReqArg addConf  "STRING") "Load model file",
-        Option "g" ["gen"]     (NoArg addGener) "Generate NNUE features",
-        Option "t" ["train"]   (NoArg addTrain) "Train Parameter",
-        Option "b" ["batches"] (ReqArg addBatches  "INT") "Batches to train",
-        Option "l" ["lr"]      (ReqArg addLR  "FLOAT") "Learning rate"
+        Option "i" ["input"]    (ReqArg addIFile   "STRING") "Input file or directory",
+        Option "o" ["output"]   (ReqArg addOFile   "STRING") "Output directory",
+        Option "c" ["config"]   (ReqArg addConf    "STRING") "Load model file",
+        Option "g" ["gen"]      (NoArg  addGener)            "Generate NNUE features",
+        Option "t" ["train"]    (ReqArg addTrain   "INT")    "Train so many batches",
+        Option "b" ["bsize"]    (ReqArg addBatchSz "INT")    "Batch size",
+        Option "l" ["lr"]       (ReqArg addLR      "FLOAT")  "Learning rate",
+        Option "v" ["validate"] (ReqArg addValidBa "INT")    "Validate every so many batches"
     ]
 
 theOptions :: IO (Options, [String])
@@ -100,8 +104,8 @@ theOptions = do
 main :: IO ()
 main = do
     (opts, _) <- theOptions
-    if optTrain opts
-        then mainSGD (optCsvPath opts) (optBatches opts) (optBatchSz opts) (optLR opts)
+    if optTrain opts > 0
+        then mainSGD (optCsvPath opts) (optBatches opts) (optBatchSz opts) (optValidBa opts) (optLR opts)
         else if optGener opts
                 then filterFile (optCsvPath opts) (optOutDir opts)
                 else putStrLn $ "No useful option, should be one of -t or -g"
@@ -242,12 +246,31 @@ getFileList filePath maybePred = do
 -- Loss function type: depends on target score, target result and actual score
 type Loss = Double -> Double -> Double -> Double
 
-lossPerScore :: Loss
-lossPerScore tgsc _ sc = x * x
+theLoss :: Loss
+-- theLoss = lossSigmoid
+theLoss = lossSF
+
+-- Simplified loss model
+lossSigmoid :: Loss
+lossSigmoid tgsc _ sc = x * x
     where wdl_target = sigmoid (scoreSigmoidScale * tgsc)
           wdl_model  = sigmoid (scoreSigmoidScale * sc)
           x = wdl_target - wdl_model
-          scoreSigmoidScale = 0.01
+          scoreSigmoidScale = 1 / 75
+
+-- Loss model like Stockfish (see https://github.com/official-stockfish/nnue-pytorch/blob/master/model.py)
+lossSF :: Loss
+lossSF tgsc _ sc = exp (2.5 * log (abs (pf - qf)))
+    where in_scaling  = 340
+          out_scaling = 380
+          pf = scoreToRezult tgsc out_scaling
+          qf = scoreToRezult sc   in_scaling
+
+scoreToRezult :: Double -> Double -> Double
+scoreToRezult sc scaling = 0.5 * (1 + sigmoid pp - sigmoid pm)
+    where offset = 270
+          pp = ( sc - offset) / scaling
+          pm = (-sc - offset) / scaling
 
 sigmoid :: Double -> Double
 sigmoid x = 1 / (1 + exp (-x))
@@ -268,12 +291,12 @@ evaluateLoss loss es files = do
     hFlush stdout
     return meanLoss
 
-mainSGD :: FilePath -> Int -> Int -> Double -> IO ()
-mainSGD inPath batches batchSize lr = do
+mainSGD :: FilePath -> Int -> Int -> Int -> Double -> IO ()
+mainSGD inPath batches batchSize validba lr = do
     ds <- makeDataset (inPath </> "train") (inPath </> "test")
-    stime   <- getCurrentTime
-    trainParams ds batches batchSize lr
-    etime   <- getCurrentTime
+    stime <- getCurrentTime
+    trainParams ds batches batchSize validba lr
+    etime <- getCurrentTime
     putStrLn $ "Time: " ++ show (diffUTCTime etime stime)
     return ()
 
@@ -297,7 +320,7 @@ makeDataset trainDir testDir = do
     }
 
 testLoss :: EvalState -> Dataset -> IO Double
-testLoss es ds = evaluateLoss lossPerScore es (dsTestFiles ds)
+testLoss es ds = evaluateLoss theLoss es (dsTestFiles ds)
 
 -- Get a batch of training samples (position, target score, target rezult) from the dataset
 -- This changes the state of the dataset, which is why it is returning also the "changed" dataset
@@ -389,9 +412,9 @@ trainOneBatch maxBatches batchSize k ts = do
             (ds, batch) <- getTrainBatch batchSize (tsDataset ts)
             -- putStrLn "Calculate losses & gradient"
             let bsrec = 1 / fromIntegral batchSize -- we have always exactly batschSize records
-                loss0 = bsrec * lossPerBatch lossPerScore es batch
-                lossm = map (bsrec *) $ map (\esm -> lossPerBatch lossPerScore esm batch) esminus
-                lossp = map (bsrec *) $ map (\esp -> lossPerBatch lossPerScore esp batch) esplus
+                loss0 = bsrec * lossPerBatch theLoss es batch
+                lossm = map (bsrec *) $ map (\esm -> lossPerBatch theLoss esm batch) esminus
+                lossp = map (bsrec *) $ map (\esp -> lossPerBatch theLoss esp batch) esplus
                 -- This is already the negative gradient estimate, and already multiplied with LR
                 dloss = U.fromList $ map (tsLR ts *) $ zipWith (-) lossm lossp
                 vecn  = U.zipWith (+) (tsCurrent ts) dloss
@@ -432,14 +455,14 @@ vecToEvalState names vec = do
     (_, es) <- makeEvalState Nothing (genAssocs vec names) "" ""
     return es
 
-trainParams :: Dataset -> Int -> Int -> Double -> IO ()
-trainParams ds batches batchSize lr = do
+trainParams :: Dataset -> Int -> Int -> Int -> Double -> IO ()
+trainParams ds batches batchSize validba lr = do
     let trainState = TrainState {
             tsDataset = ds,
             tsNames   = optSpaceNames,
             tsLR      = lr,
             tsBatchNo = 0,
-            tsValidNo = 3000,
+            tsValidNo = validba,
             tsCurrent = U.fromList optSpaceInit,
             tsHistory = []
         }
