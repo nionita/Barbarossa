@@ -392,8 +392,7 @@ trainOneBatch maxBatches batchSize k ts = do
                 lossm = map (bsrec *) $ map (\esm -> lossPerBatch lossPerScore esm batch) esminus
                 lossp = map (bsrec *) $ map (\esp -> lossPerBatch lossPerScore esp batch) esplus
                 -- This is already the negative gradient estimate, and already multiplied with LR
-                -- We need to limit the components, otherwise we get instability
-                dloss = U.fromList $ map (max (-grdMax) . min grdMax) $ map (tsLR ts *) $ zipWith (-) lossm lossp
+                dloss = U.fromList $ map (tsLR ts *) $ zipWith (-) lossm lossp
                 vecn  = U.zipWith (+) (tsCurrent ts) dloss
             when validation $ do
                 putStrLn $ "Current loss:   " ++ show loss0
@@ -401,9 +400,9 @@ trainOneBatch maxBatches batchSize k ts = do
                 putStrLn $ "Current change: " ++ show dloss
                 putStrLn $ "Next vec:       " ++ show vecn
                 hFlush stdout
-            let lr = tsLR ts * 0.999
-            return (True, ts { tsDataset = ds, tsLR = lr, tsBatchNo = tsBatchNo ts + 1, tsCurrent = vecn, tsHistory = hi })
-    where grdMax = 100
+            -- let lr = tsLR ts * 0.999
+            -- return (True, ts { tsDataset = ds, tsLR = lr, tsBatchNo = tsBatchNo ts + 1, tsCurrent = vecn, tsHistory = hi })
+            return (True, ts { tsDataset = ds, tsBatchNo = tsBatchNo ts + 1, tsCurrent = vecn, tsHistory = hi })
 
 lossPerBatch :: Loss -> EvalState -> [(MyPos, Double, Double)] -> Double
 lossPerBatch loss es = sum . map (\(p, s, r) -> loss s r (fromIntegral $ posExactEval p es))
