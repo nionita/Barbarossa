@@ -34,11 +34,10 @@ data Options = Options {
         optOutDir  :: FilePath,	-- output directory for training files
         optConFile :: Maybe FilePath,	-- model file to load
         optGener   :: Bool,    	-- generate NNUE features
-        optTrain   :: Int,    	-- test NNUE
+        optTrain   :: Int,    	-- number of train batches - if > 0
         optLR      :: Double,	-- learning rate
         optLRDecay :: Double,	-- learning rate decay
         optBatchSz :: Int,	-- batch size
-        optBatches :: Int,	-- batches to train
         optValidBa :: Int	-- validate every so many batches
     }
 
@@ -52,7 +51,6 @@ defaultOptions = Options {
         optLR      = 0.1,
         optLRDecay = 0.999,
         optBatchSz = 1024,
-        optBatches = 300000,
         optValidBa = 3000
     }
 
@@ -105,7 +103,7 @@ main :: IO ()
 main = do
     (opts, _) <- theOptions
     if optTrain opts > 0
-        then mainSGD (optCsvPath opts) (optBatches opts) (optBatchSz opts) (optValidBa opts) (optLR opts)
+        then mainSGD (optCsvPath opts) (optTrain opts) (optBatchSz opts) (optValidBa opts) (optLR opts)
         else if optGener opts
                 then filterFile (optCsvPath opts) (optOutDir opts)
                 else putStrLn $ "No useful option, should be one of -t or -g"
