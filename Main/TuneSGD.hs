@@ -247,7 +247,7 @@ lossPerScore tgsc _ sc = x * x
     where wdl_target = sigmoid (scoreSigmoidScale * tgsc)
           wdl_model  = sigmoid (scoreSigmoidScale * sc)
           x = wdl_target - wdl_model
-          scoreSigmoidScale = 1 / 150
+          scoreSigmoidScale = 0.01
 
 sigmoid :: Double -> Double
 sigmoid x = 1 / (1 + exp (-x))
@@ -291,8 +291,9 @@ makeDataset :: FilePath -> FilePath -> IO Dataset
 makeDataset trainDir testDir = do
     trainFiles <- getFileList trainDir (Just filteredCsv)
     testFiles  <- getFileList testDir  (Just filteredCsv)
+    let rtf = reverse trainFiles	-- just for variation until we can shuffle
     return Dataset {
-        dsTrainFiles = concat (repeat trainFiles), dsTrainHandle = Nothing, dsTestFiles = testFiles
+        dsTrainFiles = concat (repeat rtf), dsTrainHandle = Nothing, dsTestFiles = testFiles
     }
 
 testLoss :: EvalState -> Dataset -> IO Double
