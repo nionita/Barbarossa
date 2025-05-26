@@ -34,7 +34,12 @@ data Options = Options {
         optOutDir  :: FilePath,	-- output directory for training files
         optConFile :: Maybe FilePath,	-- model file to load
         optGener   :: Bool,    	-- generate NNUE features
-        optTeste   :: Bool    	-- test NNUE
+        optTrain   :: Bool,    	-- test NNUE
+        optLR      :: Double,	-- learning rate
+        optLRDecay :: Double,	-- learning rate decay
+        optBatchSz :: Int,	-- batch size
+        optBatches :: Int,	-- batches to train
+        optValidBa :: Int	-- validate every so many batches
     }
 
 defaultOptions :: Options
@@ -43,7 +48,12 @@ defaultOptions = Options {
         optOutDir  = "",
         optConFile = Nothing,
         optGener   = False,
-        optTeste   = False
+        optTrain   = False,
+        optLR      = 0.1,
+        optLRDecay = 0.999,
+        optBatchSz = 1024,
+        optBatches = 300000,
+        optValidBa = 3000
     }
 
 addIFile :: FilePath -> Options -> Options
@@ -58,16 +68,24 @@ addConf fi opt = opt { optConFile = Just fi }
 addGener :: Options -> Options
 addGener opt = opt { optGener = True }
 
-addTeste :: Options -> Options
-addTeste opt = opt { optTeste = True }
+addTrain :: Options -> Options
+addTrain opt = opt { optTrain = True }
+
+addBatches :: String -> Options -> Options
+addBatches ba opt = opt { optBatches = read ba }
+
+addLR :: String -> Options -> Options
+addLR lr opt = opt { optLR = read lr }
 
 options :: [OptDescr (Options -> Options)]
 options = [
-        Option "i" ["input"]  (ReqArg addIFile "STRING") "Input file or directory",
-        Option "o" ["output"] (ReqArg addOFile "STRING") "Output directory",
-        Option "c" ["config"] (ReqArg addConf  "STRING") "Load model file",
-        Option "g" ["gen"]    (NoArg addGener) "Generate NNUE features",
-        Option "t" ["train"]  (NoArg addTeste) "Train Parameter"
+        Option "i" ["input"]   (ReqArg addIFile "STRING") "Input file or directory",
+        Option "o" ["output"]  (ReqArg addOFile "STRING") "Output directory",
+        Option "c" ["config"]  (ReqArg addConf  "STRING") "Load model file",
+        Option "g" ["gen"]     (NoArg addGener) "Generate NNUE features",
+        Option "t" ["train"]   (NoArg addTrain) "Train Parameter",
+        Option "b" ["batches"] (ReqArg addBatches  "INT") "Batches to train",
+        Option "l" ["lr"]      (ReqArg addLR  "FLOAT") "Learning rate"
     ]
 
 theOptions :: IO (Options, [String])
@@ -76,14 +94,14 @@ theOptions = do
     case getOpt Permute options args of
         (o, n, []) -> return (foldr ($) defaultOptions o, n)
         (_, _, es) -> ioError (userError (concat es ++ usageInfo header options))
-    where header = "Usage: " ++ idName ++ " -g -i PATH -o PATH | -t -i PATH"
+    where header = "Usage: " ++ idName ++ " -g -i PATH -o PATH | -t -i PATH -b BATCHES"
           idName = "TuneSGD"
 
 main :: IO ()
 main = do
     (opts, _) <- theOptions
-    if optTeste opts
-        then mainSGD (optCsvPath opts)
+    if optTrain opts
+        then mainSGD (optCsvPath opts) (optBatches opts) (optBatchSz opts) (optLR opts)
         else if optGener opts
                 then filterFile (optCsvPath opts) (optOutDir opts)
                 else putStrLn $ "No useful option, should be one of -t or -g"
@@ -226,10 +244,10 @@ type Loss = Double -> Double -> Double -> Double
 
 lossPerScore :: Loss
 lossPerScore tgsc _ sc = x * x
-    where wdl_target = scoreSigmoidScale * sigmoid tgsc
-          wdl_model  = scoreSigmoidScale * sigmoid sc
+    where wdl_target = sigmoid (scoreSigmoidScale * tgsc)
+          wdl_model  = sigmoid (scoreSigmoidScale * sc)
           x = wdl_target - wdl_model
-          scoreSigmoidScale = 600
+          scoreSigmoidScale = 1 / 150
 
 sigmoid :: Double -> Double
 sigmoid x = 1 / (1 + exp (-x))
@@ -250,11 +268,11 @@ evaluateLoss loss es files = do
     hFlush stdout
     return meanLoss
 
-mainSGD :: FilePath -> IO ()
-mainSGD inPath = do
+mainSGD :: FilePath -> Int -> Int -> Double -> IO ()
+mainSGD inPath batches batchSize lr = do
     ds <- makeDataset (inPath </> "train") (inPath </> "test")
     stime   <- getCurrentTime
-    trainParams ds 1000 10240 0.001
+    trainParams ds batches batchSize lr
     etime   <- getCurrentTime
     putStrLn $ "Time: " ++ show (diffUTCTime etime stime)
     return ()
@@ -350,24 +368,25 @@ trainOneBatch maxBatches batchSize k ts = do
             let hi = (tsBatchNo ts, tsCurrent ts, tl) : tsHistory ts
             return (False, ts { tsHistory = hi })
         else do
-            hi <- if mod (tsBatchNo ts) (tsValidNo ts) == 0
+            let validation = mod (tsBatchNo ts) (tsValidNo ts) == 0
+            hi <- if validation
                      then do
                          -- We trained enough batches to calculate the next validation loss
                          tl <- testLoss es (tsDataset ts)
                          return $ (tsBatchNo ts, tsCurrent ts, tl) : tsHistory ts
                      else return (tsHistory ts)
             -- calculate evaluation states for the partial derivatives from current vector
-            putStrLn "Calculate new vectors"
+            -- putStrLn "Calculate new vectors"
             let vminus  = genMinusVec (tsCurrent ts)
                 vplus   = genPlusVec  (tsCurrent ts)
-            putStrLn "Calculate new eval states"
+            -- putStrLn "Calculate new eval states"
             esminus <- mapM (vecToEvalState (tsNames ts)) vminus
             esplus  <- mapM (vecToEvalState (tsNames ts)) vplus
             -- get new batch and calculate the loss for currnet point and the derivatives
-            putStrLn $ "*** Start batch " ++ show k ++ " ***"
+            when (mod k 100 == 0) $ putStrLn $ "*** Start batch " ++ show k ++ " ***"
             hFlush stdout
             (ds, batch) <- getTrainBatch batchSize (tsDataset ts)
-            putStrLn "Calculate losses & gradient"
+            -- putStrLn "Calculate losses & gradient"
             let bsrec = 1 / fromIntegral batchSize -- we have always exactly batschSize records
                 loss0 = bsrec * lossPerBatch lossPerScore es batch
                 lossm = map (bsrec *) $ map (\esm -> lossPerBatch lossPerScore esm batch) esminus
@@ -376,14 +395,15 @@ trainOneBatch maxBatches batchSize k ts = do
                 -- We need to limit the components, otherwise we get instability
                 dloss = U.fromList $ map (max (-grdMax) . min grdMax) $ map (tsLR ts *) $ zipWith (-) lossm lossp
                 vecn  = U.zipWith (+) (tsCurrent ts) dloss
-            putStrLn $ "Current loss:   " ++ show loss0
-            putStrLn $ "Current vec:    " ++ show (tsCurrent ts)
-            putStrLn $ "Current change: " ++ show dloss
-            putStrLn $ "Next vec:       " ++ show vecn
-            hFlush stdout
-            let lr = tsLR ts * 0.995
+            when validation $ do
+                putStrLn $ "Current loss:   " ++ show loss0
+                putStrLn $ "Current vec:    " ++ show (tsCurrent ts)
+                putStrLn $ "Current change: " ++ show dloss
+                putStrLn $ "Next vec:       " ++ show vecn
+                hFlush stdout
+            let lr = tsLR ts * 0.999
             return (True, ts { tsDataset = ds, tsLR = lr, tsBatchNo = tsBatchNo ts + 1, tsCurrent = vecn, tsHistory = hi })
-    where grdMax = 1
+    where grdMax = 100
 
 lossPerBatch :: Loss -> EvalState -> [(MyPos, Double, Double)] -> Double
 lossPerBatch loss es = sum . map (\(p, s, r) -> loss s r (fromIntegral $ posExactEval p es))
@@ -394,12 +414,12 @@ vecChange vec val i = vec U.// [(i, vec U.! i + val)]
 
 -- Generate vector for partial derivative with the minus 1 components
 genMinusVec :: OptParams -> [OptParams]
-genMinusVec vec = map (vecChange vec (-0.5)) [0..l]
+genMinusVec vec = map (vecChange vec (-1)) [0..l]
     where l = U.length vec - 1
 
 -- Generate vector for partial derivative with the plus 1 components
 genPlusVec :: OptParams -> [OptParams]
-genPlusVec vec = map (vecChange vec 0.5) [0..l]
+genPlusVec vec = map (vecChange vec 1) [0..l]
     where l = U.length vec - 1
 
 -- Generate the associations (name, value) for one vector
@@ -419,11 +439,13 @@ trainParams ds batches batchSize lr = do
             tsNames   = optSpaceNames,
             tsLR      = lr,
             tsBatchNo = 0,
-            tsValidNo = 1000,
+            tsValidNo = 3000,
             tsCurrent = U.fromList optSpaceInit,
             tsHistory = []
         }
     ts <- loopCount (trainOneBatch batches batchSize) trainState
     putStrLn "History:"
     forM_ (tsHistory ts) $ \(i, _, l) -> putStrLn $ "Batch " ++ show i ++ ": " ++ show l
+    putStrLn "Current vec:"
+    forM_ (zip (tsNames ts) (U.toList $ tsCurrent ts)) $ \(n, v) -> putStrLn $ n ++ " = " ++ show v
     return ()
