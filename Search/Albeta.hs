@@ -471,7 +471,7 @@ pvSearch nst !a !b !d = do
                 -- one variation. But the question is: is it possible that we don't find one?
                 -- And if yes: what to do in that case?
                 -- Futility pruning:
-                let !prune = isPruneFutil d a True (staticScore pos)
+                let !prune = isPruneFutil d a (staticScore pos)
                     !nsti  = resetNSt (pathFromScore a) (Killer []) nst'
                 -- Loop thru the moves
                 !nstf <- pvSLoop b d False prune nsti edges
@@ -524,7 +524,7 @@ pvZeroW !nst !b !d = do
                       else do
                         !nodes0 <- gets (sNodes . stats)
                         -- futility pruning:
-                        let !prune = isPruneFutil d bGrain False (staticScore pos)
+                        let !prune = isPruneFutil d bGrain (staticScore pos)
                         -- Loop thru the moves
                         let kill1 = case nmhigh of
                                         NullMoveThreat s -> newTKiller pos d s
@@ -806,12 +806,11 @@ pvLoop f s (Alt (e:es)) = do
            else pvLoop f s' $ Alt es
 
 -- Futility pruning:
-isPruneFutil :: Int -> Int -> Bool -> Int -> Bool
-isPruneFutil d a pv v
-    | nearmate a              = False
-    | pv && d > maxFutilDepth = False
-    | d > maxFutilDepth + 1   = False	-- for zero window searches we allow higher futility depth
-    | otherwise               = v + futilMargins d <= a
+isPruneFutil :: Int -> Int -> Int -> Bool
+isPruneFutil d a v
+    | nearmate a        = False
+    | d > maxFutilDepth = False
+    | otherwise         = v + futilMargins d <= a
 
 failHardNoValidMove :: Int -> Int -> MyPos -> Path
 failHardNoValidMove !a !b pos = trimaxPath a b $! if tacticalPos pos then matedPath else drawPath
