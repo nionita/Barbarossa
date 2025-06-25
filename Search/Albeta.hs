@@ -116,7 +116,7 @@ newtype Killer = Killer [Move] deriving Show
 data PVStRO
     = PVStRO {
           draft  :: !Int,	-- root search depth
-          albest :: !Bool,	-- always choose the best move (i.e. first)
+          tuning :: !Bool,	-- in tuning we do not prune nor reduce (self play)
           abmil1 :: !Int,	-- abort after this millisecond when in first root move
           abmili :: !Int	-- abort after this millisecond when from second root move
     } deriving Show
@@ -216,7 +216,7 @@ resetNSt :: Path -> Killer -> NodeState -> NodeState
 resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, rbmch = 0 }
 
 pvro00 :: PVStRO
-pvro00 = PVStRO { draft = 0, albest = False, abmil1 = 0, abmili = 0 }
+pvro00 = PVStRO { draft = 0, tuning = False, abmil1 = 0, abmili = 0 }
 
 alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int, Int)
 alphaBeta abc = do
@@ -226,7 +226,7 @@ alphaBeta abc = do
         searchReduced a b = pvRootSearch a      b     d lpv rmvs True
         -- We have lastpath as a parameter here (can change after fail low or high)
         searchFull    lp  = pvRootSearch alpha0 beta0 d lp  rmvs False
-        pvro = PVStRO { draft = d, albest = best abc,
+        pvro = PVStRO { draft = d, tuning = intuning abc,
                             abmil1 = stoptime1 abc, abmili = stoptime abc }
         pvs0 = pvsInit { ronly = pvro }	-- :: PVState
     -- We will get a result and a final state:
@@ -422,6 +422,9 @@ insertToPvs d p ps@(q:qs)
           qmate   = pnearmate $ pvPath q
           dscore  = 1
 
+getSelfplay :: Search Bool
+getSelfplay = gets (tuning . ronly)
+
 -- PV Search
 pvSearch :: NodeState -> Int -> Int -> Int -> Search Path
 pvSearch _ !a !b !d | d <= 0 = do
@@ -471,7 +474,9 @@ pvSearch nst !a !b !d = do
                 -- one variation. But the question is: is it possible that we don't find one?
                 -- And if yes: what to do in that case?
                 -- Futility pruning:
-                let !prune = isPruneFutil d a (staticScore pos)
+                selfplay <- getSelfplay
+                let !prune | selfplay  = False
+                           | otherwise = isPruneFutil d a (staticScore pos)
                     !nsti  = resetNSt (pathFromScore a) (Killer []) nst'
                 -- Loop thru the moves
                 !nstf <- pvSLoop b d False prune nsti edges
@@ -524,7 +529,9 @@ pvZeroW !nst !b !d = do
                       else do
                         !nodes0 <- gets (sNodes . stats)
                         -- futility pruning:
-                        let !prune = isPruneFutil d bGrain (staticScore pos)
+                        selfplay <- getSelfplay
+                        let !prune | selfplay  = False
+                                   | otherwise = isPruneFutil d bGrain (staticScore pos)
                         -- Loop thru the moves
                         let kill1 = case nmhigh of
                                         NullMoveThreat s -> newTKiller pos d s
@@ -659,7 +666,8 @@ pvInnerLoopExten b d spec !exd nst = do
            -- Here we must be in a Cut node (will fail low)
            -- and we should have: crtnt = CutNode, nxtnt = AllNode
            old <- get
-           let !d' = reduceLmr (nearmate b) spec d1 (lmrlv old) (movno nst - spcno nst)
+           let d' | tuning (ronly old) = d1
+                  | otherwise          = reduceLmr (nearmate b) spec d1 (lmrlv old) (movno nst - spcno nst)
            !s1 <- zeroWithLMR d' d1 (-a) (a+scoreGrain) nst
            whenAbort s1 $
                if pathScore s1 <= a
@@ -675,7 +683,8 @@ pvInnerLoopExtenZ b d spec !exd nst = do
     old  <- get
     -- late move reduction
     let !d1 = d + exd - 1	-- this is the normal (unreduced) depth for next search
-        !d' = reduceLmr (nearmate b) spec d1 (lmrlv old) (movno nst - spcno nst)
+        d' | tuning (ronly old) = d1
+           | otherwise          = reduceLmr (nearmate b) spec d1 (lmrlv old) (movno nst - spcno nst)
         !onemB = scoreGrain - b
     zeroWithLMR d' d1 onemB b nst
 
@@ -956,7 +965,6 @@ noKiller (Killer kl) = null kl
 timeToAbort :: a -> Search a -> Search a
 timeToAbort a act = do
     s <- get
-    rmn <- lift getRootMoveNumber
     if abort s
        then return a
        else do
@@ -965,6 +973,7 @@ timeToAbort a act = do
               then if timeNodes .&. sNodes (stats s) /= 0
                       then act
                       else do
+                          rmn <- lift getRootMoveNumber
                           !abrt <- lift $ isTimeout $ if rmn > 1 then abmili ro else abmil1 ro
                           if abrt
                              then do

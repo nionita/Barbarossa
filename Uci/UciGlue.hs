@@ -20,8 +20,8 @@ aspirWindow :: Int
 aspirWindow   = 24	-- initial aspiration window
 
 -- One iteration in the search for the best move
-bestMoveCont :: Int -> Int -> Int-> MyState -> Maybe Int -> [Move] -> [Move] -> CtxIO IterResult
-bestMoveCont draft sttime1 sttime stati lastsc lpv rmvs = do
+bestMoveCont :: Bool -> Int -> Int -> Int-> MyState -> Maybe Int -> [Move] -> [Move] -> CtxIO IterResult
+bestMoveCont tune draft sttime1 sttime stati lastsc lpv rmvs = do
     informGuiDraft draft
     ctxLog LogInfo $ "start search for depth " ++ show draft
     let abc = ABC {
@@ -30,7 +30,7 @@ bestMoveCont draft sttime1 sttime stati lastsc lpv rmvs = do
                 lastscore = lastsc,
                 rootmvs   = rmvs,
                 window    = aspirWindow,
-                best      = False,
+                intuning  = tune,
                 stoptime1 = sttime1,
                 stoptime  = sttime
               }

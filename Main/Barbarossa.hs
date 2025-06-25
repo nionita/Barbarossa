@@ -39,7 +39,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.8.0"
-progVerSuff = "funi"
+progVerSuff = "reds"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -489,7 +489,7 @@ searchTheTree draft mdraft timx1 timx tim tpm mtg rept lsc lpv rmvs = do
     ctx <- ask
     chg <- readChanging
     ctxLog LogInfo $ "Time = " ++ show tim ++ " Timx1 = " ++ show timx1 ++ " Timx = " ++ show timx
-    (path, sc, rmvsf, timint, stfin, ch) <- bestMoveCont draft timx1 timx (crtStatus chg) lsc lpv rmvs
+    (path, sc, rmvsf, timint, stfin, ch) <- bestMoveCont False draft timx1 timx (crtStatus chg) lsc lpv rmvs
     let totch = totBmCh chg + ch
         ldCh | ch > 0    = draft
              | otherwise = lastChDr chg
