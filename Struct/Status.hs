@@ -10,7 +10,7 @@ module Struct.Status (
 
 import Struct.Struct
 import Struct.Config
-import Struct.Params
+import Struct.ParamsPost
 import Struct.MidEnd
 import Moves.History
 import Hash.TransTab

@@ -5,7 +5,8 @@
 
 module Eval.Eval (
     initEvalState,
-    posEval
+    posEval,
+    posExactEval,
 ) where
 
 import Data.Array.Base (unsafeAt)
@@ -41,12 +42,21 @@ initEvalState sds = EvalState {
 matesc :: Int
 matesc = 20000 - 255	-- warning, this is also defined in Base.hs!!
 
+useSpecials :: Bool
+useSpecials = True
+
 {-# INLINE posEval #-}
 posEval :: MyPos -> EvalState -> Int
 posEval p !sti = scc
-    where !sce = evalDispatch p sti
+    where !sce | useSpecials = evalDispatch p sti
+               | otherwise   = normalEval   p sti
           !scl = min matesc $ max (-matesc) sce
           !scc = if granCoarse > 0 then (scl + granCoarse2) .&. granCoarseM else scl
+
+-- Don't use specials for tuning
+{-# INLINE posExactEval #-}
+posExactEval :: MyPos -> EvalState -> Int
+posExactEval = normalEval
 
 evalDispatch :: MyPos -> EvalState -> Int
 evalDispatch p !sti
@@ -62,23 +72,25 @@ normalEval p !sti = sc
     where ep     = esEParams  sti
           ew     = esEWeights sti
           !gph   = gamePhase p
-          !mide1 = materDiff p ew (MidEnd 0 0)
-          !mide2 = evalBishops p ew mide1
-          !mide3 = evalRookPawn p ew mide2
-          !mide4 = kingSafe p ew mide3
-          !mide5 = kingPlace ep p ew mide4
-          !mide7 = mobiLity p ew mide5
-          !mide8 = centerDiff p ew mide7
-          !mide9 = spaceDiff p ew mide8
-          !midea = adversDiff p ew mide9
-          !mideb = evalRookPlc p ew midea
-          !midec = enPrise p ew mideb
-          !mided = pawnBl p ew midec
-          !midee = isolDiff p ew mided
-          !midef = backDiff p ew midee
-          !mideg = advPawns p ew midef
-          !mideh = passPawns gph ep p ew mideg
-          !sc = ((mid mideh + epMovingMid ep) * gph + (end mideh + epMovingEnd ep) * (256 - gph))
+          !nev = foldr ($) (MidEnd 0 0) [
+                   materDiff p ew
+                 , evalBishops p ew
+                 , evalRookPawn p ew
+                 , kingSafe p ew
+                 , kingPlace ep p ew
+                 , mobiLity p ew
+                 , centerDiff p ew
+                 , spaceDiff p ew
+                 , adversDiff p ew
+                 , evalRookPlc p ew
+                 , enPrise p ew
+                 , pawnBl p ew
+                 , isolDiff p ew
+                 , backDiff p ew
+                 , advPawns p ew
+                 , passPawns gph ep p ew
+              ]
+          !sc = ((mid nev + epMovingMid ep) * gph + (end nev + epMovingEnd ep) * (256 - gph))
                    `unsafeShiftR` (shift2Cp + 8)
 
 gamePhase :: MyPos -> Int
