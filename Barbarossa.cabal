@@ -163,6 +163,8 @@ Executable TuneSGD
       template-haskell
   Other-modules:
       Tune.FenFiles,
+      Tune.EvalAccum,
+      Tune.Utils,
       Eval.BasicEval,
       Eval.Eval,
       Eval.FileParams,

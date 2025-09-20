@@ -21,6 +21,8 @@ import Struct.ParamsPost (optSpaceNames, optSpaceInit)
 import Moves.Fen
 import Eval.Eval
 import Tune.FenFiles
+import Tune.EvalAccum
+import Tune.Utils
 
 debug :: Bool
 debug = False
@@ -33,6 +35,7 @@ data Options = Options {
         optGener     :: Bool,    	-- generate NNUE features
         optWinloss   :: Bool,    	-- train only with wins & losses, no draw
         optTest      :: Bool,    	-- calculate test loss only
+        optDebug     :: Bool,    	-- debug
         optType      :: Int,    	-- input file type: 0, 1 or 2 for S, R or SR (fen is always there, first)
         optTrain     :: Int,    	-- number of train batches - if > 0
         optRosen     :: Int,    	-- minimize Rosenbrock for internal test - so many steps
@@ -57,6 +60,7 @@ defaultOptions = Options {
         optGener     = False,
         optWinloss   = False,
         optTest      = False,
+        optDebug     = False,
         optType      = 2,
         optTrain     = 0,
         optRosen     = 0,
@@ -102,6 +106,9 @@ addTrain ba opt = opt { optTrain = read ba }
 addTest :: Options -> Options
 addTest opt = opt { optTest = True }
 
+addDebug :: Options -> Options
+addDebug opt = opt { optDebug = True }
+
 addRosen :: String -> Options -> Options
 addRosen ba opt = opt { optRosen = read ba }
 
@@ -140,6 +147,7 @@ options = [
         Option "i" ["input"]    (ReqArg addIFile   "STRING") "Input file or directory",
         Option "o" ["output"]   (ReqArg addOFile   "STRING") "Output directory",
         Option "c" ["config"]   (ReqArg addConf    "STRING") "Load model file",
+        Option "d" ["debug"]    (NoArg  addDebug)            "Debug functionality",
         Option "g" ["gen"]      (NoArg  addGener)            "Generate NNUE features",
         Option "t" ["train"]    (ReqArg addTrain   "INT")    "Train so many batches",
         Option "e" ["test"]     (NoArg  addTest)             "Test evaluation",
@@ -303,73 +311,6 @@ evalPos loss sampler ess hi _ a = do
                    let !a' = eaAccum pos sco rez scores losses a
                    return (True, a')
 
--- When we evaluate a dataset we can calculate in one pass a few things, like losses for
--- more than one parameter vector, some samples of positions which exhibit higher losses
--- and so on - but the general framework is always the same - with evalPos at the bottom
--- of the functionality
--- In order to be flexible about what we calculate and accumulate, we define a class here
--- for a status that can contain different things and so we can generalize the framework
--- The accum method gets the position, the target score, the target result, the list of
--- scores and the list of losses (calculated for the list of the evaluation states)
--- and transforms the state (here "a")
-class EvalAccum a where
-    eaInit :: a
-    eaAccum :: MyPos -> Double -> Double -> [Int] -> [Double] -> a -> a
-
--- A simple accumulation with total loss & number of records
-data EASimple = EASimple !Int !Double
-
-accumEASimple :: MyPos -> Double -> Double -> [Int] -> [Double] -> EASimple -> EASimple
-accumEASimple _ _ _ _ ls (EASimple r acc) = EASimple (r + 1) (acc + head ls)
-
-instance EvalAccum EASimple where
-    eaInit  = EASimple 0 0
-    eaAccum = accumEASimple
-
--- A data structure to calculate the next step in optimizing over the whole dataset
--- by moving the current best towards better scores depending on the error, but less for
--- bigger errors - which may come from not understanding the position
-data EAStep = EAStep {
-        easDims  :: !Int,
-        easCount :: !Int,
-        easStep  :: !OptParams
-    }
-
--- We get 1 + 2 * n scores, the first beeing for the current point, the next n
--- for the +1 vectors and the last n for the -1 vectors needed to calculate the partial
--- derivatives of the individual position errors, like
--- (x1 + 1, x2, ..., xn), (x1, x2 + 1, x3, ..., xn) etc. and
--- (x1 - 1, x2, ..., xn), (x1, x2 - 1, x3, ..., xn) etc.
--- where n is the dimensionality of the weight space
--- The losses are ignored (not needed for this method!)
-accumEAStep :: MyPos -> Double -> Double -> [Int] -> [Double] -> EAStep -> EAStep
-accumEAStep _ tgsc _ scores _ eastep = eastep { easCount = easCount eastep + 1, easStep = nstep }
-    where sc0 = fromIntegral $ head scores
-          fac = exp (negate $ abs (sc0 - tgsc) * tau)
-          (scoresPlus, scoresMinus) = splitAt (easDims eastep) (tail scores)
-          -- for the "real" partials we would have to divide by 2, but here the scale does not matter
-          -- because at the end we want the highest component, and all components are scaled equal
-          partials = map fromIntegral $ zipWith (-) scoresPlus scoresMinus
-          nstep = U.zipWith (+) (easStep eastep) (U.fromList $ map ((*) fac) partials)
-          tau = 0.005
-
-reportEAStep :: EAStep -> IO ()
-reportEAStep eastep = do
-    putStrLn $ "--> EAStep ended"
-    putStrLn $ "Positions: " ++ show (easCount eastep)
-    putStrLn $ "Dims: " ++ show (easDims eastep)
-    putStrLn "Step:"
-    let vals = U.toList (easStep eastep)
-        mx = maximum $ map abs vals
-        valn = map (/ mx) vals
-    forM_ (zip optSpaceNames valn) $ \(n, v) -> do
-        putStrLn $ justifyLeft 25 ' ' n ++ " -> " ++ show v
-
-instance EvalAccum EAStep where
-    eaInit  = EAStep { easDims = n, easCount = 0, easStep = U.fromList (take n $ repeat 0) }
-        where n = length optSpaceInit
-    eaAccum = accumEAStep
-
 type Pred = FilePath -> Bool
 
 maybeFilterFilePaths :: Maybe Pred -> [FilePath] -> [FilePath]
@@ -522,11 +463,13 @@ testLoss opts = do
 
 checkStep :: Options -> IO ()
 checkStep opts = do
-    ds <- makeDataset False opts
+    ds <- makeDataset True opts
     let x  = U.fromList optSpaceInit
         xs = [x] ++ genPlusVec x ++ genMinusVec x
-    eas <- evaluateLoss "Check Step" lossDummy xs (dsTrainFiles ds) (dsSampleFunc ds)
-    reportEAStep eas
+        fs | optDebug opts = [head $ dsTrainFiles ds]
+           | otherwise     = dsTrainFiles ds
+    eas <- evaluateLoss "Check Step" lossDummy xs fs (dsSampleFunc ds)
+    reportEATrip eas
     return ()
 
 -- Dataset: a data structure which contains the CSV files and can procces them in batches,
@@ -897,10 +840,6 @@ writeWeights opts ts = withFile (optOutPath opts) WriteMode $ \fo -> do
                         | s1 == s2  = go ((min i1 i2, (s1, v1, v2)):acc) ws
                         | otherwise = error "Wrong order in consumeWeights"
                     go _ _ = error "consumeWeights: odd number of weights"
-
-justifyLeft, justifyRight :: Int -> Char -> String -> String
-justifyLeft  n c s = s ++ replicate (n - length s) c
-justifyRight n c s = replicate (n - length s) c ++ s
 
 -- Find the minimum of the Rosenbrock function
 minRosenbrock :: Double -> Double -> Double -> Int -> IO ()
