@@ -310,6 +310,7 @@ evalPos loss sampler ess hi _ a = do
                        hFlush stdout
                    let !a' = eaAccum pos sco rez scores losses a
                    return (True, a')
+                   -- return (False, a')
 
 type Pred = FilePath -> Bool
 
@@ -347,8 +348,8 @@ type Loss = Double -> Double -> Double -> Double
 -- theLoss = lossSF
 
 -- A dummy loss for the Step method
-lossDummy :: Loss
-lossDummy _ _ _ = 0
+lossDist :: Loss
+lossDist tgsc _ sc = abs (tgsc - sc)
 
 -- Score/result sigmoid loss model, ignore too high scores
 lossScoreRez :: Loss
@@ -468,7 +469,10 @@ checkStep opts = do
         xs = [x] ++ genPlusVec x ++ genMinusVec x
         fs | optDebug opts = [head $ dsTrainFiles ds]
            | otherwise     = dsTrainFiles ds
-    eas <- evaluateLoss "Check Step" lossDummy xs fs (dsSampleFunc ds)
+    eas <- evaluateLoss "Check Step" lossDist xs fs (dsSampleFunc ds)
+    -- when debug $ do
+    --     putStrLn "The vectors:"
+    --     forM_ (take 5 xs) $ \x -> putStrLn (show x)
     reportEATrip eas
     return ()
 

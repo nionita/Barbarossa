@@ -10,9 +10,12 @@ module Tune.EvalAccum (
     reportEATrip,
 ) where
 
-import Control.Monad (forM_)
+import Control.Monad (when, forM_)
+import Control.Monad.ST
+-- import Control.Monad.ST.Unsafe (unsafeIOToST)
 
 import qualified Data.Vector.Unboxed as U
+import qualified Data.Vector.Unboxed.Mutable as V
 
 import Struct.Struct
 import Struct.ParamsPost (optSpaceNames, optSpaceInit)
@@ -97,49 +100,66 @@ data EATrip = EATrip {
         eatRight :: !Accumulator
     }
 
--- We get 1 + 2 * n scores, the first beeing for the current point, the next n
+-- We get 1 + 2 * n losses, the first beeing for the current point, the next n
 -- for the +1 vectors and the last n for the -1 vectors
 -- (x1 + 1, x2, ..., xn), (x1, x2 + 1, x3, ..., xn) etc. and
 -- (x1 - 1, x2, ..., xn), (x1, x2 - 1, x3, ..., xn) etc.
 -- where n is the dimensionality of the weights space
--- The losses are ignored (not needed for this method!)
+-- The scores are ignored (not needed for this method!)
 -- The logic for one dimension is:
--- 1. calculate the score and loss for +1 on that dimension (rest is fixed) - scorePlus & rlosses
--- 2. calculate the score and loss for -1 on that dimension (rest is fixed) - scoreMinus & llosses
--- 3. compare the +1 loss to the current loss - if the +1 loss is less, then add the factor to +1
--- 4. compare the -1 loss to the current loss - if the -1 loss is less, then add the factor to -1
--- 5. if the current loss is better (i.e. smaller or equal) than both, then add the factor to current
+-- Compare the loss for -1, current and +1 - the minimum wins - but it could be 1, 2 or 3 winners!
+-- The winners share the reward (i.e. for 2 winner, every one gets the half)
 -- This procedure is done for every dimension
--- The loss is the absolute value of the difference and is calculated only for the current position
--- The factor is a negative exponential in the current loss - i.e. further positions have smaller factors
+-- The loss is the absolute value of the difference
+-- The reward is the inverse exponential in the current loss
 accumEATrip :: MyPos -> Double -> Double -> [Int] -> [Double] -> EATrip -> EATrip
-accumEATrip _ tgsc _ scores _ eatrip
+accumEATrip _ _ _ _ losses eatrip
     = eatrip { eatCount = eatCount eatrip + 1, eatLeft = ealeft, eatMid = eamid, eatRight = earight }
-    where itgsc = round tgsc
-          -- Current loss
-          closs = abs (itgsc - head scores)
+    where -- Current loss
+          closs = head losses
           -- factor: smaller for further scores
-          fac = exp (negate $ fromIntegral closs * tau)
-          -- scores for the +1 & -1 vectors
-          (scoresPlus, scoresMinus) = splitAt (eatDims eatrip) (tail scores)
-          -- losses for the +1 vectors per dimension
-          rlosses = map abs $ zipWith (-) (repeat itgsc) scoresPlus
-          -- losses for the -1 vectors per dimension
-          llosses = map abs $ zipWith (-) (repeat itgsc) scoresMinus
-          -- better losses for the +1 vectors per dimension
-          radds   = zipWith (<) rlosses (repeat closs)
-          -- better losses for the -1 vectors per dimension
-          ladds   = zipWith (<) llosses (repeat closs)
-          -- better losses for the current vector (per dimension)
-          cadds   = zipWith nono ladds radds
-          -- add to the corresponding option, per dimension
-          earight = U.zipWith (+) (eatRight eatrip) (U.fromList $ map (trueAdd fac) radds)
-          ealeft  = U.zipWith (+) (eatLeft  eatrip) (U.fromList $ map (trueAdd fac) ladds)
-          eamid   = U.zipWith (+) (eatMid   eatrip) (U.fromList $ map (trueAdd fac) cadds)
           tau = 0.005
-          trueAdd x True  = x
-          trueAdd _ False = 0
-          nono l r = not (l || r)
+          rew = exp (negate $ closs * tau)
+          -- losses for the +1 & -1 vectors
+          (rlosses, llosses) = splitAt (eatDims eatrip) (tail losses)
+          (ealeft, eamid, earight) = runST $ do
+              vl <- U.thaw (eatLeft  eatrip)
+              vm <- U.thaw (eatMid   eatrip)
+              vr <- U.thaw (eatRight eatrip)
+              -- unsafeIOToST $ putStrLn $ " vl: " ++ show (eatLeft  eatrip)
+              -- unsafeIOToST $ putStrLn $ " vm: " ++ show (eatMid   eatrip)
+              -- unsafeIOToST $ putStrLn $ " vr: " ++ show (eatRight eatrip)
+              forM_ (zip [0..] $ zip3 llosses (repeat closs) rlosses) $ \(i, (l, m, r)) -> do
+                  let (mi, ms) = foldr (\e (v, k) -> if e < v
+                                                     then (e, 1)
+                                                     else if e == v
+                                                          then (v, k+1)
+                                                          else (v, k))
+                                       (l, 1::Int) [m, r]
+                      fa = rew / fromIntegral ms
+                  -- unsafeIOToST $ putStrLn $ " --> dim " ++ show i ++ ": "
+                  --     ++ show l ++ ", " ++ show m ++ ", " ++ show r
+                  --     ++ " -> mi = " ++ show mi ++ " ms = " ++ show ms
+                  when (ms /= 3) $ do
+                      when (l == mi) $ do
+                          ol <- V.unsafeRead vl i
+                          V.unsafeWrite vl i (ol + fa)
+                          -- unsafeIOToST $ putStrLn $ " <-> l: "
+                          --                    ++ show ol ++ " + " ++ show fa ++ " = " ++ show (ol + fa)
+                      when (m == mi) $ do
+                          om <- V.unsafeRead vm i
+                          V.unsafeWrite vm i (om + fa)
+                          -- unsafeIOToST $ putStrLn $ " <-> m: "
+                          --                    ++ show om ++ " + " ++ show fa ++ " = " ++ show (om + fa)
+                      when (r == mi) $ do
+                          or <- V.unsafeRead vr i
+                          V.unsafeWrite vr i (or + fa)
+                          -- unsafeIOToST $ putStrLn $ " <-> r: "
+                          --                    ++ show or ++ " + " ++ show fa ++ " = " ++ show (or + fa)
+              ul <- U.unsafeFreeze vl
+              um <- U.unsafeFreeze vm
+              ur <- U.unsafeFreeze vr
+              return (ul, um, ur)
 
 reportEATrip :: EATrip -> IO ()
 reportEATrip eatrip = do
@@ -159,13 +179,15 @@ reportEATrip eatrip = do
             -- ++ justifyLeft 18 ' ' (show l) ++ " / "
             -- ++ justifyLeft 18 ' ' (show m) ++ " / "
             -- ++ justifyLeft 18 ' ' (show r) ++ " -> "
-            ++ justifyLeft 18 ' ' (show rl) ++ " / "
-            ++ justifyLeft 18 ' ' (show rm) ++ " / "
-            ++ justifyLeft 18 ' ' (show rr)
+            ++ justifyLeft 21 ' ' (show rl) ++ " / "
+            ++ justifyLeft 21 ' ' (show rm) ++ " / "
+            ++ justifyLeft 21 ' ' (show rr)
 
 instance EvalAccum EATrip where
     eaInit  = EATrip { eatDims = n, eatCount = 0,
-                       eatLeft = U.fromList z, eatMid = U.fromList z, eatRight = U.fromList z }
+                       eatLeft = U.fromList z1, eatMid = U.fromList z2, eatRight = U.fromList z3 }
         where n = length optSpaceInit
-              z = take n $ repeat 0
+              z1 = take n $ repeat 0
+              z2 = take n $ repeat 0
+              z3 = take n $ repeat 0
     eaAccum = accumEATrip
