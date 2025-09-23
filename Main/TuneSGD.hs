@@ -473,7 +473,7 @@ checkStep opts = do
     -- when debug $ do
     --     putStrLn "The vectors:"
     --     forM_ (take 5 xs) $ \x -> putStrLn (show x)
-    reportEATrip eas
+    reportEAStat eas
     return ()
 
 -- Dataset: a data structure which contains the CSV files and can procces them in batches,

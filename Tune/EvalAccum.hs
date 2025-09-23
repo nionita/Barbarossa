@@ -6,8 +6,10 @@ module Tune.EvalAccum (
     EASimple(..),
     EAStep(..),
     EATrip(..),
+    EAStat(..),
     reportEAStep,
     reportEATrip,
+    reportEAStat,
 ) where
 
 import Control.Monad (when, forM_)
@@ -45,6 +47,7 @@ instance EvalAccum EASimple where
     eaAccum = accumEASimple
 
 type Accumulator = U.Vector Double
+type Counters    = U.Vector Int
 
 -- A data structure to calculate the next step in optimizing over the whole dataset
 -- by moving the current best towards better scores depending on the error, but less for
@@ -122,6 +125,9 @@ accumEATrip _ _ _ _ losses eatrip
           rew = exp (negate $ closs * tau)
           -- losses for the +1 & -1 vectors
           (rlosses, llosses) = splitAt (eatDims eatrip) (tail losses)
+          addVal vr i fa = do
+              old <- V.unsafeRead vr i
+              V.unsafeWrite vr i (old + fa)
           (ealeft, eamid, earight) = runST $ do
               vl <- U.thaw (eatLeft  eatrip)
               vm <- U.thaw (eatMid   eatrip)
@@ -142,18 +148,15 @@ accumEATrip _ _ _ _ losses eatrip
                   --     ++ " -> mi = " ++ show mi ++ " ms = " ++ show ms
                   when (ms /= 3) $ do
                       when (l == mi) $ do
-                          ol <- V.unsafeRead vl i
-                          V.unsafeWrite vl i (ol + fa)
+                          addVal vl i fa
                           -- unsafeIOToST $ putStrLn $ " <-> l: "
                           --                    ++ show ol ++ " + " ++ show fa ++ " = " ++ show (ol + fa)
                       when (m == mi) $ do
-                          om <- V.unsafeRead vm i
-                          V.unsafeWrite vm i (om + fa)
+                          addVal vm i fa
                           -- unsafeIOToST $ putStrLn $ " <-> m: "
                           --                    ++ show om ++ " + " ++ show fa ++ " = " ++ show (om + fa)
                       when (r == mi) $ do
-                          or <- V.unsafeRead vr i
-                          V.unsafeWrite vr i (or + fa)
+                          addVal vr i fa
                           -- unsafeIOToST $ putStrLn $ " <-> r: "
                           --                    ++ show or ++ " + " ++ show fa ++ " = " ++ show (or + fa)
               ul <- U.unsafeFreeze vl
@@ -191,3 +194,83 @@ instance EvalAccum EATrip where
               z2 = take n $ repeat 0
               z3 = take n $ repeat 0
     eaAccum = accumEATrip
+
+-- Collect different statistics over dimensions along the train set:
+-- - number of positions
+-- - max score change using +1/-1 of all weights - summed per train set
+-- - counters for a histogram of the absolute errors, for up to 24, 48, 96, 192, 384, 768, 1536, and over
+-- - counters for a histogram of the absolute target scores, same boudaries as for errors
+-- - max score change using +1/-1 of one weight summed per dimension and train set - to measure
+-- how sensitive the score is in regard to every dimension
+data EAStat = EAStat {
+        eacDims  :: !Int,
+        eacCount :: !Int,
+        eacMaxSu :: !Int,
+        eacHistE :: !Counters,
+        eacHistS :: !Counters,
+        eacMaxCh :: !Counters
+    }
+
+-- We get 1 + 2 * n losses, the first beeing for the current point, the next n
+-- for the +1 vectors and the last n for the -1 vectors
+-- (x1 + 1, x2, ..., xn), (x1, x2 + 1, x3, ..., xn) etc. and
+-- (x1 - 1, x2, ..., xn), (x1, x2 - 1, x3, ..., xn) etc.
+-- where n is the dimensionality of the weights space
+accumEAStat :: MyPos -> Double -> Double -> [Int] -> [Double] -> EAStat -> EAStat
+accumEAStat _ tgsc _ scores _ eastat
+    = eastat { eacCount = eacCount eastat + 1,
+               eacMaxSu = eacMaxSu eastat + maxsu,
+               eacHistE = histe,
+               eacHistS = hists,
+               eacMaxCh = maxch
+             }
+    where powers2 = 1 : map (* 2) powers2
+          boundaries = take 7 $ map (* 24) powers2
+          histIndex h = foldr (\a b -> if h <= a then b else b + 1) 0 boundaries
+          itgsc = round tgsc
+          -- A ST function to add to a histogram
+          addHisto i v = do
+              old <- V.read v i
+              V.write v i (old + 1)
+          -- Current loss (or error)
+          cscor = head scores
+          iloss = histIndex (abs $ itgsc - cscor)
+          -- Add to the error histogram
+          histe = U.modify (addHisto iloss) $ eacHistE eastat
+          -- Target score histogram
+          iscor = histIndex (abs itgsc)
+          -- Add to the score histogram
+          hists = U.modify (addHisto iscor) $ eacHistS eastat
+          -- scores for the +1 & -1 vectors, the max absolute changes per dimension
+          (rscores, lscores) = splitAt (eacDims eastat) (tail scores)
+          rchanges = map abs $ zipWith (-) rscores $ repeat cscor
+          lchanges = map abs $ zipWith (-) lscores $ repeat cscor
+          changes  = zipWith max rchanges lchanges
+          maxch    = U.zipWith (+) (eacMaxCh eastat) $ U.fromList changes
+          maxsu    = maximum changes
+
+reportEAStat :: EAStat -> IO ()
+reportEAStat eastat = do
+    putStrLn $ "--> EAStat ended"
+    putStrLn $ "Dims: " ++ show (eacDims eastat)
+    putStrLn $ "Positions: " ++ show (eacCount eastat)
+    let incount = (1 :: Double) / fromIntegral (eacCount eastat)
+        maxsu = fromIntegral (eacMaxSu eastat) * incount
+    putStrLn $ "Scores Histogram abs: " ++ show (eacHistS eastat)
+    putStrLn $ "Scores Histogram rel: " ++ show (U.map ((* incount) . fromIntegral) $ eacHistS eastat)
+    putStrLn $ "Errors Histogram abs: " ++ show (eacHistE eastat)
+    putStrLn $ "Errors Histogram rel: " ++ show (U.map ((* incount) . fromIntegral) $ eacHistE eastat)
+    putStrLn $ "Max Change:" ++ show (eacMaxSu eastat) ++ " -> " ++ show maxsu
+    putStrLn "Max Change per dimension:"
+    forM_ (zip optSpaceNames (U.toList (eacMaxCh eastat))) $ \(n, chg) -> do
+        putStrLn $ justifyLeft 20 ' ' n ++ ": "
+            ++ justifyLeft 10 ' ' (show chg) ++ " -> "
+            ++ justifyLeft 21 ' ' (show (fromIntegral chg * incount))
+
+instance EvalAccum EAStat where
+    eaInit  = EAStat { eacDims = n, eacCount = 0, eacMaxSu = 0,
+                       eacHistE = U.fromList z1, eacHistS = U.fromList z1, eacMaxCh = U.fromList z2 }
+        where n = length optSpaceInit
+              z1 = take 8 $ repeat 0
+              z2 = take n $ repeat 0
+    eaAccum = accumEAStat
