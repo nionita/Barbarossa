@@ -309,7 +309,7 @@ evalPos loss sampler ess hi _ a = do
                        putStrLn $ "- loss:  " ++ show losses
                        hFlush stdout
                    let !a' = eaAccum pos sco rez scores losses a
-                   return (True, a')
+                   if eaStop a' then return (False, a') else return (True, a')
                    -- return (False, a')
 
 type Pred = FilePath -> Bool

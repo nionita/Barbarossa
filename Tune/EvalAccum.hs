@@ -21,6 +21,7 @@ import qualified Data.Vector.Unboxed.Mutable as V
 
 import Struct.Struct
 import Struct.ParamsPost (optSpaceNames, optSpaceInit)
+import Moves.Notation
 import Tune.Utils
 
 -- When we evaluate a dataset we can calculate in one pass a few things, like losses for
@@ -35,6 +36,7 @@ import Tune.Utils
 class EvalAccum a where
     eaInit :: a
     eaAccum :: MyPos -> Double -> Double -> [Int] -> [Double] -> a -> a
+    eaStop :: a -> Bool
 
 -- A simple accumulation with total loss & number of records
 data EASimple = EASimple !Int !Double
@@ -45,6 +47,7 @@ accumEASimple _ _ _ _ ls (EASimple r acc) = EASimple (r + 1) (acc + head ls)
 instance EvalAccum EASimple where
     eaInit  = EASimple 0 0
     eaAccum = accumEASimple
+    eaStop  = const False
 
 type Accumulator = U.Vector Double
 type Counters    = U.Vector Int
@@ -92,6 +95,7 @@ instance EvalAccum EAStep where
     eaInit  = EAStep { easDims = n, easCount = 0, easStep = U.fromList (take n $ repeat 0) }
         where n = length optSpaceInit
     eaAccum = accumEAStep
+    eaStop  = const False
 
 -- Similar to EAStep but for -1, 0 and 1 on every dimension we count how much we should
 -- move towards them (or stay, for 0) by comparing the 0 to 1 and -1 to 0
@@ -194,6 +198,7 @@ instance EvalAccum EATrip where
               z2 = take n $ repeat 0
               z3 = take n $ repeat 0
     eaAccum = accumEATrip
+    eaStop  = const False
 
 -- Collect different statistics over dimensions along the train set:
 -- - number of positions
@@ -202,22 +207,33 @@ instance EvalAccum EATrip where
 -- - counters for a histogram of the absolute target scores, same boudaries as for errors
 -- - max score change using +1/-1 of one weight summed per dimension and train set - to measure
 -- how sensitive the score is in regard to every dimension
+-- Also collect positions with high error and low max score change - which should be the ones
+-- hard to "understand"
 data EAStat = EAStat {
+        eacColl  :: Bool,			-- if it should collect - or count
         eacDims  :: !Int,
         eacCount :: !Int,
         eacMaxSu :: !Int,
         eacHistE :: !Counters,
         eacHistS :: !Counters,
-        eacMaxCh :: !Counters
+        eacMaxCh :: !Counters,
+        eacPosC  :: !Int,			-- number of collected positions
+        eacPos   :: [(MyPos, Int, Int, Int)]	-- the collected positions with target, score and max change
     }
+
+accumEAStat :: MyPos -> Double -> Double -> [Int] -> [Double] -> EAStat -> EAStat
+accumEAStat pos tgsc _ scores _ eastat
+    | eacColl eastat = accumEAStatCollect pos tgsc scores eastat
+    | otherwise      = accumEAStatCount   pos tgsc scores eastat
 
 -- We get 1 + 2 * n losses, the first beeing for the current point, the next n
 -- for the +1 vectors and the last n for the -1 vectors
 -- (x1 + 1, x2, ..., xn), (x1, x2 + 1, x3, ..., xn) etc. and
 -- (x1 - 1, x2, ..., xn), (x1, x2 - 1, x3, ..., xn) etc.
 -- where n is the dimensionality of the weights space
-accumEAStat :: MyPos -> Double -> Double -> [Int] -> [Double] -> EAStat -> EAStat
-accumEAStat _ tgsc _ scores _ eastat
+-- Here we count the statistics
+accumEAStatCount :: MyPos -> Double -> [Int] -> EAStat -> EAStat
+accumEAStatCount _ tgsc scores eastat
     = eastat { eacCount = eacCount eastat + 1,
                eacMaxSu = eacMaxSu eastat + maxsu,
                eacHistE = histe,
@@ -249,28 +265,72 @@ accumEAStat _ tgsc _ scores _ eastat
           maxch    = U.zipWith (+) (eacMaxCh eastat) $ U.fromList changes
           maxsu    = maximum changes
 
+-- We get 1 + 2 * n losses, the first beeing for the current point, the next n
+-- for the +1 vectors and the last n for the -1 vectors
+-- (x1 + 1, x2, ..., xn), (x1, x2 + 1, x3, ..., xn) etc. and
+-- (x1 - 1, x2, ..., xn), (x1, x2 - 1, x3, ..., xn) etc.
+-- where n is the dimensionality of the weights space
+-- Here we collect positions - parameters are hard coded for now
+accumEAStatCollect :: MyPos -> Double -> [Int] -> EAStat -> EAStat
+accumEAStatCollect pos tgsc scores eastat
+    | closs > 200 && maxsu < 10
+        = eastat {
+                   eacCount = eacCount eastat + 1,
+                   eacPosC  = eacPosC eastat + 1,
+                   eacPos   = (pos, itgsc, cscor, maxsu) : eacPos eastat
+                 }
+    | otherwise = eastat
+    where itgsc = round tgsc
+          -- Current loss (or error)
+          cscor = head scores
+          closs = abs $ itgsc - cscor
+          -- scores for the +1 & -1 vectors, the max absolute changes per dimension
+          (rscores, lscores) = splitAt (eacDims eastat) (tail scores)
+          rchanges = map abs $ zipWith (-) rscores $ repeat cscor
+          lchanges = map abs $ zipWith (-) lscores $ repeat cscor
+          changes  = zipWith max rchanges lchanges
+          maxsu    = maximum changes
+
 reportEAStat :: EAStat -> IO ()
 reportEAStat eastat = do
-    putStrLn $ "--> EAStat ended"
+    putStrLn $ "--> EAStat ended " ++ if eacColl eastat then "collection" else "counting"
     putStrLn $ "Dims: " ++ show (eacDims eastat)
     putStrLn $ "Positions: " ++ show (eacCount eastat)
-    let incount = (1 :: Double) / fromIntegral (eacCount eastat)
-        maxsu = fromIntegral (eacMaxSu eastat) * incount
-    putStrLn $ "Scores Histogram abs: " ++ show (eacHistS eastat)
-    putStrLn $ "Scores Histogram rel: " ++ show (U.map ((* incount) . fromIntegral) $ eacHistS eastat)
-    putStrLn $ "Errors Histogram abs: " ++ show (eacHistE eastat)
-    putStrLn $ "Errors Histogram rel: " ++ show (U.map ((* incount) . fromIntegral) $ eacHistE eastat)
-    putStrLn $ "Max Change:" ++ show (eacMaxSu eastat) ++ " -> " ++ show maxsu
-    putStrLn "Max Change per dimension:"
-    forM_ (zip optSpaceNames (U.toList (eacMaxCh eastat))) $ \(n, chg) -> do
-        putStrLn $ justifyLeft 20 ' ' n ++ ": "
-            ++ justifyLeft 10 ' ' (show chg) ++ " -> "
-            ++ justifyLeft 21 ' ' (show (fromIntegral chg * incount))
+    if eacColl eastat
+       then do
+           forM_ (eacPos eastat) $ \(pos, itgsc, score, maxsu) -> do
+               putStrLn $ justifyRight 5 ' ' (show itgsc) ++ " "
+                   ++ justifyRight 5 ' ' (show score) ++ " "
+                   ++ justifyRight 3 ' ' (show maxsu) ++ ": "
+                   ++ posToFen pos
+       else do
+           let incount = (1 :: Double) / fromIntegral (eacCount eastat)
+               maxsu = fromIntegral (eacMaxSu eastat) * incount
+           putStrLn $ "Scores Histogram abs: " ++ show (eacHistS eastat)
+           putStrLn $ "Scores Histogram rel: " ++ show (U.map ((* incount) . fromIntegral) $ eacHistS eastat)
+           putStrLn $ "Errors Histogram abs: " ++ show (eacHistE eastat)
+           putStrLn $ "Errors Histogram rel: " ++ show (U.map ((* incount) . fromIntegral) $ eacHistE eastat)
+           putStrLn $ "Max Change:" ++ show (eacMaxSu eastat) ++ " -> " ++ show maxsu
+           putStrLn "Max Change per dimension:"
+           forM_ (zip optSpaceNames (U.toList (eacMaxCh eastat))) $ \(n, chg) -> do
+               putStrLn $ justifyLeft 20 ' ' n ++ ": "
+                   ++ justifyLeft 10 ' ' (show chg) ++ " -> "
+                   ++ justifyLeft 21 ' ' (show (fromIntegral chg * incount))
+
+stopEAStat :: EAStat -> Bool
+stopEAStat eastat
+    | eacColl eastat = eacPosC eastat >= 10
+    | otherwise      = False
 
 instance EvalAccum EAStat where
-    eaInit  = EAStat { eacDims = n, eacCount = 0, eacMaxSu = 0,
-                       eacHistE = U.fromList z1, eacHistS = U.fromList z1, eacMaxCh = U.fromList z2 }
+    -- Hardcoded for the operation for now
+    eaInit  = EAStat {
+                       eacColl = True, eacDims = n, eacCount = 0, eacMaxSu = 0,
+                       eacHistE = U.fromList z1, eacHistS = U.fromList z1, eacMaxCh = U.fromList z2,
+                       eacPosC = 0, eacPos = []
+                     }
         where n = length optSpaceInit
               z1 = take 8 $ repeat 0
               z2 = take n $ repeat 0
     eaAccum = accumEAStat
+    eaStop  = stopEAStat
