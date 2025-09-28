@@ -33,7 +33,6 @@ data Options = Options {
         optConFile   :: Maybe FilePath,	-- model file to load
         optShuffle   :: Bool,    	-- shuffle training files
         optGener     :: Bool,    	-- generate NNUE features
-        optWinloss   :: Bool,    	-- train only with wins & losses, no draw
         optTest      :: Bool,    	-- calculate test loss only
         optDebug     :: Bool,    	-- debug
         optType      :: Int,    	-- input file type: 0, 1 or 2 for S, R or SR (fen is always there, first)
@@ -42,6 +41,7 @@ data Options = Options {
         optTolerate  :: Int,	-- tolerate this percentage of bad scores in every batch
         optBatchSz   :: Int,	-- batch size
         optValidBa   :: Int,	-- validate every so many batches
+        optLossFun   :: Int,	-- loss function code
         optX         :: Double,    	-- start x for Rosenbrock
         optY         :: Double,    	-- start x for Rosenbrock
         optLR        :: Double,	-- learning rate
@@ -58,7 +58,6 @@ defaultOptions = Options {
         optConFile   = Nothing,
         optShuffle   = False,
         optGener     = False,
-        optWinloss   = False,
         optTest      = False,
         optDebug     = False,
         optType      = 2,
@@ -67,6 +66,7 @@ defaultOptions = Options {
         optTolerate  = 0,
         optBatchSz   = 3072,
         optValidBa   = 0,
+        optLossFun   = 1,	-- default lossScoreSigWeight
         optX         = 0,
         optY         = 0,
         optLR        = 0.1,
@@ -87,9 +87,6 @@ addConf fi opt = opt { optConFile = Just fi }
 
 addGener :: Options -> Options
 addGener opt = opt { optGener = True }
-
-setWinloss :: Options -> Options
-setWinloss opt = opt { optWinloss = True }
 
 setShuffle :: Options -> Options
 setShuffle opt = opt { optShuffle = True }
@@ -127,6 +124,9 @@ addLR lr opt = opt { optLR = read lr }
 addValidBa :: String -> Options -> Options
 addValidBa ba opt = opt { optValidBa = read ba }
 
+addLossFun :: String -> Options -> Options
+addLossFun ba opt = opt { optLossFun = read ba }
+
 addMaxChg :: String -> Options -> Options
 addMaxChg ba opt = opt { optMaxChange = read ba }
 
@@ -161,8 +161,8 @@ options = [
         Option "s" ["shuffle"]  (NoArg  setShuffle)          "Shuffle training files",
         Option "S" ["score"]    (NoArg  setScore)            "Input file format: fen,score",
         Option "R" ["result"]   (NoArg  setResult)           "Input file format: fen,result",
-        Option "w" ["winloss"]  (NoArg  setWinloss)          "Train with wins & losses only",
         Option "v" ["validate"] (ReqArg addValidBa "INT")    "Validate every so many batches (1000)",
+        Option "L" ["loss"]     (ReqArg addLossFun "INT")    "Loss function: 0 - 3 (0)",
         Option "r" ["rosen"]    (ReqArg  addRosen "INT")     "Minimize Rosenbrock so many steps",
         Option "x" ["xi"]       (ReqArg  addX "INT")         "Start X for Rosenbrock",
         Option "y" ["yi"]       (ReqArg  addY "INT")         "Start Y for Rosenbrock"
@@ -258,27 +258,24 @@ get50Moves _ = 10
 -- and accumulated loss
 evalFile :: EvalAccum a => Loss -> Sampler -> [EvalState] -> Int -> ([FilePath], a)
          -> IO (Bool, ([FilePath], a))
-evalFile loss sampler ess k (files, !a)
-    | null files = return (False, ([], a))
-    | otherwise  = do
-        let inFileName = head files
-            rest       = tail files
-        fex <- doesFileExist inFileName
-        if not fex
-            then do
-                putStrLn $ "File " ++ show k ++ ": " ++ inFileName ++ " does not exist"
-                return (True, (rest, a))
-            else do
-                putStrLn $ "Eval " ++ show k ++ ": " ++ inFileName
-                hFlush stdout
-                hi <- openFile inFileName ReadMode
-                a' <- loopCount (evalPos loss sampler ess hi) a
-                -- putStrLn $ "Records: " ++ show r' ++ ", loss = " ++ show acc'
-                hFlush stdout
-                hClose hi
-                return (True, (rest, a'))
-                -- For test: return after the first file
-                -- return (False, (rest, a'))
+evalFile _    _       _   _ ([], a)               = return (False, ([], a))
+evalFile loss sampler ess k (inFileName:rest, !a) = do
+    fex <- doesFileExist inFileName
+    if not fex
+        then do
+            putStrLn $ "File " ++ show k ++ ": " ++ inFileName ++ " does not exist"
+            return (True, (rest, a))
+        else do
+            putStrLn $ "Eval " ++ show k ++ ": " ++ inFileName
+            hFlush stdout
+            hi <- openFile inFileName ReadMode
+            a' <- loopCount (evalPos loss sampler ess hi) a
+            -- putStrLn $ "Records: " ++ show r' ++ ", loss = " ++ show acc'
+            hFlush stdout
+            hClose hi
+            return (True, (rest, a'))
+            -- For test: return after the first file
+            -- return (False, (rest, a'))
 
 -- Evaluates one fen (line) of the file, calculates the loss and accumulates it
 -- Status is number of total records and accumulated loss
@@ -408,12 +405,12 @@ lossRez scale _ rez sc = x * x
           x = wdl_target - wdl_model
 
 -- Loss model like Stockfish (see https://github.com/official-stockfish/nnue-pytorch/blob/master/model.py)
-lossSF :: Loss
-lossSF tgsc _ sc = exp (2.5 * log (abs (pf - qf)))
-    where in_scaling  = 340
-          out_scaling = 380
-          pf = scoreToRezult tgsc out_scaling
-          qf = scoreToRezult sc   in_scaling
+lossSF :: Double -> Double -> Loss
+lossSF sscale wscale tgsc _ sc = exp (2.5 * log (abs (pf - qf)))
+    where -- in_scaling  = 340
+          -- out_scaling = 380
+          pf = scoreToRezult tgsc wscale
+          qf = scoreToRezult sc   sscale
 
 scoreToRezult :: Double -> Double -> Double
 scoreToRezult sc scaling = 0.5 * (1 + sigmoid pp - sigmoid pm)
@@ -467,7 +464,9 @@ checkStep opts = do
     ds <- makeDataset True opts
     let x  = U.fromList optSpaceInit
         xs = [x] ++ genPlusVec x ++ genMinusVec x
-        fs | optDebug opts = [head $ dsTrainFiles ds]
+        fs | optDebug opts = case dsTrainFiles ds of
+                                 []  -> []
+                                 f:_ -> [f]
            | otherwise     = dsTrainFiles ds
     eas <- evaluateLoss "Check Step" lossDist xs fs (dsSampleFunc ds)
     -- when debug $ do
@@ -509,11 +508,11 @@ makeDataset training opts = do
             }
        1 -> return Dataset {
                 dsTrainFiles = rtf, dsTestFiles = testFiles, dsTrainHandle = Nothing,
-                dsRestFiles = concat (repeat rtf), dsSampleFunc = sampleFenResultLine (optWinloss opts)
+                dsRestFiles = concat (repeat rtf), dsSampleFunc = sampleFenResultLine
             }
        2 -> return Dataset {
                 dsTrainFiles = rtf, dsTestFiles = testFiles, dsTrainHandle = Nothing,
-                dsRestFiles = concat (repeat rtf), dsSampleFunc = sampleFenScoreResultLine (optWinloss opts)
+                dsRestFiles = concat (repeat rtf), dsSampleFunc = sampleFenScoreResultLine
             }
        i -> fail $ "Wrong input file type " ++ show i
 
@@ -565,17 +564,20 @@ getSampleFromDS batchSize _ (ds, n, ps)
 -- The lines we expect contain: fen ',' score ',' rez
 -- The result is 0, 1 or 2 (loss, draw, win)
 -- Here the result is from moving part POV - it must be taken as it is
-sampleFenScoreResultLine :: Bool -> Sampler
-sampleFenScoreResultLine winloss line
-    | winloss && rez == 1 = Nothing
-    | otherwise           = Just (pos, sco, rez)
+sampleFenScoreResultLine :: Sampler
+sampleFenScoreResultLine line
+    | scs == "" || res == "" = Nothing
+    | otherwise              = Just (pos, sco, rez)
     where (fen, rest)  = break ((==) ',') line
-          (scs, rest1) = break ((==) ',') $ tail rest
+          (scs, rest1) | ',':tr <- rest = break ((==) ',') tr
+                       | otherwise      = ("", "")
           pos = posFromFen fen
           -- Target score in centipawns
           sco = read scs
           -- Rezult is:
-          rez = read (tail rest1)
+          res | ',':ress <- rest1 = ress
+              | otherwise         = ""
+          rez = read res
 
 -- Get a training (or test) sample from a line with fen and target result
 -- This is the format used in older training files publicly available (Ethereal, Stockfish)
@@ -584,27 +586,27 @@ sampleFenScoreResultLine winloss line
 -- We still return a score, but set to 0
 -- The result is -1, 0 or 1 (loss, draw, win) - so we must correct it
 -- Here the result is from White POV - we must revert it from black moving positions
-sampleFenResultLine :: Bool -> Sampler
-sampleFenResultLine winloss line
-    | winloss && rez == 0 = Nothing
-    | otherwise           = Just (pos, 0, rezm)
+sampleFenResultLine :: Sampler
+sampleFenResultLine line
+    | ',':res <- rest =
+        let rez = read res
+            rezm | moving pos == White = rez + 1
+                 | otherwise           = 1 - rez
+        in Just (pos, 0, rezm)
+    | otherwise = Nothing
     where (fen, rest)  = break ((==) ',') line
           pos = posFromFen fen
-          -- Rezult is:
-          rez = read (tail rest)
-          rezm | moving pos == White = rez + 1
-               | otherwise           = 1 - rez
 
 -- Get a training (or test) sample from a line with fen and target score
 -- The lines we expect contain: fen ',' score
 -- The score is in centipawns from moving part POV
 -- A result is still returned, set to 0
 sampleFenScoreLine :: Sampler
-sampleFenScoreLine line = Just (pos, sco, 0)
+sampleFenScoreLine line
+    | ',':scs <- rest = Just (pos, read scs, 0)
+    | otherwise       = Nothing
     where (fen, rest)  = break ((==) ',') line
           pos = posFromFen fen
-          -- Target score in centipawns
-          sco = read $ tail rest
 
 -- The training status
 data TrainState = TrainState {
@@ -768,10 +770,12 @@ trainParams ds opts = do
         keep = optBatchSz opts - bads
         mkeep | bads == 0 = Nothing
               | otherwise = Just keep
+        lossf | optLossFun opts == 1 = lossScoreSigWeight (optSigScale opts) (optWeiScale opts)
+              | optLossFun opts == 2 = lossScoreOutside   (optLossLuft opts) (optSigScale opts)
+              | optLossFun opts == 3 = lossSF             (optSigScale opts) (optWeiScale opts)
+              | otherwise            = lossRez            (optSigScale opts)
         tsi = TrainState {
-            -- tsLoss    = lossRez (optSigScale opts),
-            tsLoss    = lossScoreSigWeight (optSigScale opts) (optWeiScale opts),
-            -- tsLoss    = lossScoreOutside (optLossLuft opts) (optSigScale opts),
+            tsLoss    = lossf,
             tsBatchSz = optBatchSz opts,
             tsKeep    = mkeep,
             tsBatches = optTrain opts,
@@ -824,8 +828,8 @@ writeWeights opts ts = withFile (optOutPath opts) WriteMode $ \fo -> do
     -- Because our weights have names like "mid.ewKingSafe", we misuse the FilePath functions
     -- to get the parts - as we need to get only the names, like "ewKingSafe" and the 2 values
     -- corresponding to mid & end
-    let phases = map takeBaseName           (tsNames ts)
-        names  = map (tail . takeExtension) (tsNames ts)	-- takeExtention gives ".ewKingSafe"
+    let phases = map takeBaseName             (tsNames ts)
+        names  = map (drop 1 . takeExtension) (tsNames ts)	-- takeExtention gives ".ewKingSafe"
         npvs   = zipWith3 (\n p v -> (n, (ordPhase p, round(v)))) names phases (U.toList $ tsCurrent ts)
         trips  = map snd $ sort $ consumeWeights $ sort $ zip npvs [1..]
     forM_ (zip [0::Int ..] trips) $ \(i, (n, v1, v2)) -> do

@@ -464,9 +464,9 @@ pvSearch nst !a !b !d = do
            let mttmv = if hdeep > 0 then Just e else Nothing
                !nst'  = nst { cpos = pos }
            edges <- genAndPick nst' mttmv a b d
-           if noMove edges
-              then return $! failHardNoValidMove a b pos
-              else do
+           case unalt edges of
+              []   -> return $! failHardNoValidMove a b pos
+              ev:_ -> do
                 nodes0 <- gets (sNodes . stats)
                 -- Here we could maybe raise alpha when we got tp == 1 from TT, but with hsc < b:
                 -- if hsc > a then we know there must be something better than a, so we could search for it
@@ -490,8 +490,9 @@ pvSearch nst !a !b !d = do
                            lift $ do
                                let !deltan = nodes1 - nodes0
                                    mvs = pathMoves s
-                                   mv | nullSeq mvs = head $ unalt edges	-- not null - on "else" of noMove
-                                      | otherwise   = head $ unseq mvs
+                                   mv  = case unseq mvs of
+                                             []   -> ev
+                                             pv:_ -> pv
                                ttStore d (rbmch nstf) (pathScore s) mv deltan
                            return s
 
@@ -524,9 +525,9 @@ pvZeroW !nst !b !d = do
                    let mttmv = if hdeep > 0 then Just e else Nothing
                        !nst' = nst { cpos = pos }
                    edges <- genAndPick nst' mttmv bGrain b d
-                   if noMove edges
-                      then return $! failHardNoValidMove bGrain b pos
-                      else do
+                   case unalt edges of
+                      []   -> return $! failHardNoValidMove bGrain b pos
+                      ev:_ -> do
                         !nodes0 <- gets (sNodes . stats)
                         -- futility pruning:
                         selfplay <- getSelfplay
@@ -548,8 +549,9 @@ pvZeroW !nst !b !d = do
                                    lift $ do
                                        let !deltan = nodes1 - nodes0
                                            mvs = pathMoves s
-                                           mv | nullSeq mvs = head $ unalt edges	-- not null - on "else" of noMove
-                                              | otherwise   = head $ unseq mvs
+                                           mv = case unseq mvs of
+                                                     [] -> ev
+                                                     pv:_ -> pv
                                        ttStore d (rbmch nstf) (pathScore s) mv deltan
                                    return s
     where !bGrain = b - scoreGrain

@@ -39,7 +39,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.8.0"
-progVerSuff = "stats"
+progVerSuff = "ucis"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -632,9 +632,9 @@ giveBestMove :: [Move] -> CtxIO ()
 giveBestMove mvs = do
     -- ctxLog "Info" $ "The moves: " ++ show mvs
     modifyChanging $ \c -> c { working = False, compThread = Nothing, forGui = Nothing }
-    if null mvs
-        then answer $ infos "empty pv"
-        else answer $ bestMove (head mvs) Nothing
+    case mvs of
+        []  -> answer $ infos "empty pv"
+        m:_ -> answer $ bestMove m Nothing
     cng <- readChanging
     let mst = mstats $ crtStatus cng
     ctxLog LogInfo $ "Search statistics:"
