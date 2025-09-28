@@ -325,7 +325,7 @@ stopEAStat eastat
 instance EvalAccum EAStat where
     -- Hardcoded for the operation for now
     eaInit  = EAStat {
-                       eacColl = True, eacDims = n, eacCount = 0, eacMaxSu = 0,
+                       eacColl = False, eacDims = n, eacCount = 0, eacMaxSu = 0,
                        eacHistE = U.fromList z1, eacHistS = U.fromList z1, eacMaxCh = U.fromList z2,
                        eacPosC = 0, eacPos = []
                      }

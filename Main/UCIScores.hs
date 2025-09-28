@@ -137,7 +137,8 @@ doFileList opts = go
 
 oneProc :: Options -> String -> Handle -> IO ()
 oneProc opts content houtfile = do
-    (hin, hout, _, _ph) <- runInteractiveProcess (optEngine opts) [] (Just (optCwd opts)) Nothing
+    (hin, hout, _, _ph) <- runInteractiveProcess (optEngine opts) ["-l", "5"]
+                                                 (Just (optCwd opts)) Nothing
     hSetBuffering hin LineBuffering
     hPutStrLn hin "uci"
     _ <- lineUntil hout ("uciok" `isPrefixOf`)
