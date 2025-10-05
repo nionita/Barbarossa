@@ -37,6 +37,7 @@ data Options = Options {
         optDebug     :: Bool,    	-- debug
         optType      :: Int,    	-- input file type: 0, 1 or 2 for S, R or SR (fen is always there, first)
         optTrain     :: Int,    	-- number of train batches - if > 0
+        optOptim     :: Int,    	-- random search until so many improment fails
         optRosen     :: Int,    	-- minimize Rosenbrock for internal test - so many steps
         optTolerate  :: Int,	-- tolerate this percentage of bad scores in every batch
         optBatchSz   :: Int,	-- batch size
@@ -62,6 +63,7 @@ defaultOptions = Options {
         optDebug     = False,
         optType      = 2,
         optTrain     = 0,
+        optOptim     = 0,
         optRosen     = 0,
         optTolerate  = 0,
         optBatchSz   = 3072,
@@ -99,6 +101,9 @@ setResult opt = opt { optType = 1 }
 
 addTrain :: String -> Options -> Options
 addTrain ba opt = opt { optTrain = read ba }
+
+addOptim :: String -> Options -> Options
+addOptim ba opt = opt { optOptim = read ba }
 
 addTest :: Options -> Options
 addTest opt = opt { optTest = True }
@@ -144,28 +149,29 @@ setTolerate ba opt = opt { optTolerate = read ba }
 
 options :: [OptDescr (Options -> Options)]
 options = [
-        Option "i" ["input"]    (ReqArg addIFile   "STRING") "Input file or directory",
-        Option "o" ["output"]   (ReqArg addOFile   "STRING") "Output directory",
+        Option "a" ["tolerate"] (ReqArg setTolerate "FLOAT") "Tolerate (ignore) this percent of bad scores",
+        Option "b" ["bsize"]    (ReqArg addBatchSz "INT")    "Batch size (10240)",
         Option "c" ["config"]   (ReqArg addConf    "STRING") "Load model file",
         Option "d" ["debug"]    (NoArg  addDebug)            "Debug functionality",
-        Option "g" ["gen"]      (NoArg  addGener)            "Generate NNUE features",
-        Option "t" ["train"]    (ReqArg addTrain   "INT")    "Train so many batches",
         Option "e" ["test"]     (NoArg  addTest)             "Test evaluation",
-        Option "b" ["bsize"]    (ReqArg addBatchSz "INT")    "Batch size (10240)",
+        Option "f" ["luft"]     (ReqArg setLossLuft "FLOAT") "Loss luft in centipawns (25)",
+        Option "g" ["gen"]      (NoArg  addGener)            "Generate NNUE features",
+        Option "i" ["input"]    (ReqArg addIFile   "STRING") "Input file or directory",
+        Option "j" ["wscale"]   (ReqArg setWeiScale "FLOAT") "Weight scale in centipawns (200)",
+        Option "k" ["scale"]    (ReqArg setSigScale "FLOAT") "Sigmoid scale in centipawns (595)",
         Option "l" ["lr"]       (ReqArg addLR      "FLOAT")  "Learning rate (0.1)",
         Option "m" ["max"]      (ReqArg addMaxChg  "FLOAT")  "Max param change (0.01)",
-        Option "k" ["scale"]    (ReqArg setSigScale "FLOAT") "Sigmoid scale in centipawns (595)",
-        Option "j" ["wscale"]   (ReqArg setWeiScale "FLOAT") "Weight scale in centipawns (200)",
-        Option "f" ["luft"]     (ReqArg setLossLuft "FLOAT") "Loss luft in centipawns (25)",
-        Option "a" ["tolerate"] (ReqArg setTolerate "FLOAT") "Tolerate (ignore) this percent of bad scores",
-        Option "s" ["shuffle"]  (NoArg  setShuffle)          "Shuffle training files",
-        Option "S" ["score"]    (NoArg  setScore)            "Input file format: fen,score",
-        Option "R" ["result"]   (NoArg  setResult)           "Input file format: fen,result",
-        Option "v" ["validate"] (ReqArg addValidBa "INT")    "Validate every so many batches (1000)",
-        Option "L" ["loss"]     (ReqArg addLossFun "INT")    "Loss function: 0 - 3 (0)",
+        Option "o" ["output"]   (ReqArg addOFile   "STRING") "Output directory",
         Option "r" ["rosen"]    (ReqArg  addRosen "INT")     "Minimize Rosenbrock so many steps",
+        Option "s" ["shuffle"]  (NoArg  setShuffle)          "Shuffle training files",
+        Option "t" ["train"]    (ReqArg addTrain   "INT")    "Train so many batches",
+        Option "v" ["validate"] (ReqArg addValidBa "INT")    "Validate every so many batches (1000)",
         Option "x" ["xi"]       (ReqArg  addX "INT")         "Start X for Rosenbrock",
-        Option "y" ["yi"]       (ReqArg  addY "INT")         "Start Y for Rosenbrock"
+        Option "y" ["yi"]       (ReqArg  addY "INT")         "Start Y for Rosenbrock",
+        Option "L" ["loss"]     (ReqArg addLossFun "INT")    "Loss function: 0 - 3 (0)",
+        Option "R" ["result"]   (NoArg  setResult)           "Input file format: fen,result",
+        Option "S" ["score"]    (NoArg  setScore)            "Input file format: fen,score",
+        Option "O" ["optim"]    (ReqArg addOptim   "INT")    "Optimize by random search"
     ]
 
 theOptions :: IO (Options, [String])
@@ -180,7 +186,7 @@ theOptions = do
 main :: IO ()
 main = do
     (opts, _) <- theOptions
-    if optTrain opts > 0
+    if optTrain opts > 0 || optOptim opts > 0
         then train opts
         else if optGener opts
                 then filterFile (optCsvPath opts) (optOutPath opts)
@@ -447,7 +453,9 @@ train :: Options -> IO ()
 train opts = do
     ds <- makeDataset True opts
     stime <- getCurrentTime
-    trainParams ds opts
+    if optTrain opts > 0
+       then trainParams  ds opts
+       else searchParams ds opts
     etime <- getCurrentTime
     putStrLn $ "Time: " ++ show (diffUTCTime etime stime)
     return ()
@@ -750,6 +758,10 @@ vecChange :: OptParams -> Int -> Int -> OptParams
 vecChange vec val i = vec U.// [(i, v)]
     where v = fromIntegral (round (vec U.! i) + val)
 
+addOne, subOne :: Int -> OptParams -> OptParams
+addOne i v = vecChange v   1  i
+subOne i v = vecChange v (-1) i
+
 -- Generate vector for partial derivative with the minus 1 components
 genMinusVec :: OptParams -> [OptParams]
 genMinusVec vec = map (vecChange vec (-1)) [0..l]
@@ -805,11 +817,10 @@ trainParams ds opts = do
                                    (dsTrainFiles ds) (dsSampleFunc ds)
     putStrLn $ "Initial: " ++ show acci ++ " / " ++ show ri ++ " = " ++ show (acci / fromIntegral ri)
     putStrLn $ "Final:   " ++ show accf ++ " / " ++ show rf ++ " = " ++ show (accf / fromIntegral rf)
-    writeWeights opts tsf
+    writeWeights opts (hsPreambTrain opts tsf) (tsNames tsf) (tsCurrent tsf)
 
--- Write a Haskell module with the final weights
-writeWeights :: Options -> TrainState -> IO ()
-writeWeights opts ts = withFile (optOutPath opts) WriteMode $ \fo -> do
+hsPreambTrain :: Options -> TrainState -> Handle -> IO ()
+hsPreambTrain opts ts fo = do
     hPutStrLn fo "-- This module is generated by a TuneSGD run with following parameters:"
     hPutStrLn fo $ "-- dataset " ++ optCsvPath opts ++ " with lr = " ++ show (tsLR ts)
     hPutStrLn fo $ "-- batch size = " ++ show (tsBatchSz ts) ++ " with " ++ show (tsBatches ts) ++ " batches"
@@ -817,6 +828,17 @@ writeWeights opts ts = withFile (optOutPath opts) WriteMode $ \fo -> do
     hPutStrLn fo $ "-- scale = " ++ show (optSigScale opts) ++ ", wscale = " ++ show (optWeiScale opts)
     when ((optTolerate opts) > 0) $
         hPutStrLn fo $ "-- drop " ++ show (optTolerate opts) ++ "% of the worse scores"
+
+hsPreambOptim :: Options -> OptimState -> Handle -> IO ()
+hsPreambOptim opts _ fo = do
+    hPutStrLn fo "-- This module is generated by a TuneSGD optimizatio run with following parameters:"
+    hPutStrLn fo $ "-- dataset " ++ optCsvPath opts
+    hPutStrLn fo $ "-- scale = " ++ show (optSigScale opts) ++ ", wscale = " ++ show (optWeiScale opts)
+
+-- Write a Haskell module with the final weights
+writeWeights :: Options -> (Handle -> IO ()) -> [String] -> OptParams -> IO ()
+writeWeights opts preamb names best = withFile (optOutPath opts) WriteMode $ \fo -> do
+    preamb fo
     hPutStrLn fo "module Struct.Weights ("
     hPutStrLn fo "    weights,"
     hPutStrLn fo ") where"
@@ -828,9 +850,9 @@ writeWeights opts ts = withFile (optOutPath opts) WriteMode $ \fo -> do
     -- Because our weights have names like "mid.ewKingSafe", we misuse the FilePath functions
     -- to get the parts - as we need to get only the names, like "ewKingSafe" and the 2 values
     -- corresponding to mid & end
-    let phases = map takeBaseName             (tsNames ts)
-        names  = map (drop 1 . takeExtension) (tsNames ts)	-- takeExtention gives ".ewKingSafe"
-        npvs   = zipWith3 (\n p v -> (n, (ordPhase p, round(v)))) names phases (U.toList $ tsCurrent ts)
+    let phases = map takeBaseName             names
+        pnames = map (drop 1 . takeExtension) names	-- takeExtention gives ".ewKingSafe"
+        npvs   = zipWith3 (\n p v -> (n, (ordPhase p, round(v)))) pnames phases (U.toList best)
         trips  = map snd $ sort $ consumeWeights $ sort $ zip npvs [1..]
     forM_ (zip [0::Int ..] trips) $ \(i, (n, v1, v2)) -> do
         if (i > 0) then hPutStr fo "      , " else hPutStr fo "        "
@@ -848,6 +870,67 @@ writeWeights opts ts = withFile (optOutPath opts) WriteMode $ \fo -> do
                         | s1 == s2  = go ((min i1 i2, (s1, v1, v2)):acc) ws
                         | otherwise = error "Wrong order in consumeWeights"
                     go _ _ = error "consumeWeights: odd number of weights"
+
+-- The optimization status
+data OptimState = OptimState {
+        opLoss    :: Loss,	-- Fix: the loss function
+        opNames   :: [String],	-- Fix: the names of the parameters to be optimized
+        opDataset :: Dataset,	-- the dataset of the training
+        opFails   :: Int,	-- maximum fails to improve for termination
+        opHistory :: [(OptParams, Double, Int)]	-- training history (params, loss & fails)
+    }
+
+searchParams :: Dataset -> Options -> IO ()
+searchParams ds opts = do
+    let lossf | optLossFun opts == 1 = lossScoreSigWeight (optSigScale opts) (optWeiScale opts)
+              | optLossFun opts == 2 = lossScoreOutside   (optLossLuft opts) (optSigScale opts)
+              | optLossFun opts == 3 = lossSF             (optSigScale opts) (optWeiScale opts)
+              | otherwise            = lossRez            (optSigScale opts)
+        opi = OptimState {
+            opLoss    = lossf,
+            opNames   = optSpaceNames,
+            opDataset = ds,
+            opFails   = optOptim opts,
+            opHistory = []
+        }
+    opf <- loopCount optimStep opi
+    putStrLn "History:"
+    forM_ (opHistory opf) $ \(_, l, i) -> putStrLn $ "Loss " ++ show l ++ ": " ++ show i
+    case opHistory opf of
+        []           -> putStrLn "Empty history??"
+        (cv, _, _):_ -> do
+            putStrLn "Current vec:"
+            forM_ (zip (opNames opf) (U.toList cv)) $ \(n, v) -> putStrLn $ n ++ " = " ++ show v
+            writeWeights opts (hsPreambOptim opts opf) (opNames opf) cv
+
+optimStep :: Int -> OptimState -> IO (Bool, OptimState)
+optimStep k op = do
+    let ((best, bl, since), first)
+            | c:_ <- opHistory op = (c, False)
+            | otherwise           = ((U.fromList optSpaceInit, 1e100, 0), True)
+    if since > opFails op
+       then return (False, op)
+       else do
+           let candidates = generateCandidates best first k
+           let ds = opDataset op
+           eam <- evaluateLoss "Optimize" (opLoss op) candidates (dsTrainFiles ds) (dsSampleFunc ds)
+           let (mini, bl') = bestLoss eam
+           if bl' < bl
+              then do
+                  let best' = candidates !! mini
+                      oph = (best', bl', 0) : opHistory op
+                  putStrLn $ "*** New best: " ++ show bl' ++ " with " ++ show best'
+                  return (True, op { opHistory = oph })
+              else do
+                  let oph = (best, bl, since + 1) : drop 1 (opHistory op)
+                  return (True, op { opHistory = oph })
+
+generateCandidates :: OptParams -> Bool -> Int -> [OptParams]
+generateCandidates c first k
+    | first     = c : rs
+    | otherwise = rs
+    where i = k `mod` U.length c
+          rs = zipWith ($) [addOne i, subOne i] $ repeat c
 
 -- Find the minimum of the Rosenbrock function
 minRosenbrock :: Double -> Double -> Double -> Int -> IO ()

@@ -4,12 +4,14 @@
 module Tune.EvalAccum (
     EvalAccum(..),
     EASimple(..),
+    EAMulti(..),
     EAStep(..),
     EATrip(..),
     EAStat(..),
     reportEAStep,
     reportEATrip,
     reportEAStat,
+    bestLoss,
 ) where
 
 import Control.Monad (when, forM_)
@@ -18,6 +20,7 @@ import Control.Monad.ST
 
 import qualified Data.Vector.Unboxed as U
 import qualified Data.Vector.Unboxed.Mutable as V
+-- import Data.Vector.Generic 
 
 import Struct.Struct
 import Struct.ParamsPost (optSpaceNames, optSpaceInit)
@@ -38,6 +41,9 @@ class EvalAccum a where
     eaAccum :: MyPos -> Double -> Double -> [Int] -> [Double] -> a -> a
     eaStop :: a -> Bool
 
+type Accumulator = U.Vector Double
+type Counters    = U.Vector Int
+
 -- A simple accumulation with total loss & number of records
 data EASimple = EASimple !Int !Double
 
@@ -49,8 +55,20 @@ instance EvalAccum EASimple where
     eaAccum = accumEASimple
     eaStop  = const False
 
-type Accumulator = U.Vector Double
-type Counters    = U.Vector Int
+-- Accumulation with number of records & total loss per parameter vector
+data EAMulti = EAMulti !Int !Accumulator
+
+accumEAMulti :: MyPos -> Double -> Double -> [Int] -> [Double] -> EAMulti -> EAMulti
+accumEAMulti _ _ _ _ ls (EAMulti r acc) = EAMulti (r + 1) (U.zipWith (+) acc (U.fromList ls))
+
+instance EvalAccum EAMulti where
+    eaInit  = EAMulti 0 (U.fromList (take (length optSpaceInit) $ repeat 0))
+    eaAccum = accumEAMulti
+    eaStop  = const False
+
+bestLoss :: EAMulti -> (Int, Double)
+bestLoss (EAMulti _ lss) = (i, U.unsafeIndex lss i)
+    where i = U.minIndex lss
 
 -- A data structure to calculate the next step in optimizing over the whole dataset
 -- by moving the current best towards better scores depending on the error, but less for
