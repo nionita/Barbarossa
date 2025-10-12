@@ -402,6 +402,11 @@ lossScoreOutside luft scale tgsc _ sc
     | otherwise     = 2 * sigmoid (scale * (sdist - luft)) - 1
     where sdist = abs (sc - tgsc)
 
+-- Exp linear loss: x * e ^ (-x)
+lossExpLinear :: Double -> Loss
+lossExpLinear scale tgsc _ sc = sdist * exp (-sdist)
+    where sdist = scale * abs (sc - tgsc)
+
 -- Rezult sigmoid loss model
 -- It expects result to be 0, 1 or 2 (loss, draw, win)
 lossRez :: Double -> Loss
@@ -758,10 +763,6 @@ vecChange :: OptParams -> Int -> Int -> OptParams
 vecChange vec val i = vec U.// [(i, v)]
     where v = fromIntegral (round (vec U.! i) + val)
 
-addOne, subOne :: Int -> OptParams -> OptParams
-addOne i v = vecChange v   1  i
-subOne i v = vecChange v (-1) i
-
 -- Generate vector for partial derivative with the minus 1 components
 genMinusVec :: OptParams -> [OptParams]
 genMinusVec vec = map (vecChange vec (-1)) [0..l]
@@ -785,6 +786,7 @@ trainParams ds opts = do
         lossf | optLossFun opts == 1 = lossScoreSigWeight (optSigScale opts) (optWeiScale opts)
               | optLossFun opts == 2 = lossScoreOutside   (optLossLuft opts) (optSigScale opts)
               | optLossFun opts == 3 = lossSF             (optSigScale opts) (optWeiScale opts)
+              | optLossFun opts == 4 = lossExpLinear      (optSigScale opts)
               | otherwise            = lossRez            (optSigScale opts)
         tsi = TrainState {
             tsLoss    = lossf,
@@ -885,6 +887,7 @@ searchParams ds opts = do
     let lossf | optLossFun opts == 1 = lossScoreSigWeight (optSigScale opts) (optWeiScale opts)
               | optLossFun opts == 2 = lossScoreOutside   (optLossLuft opts) (optSigScale opts)
               | optLossFun opts == 3 = lossSF             (optSigScale opts) (optWeiScale opts)
+              | optLossFun opts == 4 = lossExpLinear      (optSigScale opts)
               | otherwise            = lossRez            (optSigScale opts)
         opi = OptimState {
             opLoss    = lossf,
@@ -912,8 +915,9 @@ optimStep k op = do
        then return (False, op)
        else do
            let candidates = generateCandidates best first k
-           let ds = opDataset op
-           eam <- evaluateLoss "Optimize" (opLoss op) candidates (dsTrainFiles ds) (dsSampleFunc ds)
+               ds = opDataset op
+               tx = "Optimize " ++ show k
+           eam <- evaluateLoss tx (opLoss op) candidates (dsTrainFiles ds) (dsSampleFunc ds)
            let (mini, bl') = bestLoss eam
            if bl' < bl
               then do
@@ -929,8 +933,10 @@ generateCandidates :: OptParams -> Bool -> Int -> [OptParams]
 generateCandidates c first k
     | first     = c : rs
     | otherwise = rs
-    where i = k `mod` U.length c
-          rs = zipWith ($) [addOne i, subOne i] $ repeat c
+    where i = (k - 1) `mod` U.length c
+          rs = le ++ ri
+          le = map (flip (vecChange c) i) [-1, -2, -4, -8]
+          ri = map (flip (vecChange c) i) [ 1,  2,  4,  8]
 
 -- Find the minimum of the Rosenbrock function
 minRosenbrock :: Double -> Double -> Double -> Int -> IO ()
