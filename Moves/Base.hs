@@ -152,16 +152,11 @@ uBitClear bb sq = bb .&. uBit sq == 0
 
 -- Move from a node to a descendent - the real move version
 doRealMove :: Move -> Game DoResult
-doRealMove m = do
-    s <- get
-    let pc  = head $ stack s	-- we never saw an empty stack error until now
-        !m1 = checkCastle (checkEnPas m pc) pc
-        -- Moving a non-existent piece?
-        il = occup pc `uBitClear` fromSquare m1
-        -- Capturing one king?
-        kc = kings pc `uBitSet` toSquare m1
+doRealMove m = safeStack $ \s pc -> do
+    let !m1 = checkCastle (checkEnPas m pc) pc
+        il = occup pc `uBitClear` fromSquare m1	-- Moving a non-existent piece?
+        kc = kings pc `uBitSet` toSquare m1	-- Capturing one king?
         p' = doFromToMove m1 pc
-        cok = checkOk p'
     -- If the move is real and one of those conditions occur,
     -- then we are really in trouble...
     if (il || kc)
@@ -172,7 +167,7 @@ doRealMove m = do
            logMes $ "Stack:\n" ++ showStack 3 (stack s)
            -- After an illegal result there must be no undo!
            return Illegal
-       else if not cok
+       else if not $ checkOk p'
                then return Illegal
                else do
                    put s { stack = p' : stack s }
@@ -180,13 +175,9 @@ doRealMove m = do
 
 -- Move from a node to a descendent - the normal search version
 doMove :: Move -> Game DoResult
-doMove m = do
-    s <- get
-    let pc = head $ stack s	-- we never saw an empty stack error until now
-        -- Moving a non-existent piece?
-        il  = occup pc `uBitClear` fromSquare m
-        -- Capturing one king?
-        kc  = kings pc `uBitSet` toSquare m
+doMove m = safeStack $ \s pc -> do
+    let il  = occup pc `uBitClear` fromSquare m	-- Moving a non-existent piece?
+        kc  = kings pc `uBitSet` toSquare m	-- Capturing one king?
         sts = posEval p (evalst s)
         p   = doFromToMove m pc { staticScore = sts }
     if (il || kc)
@@ -203,19 +194,17 @@ doMove m = do
                    put s { stack = p : stack s }
                    if checkRemisRules p (stack s)
                       then return Final
-                      else if captOrPromo pc m
-                              then return $! Exten (exten pc p) True True
-                              else return $! Exten (exten pc p) False (noLMR pc m)
+                      else return $ if captOrPromo pc m
+                                       then Exten (exten pc p) True True
+                                       else Exten (exten pc p) False (noLMR pc m)
 
 -- Move from a node to a descendent - the QS search version
 -- Here we do only a restricted check for illegal moves
 -- It does not check for remis, so it can't return Final
 -- It does not check for extensions a.s.o.
 doQSMove :: Move -> Game Bool
-doQSMove m = do
-    s <- get
-    let pc  = head $ stack s	-- we never saw an empty stack error until now
-        sts = posEval p (evalst s)
+doQSMove m = safeStack $ \s pc -> do
+    let sts = posEval p (evalst s)
         p   = doFromToMove m pc { staticScore = sts }
     if not $ checkOk p
        then return False
@@ -224,12 +213,17 @@ doQSMove m = do
            return True
 
 doNullMove :: Game ()
-doNullMove = do
-    s <- get
-    let pc  = head $ stack s	-- we never saw an empty stack error until now
-        sts = posEval p (evalst s)
+doNullMove = safeStack $ \s pc -> do
+    let sts = posEval p (evalst s)
         p   = reverseMoving pc { staticScore = sts }
     put s { stack = p : stack s }
+
+safeStack :: (MyState -> MyPos -> Game r) -> Game r
+safeStack a = do
+    s <- get
+    case stack s of
+        []  -> error "Position stack is empty!"
+        p:_ -> a s p
 
 checkRemisRules :: MyPos -> [MyPos] -> Bool
 checkRemisRules p ps
@@ -249,7 +243,7 @@ countRepetitions s = length f6 - uniq
 
 {-# INLINE undoMove #-}
 undoMove :: Game ()
-undoMove = modify $ \s -> s { stack = tail $ stack s }
+undoMove = modify $ \s -> s { stack = drop 1 $ stack s }
 
 -- We extend when last move:
 -- - gives check
