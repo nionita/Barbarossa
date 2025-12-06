@@ -101,10 +101,6 @@ qsDeltaMargin  = 100
 
 type Search a = CState PVState Game a
 
-alpha0, beta0 :: Int
-alpha0 = minBound + 2000
-beta0  = maxBound - 2000
-
 data Pvsl = Pvsl {
         pvPath :: Path,		-- pv path
         pvNodes :: !Int64	-- number of nodes in the current search
@@ -179,6 +175,10 @@ mated = - mateScore
 drawPath, matedPath :: Path
 drawPath  = Path { pathScore = 0, pathDepth = 20, pathMoves = Seq [] }
 matedPath = Path { pathScore = mated, pathDepth = 20, pathMoves = Seq [] }
+
+alpha0, beta0 :: Int
+alpha0 = mated
+beta0  = mateScore
 
 -- Making a path from a plain score:
 pathFromScore :: Int -> Path
@@ -837,9 +837,7 @@ trimax !a !b !x
 
 -- Quiescent Search
 pvQSearch :: Int -> Int -> Search Int
-pvQSearch !a !b = do
-    !s <- qSearch a b True
-    return $! trimax a b s
+pvQSearch a b = qSearch a b True
 
 {-# NOINLINE qSearch #-}
 qSearch :: Int -> Int -> Bool -> Search Int
@@ -857,21 +855,23 @@ qSearchFound !a !b !tp !hsc front = do
     -- tp == 2 => we have an exact score
     -- tp == 1 => score >= hsc, so if hsc >  a then we at least improved
     -- tp == 0 => score <= hsc, so if hsc <= a then we fail low
-    if    tp == 2		-- exact score: always good, terminate
-       || tp == 1 && hsc >= b	-- we will fail high
-       || tp == 0 && hsc <= a	-- we will fail low
-       then return hsc
-       else do
-           -- Here we have one and only one of:
-           -- tp == 1 && hsc < b
-           -- tp == 0 && hsc > a
-           -- We can possibly improve one of the limit
-           -- This cannot happen in zero window search!
-           if a + scoreGrain == b
-              then qSearchLims a b front
-              else if tp == 1
-                      then qSearchLims (max a hsc) b           front
-                      else qSearchLims a           (min b hsc) front
+    if tp == 2	-- exact score: always good, terminate
+       then return $ max a $ min b hsc
+       else if tp == 1 && hsc >= b
+               then return b	-- fail high
+               else if tp == 0 && hsc <= a
+                       then return a	-- fail low
+                       else do
+                           -- Here we have one and only one of:
+                           -- tp == 1 && hsc < b
+                           -- tp == 0 && hsc > a
+                           -- We can possibly improve one of the limit
+                           -- This cannot happen in zero window search!
+                           if a + scoreGrain == b
+                              then qSearchLims a b front
+                              else if tp == 1
+                                      then qSearchLims (max a hsc) b           front
+                                      else qSearchLims a           (min b hsc) front
 
 qSearchNotFound :: Int -> Int -> Bool -> Search Int
 qSearchNotFound !a !b front = reFail >> qSearchLims a b front
@@ -887,7 +887,7 @@ qsInCheck :: Int -> Int -> Int -> Search Int
 qsInCheck !a !b !s = do
     edges <- Alt <$> lift genEscapeMoves
     if noMove edges
-       then return mated
+       then return $ max a mated	-- remain in limits (a could even be minBound!)
        else do
           !dcut <- lift $ qsDelta $ a - s - qsDeltaMargin
           if dcut
@@ -914,8 +914,8 @@ qsNormal !a !b !s front
                 if noMove edges
                    then do	-- no more captures
                        when collectFens $ finWithNodes "NOCA"
-                       return (max s a)
-                   else pvQLoop b (max s a) edges
+                       return (max a s)
+                   else pvQLoop b (max a s) edges
 
 pvQLoop :: Int -> Int -> Alt Move -> Search Int
 pvQLoop !b = go
@@ -934,7 +934,7 @@ pvQInnerLoop !b !a e = timeToAbort b $ do
            newNodeQS
            !s <- negate <$> qSearch (-b) (-a) False
            lift undoMove
-           return $! if s > a then s else a
+           return $ max a s
        else return a
 
 {-# INLINE finWithNodes #-}
