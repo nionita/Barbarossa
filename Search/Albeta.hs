@@ -67,7 +67,7 @@ varImp lev w = round $ go 0 lev w
 
 -- Parameters for futility pruning:
 maxFutilDepth :: Int
-maxFutilDepth = 5
+maxFutilDepth = 6
 
 -- Futility margins
 futilMargins :: Int -> Int
@@ -177,8 +177,8 @@ drawPath  = Path { pathScore = 0, pathDepth = 20, pathMoves = Seq [] }
 matedPath = Path { pathScore = mated, pathDepth = 20, pathMoves = Seq [] }
 
 alpha0, beta0 :: Int
-alpha0 = mated
-beta0  = mateScore
+alpha0 = mated - 1
+beta0  = mateScore + 1
 
 -- Making a path from a plain score:
 pathFromScore :: Int -> Path
@@ -476,7 +476,7 @@ pvSearch nst !a !b !d = do
                 -- Futility pruning:
                 selfplay <- getSelfplay
                 let !prune | selfplay  = False
-                           | otherwise = isPruneFutil d a (staticScore pos)
+                           | otherwise = isPruneFutil True d a (staticScore pos)
                     !nsti  = resetNSt (pathFromScore a) (Killer []) nst'
                 -- Loop thru the moves
                 !nstf <- pvSLoop b d False prune nsti edges
@@ -532,7 +532,7 @@ pvZeroW !nst !b !d = do
                         -- futility pruning:
                         selfplay <- getSelfplay
                         let !prune | selfplay  = False
-                                   | otherwise = isPruneFutil d bGrain (staticScore pos)
+                                   | otherwise = isPruneFutil False d bGrain (staticScore pos)
                         -- Loop thru the moves
                         let kill1 = case nmhigh of
                                         NullMoveThreat s -> newTKiller pos d s
@@ -817,11 +817,12 @@ pvLoop f s (Alt (e:es)) = do
            else pvLoop f s' $ Alt es
 
 -- Futility pruning:
-isPruneFutil :: Int -> Int -> Int -> Bool
-isPruneFutil d a v
-    | nearmate a        = False
-    | d > maxFutilDepth = False
-    | otherwise         = v + futilMargins d <= a
+isPruneFutil :: Bool -> Int -> Int -> Int -> Bool
+isPruneFutil pv d a v
+    | nearmate a               = False
+    | d >  maxFutilDepth       = False
+    | d >= maxFutilDepth && pv = False	-- for PV nodes: less prune
+    | otherwise                = v + futilMargins d <= a
 
 failHardNoValidMove :: Int -> Int -> MyPos -> Path
 failHardNoValidMove !a !b pos = trimaxPath a b $! if tacticalPos pos then matedPath else drawPath
