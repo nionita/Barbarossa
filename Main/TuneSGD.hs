@@ -209,7 +209,8 @@ filterFile inFileName outFileDir = do
             putStrLn $ inFileName ++ " --> " ++ outFileName
             hi <- openFile inFileName  ReadMode
             ho <- openFile outFileName WriteMode
-            wr <- loopCount (filterQuietPos hi ho Nothing) 0
+            -- wr <- loopCount (filterQuietPos hi ho Nothing) 0
+            wr <- loopCount (filterMidGamePos hi ho Nothing) 0
             putStrLn $ show wr ++ " records written"
             hClose hi
             hClose ho
@@ -258,6 +259,34 @@ prettyQuiet _ = True
 
 get50Moves :: MyPos -> Int
 get50Moves _ = 10
+
+-- Filter out positions with too small game phase from the input file
+-- The fen is the first part of the line, before the first ","
+filterMidGamePos :: Handle -> Handle -> Maybe Int -> Int -> Int -> IO (Bool, Int)
+filterMidGamePos hi ho mn k i = do
+    end <- case mn of
+               Nothing -> hIsEOF hi
+               Just n  -> if k <= n then hIsEOF hi else return True
+    if end
+       then return (False, i)
+       else do
+           line <- hGetLine hi
+           when (k `mod` 100000 == 0) $ do
+               putStrLn $ "Positions completed: " ++ show k
+               hFlush stdout
+           when debug $ do
+               putStrLn $ "Line: " ++ line
+               hFlush stdout
+           let (fen, _) = break ((==) ',') line
+           when debug $ do
+               putStrLn $ "Fen: " ++ fen
+               hFlush stdout
+           let pos = posFromFen fen
+           if gamePhase pos >= 160
+               then do
+                   hPutStrLn ho line
+                   return (True, i+1)
+               else return (True, i)
 
 -- Read a file of FENs and accumulate the loss
 -- This function is called via loopCount, with status: remaining files, number of fens
