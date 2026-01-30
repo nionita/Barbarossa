@@ -949,19 +949,21 @@ searchParams ds opts = do
             forM_ (zip (opNames opf) (U.toList cv)) $ \(n, v) -> putStrLn $ n ++ " = " ++ show v
             writeWeights opts (hsPreambOptim opts opf) (opNames opf) cv
 
+optDims :: Int
+optDims = length optSpaceInit
+
 optimStep :: Int -> OptimState -> IO (Bool, OptimState)
 optimStep k op
     | k > opMax op = return (False, op)
     | opFixIdx op >= 0,
-      (best, _, _):_ <- opHistory op,
-      ix <- (k - 1) `mod` U.length best,
+      ix <- (k - 1) `mod` optDims,
       opFixIdx op == ix = do
-          putStrLn $ "--- Skip idx " ++ show ix
+          putStrLn $ "<<< Skip idx " ++ show ix
           return (True, op)
-    | otherwise    = do
+    | otherwise = do
     let ((best, bl, since), first)
-            | c:_ <- opHistory op = (c, False)
-            | otherwise           = ((U.fromList optSpaceInit, 1e100, 0), True)
+            | hit:_ <- opHistory op = (hit, False)
+            | otherwise             = ((U.fromList optSpaceInit, 1e100, 0), True)
     if opFails op > 0 && since > opFails op
        then return (False, op)
        else do
@@ -973,7 +975,7 @@ optimStep k op
            if bl' < bl
               then do
                   let best' = candidates !! mini
-                      oph = (best', bl', 0) : opHistory op
+                      oph   = (best', bl', 0) : opHistory op
                   putStrLn $ "*** New best: " ++ show bl' ++ " with " ++ show best'
                   return (True, op { opHistory = oph })
               else do
@@ -984,7 +986,7 @@ generateCandidates :: OptParams -> Bool -> Int -> [OptParams]
 generateCandidates c first k
     | first     = c : rs
     | otherwise = rs
-    where i = (k - 1) `mod` U.length c
+    where i = (k - 1) `mod` optDims
           rs = le ++ ri
           le = map (flip (vecChange c) i) [-1, -2, -4, -8]
           ri = map (flip (vecChange c) i) [ 1,  2,  4,  8]
