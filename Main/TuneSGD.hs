@@ -43,6 +43,7 @@ data Options = Options {
         optBatchSz   :: Int,	-- batch size
         optValidBa   :: Int,	-- validate every so many batches
         optLossFun   :: Int,	-- loss function code
+        optFixIdx    :: Int,	-- this weight will not be modified
         optX         :: Double,    	-- start x for Rosenbrock
         optY         :: Double,    	-- start x for Rosenbrock
         optLR        :: Double,	-- learning rate
@@ -69,6 +70,7 @@ defaultOptions = Options {
         optBatchSz   = 3072,
         optValidBa   = 0,
         optLossFun   = 1,	-- default lossScoreSigWeight
+        optFixIdx    = 0,	-- default: material middle game not modified
         optX         = 0,
         optY         = 0,
         optLR        = 0.1,
@@ -132,6 +134,9 @@ addValidBa ba opt = opt { optValidBa = read ba }
 addLossFun :: String -> Options -> Options
 addLossFun ba opt = opt { optLossFun = read ba }
 
+setFixIdx :: String -> Options -> Options
+setFixIdx ba opt = opt { optFixIdx = read ba }
+
 addMaxChg :: String -> Options -> Options
 addMaxChg ba opt = opt { optMaxChange = read ba }
 
@@ -169,6 +174,7 @@ options = [
         Option "x" ["xi"]       (ReqArg  addX "INT")         "Start X for Rosenbrock",
         Option "y" ["yi"]       (ReqArg  addY "INT")         "Start Y for Rosenbrock",
         Option "L" ["loss"]     (ReqArg addLossFun "INT")    "Loss function: 0 - 3 (0)",
+        Option "F" ["fix"]      (ReqArg setFixIdx "INT")     "Fix this index 0 - 88 (0)",
         Option "R" ["result"]   (NoArg  setResult)           "Input file format: fen,result",
         Option "S" ["score"]    (NoArg  setScore)            "Input file format: fen,score",
         Option "O" ["optim"]    (ReqArg addOptim   "INT")    "Optimize by random search"
@@ -913,6 +919,7 @@ data OptimState = OptimState {
         opDataset :: Dataset,	-- the dataset of the training
         opMax     :: Int,	-- maximum steps
         opFails   :: Int,	-- maximum fails to improve for termination
+        opFixIdx  :: Int,	-- fixed weight
         opHistory :: [(OptParams, Double, Int)]	-- training history (params, loss & fails)
     }
 
@@ -929,11 +936,12 @@ searchParams ds opts = do
             opDataset = ds,
             opMax     = optOptim opts,
             opFails   = 0,
+            opFixIdx  = optFixIdx opts,
             opHistory = []
         }
     opf <- loopCount optimStep opi
     putStrLn "History:"
-    forM_ (opHistory opf) $ \(_, l, i) -> putStrLn $ "Loss " ++ show l ++ ": " ++ show i
+    forM_ (reverse $ opHistory opf) $ \(_, l, i) -> putStrLn $ "Loss " ++ show l ++ ": " ++ show i
     case opHistory opf of
         []           -> putStrLn "Empty history??"
         (cv, _, _):_ -> do
@@ -944,6 +952,12 @@ searchParams ds opts = do
 optimStep :: Int -> OptimState -> IO (Bool, OptimState)
 optimStep k op
     | k > opMax op = return (False, op)
+    | opFixIdx op >= 0,
+      (best, _, _):_ <- opHistory op,
+      ix <- (k - 1) `mod` U.length best,
+      opFixIdx op == ix = do
+          putStrLn $ "--- Skip idx " ++ show ix
+          return (True, op)
     | otherwise    = do
     let ((best, bl, since), first)
             | c:_ <- opHistory op = (c, False)

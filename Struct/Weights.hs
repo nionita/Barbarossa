@@ -13,8 +13,8 @@ import Struct.ParamsPre
 -- All weights have type MidEnd
 weights :: [EvalWeightSpec]
 weights = [
-        ("ewMaterialDiff",    (  12,    8)),
-        ("ewKingSafe",        (   3,    0)),
+        ("ewMaterialDiff",    (   8,    8)),
+        ("ewKingSafe",        (   1,    0)),
         ("ewKingOpen",        (   2,    4)),
         ("ewKingPlaceCent",   (   8,    1)),
         ("ewKingPlacePwns",   (   0,    4)),
