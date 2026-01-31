@@ -283,9 +283,20 @@ kingSquare kingsb colorp = firstOne $ kingsb .&. colorp
 ------ Material ------
 
 materDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-materDiff p !ew = mad (ewMaterialDiff ew) md
+materDiff p !ew = mad (ewMaterialDiff ew) md .
+                  mad (ewMaterQR      ew) mQR .
+                  mad (ewMaterQN      ew) mQN .
+                  mad (ewMaterFigs    ew) mF .
+                  mad (ewMaterPawns   ew) mP
     where !md | moving p == White =   mater p
               | otherwise         = - mater p
+          !mQR = popCount (queens p .&. me p) * popCount (rooks p .&. me p)
+               - popCount (queens p .&. yo p) * popCount (rooks p .&. yo p)
+          !mQN = popCount (queens p .&. me p) * popCount (knights p .&. me p)
+               - popCount (queens p .&. yo p) * popCount (knights p .&. yo p)
+          !fig = occup p `less` pawns p
+          !mF  = popCount (fig     .&. me p) - popCount (fig     .&. yo p)
+          !mP  = popCount (pawns p .&. me p) - popCount (pawns p .&. yo p)
 
 ------ King placement and opennes ------
 
@@ -299,7 +310,10 @@ kingPlace ep p !ew = mad (ewKingPawn      ew) kpa .
                      mad (ewKingThreat    ew) ktr .
                      mad (ewKingOpen      ew) ko .
                      mad (ewKingPlaceCent ew) kcd .
-                     mad (ewKingPlacePwns ew) kpd
+                     mad (ewKingPlacePwns ew) kpd .
+                     mad (ewKingAlignB    ew) kab .
+                     mad (ewKingAlignR    ew) kar .
+                     mad (ewKingAlignQ    ew) kaq
     where !kcd = (mpl - ypl) `unsafeShiftR` epMaterBonusScale ep
           !kpd = (mpi - ypi) `unsafeShiftR` epPawnBonusScale  ep
           !mks = kingSquare (kings p) $ me p
@@ -329,26 +343,39 @@ kingPlace ep p !ew = mad (ewKingPawn      ew) kpa .
           !ypassed = passed p .&. yo p
           materFun m r q = (m * epMaterMinor ep + r * epMaterRook ep + q * epMaterQueen ep)
                                `unsafeShiftR` epMaterScale ep
-          !ko = adv - own
-          mwb = popCount $ bAttacs (pawns p) mks .&. nopawns
-          mwr = popCount $ rAttacs (pawns p) mks .&. nopawns
-          ywb = popCount $ bAttacs (pawns p) yks .&. nopawns
-          ywr = popCount $ rAttacs (pawns p) yks .&. nopawns
-          nopawns = complement $ pawns p
+          !mdb = bAttacs (pawns p) mks
+          !ydb = bAttacs (pawns p) yks
+          !mdr = rAttacs (pawns p) mks
+          !ydr = rAttacs (pawns p) yks
+          !nopawns = complement $ pawns p
+          !mwb = popCount $ mdb .&. nopawns
+          !mwr = popCount $ mdr .&. nopawns
+          !ywb = popCount $ ydb .&. nopawns
+          !ywr = popCount $ ydr .&. nopawns
           comb !oR !oQ !wb !wr = let r = oR * wr
                                      q = oQ * (wb + wr)
                                  in r + q*q
-          own = comb yrooks yqueens mwb mwr
-          adv = comb mrooks mqueens ywb ywr
+          !own = comb yrooks yqueens mwb mwr
+          !adv = comb mrooks mqueens ywb ywr
+          !ko = adv - own
           -- King on pawns: more is better (now linear)
-          pmkpa = popCount (myKAttacs p .&. pawns p)
-          pykpa = popCount (yoKAttacs p .&. pawns p)
-          !kpa = pmkpa - pykpa
+          !kpa = popCount (myKAttacs p .&. pawns p)
+               - popCount (yoKAttacs p .&. pawns p)
           -- Threat by king only pieces:
           -- pieces attacked by king and not defended by a pawn
           pmktr = popCount (myKAttacs p .&. yo p .&. nopawns `less` yoPAttacs p)
           pyktr = popCount (yoKAttacs p .&. me p .&. nopawns `less` myPAttacs p)
           !ktr = pmktr - pyktr
+          -- King alignment with bishops, rooks & queens attacks over figures
+          !mab = popCount $ mdb .&. (bishops p .&. yo p)
+          !mar = popCount $ mdr .&. (rooks   p .&. yo p)
+          !maq = popCount $ (mdb .|. mdr) .&. (queens  p .&. yo p)
+          !yab = popCount $ ydb .&. (bishops p .&. me p)
+          !yar = popCount $ ydr .&. (rooks   p .&. me p)
+          !yaq = popCount $ (ydb .|. ydr) .&. (queens  p .&. me p)
+          !kab = mab - yab
+          !kar = mar - yar
+          !kaq = maq - yaq
 
 promoW, promoB :: Square -> Square
 promoW s = 56 + (s .&. 7)
@@ -471,13 +498,14 @@ mobiLity p ew mide
           pbw = occup p `unsafeShiftR` 8
           pbb = occup p `unsafeShiftL` 8
 
--- No pawn mobility (which, calculated as attacks, is useless)
+-- Pawn mobility: only attacks (pushes are considered in blocked pawns)
 -- Mobility inspired by Stockfish, with mobility aria
 mobDiff :: MyPos -> BBoard -> BBoard -> BBoard -> BBoard -> EvalWeights -> MidEnd -> MidEnd
 mobDiff p mylr yolr mypb yopb ew = mad (ewMobilityKnight ew) n .
                                    mad (ewMobilityBishop ew) b .
                                    mad (ewMobilityRook   ew) r .
-                                   mad (ewMobilityQueen  ew) q
+                                   mad (ewMobilityQueen  ew) q .
+                                   mad (ewMobilityPawn   ew) a
     where !myPMA = me p .&. pawns p .&. (mylr .|. mypb)
           !yoPMA = yo p .&. pawns p .&. (yolr .|. yopb)
           !myMA  = complement $ myPMA .|. (kings p .&. me p) .|. yoPAttacs p
@@ -494,6 +522,7 @@ mobDiff p mylr yolr mypb yopb ew = mad (ewMobilityKnight ew) n .
           !b = myB - yoB
           !r = myR - yoR
           !q = myQ - yoQ
+          !a = popCount (myPAttacs p .&. yo p) - popCount (yoPAttacs p .&. me p)
 
 ------ Center control ------
 
@@ -502,6 +531,7 @@ mobDiff p mylr yolr mypb yopb ew = mad (ewMobilityKnight ew) n .
 -- For knights: also position on extended center
 centerDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 centerDiff p !ew = mad (ewCenterPAtts ew) pd .
+                   mad (ewCenterPOcc  ew) po .
                    mad (ewCenterNAtts ew) nd .
                    mad (ewCenterNOcc  ew) no .
                    mad (ewCenterBAtts ew) bd .
@@ -511,6 +541,9 @@ centerDiff p !ew = mad (ewCenterPAtts ew) pd .
     where !mpa = popCount $ myPAttacs p .&. center
           !ypa = popCount $ yoPAttacs p .&. center
           !pd  = mpa - ypa
+          !mpo = popCount $ me p .&. center .&. pawns p
+          !ypo = popCount $ yo p .&. center .&. pawns p
+          !po  = mpo - ypo
           !mna = popCount $ myNAttacs p .&. excent
           !yna = popCount $ yoNAttacs p .&. excent
           !nd  = mna - yna

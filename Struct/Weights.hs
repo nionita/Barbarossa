@@ -14,10 +14,17 @@ import Struct.ParamsPre
 weights :: [EvalWeightSpec]
 weights = [
         ("ewMaterialDiff",    (   8,    8)),
+        ("ewMaterQR",         (   0,    0)),
+        ("ewMaterQN",         (   0,    0)),
+        ("ewMaterFigs",       (   0,    0)),
+        ("ewMaterPawns",      (   0,    0)),
         ("ewKingSafe",        (   1,    0)),
         ("ewKingOpen",        (   2,    4)),
         ("ewKingPlaceCent",   (   8,    1)),
         ("ewKingPlacePwns",   (   0,    4)),
+        ("ewKingAlignB",      (   0,    0)),
+        ("ewKingAlignR",      (   0,    0)),
+        ("ewKingAlignQ",      (   0,    0)),
         ("ewKingPawn",        (   3,   50)),
         ("ewKingThreat",      (   0,  300)),
         ("ewRookHOpen",       ( 162,  182)),	-- DSPSA with Adadelta
@@ -28,7 +35,9 @@ weights = [
         ("ewMobilityBishop",  (  67,   32)),	-- texel2 / o: 61, 29
         ("ewMobilityRook",    (  32,   40)),	-- texel2 / o: 32, 39
         ("ewMobilityQueen",   (   4,   22)),	-- texel2 / o:  4, 22
+        ("ewMobilityPawn",    (   0,    0)),
         ("ewCenterPAtts",     (  73,   57)),
+        ("ewCenterPOcc",      (   0,    0)),
         ("ewCenterNAtts",     (  33,    0)),
         ("ewCenterBAtts",     (  78,   11)),
         ("ewCenterRAtts",     (  14,   22)),	-- DSPSA ...
