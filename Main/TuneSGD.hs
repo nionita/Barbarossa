@@ -387,17 +387,14 @@ lossDist :: Loss
 lossDist tgsc _ sc = abs (tgsc - sc)
 
 -- Score/result sigmoid loss model, ignore too high scores
-lossScoreRez :: Loss
-lossScoreRez tgsc rez sc
-    | tgsc < maxScore && tgsc > - maxScore = x * x
-    | otherwise                            = 0
-    where wdl_tgsc   = sigmoid (scoreSigmoidScale * tgsc)
-          wdl_target = lamsc * wdl_tgsc + (1 - lamsc) * rez / 2
-          wdl_model  = sigmoid (scoreSigmoidScale * sc)
+lossScoreRez :: Double -> Double -> Double -> Loss
+lossScoreRez maxScore scale frasc tgsc rez sc
+    | abs tgsc <= maxScore = x * x
+    | otherwise            = 0
+    where wdl_tgsc   = sigmoid (scale * tgsc)
+          wdl_target = frasc * wdl_tgsc + (1 - frasc) * rez / 2
+          wdl_model  = sigmoid (scale * sc)
           x = wdl_target - wdl_model
-          scoreSigmoidScale = 1 / 600
-          lamsc = 0.2
-          maxScore = 2000
 
 -- Score/sigmoid loss model, no result
 -- The target score sigmoid decides the weight of the loss,
@@ -414,7 +411,7 @@ lossScoreWeight scale tgsc _ sc = x * x * weight
 -- Score/sigmoid loss model, no result
 -- The target score sigmoid decides the weight of the loss,
 -- which itself is the squared error of sigmoids
--- We have 2 scales, one for the score inself and one for the weight
+-- We have 2 scales, one for the score itself and one for the weight
 lossScoreSigWeight :: Double -> Double -> Loss
 lossScoreSigWeight sscale wscale tgsc _ sc = x * x * weight
     where wdl_tgsc  = sigmoid (sscale * tgsc)
@@ -823,6 +820,7 @@ trainParams ds opts = do
               | optLossFun opts == 2 = lossScoreOutside   (optLossLuft opts) (optSigScale opts)
               | optLossFun opts == 3 = lossSF             (optSigScale opts) (optWeiScale opts)
               | optLossFun opts == 4 = lossExpLinear      (optSigScale opts)
+              | optLossFun opts == 5 = lossScoreRez       2000 (optSigScale opts) 0.5
               | otherwise            = lossRez            (optSigScale opts)
         tsi = TrainState {
             tsLoss    = lossf,
@@ -890,7 +888,7 @@ writeWeights opts preamb names best = withFile (optOutPath opts) WriteMode $ \fo
     -- corresponding to mid & end
     let phases = map takeBaseName             names
         pnames = map (drop 1 . takeExtension) names	-- takeExtention gives ".ewKingSafe"
-        npvs   = zipWith3 (\n p v -> (n, (ordPhase p, round(v)))) pnames phases (U.toList best)
+        npvs   = zipWith3 (\n p v -> (n, (ordPhase p, round v))) pnames phases (U.toList best)
         trips  = map snd $ sort $ consumeWeights $ sort $ zip npvs [1..]
     forM_ (zip [0::Int ..] trips) $ \(i, (n, v1, v2)) -> do
         if (i > 0) then hPutStr fo "      , " else hPutStr fo "        "
@@ -926,6 +924,7 @@ searchParams ds opts = do
               | optLossFun opts == 2 = lossScoreOutside   (optLossLuft opts) (optSigScale opts)
               | optLossFun opts == 3 = lossSF             (optSigScale opts) (optWeiScale opts)
               | optLossFun opts == 4 = lossExpLinear      (optSigScale opts)
+              | optLossFun opts == 5 = lossScoreRez       2000 (optSigScale opts) 0.5
               | otherwise            = lossRez            (optSigScale opts)
         opi = OptimState {
             opLoss    = lossf,
@@ -936,7 +935,7 @@ searchParams ds opts = do
             opFixIdx  = optFixIdx opts,
             opHistory = []
         }
-    opf <- loopCount optimStep opi
+    opf <- loopCount optimDim opi
     putStrLn "History:"
     forM_ (reverse $ opHistory opf) $ \(_, l, i) -> putStrLn $ "Loss " ++ show l ++ ": " ++ show i
     case opHistory opf of
@@ -949,13 +948,12 @@ searchParams ds opts = do
 optDims :: Int
 optDims = length optSpaceInit
 
-optimStep :: Int -> OptimState -> IO (Bool, OptimState)
-optimStep k op
+optimDim :: Int -> OptimState -> IO (Bool, OptimState)
+optimDim k op
     | k > opMax op = return (False, op)
-    | opFixIdx op >= 0,
-      ix <- (k - 1) `mod` optDims,
-      opFixIdx op == ix = do
-          putStrLn $ "<<< Skip idx " ++ show ix
+    | opFixIdx op >= 0
+      && opFixIdx op == ix = do
+          putStrLn $ "<<< Skip dimension " ++ show ix ++ " (" ++ show k ++ ")"
           return (True, op)
     | otherwise = do
     let ((best, bl, since), first)
@@ -964,29 +962,34 @@ optimStep k op
     if opFails op > 0 && since > opFails op
        then return (False, op)
        else do
-           let candidates = generateCandidates best first k
+           let candidates = generateCandidates best first ix
                ds = opDataset op
-               tx = "Optimize " ++ show k
+               tx = "Optimize " ++ show k ++ "(" ++ dimIdxToDimName ix ++ ")"
            eam <- evaluateLoss tx (opLoss op) candidates (dsTrainFiles ds) (dsSampleFunc ds)
            let (mini, bl') = bestLoss eam
            if bl' < bl
               then do
                   let best' = candidates !! mini
                       oph   = (best', bl', 0) : opHistory op
-                  putStrLn $ "*** New best: " ++ show bl' ++ " with " ++ show best'
+                      gain  = round ((bl - bl') * 1000000 / bl) :: Int
+                  putStrLn $ "*** New best: " ++ show bl' ++ " < " ++ show bl ++ "(" ++ show gain ++ " ppm)"
+                  putStrLn $ show best'
                   return (True, op { opHistory = oph })
               else do
                   let oph = (best, bl, since + 1) : drop 1 (opHistory op)
                   return (True, op { opHistory = oph })
+    where ix = (k - 1) `mod` optDims
 
 generateCandidates :: OptParams -> Bool -> Int -> [OptParams]
-generateCandidates c first k
+generateCandidates c first i
     | first     = c : rs
     | otherwise = rs
-    where i = (k - 1) `mod` optDims
-          rs = le ++ ri
-          le = map (flip (vecChange c) i) [-1, -2, -4, -8]
-          ri = map (flip (vecChange c) i) [ 1,  2,  4,  8]
+    where rs = le ++ ri
+          le = map (flip (vecChange c) i) [-1, -2, -4, -8, -16]
+          ri = map (flip (vecChange c) i) [ 1,  2,  4,  8,  16]
+
+dimIdxToDimName :: Int -> String
+dimIdxToDimName = (!!) optSpaceNames
 
 -- Find the minimum of the Rosenbrock function
 minRosenbrock :: Double -> Double -> Double -> Int -> IO ()
