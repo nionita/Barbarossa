@@ -50,7 +50,8 @@ data Options = Options {
         optMaxChange :: Double,	-- max change per parameter
         optLossLuft  :: Double,	-- loss luft (domain of 0 loss) in centipawns
         optSigScale  :: Double,	-- sigmoid scale
-        optWeiScale  :: Double	-- sigmoid scale
+        optWeiScale  :: Double,	-- sigmoid scale
+        optScoreWei  :: Double	-- score weight for score/result loss
     }
 
 defaultOptions :: Options
@@ -77,7 +78,8 @@ defaultOptions = Options {
         optMaxChange = 0.01,
         optLossLuft  = 25,
         optSigScale  = 1 / 595,	-- best factor on ccrl3200 train set (all)
-        optWeiScale  = 1 / 200
+        optWeiScale  = 1 / 200,
+        optScoreWei  = 0.5
     }
 
 addIFile :: FilePath -> Options -> Options
@@ -149,6 +151,9 @@ setSigScale ba opt = opt { optSigScale = 1 / read ba }
 setWeiScale :: String -> Options -> Options
 setWeiScale ba opt = opt { optWeiScale = 1 / read ba }
 
+setScoreWei :: String -> Options -> Options
+setScoreWei ba opt = opt { optScoreWei = read ba }
+
 setTolerate :: String -> Options -> Options
 setTolerate ba opt = opt { optTolerate = read ba }
 
@@ -167,14 +172,15 @@ options = [
         Option "l" ["lr"]       (ReqArg addLR      "FLOAT")  "Learning rate (0.1)",
         Option "m" ["max"]      (ReqArg addMaxChg  "FLOAT")  "Max param change (0.01)",
         Option "o" ["output"]   (ReqArg addOFile   "STRING") "Output directory",
-        Option "r" ["rosen"]    (ReqArg  addRosen "INT")     "Minimize Rosenbrock so many steps",
+        Option "q" ["frasc"]    (ReqArg setScoreWei "FLOAT") "Score weight for score/result loss (0.5)",
+        Option "r" ["rosen"]    (ReqArg addRosen "INT")      "Minimize Rosenbrock so many steps",
         Option "s" ["shuffle"]  (NoArg  setShuffle)          "Shuffle training files",
         Option "t" ["train"]    (ReqArg addTrain   "INT")    "Train so many batches",
         Option "v" ["validate"] (ReqArg addValidBa "INT")    "Validate every so many batches (1000)",
-        Option "x" ["xi"]       (ReqArg  addX "INT")         "Start X for Rosenbrock",
-        Option "y" ["yi"]       (ReqArg  addY "INT")         "Start Y for Rosenbrock",
+        Option "x" ["xi"]       (ReqArg addX "INT")          "Start X for Rosenbrock",
+        Option "y" ["yi"]       (ReqArg addY "INT")          "Start Y for Rosenbrock",
         Option "L" ["loss"]     (ReqArg addLossFun "INT")    "Loss function: 0 - 3 (0)",
-        Option "F" ["fix"]      (ReqArg setFixIdx "INT")     "Fix this index 0 - 88 (0)",
+        Option "F" ["fix"]      (ReqArg setFixIdx "INT")     "Fix this index 0 - dimensions (0)",
         Option "R" ["result"]   (NoArg  setResult)           "Input file format: fen,result",
         Option "S" ["score"]    (NoArg  setScore)            "Input file format: fen,score",
         Option "O" ["optim"]    (ReqArg addOptim   "INT")    "Optimize by random search"
@@ -823,7 +829,7 @@ trainParams ds opts = do
               | optLossFun opts == 2 = lossScoreOutside   (optLossLuft opts) (optSigScale opts)
               | optLossFun opts == 3 = lossSF             (optSigScale opts) (optWeiScale opts)
               | optLossFun opts == 4 = lossExpLinear      (optSigScale opts)
-              | optLossFun opts == 5 = lossScoreRez       2000 (optSigScale opts) 0.5
+              | optLossFun opts == 5 = lossScoreRez       2000 (optSigScale opts) (optScoreWei opts)
               | otherwise            = lossRez            (optSigScale opts)
         tsi = TrainState {
             tsLoss    = lossf,
@@ -927,7 +933,7 @@ searchParams ds opts = do
               | optLossFun opts == 2 = lossScoreOutside   (optLossLuft opts) (optSigScale opts)
               | optLossFun opts == 3 = lossSF             (optSigScale opts) (optWeiScale opts)
               | optLossFun opts == 4 = lossExpLinear      (optSigScale opts)
-              | optLossFun opts == 5 = lossScoreRez       2000 (optSigScale opts) 0.5
+              | optLossFun opts == 5 = lossScoreRez       2000 (optSigScale opts) (optScoreWei opts)
               | otherwise            = lossRez            (optSigScale opts)
         opi = OptimState {
             opLoss    = lossf,
@@ -970,19 +976,22 @@ optimDim k op
                tx = "Optimize " ++ show k ++ " (" ++ dimIdxToDimName ix ++ ")"
            eam <- evaluateLoss tx (opLoss op) candidates (dsTrainFiles ds) (dsSampleFunc ds)
            let (mini, bl') = bestLoss eam
-           if bl' < bl
+               blf | first     = firstLoss eam	-- original loss before any change
+                   | otherwise = bl
+           if bl' < blf
               then do
                   let best' = candidates !! mini
                       oph   = (best', bl', 0) : opHistory op
-                      gain  = round ((bl - bl') * 1000000 / bl) :: Int
-                  putStrLn $ "*** New best: " ++ show bl' ++ " < " ++ show bl ++ " (" ++ show gain ++ " ppm)"
+                      gain  = round ((blf - bl') * 1000000 / blf) :: Int
+                  putStrLn $ "*** New best: " ++ show bl' ++ " < " ++ show blf ++ " (" ++ show gain ++ " ppm)"
                   putStrLn $ show best'
                   return (True, op { opHistory = oph })
               else do
-                  let oph = (best, bl, since + 1) : drop 1 (opHistory op)
+                  let oph = (best, blf, since + 1) : drop 1 (opHistory op)
                   return (True, op { opHistory = oph })
     where ix = (k - 1) `mod` optDims
 
+-- On the first step we also evaluate the original weights (first "candidate")
 generateCandidates :: OptParams -> Bool -> Int -> [OptParams]
 generateCandidates c first i
     | first     = c : rs
