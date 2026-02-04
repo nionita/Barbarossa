@@ -12,6 +12,7 @@ module Tune.EvalAccum (
     reportEATrip,
     reportEAStat,
     bestLoss,
+    firstLoss,
 ) where
 
 import Control.Monad (when, forM_)
@@ -69,6 +70,9 @@ instance EvalAccum EAMulti where
 bestLoss :: EAMulti -> (Int, Double)
 bestLoss (EAMulti _ lss) = (i, U.unsafeIndex lss i)
     where i = U.minIndex lss
+
+firstLoss :: EAMulti -> Double
+firstLoss (EAMulti _ lss) = U.unsafeIndex lss 0
 
 -- A data structure to calculate the next step in optimizing over the whole dataset
 -- by moving the current best towards better scores depending on the error, but less for
