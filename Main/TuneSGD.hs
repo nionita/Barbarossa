@@ -956,7 +956,7 @@ optimDim k op
     | k > opMax op = return (False, op)
     | opFixIdx op >= 0
       && opFixIdx op == ix = do
-          putStrLn $ "<<< Skip dimension " ++ show ix ++ " (" ++ show k ++ ")"
+          putStrLn $ "<<< Skip dimension " ++ show ix ++ " (" ++ dimIdxToDimName ix ++ ")"
           return (True, op)
     | otherwise = do
     let ((best, bl, since), first)
@@ -967,7 +967,7 @@ optimDim k op
        else do
            let candidates = generateCandidates best first ix
                ds = opDataset op
-               tx = "Optimize " ++ show k ++ "(" ++ dimIdxToDimName ix ++ ")"
+               tx = "Optimize " ++ show k ++ " (" ++ dimIdxToDimName ix ++ ")"
            eam <- evaluateLoss tx (opLoss op) candidates (dsTrainFiles ds) (dsSampleFunc ds)
            let (mini, bl') = bestLoss eam
            if bl' < bl
@@ -975,7 +975,7 @@ optimDim k op
                   let best' = candidates !! mini
                       oph   = (best', bl', 0) : opHistory op
                       gain  = round ((bl - bl') * 1000000 / bl) :: Int
-                  putStrLn $ "*** New best: " ++ show bl' ++ " < " ++ show bl ++ "(" ++ show gain ++ " ppm)"
+                  putStrLn $ "*** New best: " ++ show bl' ++ " < " ++ show bl ++ " (" ++ show gain ++ " ppm)"
                   putStrLn $ show best'
                   return (True, op { opHistory = oph })
               else do
