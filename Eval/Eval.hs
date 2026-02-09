@@ -107,25 +107,35 @@ gamePhase p = g
 -- Not reduced: 64
 scaleFactor :: MyPos -> Int -> Int
 scaleFactor p eg
-    | pawnCountWin == 0
+    | eg == 0                                             = 64
+    | pawnsWin == 0
       && nonPawnWin - nonPawnLos <= bishopMg              = noPawnsLowMatDiff nonPawnWin nonPawnLos
     | oppoBishops
       && nonPawnWin == bishopMg && nonPawnLos == bishopMg = 22 + 4 * popCount (passed p .&. winPart)
     | oppoBishops                                         = 22 + 3 * popCount winPart
-    | otherwise                                           = 64
+    | nonPawnWin == rookMg && nonPawnLos == rookMg
+      && pawnCountWin - pawnCountLos <= 1                 = rookEndgame pawnsWin kpLos
+    | popCount (queens p) == 1                            = oneQueen p winPart losPart
+    | otherwise                                           = min 64 (36 + 7 * pawnCountWin)
     where !winPart | eg > 0    = me p
                    | otherwise = yo p
-          !pawnCountWin = popCount $ pawns p .&. winPart
+          !pawnsWin = pawns p .&. winPart
+          pawnCountWin = popCount pawnsWin
           bishopMg = matPiece1 Bishop
+          rookMg   = matPiece1 Rook
           nonPawnWin = npMat winPart
           losPart = occup p `less` winPart
           nonPawnLos = npMat losPart
+          pawnCountLos = popCount $ pawns p .&. losPart
+          -- Is this with kpLos correct? Needs more tests!
+          kpLos | eg > 0    = yoKAttacs p .&. pawns p .&. yo p
+                | otherwise = myKAttacs p .&. pawns p .&. me p
           oppoBishops | popCount (bishops p) /= 2          = False
                       | popCount (bishops p .&. me p) /= 1 = False
                       | otherwise = popCount (bishops p .&. darkSquares)  == 1
                                  && popCount (bishops p .&. lightSquares) == 1
           npMat part = matPiece1 Queen  * popCount (queens  p .&. part)
-                     + matPiece1 Rook   * popCount (rooks   p .&. part)
+                     + rookMg           * popCount (rooks   p .&. part)
                      + bishopMg         * popCount (bishops p .&. part)
                      + matPiece1 Knight * popCount (knights p .&. part)
 
@@ -134,6 +144,18 @@ noPawnsLowMatDiff npWin npLos
     | npWin <  matPiece1 Rook   =  0
     | npLos <= matPiece1 Bishop =  4
     | otherwise                 = 14
+
+rookEndgame :: BBoard -> BBoard ->Int
+rookEndgame winp loskp
+    | loskp /= 0 && (flankA .&. winp == 0 || flankH .&. winp == 0) = 36
+    | otherwise                                                    = 64
+    where flankA = fileA .|. fileB .|. fileC .|. fileD
+          flankH = fileE .|. fileF .|. fileG .|. fileH
+
+oneQueen :: MyPos -> BBoard -> BBoard -> Int
+oneQueen p winp losp
+    | queens p .&. winp /= 0 = 37 + 3 * popCount (losp .&. (bishops p .|. knights p))
+    | otherwise              = 37 + 3 * popCount (winp .&. (bishops p .|. knights p))
 
 evalSideNoPawns :: MyPos -> EvalState -> Int
 evalSideNoPawns p !sti
