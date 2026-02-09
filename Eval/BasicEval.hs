@@ -1,9 +1,10 @@
 module Eval.BasicEval (
-    matPiece, seeValue
+    matPiece, seeValue, matPiece1
 ) where
 
 import Struct.Struct
 
+{-# INLINE matPiece1 #-}
 matPiece1 :: Piece -> Int
 matPiece1 Pawn   = 100
 matPiece1 Knight = 360

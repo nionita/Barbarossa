@@ -263,9 +263,6 @@ filterQuietPos hi ho mn k i = do
 prettyQuiet :: MyPos -> Bool
 prettyQuiet _ = True
 
-get50Moves :: MyPos -> Int
-get50Moves _ = 10
-
 -- Filter out positions with too small game phase from the input file
 -- The fen is the first part of the line, before the first ","
 filterMidGamePos :: Handle -> Handle -> Maybe Int -> Int -> Int -> IO (Bool, Int)

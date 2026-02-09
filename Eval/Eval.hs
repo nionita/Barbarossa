@@ -24,6 +24,7 @@ import Struct.MidEnd
 import Moves.Moves
 import Moves.BitBoard
 import Moves.Pattern
+import Eval.BasicEval (matPiece1)
 
 ------------------------------------------------------------------
 -- Parameters of this module ------------
@@ -44,7 +45,7 @@ matesc :: Int
 matesc = 20000 - 255	-- warning, this is also defined in Base.hs!!
 
 useSpecials :: Bool
-useSpecials = True
+useSpecials = False
 
 {-# INLINE posEval #-}
 posEval :: MyPos -> EvalState -> Int
@@ -69,7 +70,7 @@ evalDispatch p !sti
     | otherwise    = normalEval p sti
 
 normalEval :: MyPos -> EvalState -> Int
-normalEval p !sti = sc
+normalEval p !sti = ((sc * (100 - get50Moves p)) `div` 100) `unsafeShiftR` (shift2Cp + 8)
     where ep     = esEParams  sti
           ew     = esEWeights sti
           !gph   = gamePhase p
@@ -91,8 +92,8 @@ normalEval p !sti = sc
                  , advPawns p ew
                  , passPawns gph ep p ew
               ]
-          !sc = ((mid nev + epMovingMid ep) * gph + (end nev + epMovingEnd ep) * (256 - gph))
-                   `unsafeShiftR` (shift2Cp + 8)
+          !eg = (end nev * scaleFactor p (end nev)) `unsafeShiftR` 6
+          !sc = (mid nev + epMovingMid ep) * gph + (eg + epMovingEnd ep) * (256 - gph)
 
 gamePhase :: MyPos -> Int
 gamePhase p = g
@@ -101,6 +102,38 @@ gamePhase p = g
           bs = popCount $ bishops p
           ns = popCount $ knights p
           !g = qs * 39 + rs * 20 + (bs + ns) * 12	-- opening: 254, end: 0
+
+-- For specific material configurations which reduce the chance of winning
+-- Not reduced: 64
+scaleFactor :: MyPos -> Int -> Int
+scaleFactor p eg
+    | pawnCountWin == 0
+      && nonPawnWin - nonPawnLos <= bishopMg              = noPawnsLowMatDiff nonPawnWin nonPawnLos
+    | oppoBishops
+      && nonPawnWin == bishopMg && nonPawnLos == bishopMg = 22 + 4 * popCount (passed p .&. winPart)
+    | oppoBishops                                         = 22 + 3 * popCount winPart
+    | otherwise                                           = 64
+    where !winPart | eg > 0    = me p
+                   | otherwise = yo p
+          !pawnCountWin = popCount $ pawns p .&. winPart
+          bishopMg = matPiece1 Bishop
+          nonPawnWin = npMat winPart
+          losPart = occup p `less` winPart
+          nonPawnLos = npMat losPart
+          oppoBishops | popCount (bishops p) /= 2          = False
+                      | popCount (bishops p .&. me p) /= 1 = False
+                      | otherwise = popCount (bishops p .&. darkSquares)  == 1
+                                 && popCount (bishops p .&. lightSquares) == 1
+          npMat part = matPiece1 Queen  * popCount (queens  p .&. part)
+                     + matPiece1 Rook   * popCount (rooks   p .&. part)
+                     + bishopMg         * popCount (bishops p .&. part)
+                     + matPiece1 Knight * popCount (knights p .&. part)
+
+noPawnsLowMatDiff :: Int -> Int -> Int
+noPawnsLowMatDiff npWin npLos
+    | npWin <  matPiece1 Rook   =  0
+    | npLos <= matPiece1 Bishop =  4
+    | otherwise                 = 14
 
 evalSideNoPawns :: MyPos -> EvalState -> Int
 evalSideNoPawns p !sti
