@@ -111,8 +111,8 @@ scaleFactor p eg
     | pawnsWin == 0
       && nonPawnWin - nonPawnLos <= bishopMg              = noPawnsLowMatDiff nonPawnWin nonPawnLos
     | oppoBishops
-      && nonPawnWin == bishopMg && nonPawnLos == bishopMg = 22 + 4 * popCount (passed p .&. winPart)
-    | oppoBishops                                         = 22 + 3 * popCount winPart
+      && nonPawnWin == bishopMg && nonPawnLos == bishopMg = 22 + 14 * (pawnCountWin - pawnCountLos)
+    | oppoBishops                                         = 22 +  3 * popCount winPart
     | nonPawnWin == rookMg && nonPawnLos == rookMg
       && pawnCountWin - pawnCountLos <= 1                 = rookEndgame pawnsWin kpLos
     | popCount (queens p) == 1                            = oneQueen p winPart losPart
