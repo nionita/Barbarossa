@@ -45,32 +45,50 @@ matesc :: Int
 matesc = 20000 - 255	-- warning, this is also defined in Base.hs!!
 
 useSpecials :: Bool
-useSpecials = False
+useSpecials = True
 
 {-# INLINE posEval #-}
 posEval :: MyPos -> EvalState -> Int
 posEval p !sti = scc
-    where !sce | useSpecials = evalDispatch p sti
-               | otherwise   = normalEval   p sti
+    where !sce | useSpecials = evalDispatch          p sti
+               | otherwise   = normalEval NotMatched p sti
           !scl = min matesc $ max (-matesc) sce
           !scc = if granCoarse > 0 then (scl + granCoarse2) .&. granCoarseM else scl
 
 -- Don't use specials for tuning
 {-# INLINE posExactEval #-}
 posExactEval :: MyPos -> EvalState -> Int
-posExactEval = normalEval
+posExactEval = normalEval NotMatched
+
+data SpecialResult = NotMatched | Score Int | Scale Int
+
+type SpecialEval = MyPos -> SpecialResult
 
 evalDispatch :: MyPos -> EvalState -> Int
-evalDispatch p !sti
-    | pawns p == 0 = evalNoPawns p sti
-    | pawns p .&. me p == 0 ||
-      pawns p .&. yo p == 0 = evalSideNoPawns p sti
-    | kings p .|. pawns p == occup p,
-      Just r <- pawnEndGame p = r
-    | otherwise    = normalEval p sti
+evalDispatch p sti
+    -- = case trySpecials p (enp ++ esnp ++ peg) of
+    = case trySpecials p (enp ++ peg) of
+          Score s -> s
+          sr      -> normalEval sr p sti
+    where -- No pawns at all
+          enp  | pawns p == 0 = [evalNoPawns]
+               | otherwise    = []
+          -- Pawns end game
+          peg  | kings p .|. pawns p == occup p = [pawnEndGame]
+               | otherwise    = []
 
-normalEval :: MyPos -> EvalState -> Int
-normalEval p !sti = ((sc * (100 - get50Moves p)) `div` 100) `unsafeShiftR` (shift2Cp + 8)
+-- Try a list of special eval functions
+-- The first match will be the result of the whole try
+-- If matched, a special eval function can return a score or a scale
+trySpecials :: MyPos -> [SpecialEval] -> SpecialResult
+trySpecials p = go
+    where go []       = NotMatched
+          go (se:ses) = case se p of
+                            NotMatched -> go ses
+                            sr         -> sr
+
+normalEval :: SpecialResult -> MyPos -> EvalState -> Int
+normalEval sr p !sti = ((sc * (100 - get50Moves p)) `div` 100) `unsafeShiftR` (shift2Cp + 8)
     where ep     = esEParams  sti
           ew     = esEWeights sti
           !gph   = gamePhase p
@@ -92,7 +110,7 @@ normalEval p !sti = ((sc * (100 - get50Moves p)) `div` 100) `unsafeShiftR` (shif
                  , advPawns p ew
                  , passPawns gph ep p ew
               ]
-          !eg = (end nev * scaleFactor p (end nev)) `unsafeShiftR` 6
+          !eg = (end nev * scaleFactor p (end nev) sr) `unsafeShiftR` 6
           !sc = (mid nev + epMovingMid ep) * gph + (eg + epMovingEnd ep) * (256 - gph)
 
 gamePhase :: MyPos -> Int
@@ -105,8 +123,8 @@ gamePhase p = g
 
 -- For specific material configurations which reduce the chance of winning
 -- Not reduced: 64
-scaleFactor :: MyPos -> Int -> Int
-scaleFactor p eg
+scaleFactor :: MyPos -> Int -> SpecialResult -> Int
+scaleFactor p eg sr
     | eg == 0                                             = 64
     | pawnsWin == 0
       && nonPawnWin - nonPawnLos <= bishopMg              = noPawnsLowMatDiff nonPawnWin nonPawnLos
@@ -116,7 +134,7 @@ scaleFactor p eg
     | nonPawnWin == rookMg && nonPawnLos == rookMg
       && pawnCountWin - pawnCountLos <= 1                 = rookEndgame pawnsWin kpLos
     | popCount (queens p) == 1                            = oneQueen p winPart losPart
-    | otherwise                                           = min 64 (36 + 7 * pawnCountWin)
+    | otherwise                                           = min sf (36 + 7 * pawnCountWin)
     where !winPart | eg > 0    = me p
                    | otherwise = yo p
           !pawnsWin = pawns p .&. winPart
@@ -138,6 +156,9 @@ scaleFactor p eg
                      + rookMg           * popCount (rooks   p .&. part)
                      + bishopMg         * popCount (bishops p .&. part)
                      + matPiece1 Knight * popCount (knights p .&. part)
+          sf = case sr of
+                   Scale s -> s
+                   _       -> 64
 
 noPawnsLowMatDiff :: Int -> Int -> Int
 noPawnsLowMatDiff npWin npLos
@@ -157,42 +178,29 @@ oneQueen p winp losp
     | queens p .&. winp /= 0 = 37 + 3 * popCount (losp .&. (bishops p .|. knights p))
     | otherwise              = 37 + 3 * popCount (winp .&. (bishops p .|. knights p))
 
-evalSideNoPawns :: MyPos -> EvalState -> Int
-evalSideNoPawns p !sti
-    | npwin && insufficient = 0
-    | npwin && lessRook p   = nsc `div` 4
-    | otherwise             = nsc
-    where nsc = normalEval p sti
-          npside = if pawns p .&. me p == 0 then me p else yo p
-          npwin = npside == me p && nsc > 0 || npside == yo p && nsc < 0
-          insufficient = majorcnt == 0 && (minorcnt == 1 || minorcnt == 2 && bishopcnt == 0)
-          bishopcnt = popCount $ bishops p .&. npside
-          minorcnt  = popCount $ (bishops p .|. knights p) .&. npside
-          majorcnt  = popCount $ (queens p .|. rooks p) .&. npside
-
 -- These evaluation function distiguishes between some known finals with no pawns
-evalNoPawns :: MyPos -> EvalState -> Int
-evalNoPawns p !sti = sc
-    where !sc | onlykings   = 0
-              | kmk || knnk = 0		-- one minor or two knights
-              | kbbk        = mateKBBK p kaloneyo	-- 2 bishops
-              | kbnk        = mateKBNK p kaloneyo	-- bishop + knight
-              | kMxk        = mateKMajxK p kaloneyo	-- simple mate with at least one major
-              | lessRook p  = (normalEval p sti) `div` 2
-              | otherwise   = normalEval p sti
-          nokings  = complement (kings p)
-          kaloneme = me p .&. nokings == 0
-          kaloneyo = yo p .&. nokings == 0
-          onlykings = kaloneme && kaloneyo
-          kmk  = (kaloneme || kaloneyo) && minorcnt == 1 && majorcnt == 0
-          knnk = (kaloneme || kaloneyo) && minorcnt == 2 && majorcnt == 0 && bishops p == 0
-          kbbk = (kaloneme || kaloneyo) && minorcnt == 2 && majorcnt == 0 && knights p == 0
-          kbnk = (kaloneme || kaloneyo) && minorcnt == 2 && not (knnk || kbbk)
-          kMxk = (kaloneme || kaloneyo) && majorcnt > 0
-          minor   = bishops p .|. knights p
-          minorcnt = popCount minor
-          major    = queens p .|. rooks p
-          majorcnt = popCount major
+evalNoPawns :: SpecialEval
+evalNoPawns p
+    | kings p == occup p = Score 0
+    | onealone           = trySpecials p [kingAlone kaloneyo]
+    | otherwise          = NotMatched
+    where onealone = kaloneme || kaloneyo
+          kaloneme = me p .&. kings p == me p
+          kaloneyo = yo p .&. kings p == yo p
+
+kingAlone :: Bool -> SpecialEval
+kingAlone mywin p
+    | majorcnt >  0 = trySpecials p [mateKMajxK mywin]
+    | minorcnt == 2 = trySpecials p (knnk ++ kbbk ++ kbnk) -- the order is important here!
+    | minorcnt == 1 = Score 0
+    | otherwise     = NotMatched	-- here should be maybe same like KBBK
+    where knnk | bishops p == 0 = [const (Score 0)]
+               | otherwise      = []
+          kbbk | knights p == 0 = [mateKBBK mywin]
+               | otherwise      = []
+          kbnk = [mateKBNK mywin]
+          minorcnt = popCount $ bishops p .|. knights p
+          majorcnt = popCount $ queens  p .|. rooks   p
 
 -- Has one of the players less then one rook advantage (without pawns)?
 -- In this case it is drawish (if the winning part has no pawns)
@@ -212,21 +220,21 @@ lessRook p | mq == yq && mr == yr = mb + mn - yb - yn `elem` [-1, 0, 1]
 winBonus :: Int
 winBonus = 200	-- when it's known win
 
-mateKBBK :: MyPos -> Bool -> Int
+mateKBBK :: Bool -> SpecialEval
 mateKBBK = scoreToMate centerDistance
 
 -- It seems that with 2 bishops or 1 major it's the same
 -- rule to go to mate
-mateKMajxK :: MyPos -> Bool -> Int
+mateKMajxK :: Bool -> SpecialEval
 mateKMajxK = mateKBBK
 
-mateKBNK :: MyPos -> Bool -> Int
-mateKBNK p = scoreToMate (bnMateDistance wbish) p
+mateKBNK :: Bool -> SpecialEval
+mateKBNK mywin p = scoreToMate (bnMateDistance wbish) mywin p
     where wbish = bishops p .&. lightSquares /= 0
 
 {-# INLINE scoreToMate #-}
-scoreToMate :: (Square -> Int) -> MyPos -> Bool -> Int
-scoreToMate f p mywin = msc
+scoreToMate :: (Square -> Int) -> Bool -> SpecialEval
+scoreToMate f mywin p = Score msc
     where !kadv = if mywin then ky else km
           !km = kingSquare (kings p) (me p)
           !ky = kingSquare (kings p) (yo p)
@@ -950,12 +958,12 @@ advPawns p !ew = mad (ewAdvPawn6 ew) ap6 .
 -- 2. What about the rest of pawns? Here we make a trick: we shift the passed
 -- pawns virtually one row back, which gives less points for the possibly remaining
 -- passed pawns - now with queens)
-pawnEndGame :: MyPos -> Maybe Int
+pawnEndGame :: SpecialEval
 pawnEndGame p
-    | not (null mescds) && not (null yescds) = Just dpr
-    | not (null mescds)                      = Just myrace
-    |                      not (null yescds) = Just yorace
-    | otherwise                              = Nothing
+    | not (null mescds) && not (null yescds) = Score dpr
+    | not (null mescds)                      = Score myrace
+    |                      not (null yescds) = Score yorace
+    | otherwise                              = NotMatched
     -- | -- here we will consider what is with 2 passed pawns which are far enough from each other
     -- and even with connected (or defended) passed pawns
     where !mfpbb = passed p .&. me p
