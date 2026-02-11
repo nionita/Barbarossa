@@ -203,8 +203,8 @@ main = do
         else if optGener opts
                 then filterFile (optCsvPath opts) (optOutPath opts)
                 else if optTest opts
-                        -- then testLoss opts
-                        then checkStep opts
+                        then testLoss opts
+                        -- then checkStep opts
                         else if optRosen opts > 0
                                 then minRosenbrock (optX opts) (optY opts) (optLR opts) (optRosen opts)
                                 else putStrLn $ "No useful option, should be one of -t, -e or -g"
@@ -500,11 +500,22 @@ train opts = do
     putStrLn $ "Time: " ++ show (diffUTCTime etime stime)
     return ()
 
+optsToLossFunction :: Options -> Loss
+optsToLossFunction opts
+    | optLossFun opts == 1 = lossScoreSigWeight (optSigScale opts) (optWeiScale opts)
+    | optLossFun opts == 2 = lossScoreOutside   (optLossLuft opts) (optSigScale opts)
+    | optLossFun opts == 3 = lossSF             (optSigScale opts) (optWeiScale opts)
+    | optLossFun opts == 4 = lossExpLinear      (optSigScale opts)
+    | optLossFun opts == 5 = lossScoreRez       2000 (optSigScale opts) (optScoreWei opts)
+    | otherwise            = lossRez            (optSigScale opts)
+
 testLoss :: Options -> IO ()
 testLoss opts = do
     ds <- makeDataset False opts
-    EASimple _ _ <- evaluateLoss "Train only" (lossRez $ optSigScale opts)
-                                 [(U.fromList optSpaceInit)] (dsTrainFiles ds) (dsSampleFunc ds)
+    let loss = optsToLossFunction opts
+    EASimple _ l <- evaluateLoss "Train only" loss
+                        [(U.fromList optSpaceInit)] (dsTrainFiles ds) (dsSampleFunc ds)
+    putStrLn $ "Loss: " ++ show l
     return ()
 
 checkStep :: Options -> IO ()
@@ -542,7 +553,7 @@ makeDataset training opts = do
     let filefilter | optType opts == 1 = filteredEpd	-- gets EPD files (*.epd)
                    | optType opts == 0 = justCsv	-- gets CSV files (*.csv)
                    | otherwise         = filteredCsv	-- CSV files with suffix "-filt" (*-filt.csv)
-    trainFiles <- if optOptim opts > 0
+    trainFiles <- if optOptim opts > 0 || optTest opts
                      then getFileList (optCsvPath opts)             False (Just filefilter)
                      else getFileList (optCsvPath opts </> "train") False (Just filefilter)
     testFiles  <- if optOptim opts > 0
@@ -822,12 +833,7 @@ trainParams ds opts = do
         keep = optBatchSz opts - bads
         mkeep | bads == 0 = Nothing
               | otherwise = Just keep
-        lossf | optLossFun opts == 1 = lossScoreSigWeight (optSigScale opts) (optWeiScale opts)
-              | optLossFun opts == 2 = lossScoreOutside   (optLossLuft opts) (optSigScale opts)
-              | optLossFun opts == 3 = lossSF             (optSigScale opts) (optWeiScale opts)
-              | optLossFun opts == 4 = lossExpLinear      (optSigScale opts)
-              | optLossFun opts == 5 = lossScoreRez       2000 (optSigScale opts) (optScoreWei opts)
-              | otherwise            = lossRez            (optSigScale opts)
+        lossf = optsToLossFunction opts
         tsi = TrainState {
             tsLoss    = lossf,
             tsBatchSz = optBatchSz opts,
@@ -926,12 +932,7 @@ data OptimState = OptimState {
 
 searchParams :: Dataset -> Options -> IO ()
 searchParams ds opts = do
-    let lossf | optLossFun opts == 1 = lossScoreSigWeight (optSigScale opts) (optWeiScale opts)
-              | optLossFun opts == 2 = lossScoreOutside   (optLossLuft opts) (optSigScale opts)
-              | optLossFun opts == 3 = lossSF             (optSigScale opts) (optWeiScale opts)
-              | optLossFun opts == 4 = lossExpLinear      (optSigScale opts)
-              | optLossFun opts == 5 = lossScoreRez       2000 (optSigScale opts) (optScoreWei opts)
-              | otherwise            = lossRez            (optSigScale opts)
+    let lossf = optsToLossFunction opts
         opi = OptimState {
             opLoss    = lossf,
             opNames   = optSpaceNames,
