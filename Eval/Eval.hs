@@ -66,7 +66,6 @@ type SpecialEval = MyPos -> SpecialResult
 
 evalDispatch :: MyPos -> EvalState -> Int
 evalDispatch p sti
-    -- = case trySpecials p (enp ++ esnp ++ peg) of
     = case trySpecials p (enp ++ peg) of
           Score s -> s
           sr      -> normalEval sr p sti
@@ -87,6 +86,9 @@ trySpecials p = go
                             NotMatched -> go ses
                             sr         -> sr
 
+-- In the normal evaluation (features & weights) the calculation is in
+-- units of 1/8 centipawns, so when we return the normal score (in centipawns)
+-- we must divide again by 8 (see shift2Cp)
 normalEval :: SpecialResult -> MyPos -> EvalState -> Int
 normalEval sr p !sti = ((sc * (100 - get50Moves p)) `div` 100) `unsafeShiftR` (shift2Cp + 8)
     where ep     = esEParams  sti
@@ -129,12 +131,13 @@ scaleFactor p eg sr
     | pawnsWin == 0
       && nonPawnWin - nonPawnLos <= bishopMg              = noPawnsLowMatDiff nonPawnWin nonPawnLos
     | oppoBishops
-      && nonPawnWin == bishopMg && nonPawnLos == bishopMg = 22 + 14 * (pawnCountWin - pawnCountLos)
-    | oppoBishops                                         = 22 +  3 * popCount winPart
+      && nonPawnWin == bishopMg && nonPawnLos == bishopMg = 18 + 4 * (popCount $ passed p .&. winPart)
+    | oppoBishops                                         = 22 + 3 * popCount winPart
     | nonPawnWin == rookMg && nonPawnLos == rookMg
-      && pawnCountWin - pawnCountLos <= 1                 = rookEndgame pawnsWin kpLos
+      && pawnCountWin - pawnCountLos <= 1                 = rookEndgame winPawnsOneFlank losKingOnOwnPawn
     | popCount (queens p) == 1                            = oneQueen p winPart losPart
-    | otherwise                                           = min sf (36 + 7 * pawnCountWin)
+    -- | otherwise                                           = min sf (36 + 7 * pawnCountWin)	-- this seems too small! For example KRPKB
+    | otherwise                                           = sf
     where !winPart | eg > 0    = me p
                    | otherwise = yo p
           !pawnsWin = pawns p .&. winPart
@@ -144,10 +147,10 @@ scaleFactor p eg sr
           nonPawnWin = npMat winPart
           losPart = occup p `less` winPart
           nonPawnLos = npMat losPart
-          pawnCountLos = popCount $ pawns p .&. losPart
-          -- Is this with kpLos correct? Needs more tests!
-          kpLos | eg > 0    = yoKAttacs p .&. pawns p .&. yo p
-                | otherwise = myKAttacs p .&. pawns p .&. me p
+          pawnsLos = pawns p .&. losPart
+          pawnCountLos = popCount pawnsLos
+          losKingOnOwnPawn | eg > 0    = yoKAttacs p .&. pawnsLos
+                           | otherwise = myKAttacs p .&. pawnsLos
           oppoBishops | popCount (bishops p) /= 2          = False
                       | popCount (bishops p .&. me p) /= 1 = False
                       | otherwise = popCount (bishops p .&. darkSquares)  == 1
@@ -159,6 +162,10 @@ scaleFactor p eg sr
           sf = case sr of
                    Scale s -> s
                    _       -> 64
+          queenSide = fileA .|. fileB .|. fileC .|. fileD
+          kingSide  = fileE .|. fileF .|. fileG .|. fileH
+          -- pawnsOnBothFlanks = pawns p .&. queenSide /= 0 && pawns p .&. kingSide /= 0
+          winPawnsOneFlank  = pawnsWin .&. queenSide == 0 || pawnsWin .&. kingSide == 0
 
 noPawnsLowMatDiff :: Int -> Int -> Int
 noPawnsLowMatDiff npWin npLos
@@ -166,12 +173,10 @@ noPawnsLowMatDiff npWin npLos
     | npLos <= matPiece1 Bishop =  4
     | otherwise                 = 14
 
-rookEndgame :: BBoard -> BBoard ->Int
-rookEndgame winp loskp
-    | loskp /= 0 && (flankA .&. winp == 0 || flankH .&. winp == 0) = 36
-    | otherwise                                                    = 64
-    where flankA = fileA .|. fileB .|. fileC .|. fileD
-          flankH = fileE .|. fileF .|. fileG .|. fileH
+rookEndgame :: Bool -> BBoard ->Int
+rookEndgame winponeflank loskp
+    | winponeflank && loskp /= 0 = 36
+    | otherwise                  = 64
 
 oneQueen :: MyPos -> BBoard -> BBoard -> Int
 oneQueen p winp losp
@@ -202,26 +207,11 @@ kingAlone mywin p
           minorcnt = popCount $ bishops p .|. knights p
           majorcnt = popCount $ queens  p .|. rooks   p
 
--- Has one of the players less then one rook advantage (without pawns)?
--- In this case it is drawish (if the winning part has no pawns)
--- This is a primitive first approach
-lessRook :: MyPos -> Bool
-lessRook p | mq == yq && mr == yr = mb + mn - yb - yn `elem` [-1, 0, 1]
-           | otherwise = False
-    where !mq = popCount $ queens  p .&. me p
-          !yq = popCount $ queens  p .&. yo p
-          !mr = popCount $ rooks   p .&. me p
-          !yr = popCount $ rooks   p .&. yo p
-          !mb = popCount $ bishops p .&. me p
-          !yb = popCount $ bishops p .&. yo p
-          !mn = popCount $ knights p .&. me p
-          !yn = popCount $ knights p .&. yo p
-
 winBonus :: Int
-winBonus = 200	-- when it's known win
+winBonus = 1200	-- known win
 
 mateKBBK :: Bool -> SpecialEval
-mateKBBK = scoreToMate centerDistance
+mateKBBK = scoreToMate pushToEdge
 
 -- It seems that with 2 bishops or 1 major it's the same
 -- rule to go to mate
@@ -229,53 +219,74 @@ mateKMajxK :: Bool -> SpecialEval
 mateKMajxK = mateKBBK
 
 mateKBNK :: Bool -> SpecialEval
-mateKBNK mywin p = scoreToMate (bnMateDistance wbish) mywin p
-    where wbish = bishops p .&. lightSquares /= 0
+mateKBNK mywin p
+    | bishops p .&. lightSquares == 0 = scoreToMate pushToDarkCorner  mywin p
+    | otherwise                       = scoreToMate pushToLightCorner mywin p
 
-{-# INLINE scoreToMate #-}
+-- Make a score to mate the alone king
+-- Given: a function to drive the weak king to some edge or corner (higher value means better score)
+-- and which king is weak (mywin = True means: yours is weak)
+-- The strong king must go near the weak king too
 scoreToMate :: (Square -> Int) -> Bool -> SpecialEval
 scoreToMate f mywin p = Score msc
-    where !kadv = if mywin then ky else km
+    where !kweak | mywin     = ky
+                 | otherwise = km
           !km = kingSquare (kings p) (me p)
           !ky = kingSquare (kings p) (yo p)
-          !distk = squareDistance km ky
-          !distc = f kadv
-          !sc = winBonus + distc*distc - distk*distk
+          !distk = squareDistance km ky	-- distance between kings - drive to low
+          !distc = f kweak	-- driving function: drive to high
+          !sc  = (winBonus + distc * distc - distk * distk) * 10
           !mtr = if moving p == White then mater p else -(mater p)
           !wsc = if mywin then sc else -sc
-          !msc = mtr + wsc
+          !msc = (mtr `unsafeShiftL` shift2Cp) + wsc	-- here the score is in centipawns
 
+{-
 squareDistArr :: UArray Int Int32
 squareDistArr = array (0, 64*64-1) [(sqSqIdx s1 s2, squareDist s1 s2) | s1 <- [0..63], s2 <- [0..63]]
     where squareDist f t = max (abs (fr - tr)) (abs (fc - tc))
-              where (fr, fc) = fromIntegral f `divMod` 8
-                    (tr, tc) = fromIntegral t `divMod` 8
+              where (fr, fc) = rankFile $ fromIntegral f
+                    (tr, tc) = rankFile $ fromIntegral t
 
 squareDistance :: Square -> Square -> Int
 squareDistance !sq1 !sq2 = fromIntegral $ squareDistArr `unsafeAt` sqSqIdx sq1 sq2
 
 sqSqIdx :: Square -> Square -> Int
 sqSqIdx !sq1 !sq2 = (sq1 `unsafeShiftL` 6) + sq2
+-}
 
-{--
+{-# INLINE squareDistance #-}
 squareDistance :: Square -> Square -> Int
-squareDistance f t = max (abs (fr - tr)) (abs (fc - tc))
-    where fr = f `unsafeShiftR` 3
-          tr = t `unsafeShiftR` 3
-          fc = f .&. 7
-          tc = t .&. 7
---}
+squareDistance sq1 sq2 = max (abs $ r1 - r2) (abs $ f1 - f2)
+    where (r1, f1) = rankFile $ fromIntegral sq1
+          (r2, f2) = rankFile $ fromIntegral sq2
 
--- This center distance should be pre calculated
-centerDistance :: Int -> Int
-centerDistance sq = max (r - 4) (3 - r) + max (c - 4) (3 - c)
-    where (r, c) = sq `divMod` 8
+-- Distance to en adge on rank of file (i.e. 0 to 7) - take the nearest edge
+edgeDistance :: Int -> Int
+edgeDistance r = min r (7 - r)
 
--- This distance for knight bishop mate should be pre calculated
--- Here we have to push the adverse king far from center and from the opposite bishop corners
-bnMateDistance :: Bool -> Square -> Int
-bnMateDistance wbish sq = min (squareDistance sq ocor1) (squareDistance sq ocor2)
-    where (ocor1, ocor2) = if wbish then (0, 63) else (7, 56)
+-- pushTo... - used in special evaluations
+-- pushToEdge - drive the weak king to an edge
+-- Values: 0 (in center), 5, 8, 9 (on egde)
+pushToEdge :: Square -> Int
+pushToEdge sq = 9 - md * md
+    where (r, f) = rankFile sq
+          rd = edgeDistance r
+          fd = edgeDistance f
+          md = min rd fd
+
+-- pushToLightCorner: for KBNK end games with light color bishop
+-- push the weak king to A1 or H8
+-- Values: 0 (on diagonale A8H1) to 7 (on A1 or H8)
+pushToDarkCorner :: Square -> Int
+pushToDarkCorner sq = abs $ r + f - 7
+    where (r, f) = rankFile sq
+
+-- pushToLightCorner: for KBNK end games with light color bishop
+-- push the weak king to A8 or H1
+-- Values: 0 (on diagonale A1H8) to 7 (on A8 or H1)
+pushToLightCorner :: Square -> Int
+pushToLightCorner sq = abs $ r - f
+    where (r, f) = rankFile sq
 
 ----------------------------------------------------------------------------
 -- Here we have the implementation of the evaluation items
@@ -413,9 +424,19 @@ kingPlace ep p !ew = mad (ewKingPawn      ew) kpa .
           pyktr = popCount (yoKAttacs p .&. me p .&. nopawns `less` myPAttacs p)
           !ktr = pmktr - pyktr
 
+-- Rank & File of a square
+rankOf :: Square -> Int
+rankOf s = s `unsafeShiftR` 3
+
+fileOf :: Square -> Int
+fileOf s = s .&. 7
+
+rankFile :: Square -> (Int, Int)
+rankFile sq = sq `divMod` 8
+
 promoW, promoB :: Square -> Square
-promoW s = 56 + (s .&. 7)
-promoB s =       s .&. 7
+promoW s = fileOf s + 56
+promoB s = fileOf s
 
 -- We give bonus also for pawn promotion squares, if the pawn is near enough to promote
 -- Give as parameter bitboards for all pawns, white pawns and black pawns for performance
