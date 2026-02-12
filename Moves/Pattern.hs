@@ -59,8 +59,8 @@ colBB = (!) fileArray
 bbLeft, bbRight, up, down :: BBoard -> BBoard
 bbLeft  = flip unsafeShiftR 1 . (.&. notFileA)
 bbRight = flip unsafeShiftL 1 . (.&. notFileH)
-down    = flip shiftR 8
-up      = flip shiftL 8
+down    = flip unsafeShiftR 8
+up      = flip unsafeShiftL 8
 
 type Elem = (Int, BBoard)
 

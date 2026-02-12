@@ -89,8 +89,9 @@ trySpecials p = go
 -- In the normal evaluation (features & weights) the calculation is in
 -- units of 1/8 centipawns, so when we return the normal score (in centipawns)
 -- we must divide again by 8 (see shift2Cp)
+-- For the 50 moves rscale we don't get to 0 but to 28/100 (see: 128 - ...)
 normalEval :: SpecialResult -> MyPos -> EvalState -> Int
-normalEval sr p !sti = ((sc * (100 - get50Moves p)) `div` 100) `unsafeShiftR` (shift2Cp + 8)
+normalEval sr p !sti = (sc * (128 - get50Moves p)) `unsafeShiftR` (shift2Cp + 15)
     where ep     = esEParams  sti
           ew     = esEWeights sti
           !gph   = gamePhase p
@@ -130,13 +131,16 @@ scaleFactor p eg sr
     | eg == 0                                             = 64
     | pawnsWin == 0
       && nonPawnWin - nonPawnLos <= bishopMg              = noPawnsLowMatDiff nonPawnWin nonPawnLos
+    -- Next one seems too low:
     | oppoBishops
-      && nonPawnWin == bishopMg && nonPawnLos == bishopMg = 18 + 4 * (popCount $ passed p .&. winPart)
+      -- && nonPawnWin == bishopMg && nonPawnLos == bishopMg = 18 + 4 * (popCount $ passed p .&. winPart)
+      && nonPawnWin == bishopMg && nonPawnLos == bishopMg = 18 + 8 * (pawnCountWin + popCount (passed p .&. winPart))
     | oppoBishops                                         = 22 + 3 * popCount winPart
     | nonPawnWin == rookMg && nonPawnLos == rookMg
       && pawnCountWin - pawnCountLos <= 1                 = rookEndgame winPawnsOneFlank losKingOnOwnPawn
     | popCount (queens p) == 1                            = oneQueen p winPart losPart
-    -- | otherwise                                           = min sf (36 + 7 * pawnCountWin)	-- this seems too small! For example KRPKB
+    -- Next one seems too small! For example KRPKB
+    -- | otherwise                                           = min sf (36 + 7 * pawnCountWin)
     | otherwise                                           = sf
     where !winPart | eg > 0    = me p
                    | otherwise = yo p
@@ -208,7 +212,7 @@ kingAlone mywin p
           majorcnt = popCount $ queens  p .|. rooks   p
 
 winBonus :: Int
-winBonus = 1200	-- known win
+winBonus = 500	-- known win
 
 mateKBBK :: Bool -> SpecialEval
 mateKBBK = scoreToMate pushToEdge
@@ -373,7 +377,9 @@ kingPlace ep p !ew = mad (ewKingPawn      ew) kpa .
                      mad (ewKingThreat    ew) ktr .
                      mad (ewKingOpen      ew) ko .
                      mad (ewKingPlaceCent ew) kcd .
-                     mad (ewKingPlacePwns ew) kpd
+                     mad (ewKingPlacePwns ew) kpd .
+                     mad (ewKingProtB     ew) kpb .
+                     mad (ewKingProtN     ew) kpn
     where !kcd = (mpl - ypl) `unsafeShiftR` epMaterBonusScale ep
           !kpd = (mpi - ypi) `unsafeShiftR` epPawnBonusScale  ep
           !mks = kingSquare (kings p) $ me p
@@ -423,6 +429,15 @@ kingPlace ep p !ew = mad (ewKingPawn      ew) kpa .
           pmktr = popCount (myKAttacs p .&. yo p .&. nopawns `less` yoPAttacs p)
           pyktr = popCount (yoKAttacs p .&. me p .&. nopawns `less` myPAttacs p)
           !ktr = pmktr - pyktr
+          -- King protector: bishops & knights malus when far from own king
+          !mkpb = foldr (perBishop mks) 0 $ bbToSquares $ bishops p .&. me p
+          !ykpb = foldr (perBishop yks) 0 $ bbToSquares $ bishops p .&. yo p
+          !kpb  = mkpb - ykpb
+          !mkpn = foldr (perKnight mks) 0 $ bbToSquares $ knights p .&. me p
+          !ykpn = foldr (perKnight yks) 0 $ bbToSquares $ knights p .&. yo p
+          !kpn  = mkpn - ykpn
+          perBishop ks sq pro = pro + squareDistance ks sq
+          perKnight ks sq pro = pro + squareDistance ks sq
 
 -- Rank & File of a square
 rankOf :: Square -> Int
@@ -508,41 +523,58 @@ matKCArr = listArray (0, 63) $ [0, 0, 0, 1, 1, 2, 3, 4, 5, 7, 9, 10, 11, 12] ++ 
 ------ Rook placement points ------
 
 evalRookPlc :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-evalRookPlc p !ew = mad (ewRook7th   ew) r7 .
-                    mad (ewRookHOpen ew) ho .
-                    mad (ewRookOpen  ew) op .
-                    mad (ewRookConn  ew) rc
+evalRookPlc p !ew = mad (ewRookHOpen    ew) ho .
+                    mad (ewRookConn     ew) rc .
+                    mad (ewRookKingFile ew) kf .
+                    mad (ewRookKingRank ew) kr
     where !mRs = rooks p .&. me p
           !mPs = pawns p .&. me p
-          (mho, mop) = foldr (perRook (pawns p) mPs) (0, 0) $ bbToSquares mRs
+          !mho = foldr (perRookPawns mPs) 0 $ bbToSquares mRs
           !yRs = rooks p .&. yo p
           !yPs = pawns p .&. yo p
-          (yho, yop) = foldr (perRook (pawns p) yPs) (0, 0) $ bbToSquares yRs
-          !ho = mho - yho
-          !op = mop - yop
+          !yho = foldr (perRookPawns yPs) 0 $ bbToSquares yRs
+          !ho  = mho - yho
           !mrc | myRAttacs p .&. me p .&. rooks p == 0 = 0
                | otherwise                             = 1
           !yrc | yoRAttacs p .&. yo p .&. rooks p == 0 = 0
                | otherwise                             = 1
           !rc = mrc - yrc
-          !r7 = r7m - r7y
-          (!my7, !my8, !yo7, !yo8) | moving p == White = (row7, row8, row2, row1)
-                                   | otherwise         = (row2, row1, row7, row8)
-          !r7m | yo p .&. kings p .&. my8 == 0 = 0
-               | otherwise                     = popCount $ me p .&. rooks p .&. my7
-          !r7y | me p .&. kings p .&. yo8 == 0 = 0
-               | otherwise                     = popCount $ yo p .&. rooks p .&. yo7
+          -- Rook on opponent king ring file
+          !mkf = foldr (perRookKingFile (yoKAttacs p)) 0 $ bbToSquares mRs
+          !ykf = foldr (perRookKingFile (myKAttacs p)) 0 $ bbToSquares yRs
+          !kf  = mkf - ykf
+          -- Rook on opponent king ring rank
+          !mkr = foldr (perRookKingRank (yoKAttacs p)) 0 $ bbToSquares mRs
+          !ykr = foldr (perRookKingRank (myKAttacs p)) 0 $ bbToSquares yRs
+          !kr  = mkr - ykr
 
-perRook :: BBoard -> BBoard -> Square -> (Int, Int) -> (Int, Int)
-perRook allp myp rsq (ho, op)
-    | rco .&. allp == 0 = (ho,  op')
-    | rco .&. myp  == 0 = (ho', op)
-    | otherwise         = (ho,  op)
-    where !rco = rcolls `unsafeAt` (rsq .&. 0x7)
-          ho'  = ho + 1
-          op'  = op + 1
-          rcolls :: UArray Int BBoard
+perRookPawns :: BBoard -> Square -> Int -> Int
+perRookPawns myp rsq ho
+    | rco .&. myp  == 0 = ho + 1
+    | otherwise         = ho
+    where rco = fileBB rsq
+
+perRookKingFile :: BBoard -> Square -> Int -> Int
+perRookKingFile kir rsq kr
+    | rco .&. kir  == 0 = kr + 1
+    | otherwise         = kr
+    where rco = fileBB rsq
+
+perRookKingRank :: BBoard -> Square -> Int -> Int
+perRookKingRank kir rsq kr
+    | rco .&. kir  == 0 = kr + 1
+    | otherwise         = kr
+    where rco = rankBB rsq
+
+fileBB :: Square -> BBoard
+fileBB sq = rcolls `unsafeAt` (fileOf sq)
+    where rcolls :: UArray Int BBoard
           rcolls = listArray (0, 7) [ fileA, fileB, fileC, fileD, fileE, fileF, fileG, fileH ]
+
+rankBB :: Square -> BBoard
+rankBB sq = rcolls `unsafeAt` (rankOf sq)
+    where rcolls :: UArray Int BBoard
+          rcolls = listArray (0, 7) [ row1, row2, row3, row4, row5, row6, row7, row8 ]
 
 ------ Mobility ------
 
