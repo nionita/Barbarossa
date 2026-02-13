@@ -20,6 +20,7 @@ import Struct.Struct
 import Moves.BaseTypes
 import Moves.Base
 import Moves.Fen (initPos)
+import Moves.Notation (posToFen)
 
 absurd :: String -> Game ()
 absurd s = logmes $ "Absurd: " ++ s	-- used for messages when assertions fail
@@ -167,14 +168,15 @@ data Path
     = Path {
          pathScore :: !Int,
          pathDepth :: !Int,
-         pathMoves :: Seq Move
+         pathMoves :: Seq Move,
+         pathMPos  :: Maybe MyPos
       } deriving Show
 
 mated :: Int
 mated = - mateScore
 drawPath, matedPath :: Path
-drawPath  = Path { pathScore = 0, pathDepth = 20, pathMoves = Seq [] }
-matedPath = Path { pathScore = mated, pathDepth = 20, pathMoves = Seq [] }
+drawPath  = Path { pathScore = 0, pathDepth = 20, pathMoves = Seq [], pathMPos = Nothing }
+matedPath = Path { pathScore = mated, pathDepth = 20, pathMoves = Seq [], pathMPos = Nothing }
 
 alpha0, beta0 :: Int
 alpha0 = mated - 1
@@ -182,7 +184,10 @@ beta0  = mateScore + 1
 
 -- Making a path from a plain score:
 pathFromScore :: Int -> Path
-pathFromScore s = Path { pathScore = s, pathDepth = 0, pathMoves = Seq [] }
+pathFromScore s = Path { pathScore = s, pathDepth = 0, pathMoves = Seq [], pathMPos = Nothing }
+
+pathFromScorePos :: Int -> Maybe MyPos -> Path
+pathFromScorePos s mp = Path { pathScore = s, pathDepth = 0, pathMoves = Seq [], pathMPos = mp }
 
 -- Add a move to a path:
 addToPath :: Move -> Path -> Path
@@ -283,6 +288,10 @@ pvRootSearch a b d lastpath rmvs aspir = do
                          Seq (e:_) -> return $ Alt $ e : delete e (unalt rmvs)
     let !nsti = nst0 { cursc = pathFromScore a, cpos = pos }
     nstf <- pvLoop (pvInnerRoot b d) nsti edges
+    case pathMPos (cursc nstf) of
+        Just opos -> lift $ logmes $ "Origin |" ++ posToFen pos ++ "|" ++ show d
+                                ++ "|" ++ show (staticScore opos) ++ "|" ++ posToFen opos
+        _         -> return ()
     abrt <- gets abort
     reportStats
     let (sc, pm) | d > 1             = (pathScore (cursc nstf), pathMoves (cursc nstf))
@@ -428,8 +437,8 @@ getSelfplay = gets (tuning . ronly)
 -- PV Search
 pvSearch :: NodeState -> Int -> Int -> Int -> Search Path
 pvSearch _ !a !b !d | d <= 0 = do
-    v <- pvQSearch a b
-    return $! pathFromScore v	-- ok: fail hard in QS
+    (v, mp) <- pvQSearch a b
+    return $! pathFromScorePos v mp	-- ok: fail hard in QS
 pvSearch nst !a !b !d = do
     let pvnode = crtnt nst == PVNode
     -- Here we are always in PV if enough depth:
@@ -450,7 +459,7 @@ pvSearch nst !a !b !d = do
          || tp == 0 && hsc <= a	-- we will fail low
        )
        then do
-           let !ttpath = Path { pathScore = trimax a b hsc, pathDepth = hdeep, pathMoves = Seq [e] }
+           let !ttpath = Path { pathScore = trimax a b hsc, pathDepth = hdeep, pathMoves = Seq [e], pathMPos = Nothing }
            -- we will treat the beta cut here too, if it happens
            when (tp == 1 || tp == 2 && hsc > a) $ do
                adp <- gets absdp
@@ -499,15 +508,15 @@ pvSearch nst !a !b !d = do
 -- PV Zero Window
 pvZeroW :: NodeState -> Int -> Int -> Search Path
 pvZeroW !_ !b !d | d <= 0 = do
-    v <- pvQSearch bGrain b
-    return $! pathFromScore v
+    (v, mp) <- pvQSearch bGrain b
+    return $! pathFromScorePos v mp
     where !bGrain = b - scoreGrain
 pvZeroW !nst !b !d = do
     -- Check if we have it in TT
     (hdeep, tp, hsc, e, nodes') <- reTrieve >> lift ttRead
     if hdeep >= d && (tp == 2 || tp == 1 && hsc >= b || tp == 0 && hsc < b)
        then do
-           let !ttpath = Path { pathScore = trimax bGrain b hsc, pathDepth = hdeep, pathMoves = Seq [e] }
+           let !ttpath = Path { pathScore = trimax bGrain b hsc, pathDepth = hdeep, pathMoves = Seq [e], pathMPos = Nothing }
            -- we will treat the beta cut here too, if it happens
            when (tp == 1 || tp == 2 && hsc >= b) $ do
                adp <- gets absdp
@@ -836,107 +845,140 @@ trimax !a !b !x
     | x >= b    = b
     | otherwise = x
 
+-- We need a type to hold score and maybe a position to keep track where the final score comes from
+type QSScore = (Int, Maybe MyPos)
+
+-- And a few convenience functions
+toQSScore :: Int -> QSScore
+toQSScore v = (v, Nothing)
+
+qsScorePos :: Int -> MyPos -> QSScore
+qsScorePos s pos = (s, Just pos)
+
+qsScore :: QSScore -> Int
+qsScore = fst
+
+negateQSScore :: QSScore -> QSScore
+negateQSScore (s, mp) = (-s, mp)
+
+-- This max & min functions are not symmetrical, the first parameter
+-- is the previous (found) score, and the second is a new one
+-- The explanation is for max, but it is similar for min too
+-- There are 2 cases:
+-- - new score is smaller or equal: the old remains
+-- - new score is higher: then this remains
+maxQSScore, minQSScore :: QSScore -> QSScore -> QSScore
+
+maxQSScore qsa qsx
+    | qsScore qsx <= qsScore qsa = qsa
+    | otherwise                  = qsx
+
+minQSScore qsb qsx
+    | qsScore qsx >= qsScore qsb = qsb
+    | otherwise                  = qsx
+
 -- Quiescent Search
-pvQSearch :: Int -> Int -> Search Int
-pvQSearch a b = qSearch a b True
+pvQSearch :: Int -> Int -> Search QSScore
+pvQSearch a b = qSearch (toQSScore a) (toQSScore b) True
 
 {-# NOINLINE qSearch #-}
-qSearch :: Int -> Int -> Bool -> Search Int
-qSearch !a !b front = do
+qSearch :: QSScore -> QSScore -> Bool -> Search QSScore
+qSearch qsa qsb front = do
     (hdeep, tp, hsc, _, _) <- reTrieve >> lift ttRead
     if hdeep >= 0
-       then qSearchFound    a b tp hsc front
-       else qSearchNotFound a b        front
+       then qSearchFound    qsa qsb tp hsc front
+       else qSearchNotFound qsa qsb        front
 
 -- When we found a TT entry, we sometimes may terminate the QS immediately,
 -- and sometimes we may at least improve the search limits
-qSearchFound :: Int -> Int -> Int -> Int -> Bool -> Search Int
-qSearchFound !a !b !tp !hsc front = do
+qSearchFound :: QSScore -> QSScore -> Int -> Int -> Bool -> Search QSScore
+qSearchFound qsa qsb !tp !hsc front = do
     reSucc 1
     -- tp == 2 => we have an exact score
     -- tp == 1 => score >= hsc, so if hsc >  a then we at least improved
     -- tp == 0 => score <= hsc, so if hsc <= a then we fail low
     if tp == 2	-- exact score: always good, terminate
-       then return $ max a $ min b hsc
-       else if tp == 1 && hsc >= b
-               then return b	-- fail high
-               else if tp == 0 && hsc <= a
-                       then return a	-- fail low
+       then return $ toQSScore $ max (qsScore qsa) $ min (qsScore qsb) hsc
+       else if tp == 1 && hsc >= qsScore qsb
+               then return qsb	-- fail high
+               else if tp == 0 && hsc <= qsScore qsa
+                       then return qsa	-- fail low
                        else do
                            -- Here we have one and only one of:
                            -- tp == 1 && hsc < b
                            -- tp == 0 && hsc > a
                            -- We can possibly improve one of the limit
                            -- This cannot happen in zero window search!
-                           if a + scoreGrain == b
-                              then qSearchLims a b front
+                           if qsScore qsa + scoreGrain == qsScore qsb
+                              then qSearchLims qsa qsb front
                               else if tp == 1
-                                      then qSearchLims (max a hsc) b           front
-                                      else qSearchLims a           (min b hsc) front
+                                      then qSearchLims (maxQSScore qsa (toQSScore hsc)) qsb front
+                                      else qSearchLims qsa (minQSScore qsb (toQSScore hsc)) front
 
-qSearchNotFound :: Int -> Int -> Bool -> Search Int
-qSearchNotFound !a !b front = reFail >> qSearchLims a b front
+qSearchNotFound :: QSScore -> QSScore -> Bool -> Search QSScore
+qSearchNotFound qsa qsb front = reFail >> qSearchLims qsa qsb front
 
-qSearchLims :: Int -> Int -> Bool -> Search Int
-qSearchLims !a !b front = do
+qSearchLims :: QSScore -> QSScore -> Bool -> Search QSScore
+qSearchLims qsa qsb front = do
     pos <- lift getPos
     if tacticalPos pos
-       then qsInCheck a b (staticScore pos)
-       else qsNormal  a b (staticScore pos) front
+       then qsInCheck qsa qsb pos
+       else qsNormal  qsa qsb pos front
 
-qsInCheck :: Int -> Int -> Int -> Search Int
-qsInCheck !a !b !s = do
+qsInCheck :: QSScore -> QSScore -> MyPos -> Search QSScore
+qsInCheck qsa qsb pos = do
     edges <- Alt <$> lift genEscapeMoves
     if noMove edges
-       then return $ max a mated	-- remain in limits (a could even be minBound!)
+       then return $ maxQSScore qsa (toQSScore mated)	-- remain in limits (a could even be minBound!)
        else do
-          !dcut <- lift $ qsDelta $ a - s - qsDeltaMargin
+          !dcut <- lift $ qsDelta $ (qsScore qsa) - (staticScore pos) - qsDeltaMargin
           if dcut
              then do
                  when collectFens $ finWithNodes "DELT"
-                 return a
+                 return qsa
              -- else pvQLoop b (max s a) edges
              -- do not trust eval in check
-             else pvQLoop b a edges
+             else pvQLoop qsb qsa edges
 
-qsNormal :: Int -> Int -> Int -> Bool -> Search Int
-qsNormal !a !b !s front
-    | s >= b = do
+qsNormal :: QSScore -> QSScore -> MyPos -> Bool -> Search QSScore
+qsNormal qsa qsb pos front
+    | staticScore pos >= qsScore qsb = do
          when collectFens $ finWithNodes "BETA"
-         return b
+         return qsb
     | otherwise = do
-         !dcut <- lift $ qsDelta $ a - s - qsDeltaMargin
+         !dcut <- lift $ qsDelta $ (qsScore qsa) - (staticScore pos) - qsDeltaMargin
          if dcut
             then do
                 when collectFens $ finWithNodes "DELT"
-                return a
+                return qsa
             else do
+                let qss = qsScorePos (staticScore pos) pos
                 edges <- Alt <$> lift (genTactMoves front)
                 if noMove edges
                    then do	-- no more captures
                        when collectFens $ finWithNodes "NOCA"
-                       return (max a s)
-                   else pvQLoop b (max a s) edges
+                       return (maxQSScore qsa qss)
+                   else pvQLoop qsb (maxQSScore qsa qss) edges
 
-pvQLoop :: Int -> Int -> Alt Move -> Search Int
-pvQLoop !b = go
-    where go !s (Alt [])     = return s
-          go !s (Alt (e:es)) = do
-              !s' <- pvQInnerLoop b s e
-              if s' >= b then return b
-                         else go s' $ Alt es
+pvQLoop :: QSScore -> QSScore -> Alt Move -> Search QSScore
+pvQLoop qsb = go
+    where go qss (Alt [])     = return qss
+          go qss (Alt (e:es)) = do
+              qss' <- pvQInnerLoop qsb qss e
+              if qsScore qss' >= qsScore qsb then return qsb
+                                             else go qss' $ Alt es
 
 {-# NOINLINE pvQInnerLoop #-}
-pvQInnerLoop :: Int -> Int -> Move -> Search Int
-pvQInnerLoop !b !a e = timeToAbort b $ do
+pvQInnerLoop :: QSScore -> QSScore -> Move -> Search QSScore
+pvQInnerLoop qsb qsa e = timeToAbort qsb $ do
     r <- lift $ doQSMove e
     if r
        then do
            newNodeQS
-           !s <- negate <$> qSearch (-b) (-a) False
+           qss <- negateQSScore <$> qSearch (negateQSScore qsb) (negateQSScore qsa) False
            lift undoMove
-           return $ max a s
-       else return a
+           return $ maxQSScore qsa qss
+       else return qsa
 
 {-# INLINE finWithNodes #-}
 finWithNodes :: String -> Search ()
