@@ -291,7 +291,7 @@ filterMidGamePos hi ho mn k i = do
                putStrLn $ "Fen: " ++ fen
                hFlush stdout
            let pos = posFromFen fen
-           if gamePhase pos >= 160
+           if gamePhase pos >= 120
                then do
                    hPutStrLn ho line
                    return (True, i+1)
