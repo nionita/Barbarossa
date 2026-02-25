@@ -6,10 +6,7 @@ import Data.Bits
 import Data.Char (ord, chr, toLower)
 
 import Struct.Struct
-import Moves.BitBoard
-import Moves.Pattern
-import Moves.Moves
-import Moves.Board
+import Moves.Core
 
 -- Given a position and a move, write the move in nice human readable form
 toNiceNotation :: MyPos -> Move -> String

@@ -3,7 +3,7 @@
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Eval.Eval (
+module Eval.Core (
     initEvalState,
     posEval,
     posExactEval,
@@ -21,10 +21,7 @@ import Struct.Struct
 import Struct.Status
 import Struct.Config
 import Struct.MidEnd
-import Moves.Moves
-import Moves.BitBoard
-import Moves.Pattern
-import Eval.BasicEval (matPiece1)
+import Moves.Core
 
 ------------------------------------------------------------------
 -- Parameters of this module ------------
@@ -212,7 +209,7 @@ kingAlone mywin p
           majorcnt = popCount $ queens  p .|. rooks   p
 
 winBonus :: Int
-winBonus = 500	-- known win
+winBonus = 1200	-- known win
 
 mateKBBK :: Bool -> SpecialEval
 mateKBBK = scoreToMate pushToEdge

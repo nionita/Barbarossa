@@ -18,8 +18,8 @@ import qualified Data.Vector.Unboxed as U
 import Struct.Status (EvalState(..))
 import Struct.Struct
 import Struct.ParamsPost (optSpaceNames, optSpaceInit)
-import Moves.Fen
-import Eval.Eval
+import Moves.Core
+import Eval.Core
 import Tune.FenFiles
 import Tune.EvalAccum
 import Tune.Utils

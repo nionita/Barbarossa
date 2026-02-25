@@ -1,27 +1,33 @@
+﻿{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE PatternGuards #-}
-{-# LANGUAGE BangPatterns #-}
-
-module Search.Albeta (
-    alphaBeta, logmes
-) where
-
+module Search.Core where
 import Control.Monad
+import Control.Monad.Reader (ask)
 import Control.Monad.State hiding (gets, modify)
 import Data.Array.Base (unsafeAt)
 import Data.Array.Unboxed
 import Data.Bits
 import Data.Int
-import Data.List (delete)
+import Data.List
 import Data.Maybe (fromMaybe)
-
 import Search.CStateMonad
 import Search.AlbetaTypes
 import Struct.Struct
-import Moves.BaseTypes
-import Moves.Base
-import Moves.Fen (initPos)
-import Moves.Notation (posToFen)
+import Struct.Context
+import Struct.Status
+import Hash.TransTab
+import Moves.Core
+import Moves.Internal.Base
+import Moves.Internal.BaseTypes (Game)
+import Moves.History
+import Moves.Notation
+import Moves.ShowMe
+import Eval.Core
 
+
+
+
+-- This is a specialized monad transformer for state
 absurd :: String -> Game ()
 absurd s = logmes $ "Absurd: " ++ s	-- used for messages when assertions fail
 
@@ -1144,3 +1150,4 @@ informPV s d es = do
     lift $ do
         n <- curNodes $ sNodes ss
         informCtx (BestMv s d (maxdp st) n es)
+

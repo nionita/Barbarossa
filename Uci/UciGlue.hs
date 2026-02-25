@@ -9,8 +9,8 @@ module Uci.UciGlue (
 -- import Control.Monad.State.Lazy
 
 import Search.CStateMonad (runCState)
+import Search.Core
 import Search.AlbetaTypes
-import Search.Albeta
 import Struct.Struct
 import Struct.Status
 import Struct.Context

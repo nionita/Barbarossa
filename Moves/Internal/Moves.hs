@@ -1,5 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
-module Moves.Moves (
+module Moves.Internal.Moves (
     movesInit, pAttacs, pawnWhiteAttacks, pawnBlackAttacks, targetPawnMoves,
     fAttacs, kAttacs, qAttacs, rAttacs, bAttacs, nAttacs
     ) where
@@ -8,10 +8,10 @@ import Data.Array.Base
 import Data.Bits
 
 import Struct.Struct
-import Moves.GenMagics
-import Moves.Magics
-import Moves.BitBoard
-import Moves.Pattern
+import Moves.Internal.GenMagics
+import Moves.Internal.Magics
+import Moves.Internal.BitBoard
+import Moves.Internal.Pattern
 
 -- Used to compute all the needed tables by initialiasation:
 movesInit :: Int

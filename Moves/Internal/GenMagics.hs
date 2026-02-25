@@ -1,5 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
-module Moves.GenMagics (
+module Moves.Internal.GenMagics (
     genDatabase, genBishop, genRook,
     genRookMask, genBishopMask,
     movKings, movKnights
@@ -12,8 +12,8 @@ import qualified Data.Set as S
 import Data.Word
 
 import Struct.Struct
-import Moves.Magics
-import Moves.Pattern
+import Moves.Internal.Magics
+import Moves.Internal.Pattern
 
 -- Bring one configuration of the given length into a bitboard
 -- according to a given pattern

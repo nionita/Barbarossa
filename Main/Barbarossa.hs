@@ -1,4 +1,4 @@
-{-# LANGUAGE PatternGuards #-}
+﻿{-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -26,12 +26,12 @@ import Struct.Config
 import Hash.TransTab
 import Uci.UCI
 import Uci.UciGlue
-import Moves.Base
-import Moves.Moves (movesInit)
-import Moves.Board (posFromFen, initPos)
+import Moves.Core (movesInit, posFromFen, initPos)
+import Moves.Internal.Base
 import Moves.History
 import Search.CStateMonad (execCState)
-import Search.AlbetaTypes
+import Search.Core
+import Search.AlbetaTypes (formatStats)
 import Eval.FileParams (makeEvalState)
 
 -- Name, author, version and suffix:
@@ -720,3 +720,4 @@ collectError e = handle cannot $ do
     hClose ef
     where cannot :: IOException -> IO ()
           cannot _ = return ()
+

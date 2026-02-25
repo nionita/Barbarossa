@@ -1,5 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
-module Moves.BitBoard (
+module Moves.Internal.BitBoard (
     lsbBBoard, bbToSquares, less, firstOne,
     bbToSquaresBB,
     shadowDown, shadowUp, uTestBit, uBit
@@ -35,13 +35,6 @@ bbToSquares = unfoldr f
 {-# INLINE bbToSquaresBB #-}
 bbToSquaresBB :: (Square -> BBoard) -> BBoard -> BBoard
 bbToSquaresBB f = foldr (\sq w -> f sq .|. w) 0 . bbToSquares
-{-
-bbToSquaresBB f = go 0
-    where go w 0 = w
-          go w b = let (sq, b') = extractSquare b
-                       !w' = f sq .|. w
-                   in go w' b'
--}
 
 {-# INLINE extractSquare #-}
 extractSquare :: BBoard -> (Square, BBoard)

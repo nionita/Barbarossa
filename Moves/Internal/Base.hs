@@ -1,7 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE PatternGuards #-}
 
-module Moves.Base (
+module Moves.Internal.Base (
     posToState, getPos, posNewSearch,
     doRealMove, doMove, doQSMove, doNullMove, undoMove,
     genMoves, genTactMoves, genEscapeMoves, canPruneMove,
@@ -17,26 +17,22 @@ module Moves.Base (
 
 import Data.Bits
 import Data.Int
-import Data.List (nub)
+import Data.List (nub, partition)
 import Control.Monad.State
 import Control.Monad.Reader (ask)
 import Control.Monad (when)
--- import Numeric
 
-import Moves.BaseTypes
+import Moves.Internal.BaseTypes
 import Search.AlbetaTypes
 import Struct.Struct
 import Struct.Context
 import Struct.Status
 import Hash.TransTab
-import Moves.Board
-import Moves.BitBoard (less, uBit)
-import Eval.BasicEval
-import Eval.Eval
+import Moves.Core
+import Eval.Core (posEval)
 import Moves.ShowMe
 import Moves.History
 import Moves.Notation
-import Moves.Moves
 
 {-# INLINE nearmate #-}
 nearmate :: Int -> Bool
@@ -84,10 +80,13 @@ draftStats dst = do
 genMoves :: Int -> Game ([Move], [Move])
 genMoves d = do
     p <- getPos
+    h <- gets hist
     if inCheck p
-       then return (genMoveFCheck p, [])
+       then do
+            let escs = genMoveFCheck p
+                (escc, escq) = partition (moveIsCapture p) escs
+            return (escc, histSortMoves d h escq)
        else do
-            h <- gets hist
             let l0 = genMoveCast p
                 (l1q, l1r) = genMovePromo p
                 (l2w, l2l) = genMoveCaptWL p
@@ -102,41 +101,15 @@ genMoves d = do
 genTactMoves :: Bool -> Game [Move]
 genTactMoves front = do
     p <- getPos
-    let (l1q, _) = genMovePromo p
-        l2w = fst $ genMoveCaptWL p
-        l3  = genMoveNCaptToCheck p
-    if front
-       then return $ l1q ++ l2w ++ l3
-       else return $ l1q ++ l2w
+    return $ if front
+                then fst (genMovePromo p) ++ fst (genMoveCaptWL p) ++ genMoveNCaptToCheck p
+                else fst (genMovePromo p) ++ fst (genMoveCaptWL p)
 
 -- Generate only escape moves: needed only in QS when we know we have to escape
 genEscapeMoves :: Game [Move]
 genEscapeMoves = do
     p <- getPos
     return $ genMoveFCheck p
-
-{--
-checkGenMoves :: MyPos -> [Move] -> [Move]
-checkGenMoves p = map $ toError . checkGenMove p
-    where toError (Left str) = error str
-          toError (Right m)  = m
-
-checkGenMove :: MyPos -> Move -> Either String Move
-checkGenMove p m@(Move w)
-    = case tabla p f of
-          Empty     -> wrong "empty src"
-          Busy c pc -> if moveColor m /= c
-                          then if mc == c
-                                  then wrong $ "wrong move color (should be " ++ show mc ++ ")"
-                                  else wrong $ "wrong pos src color (should be " ++ show mc ++ ")"
-                          else if movePiece m /= pc
-                                  then wrong $ "wrong move piece (should be " ++ show pc ++ ")"
-                                  else Right m
-    where f  = fromSquare m
-          mc = moving p
-          wrong mes = Left $ "checkGenMove: " ++ mes ++ " for move "
-                            ++ showHex w (" in pos\n" ++ showMyPos p)
---}
 
 showMyPos :: MyPos -> String
 showMyPos p = showTab (black p) (slide p) (kkrq p) (diag p) ++ "================ " ++ mc ++ "\n"
@@ -257,27 +230,6 @@ exten p1 p2 | inCheck p2     = 1
             | rooks  p1 /= 0 = 1
             | otherwise      = 0
 
-{--
--- Parameters for pawn threats
-validThreat, majorThreat :: Bool
-validThreat = True	-- pawn threat must be valid?
-majorThreat = False	-- pawn threat: only majors?
-
-pawnThreat :: MyPos -> MyPos -> Bool
-pawnThreat p1 p2
-    | npa .&. fig == 0 = False
-    | validThreat      = validPawnThreat p1 p2
-    | otherwise        = True
-    where !npa = yoPAttacs p2 `less` myPAttacs p1
-          !fig | majorThreat = me p2 .&. (queens p2 .|. rooks p2)
-               | otherwise   = me p2 `less` pawns p2
-
--- Valid pawn threat is when the pawn is defended or not attacked
-validPawnThreat :: MyPos -> MyPos -> Bool
-validPawnThreat p1 p2 = mvpaw .&. yoAttacs p2 /= 0 || mvpaw .&. myAttacs p2 == 0
-    where !mvpaw = yo p2 `less` me p1
---}
-
 -- Tactical positions will be searched complete in quiescent search
 -- Currently only when in check
 {-# INLINE tacticalPos #-}
@@ -320,21 +272,19 @@ incrementRootMoveNumber = modify $ \s -> s { rootmn = rootmn s + 1 }
 
 -- {-# INLINE qsDelta #-}
 qsDelta :: Int -> Game Bool
-qsDelta !a = do
-    p <- getPos
-    if matPiece White Bishop >= a
-       then return False
-       else if matPiece White Queen < a
-               then return True
-               else do
-                   let !ua = yo p .&. myAttacs p	-- under attack!
-                   if ua .&. queens p /= 0	-- TODO: need to check also pawns on 7th!
-                      then return False
-                      else if matPiece White Rook < a
-                              then return True
-                              else if ua .&. rooks p /= 0
-                                      then return False
-                                      else return True
+qsDelta !a
+    | matPiece White Bishop >= a = return False
+    | matPiece White Queen  <  a = return True
+    | otherwise = do
+        p <- getPos
+        let !ua = yo p .&. myAttacs p	-- under attack!
+        if ua .&. queens p /= 0	-- TODO: need to check also pawns on 7th!
+           then return False
+           else if matPiece White Rook < a
+                   then return True
+                   else if ua .&. rooks p /= 0
+                           then return False
+                           else return True
 
 {-# INLINE ttRead #-}
 ttRead :: Game (Int, Int, Int, Move, Int64)

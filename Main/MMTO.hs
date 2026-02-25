@@ -26,10 +26,10 @@ import Struct.Status
 import Struct.Context
 import Struct.Config
 import Hash.TransTab
-import Moves.BaseTypes
-import Search.AlbetaTypes
-import Moves.Base
-import Moves.Board (posFromFen, initPos)
+import Search.Core
+import Moves.Core (posFromFen, initPos)
+import Moves.Internal.Base
+import Moves.Internal.BaseTypes (Game)
 import Moves.History
 import Moves.Notation
 import Search.CStateMonad (runCState)

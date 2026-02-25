@@ -26,9 +26,10 @@ import Struct.Status
 import Struct.Context
 import Struct.Config
 import Hash.TransTab
-import Search.AlbetaTypes
-import Moves.Base
-import Moves.Fen
+import Search.Core
+import Search.AlbetaTypes (SStats(..), ssts0)
+import Moves.Core
+import Moves.Internal.Base
 import Moves.Notation
 import Moves.History
 import Search.CStateMonad (execCState)

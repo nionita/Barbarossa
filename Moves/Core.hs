@@ -1,28 +1,56 @@
-{-# LANGUAGE TypeSynonymInstances, MultiParamTypeClasses, PatternGuards, BangPatterns #-}
-module Moves.Board (
-    posFromFen, initPos,
-    isCheck, inCheck,
-    movePassed, moveIsCapture,
-    castKingRookOk, castQueenRookOk,
-    genMoveCast, genMoveNCapt, genMovePromo, genMoveFCheck, genMoveCaptWL,
-    genMoveNCaptToCheck,
-    updatePos, checkOk, moveChecks,
-    legalMove, alternateMoves,
-    doFromToMove, reverseMoving
-    ) where
-
+﻿{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PatternGuards #-}
+module Moves.Core (
+    module Moves.Core,
+    module Moves.Internal.BitBoard,
+    module Moves.Internal.Pattern,
+    module Moves.Internal.Moves
+) where
+import Data.Array.Base
+import Data.Array.Unboxed
 import Data.Bits
-import Data.List (sort, foldl')
+import Data.Char
+import Data.List
+import Data.Maybe (fromJust)
 import Data.Word
-
+import qualified Data.Set as S
 import Struct.Struct
-import Moves.Pattern
-import Moves.Moves
-import Moves.BitBoard
-import Moves.ShowMe
-import Eval.BasicEval
 import Hash.Zobrist
-import Moves.Fen
+import Moves.ShowMe
+import Moves.Internal.BitBoard
+import Moves.Internal.Pattern
+import Moves.Internal.Moves
+
+matPiece1 :: Piece -> Int
+matPiece1 Pawn   = 100
+matPiece1 Knight = 360
+matPiece1 Bishop = 360
+matPiece1 Rook   = 565
+matPiece1 Queen  = 1100
+matPiece1 King   = 20000
+
+fun :: Color -> Int -> Int
+fun White = id
+fun Black = negate
+
+{-# INLINE matPiece #-}
+matPiece :: Color -> Piece -> Int
+matPiece c = fun c . matPiece1
+
+seeValue :: Piece -> Int
+seeValue Pawn   = 1
+seeValue Knight = 3
+seeValue Bishop = 3
+seeValue Rook   = 5
+seeValue Queen  = 10
+seeValue King   = 200
+
+
+
+
+
 
 -- Is color c in check in position p?
 {-# INLINE isCheck #-}
@@ -127,9 +155,188 @@ moveChecksIndirect !p !m = ba .&. bq /= 0 || ra .&. rq /= 0
           ba   = bAttacs occ ksq
           ra   = rAttacs occ ksq
 
--- Because finding the blocking square for a queen check is so hard,
--- we define a data type and, in case of a queen check, we give also
--- the piece type (rook or bishop) in which direction the queen checks
+
+
+
+
+
+
+
+
+
+
+
+
+startFen :: String
+startFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR/ w KQkq - 0 1"
+
+fenToTable :: String -> MyPos
+fenToTable fen = foldr setp emptyPos $ fenToAssocs fen
+    where setp (sq, (c, p)) = setPiece sq c p
+
+fenToAssocs :: String -> [(Square, (Color, Piece))]
+fenToAssocs str = go 56 str []
+    where go _ [] acc = acc
+          go sq (c:cs) acc
+              | sq < 0 = acc
+              | c `elem` "PRNBQK" = go (sq+1) cs $ (sq, fcw) : acc
+              | c `elem` "prnbqk" = go (sq+1) cs $ (sq, fcb) : acc
+              | isDigit c = go (skip sq c) cs acc
+              | otherwise = go (nextline sq) cs acc	-- treat like /
+              where fcw = (White, toPiece c)
+                    fcb = (Black, toPiece $ toUpper c)
+          skip f c = f + fromIntegral (ord c - ord '0')
+          nextline f = f - 16
+          toPiece c = fromJust $ lookup c letterToPiece
+
+letterToPiece :: [(Char, Piece)]
+letterToPiece = [('P', Pawn), ('R', Rook), ('N', Knight), ('B', Bishop),
+                    ('Q', Queen), ('K', King)]
+
+initPos :: MyPos
+initPos = posFromFen startFen
+
+posFromFen :: String -> MyPos
+posFromFen fen = updatePos p { epcas = x, zobkey = zk }
+    where fen1:fen2:fen3:fen4:fen5:_ = fenFromString fen
+          p  = fenToTable fen1
+          x  = fyInit . castInit . epInit $ epcas0
+          (epcas0, z) = case fen2 of
+              'w':_ -> (0, 0)
+              'b':_ -> (mvMask, zobMove)
+              _     -> error "posFromFen: expect w or b"
+          (cK, z1) = if 'K' `elem` fen3 then ((.|. caRKiw), zobCastKw) else (id, 0)
+          (cQ, z2) = if 'Q' `elem` fen3 then ((.|. caRQuw), zobCastQw) else (id, 0)
+          (ck, z3) = if 'k' `elem` fen3 then ((.|. caRKib), zobCastKb) else (id, 0)
+          (cq, z4) = if 'q' `elem` fen3 then ((.|. caRQub), zobCastQb) else (id, 0)
+          castInit = cQ . cK . cq . ck
+          (epInit, ze) = case fen4 of
+              f:r:_ | f `elem` "abcdefgh" && r `elem` "36"
+                    -> let fn  = ord f - ord 'a'
+                           ms' = case r of
+                                     '3' -> 0x10000
+                                     _   -> 0x10000000000
+                           ms = ms' `shiftL` fn
+                           zz = zobEP fn
+                       in ((.|.) ms, zz)
+              _     -> (id, 0)
+          fyInit = set50Moves $ read fen5
+          zk = zobkey p `xor` z `xor` z1 `xor` z2 `xor` z3 `xor` z4 `xor` ze
+
+-- A primitive decomposition of the fen string
+fenFromString :: String -> [String]
+fenFromString fen = zipWith ($) fenfuncs fentails
+    where fentails = tails $ words fen
+          fenfuncs = [ getFenPos, getFenMv, getFenCast, getFenEp, getFenHalf, getFenMvNo ]
+          headOrDefault a0 as = if null as then a0 else head as
+          getFenPos  = headOrDefault ""
+          getFenMv   = headOrDefault "w"
+          getFenCast = headOrDefault "-"
+          getFenEp   = headOrDefault "-"
+          getFenHalf = headOrDefault "0"
+          getFenMvNo = headOrDefault "0"
+
+updatePos :: MyPos -> MyPos
+updatePos !p = p {
+                  occup = toccup, me = tme, yo = tyo, kings   = tkings,
+                  pawns = tpawns, knights = tknights, queens  = tqueens,
+                  rooks = trooks, bishops = tbishops, passed = tpassed,
+                  lazyBits = lzb
+               }
+    where !toccup = kkrq p .|. diag p
+          !tkings = kkrq p .&. diag p `less` slide p
+          !twhite = toccup `less` black p
+          (!tme, !tyo) | moving p == White = (twhite, black p)
+                       | otherwise         = (black p, twhite)
+          !tpawns   = diag p `less` (kkrq p .|. slide p)
+          !tknights = kkrq p `less` (diag p .|. slide p)
+          !tqueens  = slide p .&. kkrq p .&. diag p
+          !trooks   = slide p .&. kkrq p `less` diag p
+          !tbishops = slide p .&. diag p `less` kkrq p
+          !twpawns = tpawns .&. twhite
+          !tbpawns = tpawns .&. black p
+          !tpassed = whitePassed twpawns tbpawns .|. blackPassed twpawns tbpawns
+          -- Further ideas:
+          -- 1. The old method could be faster for afew pawns! Tests!!
+          -- 2. This is necessary only after a pawn move, otherwise passed remains the same
+          -- 3. Unify updatePos: one function with basic fields as parameter and eventually
+          --    the old position, then everything in one go - should avoid copying
+          lzb = posLazy (moving p) toccup (black p) tpawns tknights tbishops trooks tqueens tkings
+
+posLazy :: Color -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> BBoard -> LazyBits
+posLazy !co !ocp !tblack !tpawns !tknights !tbishops !trooks !tqueens !tkings
+    | co == White = LazyBits {
+                      _check = tcheck,
+                      _myPAttacs = twhPAtt, _myNAttacs = twhNAtt, _myBAttacs = twhBAtt,
+                      _myRAttacs = twhRAtt, _myQAttacs = twhQAtt, _myKAttacs = twhKAtt,
+                      _yoPAttacs = tblPAtt, _yoNAttacs = tblNAtt, _yoBAttacs = tblBAtt,
+                      _yoRAttacs = tblRAtt, _yoQAttacs = tblQAtt, _yoKAttacs = tblKAtt,
+                      _myAttacs  = twhAttacs, _yoAttacs = tblAttacs
+                  }
+    | otherwise   = LazyBits {
+                      _check = tcheck,
+                      _myPAttacs = tblPAtt, _myNAttacs = tblNAtt, _myBAttacs = tblBAtt,
+                      _myRAttacs = tblRAtt, _myQAttacs = tblQAtt, _myKAttacs = tblKAtt,
+                      _yoPAttacs = twhPAtt, _yoNAttacs = twhNAtt, _yoBAttacs = twhBAtt,
+                      _yoRAttacs = twhRAtt, _yoQAttacs = twhQAtt, _yoKAttacs = twhKAtt,
+                      _myAttacs  = tblAttacs, _yoAttacs = twhAttacs
+                  }
+    where !twhPAtt = bbToSquaresBB (pAttacs White) $ tpawns .&. white
+          !twhNAtt = bbToSquaresBB nAttacs $ tknights .&. white
+          !twhBAtt = bbToSquaresBB (bAttacs ocp) $ tbishops .&. white
+          !twhRAtt = bbToSquaresBB (rAttacs ocp) $ trooks .&. white
+          !twhQAtt = bbToSquaresBB (qAttacs ocp) $ tqueens .&. white
+          !twhKAtt = kAttacs $ firstOne $ tkings .&. white
+          !tblPAtt = bbToSquaresBB (pAttacs Black) $ tpawns .&. tblack
+          !tblNAtt = bbToSquaresBB nAttacs $ tknights .&. tblack
+          !tblBAtt = bbToSquaresBB (bAttacs ocp) $ tbishops .&. tblack
+          !tblRAtt = bbToSquaresBB (rAttacs ocp) $ trooks .&. tblack
+          !tblQAtt = bbToSquaresBB (qAttacs ocp) $ tqueens .&. tblack
+          !tblKAtt = kAttacs $ firstOne $ tkings .&. tblack
+          !twhAttacs = twhPAtt .|. twhNAtt .|. twhBAtt .|. twhRAtt .|. twhQAtt .|. twhKAtt
+          !tblAttacs = tblPAtt .|. tblNAtt .|. tblBAtt .|. tblRAtt .|. tblQAtt .|. tblKAtt
+          !white = ocp `less` tblack
+          !whcheck = white   .&. tkings .&. tblAttacs
+          !blcheck = tblack .&. tkings .&. twhAttacs
+          !tcheck = whcheck .|. blcheck
+
+-- Passed pawns: only with bitboard operations
+whitePassed :: BBoard -> BBoard -> BBoard
+whitePassed !wp !bp = wpa
+    where !bpL = bbLeft bp
+          !bpR = bbRight bp
+          !wb0 = bpR .|. bpL .|. bp .|. wp
+          !sha = shadowDown wb0	-- erase
+          !wpa = wp `less` sha
+
+blackPassed :: BBoard -> BBoard -> BBoard
+blackPassed !wp !bp = bpa
+    where !wpL = bbLeft wp
+          !wpR = bbRight wp
+          !wb0 = wpR .|. wpL .|. wp .|. bp
+          !sha = shadowUp wb0	-- erase
+          !bpa = bp `less` sha
+
+-- Set a piece on a square of the table
+setPiece :: Square -> Color -> Piece -> MyPos -> MyPos
+setPiece sq c f !p
+    = p { black = setCond (c == Black) $ black p,
+          slide = setCond (isSlide f)  $ slide p,
+          kkrq  = setCond (isKkrq f)   $ kkrq p,
+          diag  = setCond (isDiag f)   $ diag p,
+          zobkey = nzob, mater = nmat }
+    where setCond cond = if cond then (.|. bsq) else (.&. nbsq)
+          nzob = zobkey p `xor` zold `xor` znew
+          nmat = mater p - mold + mnew
+          (!zold, !mold) = case tabla p sq of
+                             Empty      -> (0, 0)
+                             Busy co fo -> (zobPiece co fo sq, matPiece co fo)
+          !znew = zobPiece c f sq
+          !mnew = matPiece c f
+          bsq = uBit sq
+          !nbsq = complement bsq
+
+
 data CheckInfo = NormalCheck Piece !Square
                | QueenCheck Piece !Square
 
@@ -833,7 +1040,7 @@ perCaptFieldWL pos mypc advdefence sq mvlst
               | otherwise = (0, myattacs)
 
 approximateEasyCapts :: Bool
-approximateEasyCapts = True	-- when capturing a better piece: no SEE, it is always winning
+approximateEasyCapts = True	-- when capturing an equal or better piece: no SEE, it is always "winning"
 
 perCaptWL :: MyPos -> Attacks -> Bool -> Piece -> Int -> Square -> Square
           -> ([LMove], [LMove]) -> ([LMove], [LMove])
@@ -844,7 +1051,8 @@ perCaptWL !pos !attacks promo vict !gain0 !sq !sqfa (wsqs, lsqs)
               ss  = moveToLMove attc vict $ moveAddPiece attc $ moveFromTo sqfa sq
               adv = seeMoveValue pos attacks sqfa sq v0
               approx = approximateEasyCapts && gain0 >= v0
-          in if approx || adv <= gain0
+          -- in if approx || adv <= gain0	-- was here the problem?
+          in if approx || adv < gain0	-- was here the problem?
                 then (ss:wsqs, lsqs)
                 else (wsqs, ss:lsqs)
     | otherwise = error "perCaptWL pattern"
