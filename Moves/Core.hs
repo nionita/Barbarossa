@@ -2,6 +2,7 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternGuards #-}
+{-# OPTIONS_GHC -Wno-incomplete-uni-patterns -Wno-x-partial #-}
 module Moves.Core (
     module Moves.Core,
     module Moves.Internal.BitBoard,

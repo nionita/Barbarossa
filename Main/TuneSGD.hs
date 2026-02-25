@@ -1,7 +1,8 @@
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE BangPatterns #-}
+{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
-module Main where
+module Main (main) where
 import Control.Monad (when, forM_)
 import Data.List (isSuffixOf, sort)
 import System.Console.GetOpt

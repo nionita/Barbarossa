@@ -1,6 +1,10 @@
 {-# LANGUAGE PatternGuards #-}
+{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
-module Moves.Notation where
+module Moves.Notation (
+    fromNiceNotation,
+    posToFen
+) where
 
 import Data.Bits
 import Data.Char (ord, chr, toLower)

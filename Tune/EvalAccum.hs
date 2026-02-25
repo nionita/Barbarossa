@@ -1,15 +1,10 @@
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE BangPatterns #-}
+{-# OPTIONS_GHC -Wno-unused-top-binds -Wno-x-partial #-}
 
 module Tune.EvalAccum (
     EvalAccum(..),
     EASimple(..),
-    EAMulti(..),
-    EAStep(..),
-    EATrip(..),
-    EAStat(..),
-    reportEAStep,
-    reportEATrip,
     reportEAStat,
     bestLoss,
     firstLoss,

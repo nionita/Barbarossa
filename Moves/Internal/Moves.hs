@@ -1,6 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 module Moves.Internal.Moves (
-    movesInit, pAttacs, pawnWhiteAttacks, pawnBlackAttacks, targetPawnMoves,
+    movesInit, pAttacs, targetPawnMoves,
     fAttacs, kAttacs, qAttacs, rAttacs, bAttacs, nAttacs
     ) where
 

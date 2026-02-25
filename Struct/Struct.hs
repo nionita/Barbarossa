@@ -2,7 +2,7 @@
 module Struct.Struct (
          BBoard, Square, ZKey, ShArray, MaArray, DbArray, Move(..),
          Piece(..), Color(..), TabCont(..), MyPos(..), LazyBits(..),
-         other, moving, epMask, fyMask, fyIncr, fyZero, mvMask, caRiMa,
+         other, moving, epMask, fyMask, fyIncr, mvMask, caRiMa,
          caRKiw, caRQuw, caRMKw, caRMQw, caRAKw, caRAQw, caRKib, caRQub, caRMKb, caRMQb, caRAKb, caRAQb,
          tabla, emptyPos, isReversible,
          remis50Moves, set50Moves, reset50Moves, addHalfMove, get50Moves,
@@ -10,7 +10,7 @@ module Struct.Struct (
          moveIsNormal, moveIsCastle, moveIsPromo, moveIsEnPas, moveColor, movePiece,
          movePromoPiece, moveEnPasDel, makeEnPas, moveAddColor, moveAddPiece,
          moveHisAdr, moveHisOfs,
-         makeCastleFor, makePromo, moveFromTo, showWord64,
+         makeCastleFor, makePromo, moveFromTo,
          activatePromo, fromColRow, checkCastle, checkEnPas, toString,
          myAttacs, yoAttacs, check,
          myPAttacs, myNAttacs, myBAttacs, myRAttacs, myQAttacs, myKAttacs,

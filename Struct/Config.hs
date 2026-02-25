@@ -3,7 +3,7 @@
 module Struct.Config (
     CollectParams(..),
     fileToParams, stringToParams,
-    readParam, colParams, lookApply
+    colParams, lookApply
 ) where
 
 import Data.Char (isSpace)

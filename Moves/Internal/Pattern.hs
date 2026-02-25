@@ -2,7 +2,7 @@ module Moves.Internal.Pattern (
         genMovesArray, regPawnsBB,
         row1,  row2,  row3,  row4,  row5,  row6,  row7,  row8,
         fileA, fileB, fileC, fileD, fileE, fileF, fileG, fileH,
-        bbLeft, bbRight, up, down,
+        bbLeft, bbRight, up,
         rowBB, colBB, rookFiles, lightSquares, darkSquares
     ) where
 

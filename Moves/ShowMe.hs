@@ -1,4 +1,9 @@
-module Moves.ShowMe where
+{-# OPTIONS_GHC -Wno-unused-top-binds #-}
+
+module Moves.ShowMe (
+    showBB,
+    showTab
+) where
 
 import Data.Array.Unboxed
 import Data.Bits

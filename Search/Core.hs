@@ -1,6 +1,8 @@
 ﻿{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE PatternGuards #-}
-module Search.Core where
+module Search.Core (
+    alphaBeta
+) where
 import Control.Monad
 import Control.Monad.State hiding (gets, modify)
 import Data.Array.Base (unsafeAt)

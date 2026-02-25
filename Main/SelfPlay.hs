@@ -1,11 +1,12 @@
 {-# LANGUAGE PatternGuards #-}
+{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE MultiWayIf #-}
 
-module Main where
+module Main (main) where
 import Control.Monad.Reader
 import Control.Monad (when, void)
 import Control.Concurrent

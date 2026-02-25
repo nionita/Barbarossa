@@ -4,7 +4,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Main where
+module Main (main) where
 import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.State
@@ -26,7 +26,6 @@ import Struct.Status
 import Struct.Context
 import Struct.Config
 import Hash.TransTab
-import Search.Core
 import Moves.Core (posFromFen, initPos)
 import Moves.Internal.Base
 import Moves.Internal.BaseTypes (Game)

@@ -1,7 +1,8 @@
 {-# LANGUAGE RankNTypes #-}
+{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 module Uci.UCI (
-         UCIMess(..), Option(..), Pos(..), GoCmds(..), ExpCommand(..),
-         parseUciStr, parseMoveStr, parseExploreStr,
+         UCIMess(..), Option(..), Pos(..), GoCmds(..),
+         parseUciStr,
          findDepth, findTInc, findTime, findMovesToGo
     ) where
 

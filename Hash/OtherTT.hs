@@ -1,9 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE EmptyDataDecls #-}
-module Hash.OtherTT (
-    ACache, newACache, readACache, writeACache
-    -- , checkProp
-    ) where
+module Hash.OtherTT () where
 
 -- For other caches (for king safety, pawn structure) we use a smaller and simpler
 -- cache with one entry slots, with immediate replace

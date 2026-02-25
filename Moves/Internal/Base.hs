@@ -1,5 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE PatternGuards #-}
+{-# OPTIONS_GHC -Wno-x-partial #-}
 
 module Moves.Internal.Base (
     posToState, getPos, posNewSearch,
@@ -10,7 +11,6 @@ module Moves.Internal.Base (
     mateScore, qsDelta,
     draftStats,
     finNode, countRepetitions,
-    showMyPos, logMes,
     nearmate,
     getRootMoveNumber, incrementRootMoveNumber
 ) where
