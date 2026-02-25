@@ -45,11 +45,6 @@ seeValue Rook   = 5
 seeValue Queen  = 10
 seeValue King   = 200
 
-
-
-
-
-
 -- Is color c in check in position p?
 {-# INLINE isCheck #-}
 isCheck :: MyPos -> Color -> Bool
@@ -152,18 +147,6 @@ moveChecksIndirect !p !m = ba .&. bq /= 0 || ra .&. rq /= 0
           !occ = (occup p .|. tb) `less` fb
           ba   = bAttacs occ ksq
           ra   = rAttacs occ ksq
-
-
-
-
-
-
-
-
-
-
-
-
 
 startFen :: String
 startFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR/ w KQkq - 0 1"
