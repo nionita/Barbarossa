@@ -26,7 +26,6 @@ import Struct.Status
 import Struct.Context
 import Struct.Config
 import Hash.TransTab
-import Search.Core
 import Search.AlbetaTypes (SStats(..), ssts0)
 import Moves.Core
 import Moves.Internal.Base

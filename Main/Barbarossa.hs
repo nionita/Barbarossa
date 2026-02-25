@@ -30,7 +30,6 @@ import Moves.Core (movesInit, posFromFen, initPos)
 import Moves.Internal.Base
 import Moves.History
 import Search.CStateMonad (execCState)
-import Search.Core
 import Search.AlbetaTypes (formatStats)
 import Eval.FileParams (makeEvalState)
 
@@ -39,7 +38,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.8.0"
-progVerSuff = "trc"
+progVerSuff = "cx"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file

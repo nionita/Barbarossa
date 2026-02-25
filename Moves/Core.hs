@@ -8,14 +8,11 @@ module Moves.Core (
     module Moves.Internal.Pattern,
     module Moves.Internal.Moves
 ) where
-import Data.Array.Base
-import Data.Array.Unboxed
 import Data.Bits
 import Data.Char
 import Data.List
 import Data.Maybe (fromJust)
 import Data.Word
-import qualified Data.Set as S
 import Struct.Struct
 import Hash.Zobrist
 import Moves.ShowMe

@@ -7,7 +7,6 @@ module Moves.Internal.GenMagics (
 
 import Data.Array.Unboxed
 import Data.Bits
-import Data.List
 import qualified Data.Set as S
 import Data.Word
 

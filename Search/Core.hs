@@ -2,7 +2,6 @@
 {-# LANGUAGE PatternGuards #-}
 module Search.Core where
 import Control.Monad
-import Control.Monad.Reader (ask)
 import Control.Monad.State hiding (gets, modify)
 import Data.Array.Base (unsafeAt)
 import Data.Array.Unboxed
@@ -13,16 +12,10 @@ import Data.Maybe (fromMaybe)
 import Search.CStateMonad
 import Search.AlbetaTypes
 import Struct.Struct
-import Struct.Context
-import Struct.Status
-import Hash.TransTab
 import Moves.Core
 import Moves.Internal.Base
 import Moves.Internal.BaseTypes (Game)
-import Moves.History
 import Moves.Notation
-import Moves.ShowMe
-import Eval.Core
 
 
 
@@ -813,7 +806,7 @@ moreLMR more !d = do
         !i1 = lmrrs s + i
     if i1 < 0
        then if lmrlv s <= lmrLevMin
-               then put s { lmrhi = find (lmrhi s), lmrrs = 0 }
+               then put s { lmrhi = findir (lmrhi s), lmrrs = 0 }
                else put s { lmrlv = lmrlv s - 1, lmrrs = 0 }
        else if i1 > lmrhi s
                then if lmrlv s >= lmrLevMax
@@ -821,7 +814,7 @@ moreLMR more !d = do
                        else put s { lmrlv = lmrlv s + 1, lmrrs = 0 }
                else put s { lmrrs = i1 }
     where fdir x = x `unsafeShiftL` 2
-          find x = max 1 $ x `unsafeShiftR` 1
+          findir x = max 1 $ x `unsafeShiftR` 1
 
 -- This is a kind of monadic fold optimized for (beta) cut
 pvLoop :: Monad m => (s -> e -> m (Bool, s)) -> s -> Alt e -> m s
