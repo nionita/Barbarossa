@@ -10,6 +10,7 @@ dist
 *.swp
 *.log
 .stack-work
+__pycache__/
 
 # Added 26.02.2026
 other/
