@@ -10,3 +10,8 @@ dist
 *.swp
 *.log
 .stack-work
+
+# Added 26.02.2026
+other/
+scripts/
+stack.yaml.lock
