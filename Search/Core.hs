@@ -900,11 +900,11 @@ pvQSearch :: Int -> Int -> Search ActiveQSScore
 pvQSearch = pvQSearchW
 
 pvQSearchW :: QSScore a => Int -> Int -> Search a
-pvQSearchW a b = qSearch (toQSScore a) (toQSScore b) True
+pvQSearchW !a !b = qSearch (toQSScore a) (toQSScore b) True
 
 {-# INLINABLE qSearch #-}
 qSearch :: QSScore a => a -> a -> Bool -> Search a
-qSearch qsa qsb front = do
+qSearch !qsa !qsb front = do
     (hdeep, tp, hsc, _, _) <- reTrieve >> lift ttRead
     if hdeep >= 0
        then qSearchFound    qsa qsb tp hsc front
@@ -913,7 +913,7 @@ qSearch qsa qsb front = do
 -- When we found a TT entry, we sometimes may terminate the QS immediately,
 -- and sometimes we may at least improve the search limits
 qSearchFound :: QSScore a => a -> a -> Int -> Int -> Bool -> Search a
-qSearchFound qsa qsb !tp !hsc front = do
+qSearchFound !qsa !qsb !tp !hsc front = do
     reSucc 1
     -- tp == 2 => we have an exact score
     -- tp == 1 => score >= hsc, so if hsc >  a then we at least improved
@@ -937,17 +937,17 @@ qSearchFound qsa qsb !tp !hsc front = do
                                       else qSearchLims qsa (minQSScore qsb (toQSScore hsc)) front
 
 qSearchNotFound :: QSScore a => a -> a -> Bool -> Search a
-qSearchNotFound qsa qsb front = reFail >> qSearchLims qsa qsb front
+qSearchNotFound !qsa !qsb front = reFail >> qSearchLims qsa qsb front
 
 qSearchLims :: QSScore a => a -> a -> Bool -> Search a
-qSearchLims qsa qsb front = do
+qSearchLims !qsa !qsb front = do
     pos <- lift getPos
     if tacticalPos pos
        then qsInCheck qsa qsb pos
        else qsNormal  qsa qsb pos front
 
 qsInCheck :: QSScore a => a -> a -> MyPos -> Search a
-qsInCheck qsa qsb pos = do
+qsInCheck !qsa !qsb pos = do
     edges <- Alt <$> lift genEscapeMoves
     if noMove edges
        then return $ maxQSScore qsa (toQSScore mated)	-- remain in limits (a could even be minBound!)
@@ -962,7 +962,7 @@ qsInCheck qsa qsb pos = do
              else pvQLoop qsb qsa edges
 
 qsNormal :: QSScore a => a -> a -> MyPos -> Bool -> Search a
-qsNormal qsa qsb pos front
+qsNormal !qsa !qsb pos front
     | staticScore pos >= qsScore qsb = do
          when collectFens $ finWithNodes "BETA"
          return qsb
@@ -982,16 +982,16 @@ qsNormal qsa qsb pos front
                    else pvQLoop qsb (maxQSScore qsa qss) edges
 
 pvQLoop :: QSScore a => a -> a -> Alt Move -> Search a
-pvQLoop qsb = go
-    where go qss (Alt [])     = return qss
-          go qss (Alt (e:es)) = do
+pvQLoop !qsb = go
+    where go !qss (Alt [])     = return qss
+          go !qss (Alt (e:es)) = do
               qss' <- pvQInnerLoop qsb qss e
               if qsScore qss' >= qsScore qsb then return qsb
                                              else go qss' $ Alt es
 
 {-# INLINABLE pvQInnerLoop #-}
 pvQInnerLoop :: QSScore a => a -> a -> Move -> Search a
-pvQInnerLoop qsb qsa e = timeToAbort qsb $ do
+pvQInnerLoop !qsb !qsa e = timeToAbort qsb $ do
     r <- lift $ doQSMove e
     if r
        then do
