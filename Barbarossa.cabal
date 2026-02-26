@@ -14,6 +14,10 @@ Flag ddump
   Description:  Enable ddumps
   Default:      True
 
+Flag qscollect
+  Description:  Collect quiescence tuning data (origin position payload)
+  Default:      True
+
 Executable Barbarossa
   Main-is:	Main/Barbarossa.hs
   Build-depends:
@@ -71,6 +75,8 @@ Executable Barbarossa
                -msse4.2
                -optl-s
   CPP-Options: -DSMSTRICT
+  if flag(qscollect)
+    CPP-Options: -DQS_COLLECT
   if flag(ddump)
     GHC-Options: -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques
                  -ddump-opt-cmm -ddump-asm
@@ -134,6 +140,8 @@ Executable SelfPlay
                -msse4.2
                -optl-s
   CPP-Options: -DSMSTRICT
+  if flag(qscollect)
+    CPP-Options: -DQS_COLLECT
   if flag(ddump)
     GHC-Options: -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques
                  -ddump-opt-cmm -ddump-asm
@@ -200,6 +208,8 @@ Executable TuneSGD
                -msse4.2
                -optl-s
   CPP-Options: -DSMSTRICT
+  if flag(qscollect)
+    CPP-Options: -DQS_COLLECT
   if flag(ddump)
     GHC-Options: -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques
                  -ddump-opt-cmm -ddump-asm

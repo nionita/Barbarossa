@@ -1,4 +1,5 @@
-﻿{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE PatternGuards #-}
 module Search.Core (
     alphaBeta
@@ -27,7 +28,11 @@ absurd :: String -> Game ()
 absurd s = logmes $ "Absurd: " ++ s	-- used for messages when assertions fail
 
 collectFens :: Bool
+#ifdef QS_COLLECT
 collectFens = True
+#else
+collectFens = False
+#endif
 
 -- Parameter for aspiration
 useAspirWin :: Bool
@@ -438,8 +443,8 @@ getSelfplay = gets (tuning . ronly)
 -- PV Search
 pvSearch :: NodeState -> Int -> Int -> Int -> Search Path
 pvSearch _ !a !b !d | d <= 0 = do
-    (v, mp) <- pvQSearch a b
-    return $! pathFromScorePos v mp	-- ok: fail hard in QS
+    qss <- pvQSearch a b
+    return $! pathFromScorePos (qsScore qss) (qsMPos qss)	-- ok: fail hard in QS
 pvSearch nst !a !b !d = do
     let pvnode = crtnt nst == PVNode
     -- Here we are always in PV if enough depth:
@@ -509,8 +514,8 @@ pvSearch nst !a !b !d = do
 -- PV Zero Window
 pvZeroW :: NodeState -> Int -> Int -> Search Path
 pvZeroW !_ !b !d | d <= 0 = do
-    (v, mp) <- pvQSearch bGrain b
-    return $! pathFromScorePos v mp
+    qss <- pvQSearch bGrain b
+    return $! pathFromScorePos (qsScore qss) (qsMPos qss)
     where !bGrain = b - scoreGrain
 pvZeroW !nst !b !d = do
     -- Check if we have it in TT
@@ -846,44 +851,59 @@ trimax !a !b !x
     | x >= b    = b
     | otherwise = x
 
--- We need a type to hold score and maybe a position to keep track where the final score comes from
-type QSScore = (Int, Maybe MyPos)
+class QSScore a where
+    toQSScore :: Int -> a
+    qsScorePos :: Int -> MyPos -> a
+    qsScore :: a -> Int
+    qsMPos :: a -> Maybe MyPos
+    negateQSScore :: a -> a
+    maxQSScore :: a -> a -> a
+    minQSScore :: a -> a -> a
 
--- And a few convenience functions
-toQSScore :: Int -> QSScore
-toQSScore v = (v, Nothing)
+data QSScoreCollect = QSScoreCollect !Int !(Maybe MyPos)
+data QSScoreSpeed = QSScoreSpeed !Int
 
-qsScorePos :: Int -> MyPos -> QSScore
-qsScorePos s pos = (s, Just pos)
+instance QSScore QSScoreCollect where
+    toQSScore v = QSScoreCollect v Nothing
+    qsScorePos s pos = QSScoreCollect s (Just pos)
+    qsScore (QSScoreCollect s _) = s
+    qsMPos (QSScoreCollect _ mp) = mp
+    negateQSScore (QSScoreCollect s mp) = QSScoreCollect (-s) mp
+    maxQSScore qsa qsx
+        | qsScore qsx <= qsScore qsa = qsa
+        | otherwise                  = qsx
+    minQSScore qsb qsx
+        | qsScore qsx >= qsScore qsb = qsb
+        | otherwise                  = qsx
 
-qsScore :: QSScore -> Int
-qsScore = fst
+instance QSScore QSScoreSpeed where
+    toQSScore v = QSScoreSpeed v
+    qsScorePos s _ = QSScoreSpeed s
+    qsScore (QSScoreSpeed s) = s
+    qsMPos _ = Nothing
+    negateQSScore (QSScoreSpeed s) = QSScoreSpeed (-s)
+    maxQSScore qsa qsx
+        | qsScore qsx <= qsScore qsa = qsa
+        | otherwise                  = qsx
+    minQSScore qsb qsx
+        | qsScore qsx >= qsScore qsb = qsb
+        | otherwise                  = qsx
 
-negateQSScore :: QSScore -> QSScore
-negateQSScore (s, mp) = (-s, mp)
-
--- This max & min functions are not symmetrical, the first parameter
--- is the previous (found) score, and the second is a new one
--- The explanation is for max, but it is similar for min too
--- There are 2 cases:
--- - new score is smaller or equal: the old remains
--- - new score is higher: then this remains
-maxQSScore, minQSScore :: QSScore -> QSScore -> QSScore
-
-maxQSScore qsa qsx
-    | qsScore qsx <= qsScore qsa = qsa
-    | otherwise                  = qsx
-
-minQSScore qsb qsx
-    | qsScore qsx >= qsScore qsb = qsb
-    | otherwise                  = qsx
+#ifdef QS_COLLECT
+type ActiveQSScore = QSScoreCollect
+#else
+type ActiveQSScore = QSScoreSpeed
+#endif
 
 -- Quiescent Search
-pvQSearch :: Int -> Int -> Search QSScore
-pvQSearch a b = qSearch (toQSScore a) (toQSScore b) True
+pvQSearch :: Int -> Int -> Search ActiveQSScore
+pvQSearch = pvQSearchW
 
-{-# NOINLINE qSearch #-}
-qSearch :: QSScore -> QSScore -> Bool -> Search QSScore
+pvQSearchW :: QSScore a => Int -> Int -> Search a
+pvQSearchW a b = qSearch (toQSScore a) (toQSScore b) True
+
+{-# INLINABLE qSearch #-}
+qSearch :: QSScore a => a -> a -> Bool -> Search a
 qSearch qsa qsb front = do
     (hdeep, tp, hsc, _, _) <- reTrieve >> lift ttRead
     if hdeep >= 0
@@ -892,7 +912,7 @@ qSearch qsa qsb front = do
 
 -- When we found a TT entry, we sometimes may terminate the QS immediately,
 -- and sometimes we may at least improve the search limits
-qSearchFound :: QSScore -> QSScore -> Int -> Int -> Bool -> Search QSScore
+qSearchFound :: QSScore a => a -> a -> Int -> Int -> Bool -> Search a
 qSearchFound qsa qsb !tp !hsc front = do
     reSucc 1
     -- tp == 2 => we have an exact score
@@ -916,17 +936,17 @@ qSearchFound qsa qsb !tp !hsc front = do
                                       then qSearchLims (maxQSScore qsa (toQSScore hsc)) qsb front
                                       else qSearchLims qsa (minQSScore qsb (toQSScore hsc)) front
 
-qSearchNotFound :: QSScore -> QSScore -> Bool -> Search QSScore
+qSearchNotFound :: QSScore a => a -> a -> Bool -> Search a
 qSearchNotFound qsa qsb front = reFail >> qSearchLims qsa qsb front
 
-qSearchLims :: QSScore -> QSScore -> Bool -> Search QSScore
+qSearchLims :: QSScore a => a -> a -> Bool -> Search a
 qSearchLims qsa qsb front = do
     pos <- lift getPos
     if tacticalPos pos
        then qsInCheck qsa qsb pos
        else qsNormal  qsa qsb pos front
 
-qsInCheck :: QSScore -> QSScore -> MyPos -> Search QSScore
+qsInCheck :: QSScore a => a -> a -> MyPos -> Search a
 qsInCheck qsa qsb pos = do
     edges <- Alt <$> lift genEscapeMoves
     if noMove edges
@@ -941,7 +961,7 @@ qsInCheck qsa qsb pos = do
              -- do not trust eval in check
              else pvQLoop qsb qsa edges
 
-qsNormal :: QSScore -> QSScore -> MyPos -> Bool -> Search QSScore
+qsNormal :: QSScore a => a -> a -> MyPos -> Bool -> Search a
 qsNormal qsa qsb pos front
     | staticScore pos >= qsScore qsb = do
          when collectFens $ finWithNodes "BETA"
@@ -961,7 +981,7 @@ qsNormal qsa qsb pos front
                        return (maxQSScore qsa qss)
                    else pvQLoop qsb (maxQSScore qsa qss) edges
 
-pvQLoop :: QSScore -> QSScore -> Alt Move -> Search QSScore
+pvQLoop :: QSScore a => a -> a -> Alt Move -> Search a
 pvQLoop qsb = go
     where go qss (Alt [])     = return qss
           go qss (Alt (e:es)) = do
@@ -969,8 +989,8 @@ pvQLoop qsb = go
               if qsScore qss' >= qsScore qsb then return qsb
                                              else go qss' $ Alt es
 
-{-# NOINLINE pvQInnerLoop #-}
-pvQInnerLoop :: QSScore -> QSScore -> Move -> Search QSScore
+{-# INLINABLE pvQInnerLoop #-}
+pvQInnerLoop :: QSScore a => a -> a -> Move -> Search a
 pvQInnerLoop qsb qsa e = timeToAbort qsb $ do
     r <- lift $ doQSMove e
     if r
@@ -980,6 +1000,25 @@ pvQInnerLoop qsb qsa e = timeToAbort qsb $ do
            lift undoMove
            return $ maxQSScore qsa qss
        else return qsa
+
+{-# SPECIALIZE pvQSearchW :: Int -> Int -> Search QSScoreCollect #-}
+{-# SPECIALIZE pvQSearchW :: Int -> Int -> Search QSScoreSpeed #-}
+{-# SPECIALIZE qSearch :: QSScoreCollect -> QSScoreCollect -> Bool -> Search QSScoreCollect #-}
+{-# SPECIALIZE qSearch :: QSScoreSpeed -> QSScoreSpeed -> Bool -> Search QSScoreSpeed #-}
+{-# SPECIALIZE qSearchFound :: QSScoreCollect -> QSScoreCollect -> Int -> Int -> Bool -> Search QSScoreCollect #-}
+{-# SPECIALIZE qSearchFound :: QSScoreSpeed -> QSScoreSpeed -> Int -> Int -> Bool -> Search QSScoreSpeed #-}
+{-# SPECIALIZE qSearchNotFound :: QSScoreCollect -> QSScoreCollect -> Bool -> Search QSScoreCollect #-}
+{-# SPECIALIZE qSearchNotFound :: QSScoreSpeed -> QSScoreSpeed -> Bool -> Search QSScoreSpeed #-}
+{-# SPECIALIZE qSearchLims :: QSScoreCollect -> QSScoreCollect -> Bool -> Search QSScoreCollect #-}
+{-# SPECIALIZE qSearchLims :: QSScoreSpeed -> QSScoreSpeed -> Bool -> Search QSScoreSpeed #-}
+{-# SPECIALIZE qsInCheck :: QSScoreCollect -> QSScoreCollect -> MyPos -> Search QSScoreCollect #-}
+{-# SPECIALIZE qsInCheck :: QSScoreSpeed -> QSScoreSpeed -> MyPos -> Search QSScoreSpeed #-}
+{-# SPECIALIZE qsNormal :: QSScoreCollect -> QSScoreCollect -> MyPos -> Bool -> Search QSScoreCollect #-}
+{-# SPECIALIZE qsNormal :: QSScoreSpeed -> QSScoreSpeed -> MyPos -> Bool -> Search QSScoreSpeed #-}
+{-# SPECIALIZE pvQLoop :: QSScoreCollect -> QSScoreCollect -> Alt Move -> Search QSScoreCollect #-}
+{-# SPECIALIZE pvQLoop :: QSScoreSpeed -> QSScoreSpeed -> Alt Move -> Search QSScoreSpeed #-}
+{-# SPECIALIZE pvQInnerLoop :: QSScoreCollect -> QSScoreCollect -> Move -> Search QSScoreCollect #-}
+{-# SPECIALIZE pvQInnerLoop :: QSScoreSpeed -> QSScoreSpeed -> Move -> Search QSScoreSpeed #-}
 
 {-# INLINE finWithNodes #-}
 finWithNodes :: String -> Search ()
@@ -1145,4 +1184,3 @@ informPV s d es = do
     lift $ do
         n <- curNodes $ sNodes ss
         informCtx (BestMv s d (maxdp st) n es)
-

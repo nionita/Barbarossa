@@ -27,6 +27,17 @@ After that you can build the program with:
 
     stack build
 
+Quiescence QSScore variants
+---------------------------
+
+By default, builds include quiescence tuning data collection (collect variant).
+
+    stack build
+
+To build the speed variant (without quiescence data collection payload), use:
+
+    stack build --flag Barbarossa:-qscollect
+
 One of the last lines of the output tells you where the produced executable (with a name
 like Barbarossa, for Linux, or Barbarossa.exe, for Windows) was copied.
 
