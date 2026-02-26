@@ -1,4 +1,4 @@
-﻿{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternGuards #-}

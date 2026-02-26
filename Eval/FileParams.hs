@@ -1,4 +1,4 @@
-﻿module Eval.FileParams (
+module Eval.FileParams (
     makeEvalState,
     fileToState
   ) where
