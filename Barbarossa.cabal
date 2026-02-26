@@ -18,6 +18,10 @@ Flag qscollect
   Description:  Collect quiescence tuning data (origin position payload)
   Default:      True
 
+Flag reproselfplay
+  Description:  SelfPlay-only reproducible history init (newHist = 0)
+  Default:      False
+
 Executable Barbarossa
   Main-is:	Main/Barbarossa.hs
   Build-depends:
@@ -142,6 +146,8 @@ Executable SelfPlay
   CPP-Options: -DSMSTRICT
   if flag(qscollect)
     CPP-Options: -DQS_COLLECT
+  if flag(reproselfplay)
+    CPP-Options: -DREPRO_HIST
   if flag(ddump)
     GHC-Options: -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques
                  -ddump-opt-cmm -ddump-asm

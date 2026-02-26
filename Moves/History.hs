@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE BangPatterns #-}
 
 module Moves.History (
@@ -8,14 +9,18 @@ import Control.Monad.ST.Unsafe (unsafeIOToST)
 import Control.Monad.ST
 import Control.Monad (forM_)
 import Data.Bits
+#ifndef REPRO_HIST
 import Data.List (unfoldr)
+#endif
 import Data.Ord (comparing)
 import qualified Data.Vector.Algorithms.Heap as H	-- Intro sort was slower
 import qualified Data.Vector.Unboxed.Mutable as V
 import qualified Data.Vector.Unboxed         as U
 import Data.Int
 import Data.Word
+#ifndef REPRO_HIST
 import System.Random
+#endif
 
 import Struct.Struct
 
@@ -52,17 +57,23 @@ ofs' :: Move -> Int
 ofs' m = bloff * moveHisOfs m
 
 -- Produce small random numbers to initialize the new history
+#ifndef REPRO_HIST
 smallVals :: RandomGen g => g -> [Word32]
 smallVals g = concatMap chop $ randoms g
     where chop w = unfoldr f (w, 16)
           f :: (Word32, Int) -> Maybe (Word32, (Word32, Int))
           f (_, 0) = Nothing
           f (w, k) = Just (w .&. 3, (w `unsafeShiftR` 2, k-1))
+#endif
 
 newHist :: IO History
+#ifdef REPRO_HIST
+newHist = U.thaw $ U.replicate vsize 0
+#else
 newHist = do
     g <- newStdGen
     U.thaw $ U.fromList $ map fromIntegral $ take vsize $ smallVals g
+#endif
 
 -- History value: exponential
 -- d is absolute depth, root = 1, so that cuts near root count more

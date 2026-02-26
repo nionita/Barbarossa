@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE PatternGuards #-}
 {-# OPTIONS_GHC -Wno-unused-top-binds #-}
 {-# LANGUAGE BangPatterns #-}
@@ -54,6 +55,7 @@ data Options = Options {
         optNFens    :: Maybe Int,	-- number of fens (Nothing = all)
         optMatch    :: Maybe String,	-- match between configs in the given directory
         optPerfTest :: Bool,		-- perf test on input fen file
+        optBuildInfo :: Bool,		-- print build flavor and opposite build command
         optAFenFile :: FilePath,	-- fen file with start positions
         optFOutFile :: FilePath		-- output file for filter option
     }
@@ -72,6 +74,7 @@ defaultOptions = Options {
         optNFens    = Nothing,
         optMatch    = Nothing,
         optPerfTest = False,
+        optBuildInfo = False,
         optAFenFile = "alle.epd",
         optFOutFile = "vect.txt"
     }
@@ -111,6 +114,9 @@ addMatch ns opt = opt { optMatch = Just ns }
 setPerfTest :: Options -> Options
 setPerfTest opt = opt { optPerfTest = True }
 
+setBuildInfo :: Options -> Options
+setBuildInfo opt = opt { optBuildInfo = True }
+
 addIFile :: FilePath -> Options -> Options
 addIFile fi opt = opt { optAFenFile = fi }
 
@@ -136,6 +142,7 @@ options = [
         Option "p" ["param"]   (ReqArg addParam "STRING") "Eval/search/time params: name=value,...",
         Option "m" ["match"]   (ReqArg addMatch "STRING") "Match between 2 configs in the given directory",
         Option "P" ["perf"]    (NoArg setPerfTest) "Performance test on input FEN file",
+        Option "B" ["build-info"] (NoArg setBuildInfo) "Show build flavor and opposite build command",
         Option "i" ["input"]   (ReqArg addIFile "STRING") "Input (fen) file",
         Option "o" ["output"]  (ReqArg addOFile "STRING") "Output file",
         Option "d" ["depth"]   (ReqArg addDepth "STRING") "Search depth",
@@ -153,7 +160,7 @@ theOptions = do
         (o, n, []) -> return (foldr ($) defaultOptions o, n)
         (_, _, es) -> ioError (userError (concat es ++ usageInfo header options))
     where header = "Usage: " ++ idName
-              ++ " [-c CONF] [-m DIR [-a CFILE1] -b CFILE2] [-P] [-i FENFILE [-s SKIP][-f FENS]] [-o OUTFILE] [-d DEPTH]"
+              ++ " [-c CONF] [-m DIR [-a CFILE1] -b CFILE2] [-P] [-B] [-i FENFILE [-s SKIP][-f FENS]] [-o OUTFILE] [-d DEPTH]"
           idName = "SelfPlay"
 
 validateOptions :: Options -> IO ()
@@ -165,6 +172,21 @@ validateOptions opts
     | optPerfTest opts && (optPlayer1 opts /= Nothing || optPlayer2 opts /= Nothing)
         = ioError $ userError "--perf cannot be combined with --player1/--player2"
     | otherwise = return ()
+
+buildFlavor, otherBuildCmd :: String
+#ifdef REPRO_HIST
+buildFlavor = "reproducible history (REPRO_HIST enabled)"
+otherBuildCmd = "stack build Barbarossa:exe:SelfPlay"
+#else
+buildFlavor = "default history (randomized small init)"
+otherBuildCmd = "stack build --flag Barbarossa:reproselfplay Barbarossa:exe:SelfPlay"
+#endif
+
+showBuildInfo :: IO ()
+showBuildInfo = do
+    putStrLn $ "SelfPlay build flavor: " ++ buildFlavor
+    putStrLn $ "To build the other flavor use:"
+    putStrLn $ "  " ++ otherBuildCmd
 
 initContext :: Options -> IO Context
 initContext opts = do
@@ -201,15 +223,18 @@ initContext opts = do
 main :: IO ()
 main = do
     (opts, _) <- theOptions
-    validateOptions opts
-    ctx <- initContext opts
-    if optPerfTest opts
-       then runReaderT (perfTestFile opts) ctx
-       else case optMatch opts of
-                 Nothing  -> runReaderT (filterFile opts) ctx
-                 Just dir -> do
-                     GameScore w d l <- runReaderT (matchFile  opts dir) ctx
-                     putStrLn $ "End result: (" ++ show w ++ "," ++ show d ++ "," ++ show l ++ ")"
+    if optBuildInfo opts
+       then showBuildInfo
+       else do
+           validateOptions opts
+           ctx <- initContext opts
+           if optPerfTest opts
+              then runReaderT (perfTestFile opts) ctx
+              else case optMatch opts of
+                        Nothing  -> runReaderT (filterFile opts) ctx
+                        Just dir -> do
+                            GameScore w d l <- runReaderT (matchFile  opts dir) ctx
+                            putStrLn $ "End result: (" ++ show w ++ "," ++ show d ++ "," ++ show l ++ ")"
 
 filterFile :: Options -> CtxIO ()
 filterFile opts = do

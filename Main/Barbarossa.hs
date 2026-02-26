@@ -1,4 +1,4 @@
-﻿{-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -38,7 +38,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.8.0"
-progVerSuff = "cxis"
+progVerSuff = "cxirep"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
