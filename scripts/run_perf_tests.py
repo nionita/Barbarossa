@@ -9,10 +9,19 @@ import re
 import statistics
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 
+NODES_RE = re.compile(r"Total nodes:\s*(\d+)")
+TIME_MS_RE = re.compile(r"Total time \(ms\):\s*(\d+)")
 NPS_RE = re.compile(r"Nodes/second:\s*(\d+)")
+
+@dataclass(frozen=True)
+class RoundStats:
+    nodes: int
+    time_ms: int
+    nps: int
 
 
 def normalize_path(path_text: str) -> Path:
@@ -25,7 +34,7 @@ def normalize_path(path_text: str) -> Path:
     return Path(s)
 
 
-def run_one(exe: Path, input_file: Path, depth: int, branch: str, round_no: int) -> int:
+def run_one(exe: Path, input_file: Path, depth: int, branch: str, round_no: int) -> RoundStats:
     cmd = [str(exe), "-P", "-i", str(input_file), "-d", str(depth)]
     cp = subprocess.run(cmd, text=True, capture_output=True, check=False)
     if cp.returncode != 0:
@@ -33,13 +42,19 @@ def run_one(exe: Path, input_file: Path, depth: int, branch: str, round_no: int)
         raise RuntimeError(
             f"[{branch}] run {round_no} failed with code {cp.returncode}: {err}"
         )
-    match = NPS_RE.search(cp.stdout)
-    if not match:
+    nodes_m = NODES_RE.search(cp.stdout)
+    time_m = TIME_MS_RE.search(cp.stdout)
+    nps_m = NPS_RE.search(cp.stdout)
+    if not (nodes_m and time_m and nps_m):
         raise RuntimeError(
-            f"[{branch}] run {round_no} did not report Nodes/second.\n"
+            f"[{branch}] run {round_no} did not report nodes/time/nps.\n"
             f"Output:\n{cp.stdout}"
         )
-    return int(match.group(1))
+    return RoundStats(
+        nodes=int(nodes_m.group(1)),
+        time_ms=int(time_m.group(1)),
+        nps=int(nps_m.group(1)),
+    )
 
 
 def filtered_average(values: list[int]) -> float:
@@ -86,7 +101,7 @@ def main() -> int:
             return 2
         exes[branch] = exe
 
-    results: dict[str, list[int]] = {branch: [] for branch in args.branches}
+    results: dict[str, list[RoundStats]] = {branch: [] for branch in args.branches}
 
     for round_no in range(1, args.runs + 1):
         print(f"Round {round_no}/{args.runs}")
@@ -95,21 +110,27 @@ def main() -> int:
                 pool.submit(run_one, exes[branch], input_file, args.depth, branch, round_no): branch
                 for branch in args.branches
             }
+            round_stats: dict[str, RoundStats] = {}
             for fut in cf.as_completed(future_map):
                 branch = future_map[fut]
                 try:
-                    nps = fut.result()
+                    stats = fut.result()
                 except Exception as exc:
                     print(f"ERROR: {exc}", file=sys.stderr)
                     return 1
-                results[branch].append(nps)
-                print(f"  {branch}: {nps} nps")
+                results[branch].append(stats)
+                round_stats[branch] = stats
+            for branch in args.branches:
+                stats = round_stats[branch]
+                print(
+                    f"  {branch}: nodes={stats.nodes} time={stats.time_ms}ms nps={stats.nps}"
+                )
 
     print("\nFiltered averages (drop one best + one worst):")
     for branch in args.branches:
-        values = results[branch]
-        vals_sorted = sorted(values)
-        avg = filtered_average(values)
+        nps_values = [s.nps for s in results[branch]]
+        vals_sorted = sorted(nps_values)
+        avg = filtered_average(nps_values)
         print(
             f"  {branch}: avg={avg:.2f} nps  "
             f"(best={vals_sorted[-1]}, worst={vals_sorted[0]}, kept={vals_sorted[1:-1]})"
