@@ -11,6 +11,7 @@ import Control.Monad.Reader
 import Control.Monad (when, void)
 import Control.Concurrent
 import Control.Exception
+import Data.Char (isSpace)
 import Data.Foldable (foldlM)
 import Data.List (intersperse)
 import Data.Maybe (fromMaybe)
@@ -52,6 +53,7 @@ data Options = Options {
         optNSkip    :: Maybe Int,	-- number of fens to skip (Nothing = none)
         optNFens    :: Maybe Int,	-- number of fens (Nothing = all)
         optMatch    :: Maybe String,	-- match between configs in the given directory
+        optPerfTest :: Bool,		-- perf test on input fen file
         optAFenFile :: FilePath,	-- fen file with start positions
         optFOutFile :: FilePath		-- output file for filter option
     }
@@ -69,6 +71,7 @@ defaultOptions = Options {
         optNSkip    = Nothing,
         optNFens    = Nothing,
         optMatch    = Nothing,
+        optPerfTest = False,
         optAFenFile = "alle.epd",
         optFOutFile = "vect.txt"
     }
@@ -105,6 +108,9 @@ addNFens ns opt = opt { optNFens = Just $ read ns }
 addMatch :: String -> Options -> Options
 addMatch ns opt = opt { optMatch = Just ns }
 
+setPerfTest :: Options -> Options
+setPerfTest opt = opt { optPerfTest = True }
+
 addIFile :: FilePath -> Options -> Options
 addIFile fi opt = opt { optAFenFile = fi }
 
@@ -129,6 +135,7 @@ options = [
         Option "c" ["config"]  (ReqArg setConfFile "STRING") "Configuration file",
         Option "p" ["param"]   (ReqArg addParam "STRING") "Eval/search/time params: name=value,...",
         Option "m" ["match"]   (ReqArg addMatch "STRING") "Match between 2 configs in the given directory",
+        Option "P" ["perf"]    (NoArg setPerfTest) "Performance test on input FEN file",
         Option "i" ["input"]   (ReqArg addIFile "STRING") "Input (fen) file",
         Option "o" ["output"]  (ReqArg addOFile "STRING") "Output file",
         Option "d" ["depth"]   (ReqArg addDepth "STRING") "Search depth",
@@ -146,8 +153,18 @@ theOptions = do
         (o, n, []) -> return (foldr ($) defaultOptions o, n)
         (_, _, es) -> ioError (userError (concat es ++ usageInfo header options))
     where header = "Usage: " ++ idName
-              ++ " [-c CONF] [-m DIR [-a CFILE1] -b CFILE2] [-t THREADS] [-i FENFILE [-s SKIP][-f FENS]] [-o OUTFILE] [-d DEPTH]"
+              ++ " [-c CONF] [-m DIR [-a CFILE1] -b CFILE2] [-P] [-i FENFILE [-s SKIP][-f FENS]] [-o OUTFILE] [-d DEPTH]"
           idName = "SelfPlay"
+
+validateOptions :: Options -> IO ()
+validateOptions opts
+    | optPerfTest opts && optMatch opts /= Nothing
+        = ioError $ userError "--perf cannot be combined with --match"
+    | optPerfTest opts && optFOutFile opts /= optFOutFile defaultOptions
+        = ioError $ userError "--perf cannot be combined with --output"
+    | optPerfTest opts && (optPlayer1 opts /= Nothing || optPlayer2 opts /= Nothing)
+        = ioError $ userError "--perf cannot be combined with --player1/--player2"
+    | otherwise = return ()
 
 initContext :: Options -> IO Context
 initContext opts = do
@@ -156,7 +173,9 @@ initContext opts = do
     wchan <- newChan
     ha <- newCache 1	-- it will take the minimum number of entries
     hi <- newHist
-    let paramList = stringToParams $ concat $ intersperse "," $ optParams opts
+    let paramList
+            | null $ optParams opts = []
+            | otherwise             = stringToParams $ concat $ intersperse "," $ optParams opts
     (parc, evs) <- makeEvalState (optConfFile opts) paramList "progver" "progsuf"
     let chg = Chg {
             working = False,
@@ -182,12 +201,15 @@ initContext opts = do
 main :: IO ()
 main = do
     (opts, _) <- theOptions
+    validateOptions opts
     ctx <- initContext opts
-    case optMatch opts of
-       Nothing  -> runReaderT (filterFile opts) ctx
-       Just dir -> do
-           GameScore w d l <- runReaderT (matchFile  opts dir) ctx
-           putStrLn $ "End result: (" ++ show w ++ "," ++ show d ++ "," ++ show l ++ ")"
+    if optPerfTest opts
+       then runReaderT (perfTestFile opts) ctx
+       else case optMatch opts of
+                 Nothing  -> runReaderT (filterFile opts) ctx
+                 Just dir -> do
+                     GameScore w d l <- runReaderT (matchFile  opts dir) ctx
+                     putStrLn $ "End result: (" ++ show w ++ "," ++ show d ++ "," ++ show l ++ ")"
 
 filterFile :: Options -> CtxIO ()
 filterFile opts = do
@@ -209,6 +231,60 @@ filterFile opts = do
     liftIO $ do
         hClose ho
         hClose hi
+
+data PerfAcc = PerfAcc {
+        perfValid   :: !Int,
+        perfInvalid :: !Int,
+        perfNodes   :: !Int
+    }
+
+perfTestFile :: Options -> CtxIO ()
+perfTestFile opts = do
+    ctx <- ask
+    let logFileName = "selfplay-" ++ show (startSecond ctx) ++ ".log"
+    startLogger logFileName
+    lift $ do
+        putStrLn $ "Performance test from " ++ optAFenFile opts
+        putStrLn $ "Search depth  " ++ show (optDepth opts)
+    hi <- liftIO $ openFile (optAFenFile opts) ReadMode
+    startMs <- liftIO $ currMilli (strttm ctx)
+    acc <- loopCount (perfLoop hi (optDepth opts)) (PerfAcc 0 0 0)
+    endMs <- liftIO $ currMilli (strttm ctx)
+    let elapsedMs = max 1 (endMs - startMs)
+        nps = perfNodes acc * 1000 `div` elapsedMs
+    liftIO $ do
+        putStrLn $ "Positions searched: " ++ show (perfValid acc)
+        putStrLn $ "Positions skipped:  " ++ show (perfInvalid acc)
+        putStrLn $ "Total nodes:        " ++ show (perfNodes acc)
+        putStrLn $ "Total time (ms):    " ++ show elapsedMs
+        putStrLn $ "Nodes/second:       " ++ show nps
+        hClose hi
+
+perfLoop :: Handle -> Int -> Int -> PerfAcc -> CtxIO (Bool, PerfAcc)
+perfLoop hi depth _k acc = do
+    end <- lift $ hIsEOF hi
+    if end
+       then return (False, acc)
+       else do
+           fen <- lift $ hGetLine hi
+           if all isSpace fen
+              then return (True, acc { perfInvalid = perfInvalid acc + 1 })
+              else do
+                  posRes <- liftIO $ try (evaluate (posFromFen fen)) :: CtxIO (Either SomeException MyPos)
+                  case posRes of
+                      Left _ -> return (True, acc { perfInvalid = perfInvalid acc + 1 })
+                      Right pos -> do
+                          chg <- readChanging
+                          let crts = crtStatus chg
+                              sini = posToState pos (hash crts) (hist crts) (evalst crts)
+                          modifyChanging $ \c -> c { crtStatus = sini }
+                          (_, _, nodes) <- iterativeDeepening depth Nothing
+                          let acc' = PerfAcc {
+                                  perfValid = perfValid acc + 1,
+                                  perfInvalid = perfInvalid acc,
+                                  perfNodes = perfNodes acc + nodes
+                              }
+                          return (True, acc')
 
 matchFile :: Options -> String -> CtxIO GameScore
 matchFile opts dir = do
