@@ -56,7 +56,7 @@ isCheck p Black | check p .&. black p == 0 = False
 
 {-# INLINE inCheck #-}
 inCheck :: MyPos -> Bool
-inCheck = (/= 0) . check
+inCheck p = isCheck p (moving p)
 
 {-# INLINE movePassed #-}
 movePassed :: MyPos -> Move -> Bool
@@ -343,7 +343,7 @@ findChecking !pos = concat [pChk, nChk, bChk, rChk, qbChk, qrChk]
 -- Generate move when in check
 genMoveFCheck :: MyPos -> [Move]
 genMoveFCheck !p
-    | null chklist        = error "genMoveFCheck"
+    | null chklist        = []
     | null $ tail chklist = r1 ++ kGen ++ r2	-- simple check
     | otherwise           = kGen		-- double check, only king moves help
     where chklist = findChecking p

@@ -234,7 +234,7 @@ exten p1 p2 | inCheck p2     = 1
 -- Currently only when in check
 {-# INLINE tacticalPos #-}
 tacticalPos :: MyPos -> Bool
-tacticalPos = (/= 0) . check
+tacticalPos p = isCheck p (moving p)
 
 {-# INLINE zugZwang #-}
 zugZwang :: MyPos -> Bool
