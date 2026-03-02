@@ -7,6 +7,7 @@ Edit the destination directories below for your machine.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import shutil
 import subprocess
@@ -43,15 +44,31 @@ def sanitize_branch(branch: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "-", branch)
 
 
-def deploy_file(src: Path, dst: Path, dry_run: bool, verbose: bool) -> None:
+def should_copy(src: Path, dst: Path) -> bool:
+    if not dst.exists():
+        return True
+    # Copy only if source executable is newer than deployed file.
+    return os.path.getmtime(src) > os.path.getmtime(dst)
+
+
+def deploy_file(src: Path, dst: Path, dry_run: bool, verbose: bool) -> bool:
     if not src.exists():
-        raise RuntimeError(f"Missing built executable: {src}")
+        if verbose or dry_run:
+            print(f"Skip (missing source): {src}")
+        return False
+
+    if not should_copy(src, dst):
+        if verbose or dry_run:
+            print(f"Up-to-date: {dst}")
+        return False
+
     if verbose or dry_run:
         print(f"{src} -> {dst}")
     if dry_run:
-        return
+        return True
     dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(src, dst)
+    return True
 
 
 def main() -> int:
@@ -77,14 +94,23 @@ def main() -> int:
     dst_selfplay = SELFPLAY_DEST_DIR / f"SelfPlay-{branch}.exe"
     dst_tunesgd = TUNESGD_DEST_DIR / f"TuneSGD-{branch}.exe"
 
-    deploy_file(src_barbarossa, dst_barbarossa, args.dry_run, args.verbose)
-    deploy_file(src_selfplay, dst_selfplay, args.dry_run, args.verbose)
-    deploy_file(src_tunesgd, dst_tunesgd, args.dry_run, args.verbose)
+    copied_barbarossa = deploy_file(src_barbarossa, dst_barbarossa, args.dry_run, args.verbose)
+    copied_selfplay = deploy_file(src_selfplay, dst_selfplay, args.dry_run, args.verbose)
+    copied_tunesgd = deploy_file(src_tunesgd, dst_tunesgd, args.dry_run, args.verbose)
 
     if not args.dry_run:
-        print(f"Deployed: {dst_barbarossa}")
-        print(f"Deployed: {dst_selfplay}")
-        print(f"Deployed: {dst_tunesgd}")
+        if copied_barbarossa:
+            print(f"Deployed: {dst_barbarossa}")
+        else:
+            print(f"Skipped:  {dst_barbarossa}")
+        if copied_selfplay:
+            print(f"Deployed: {dst_selfplay}")
+        else:
+            print(f"Skipped:  {dst_selfplay}")
+        if copied_tunesgd:
+            print(f"Deployed: {dst_tunesgd}")
+        else:
+            print(f"Skipped:  {dst_tunesgd}")
     return 0
 
 
