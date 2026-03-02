@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -44,6 +45,7 @@ data Options = Options {
         optConfFile :: Maybe String,	-- config file
         optParams   :: [String],	-- list of eval parameter assignements
         optLogging  :: LogLevel,	-- logging level
+        optBuildInfo :: Bool,		-- print build flavor and opposite build command
         optAFenFile :: Maybe FilePath	-- annotated fen file for self analysis
     }
 
@@ -55,6 +57,7 @@ defaultOptions = Options {
         optConfFile = Nothing,
         optParams   = [],
         optLogging  = logOptDefault,
+        optBuildInfo = False,
         optAFenFile = Nothing
     }
 
@@ -78,11 +81,15 @@ setLogging lev opt = opt { optLogging = llev }
 addAFile :: FilePath -> Options -> Options
 addAFile fi opt = opt { optAFenFile = Just fi }
 
+setBuildInfo :: Options -> Options
+setBuildInfo opt = opt { optBuildInfo = True }
+
 options :: [OptDescr (Options -> Options)]
 options = [
         Option "c" ["config"]  (ReqArg setConfFile "STRING") "Configuration file",
         Option "l" ["loglev"]  (ReqArg setLogging "STRING")  "Logging level from 0 (debug) to 5 (never)",
         Option "p" ["param"]   (ReqArg addParam "STRING")    "Eval/search/time parameters: name=value,...",
+        Option "B" ["build-info"] (NoArg setBuildInfo)       "Show build flavor and opposite build command",
         Option "a" ["analyse"] (ReqArg addAFile "STRING")    "Analysis file"
     ]
 
@@ -92,7 +99,22 @@ theOptions = do
     case getOpt Permute options args of
         (o, n, []) -> return (foldr ($) defaultOptions o, n)
         (_, _, es) -> ioError (userError (concat es ++ usageInfo header options))
-    where header = "Usage: " ++ idName ++ " [-c CONF] [-l LEV] [-p name=val[,...]] [-a AFILE]"
+    where header = "Usage: " ++ idName ++ " [-c CONF] [-l LEV] [-p name=val[,...]] [-B] [-a AFILE]"
+
+buildFlavor, otherBuildCmd :: String
+#ifdef QS_COLLECT
+buildFlavor = "collect mode (QS_COLLECT enabled)"
+otherBuildCmd = "stack build --flag Barbarossa:-qscollect Barbarossa:exe:Barbarossa"
+#else
+buildFlavor = "speed mode (QS_COLLECT disabled)"
+otherBuildCmd = "stack build --flag Barbarossa:qscollect Barbarossa:exe:Barbarossa"
+#endif
+
+showBuildInfo :: IO ()
+showBuildInfo = do
+    putStrLn $ "Barbarossa build flavor: " ++ buildFlavor
+    putStrLn $ "To build the other flavor use:"
+    putStrLn $ "  " ++ otherBuildCmd
 
 initContext :: Options -> IO Context
 initContext opts = do
@@ -130,10 +152,13 @@ initContext opts = do
 main :: IO ()
 main = do
     (opts, _) <- theOptions
-    ctx <- initContext opts
-    case optAFenFile opts of
-        Nothing -> runReaderT interMachine ctx	-- the normal (interactive) mode
-        Just fi -> runReaderT (analysingMachine fi) ctx	-- the analysis mode
+    if optBuildInfo opts
+       then showBuildInfo
+       else do
+           ctx <- initContext opts
+           case optAFenFile opts of
+               Nothing -> runReaderT interMachine ctx	-- the normal (interactive) mode
+               Just fi -> runReaderT (analysingMachine fi) ctx	-- the analysis mode
 
 -- The logger, writer and informer will be started only once, here,
 -- so every setting about them cannot be changed later, which mainly
