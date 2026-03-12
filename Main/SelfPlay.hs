@@ -233,7 +233,7 @@ main = do
               else case optMatch opts of
                         Nothing  -> runReaderT (filterFile opts) ctx
                         Just dir -> do
-                            GameScore w d l <- runReaderT (matchFile  opts dir) ctx
+                            GameScore w d l <- runReaderT (matchFile opts dir) ctx
                             putStrLn $ "End result: (" ++ show w ++ "," ++ show d ++ "," ++ show l ++ ")"
 
 filterFile :: Options -> CtxIO ()

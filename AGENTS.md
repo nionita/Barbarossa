@@ -6,7 +6,7 @@
 
 ## Build Identity
 
-- Before any build, check thet the chess engine identity is correct, which means: top-level variable progVerSuff in Main/Barbarossa.hs is set to the branch name
+- Before any build, check the chess engine identity is correctnes, which means: top-level variable progVerSuff in Main/Barbarossa.hs is set to the branch name
 
 ## Post-Build Deployment
 
