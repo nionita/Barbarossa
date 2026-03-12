@@ -20,19 +20,20 @@ aspirWindow :: Int
 aspirWindow   = 24	-- initial aspiration window
 
 -- One iteration in the search for the best move
-bestMoveCont :: Bool -> Int -> Int -> Int-> MyState -> Maybe Int -> [Move] -> [Move] -> CtxIO IterResult
-bestMoveCont tune draft sttime1 sttime stati lastsc lpv rmvs = do
+bestMoveCont :: Bool -> Maybe Int -> Int -> Int -> Int -> MyState -> Maybe Int -> [Move] -> [Move] -> CtxIO IterResult
+bestMoveCont tune mbNodes draft sttime1 sttime stati lastsc lpv rmvs = do
     informGuiDraft draft
     ctxLog LogInfo $ "start search for depth " ++ show draft
-    let abc = ABC {
+    let abortPol | tune      = maybe NoAbort AbortByNodes mbNodes
+                 | otherwise = AbortByTime { firstMoveMs = sttime1, laterMovesMs = sttime }
+        abc = ABC {
                 maxdepth = draft,
                 lastpv = lpv,
                 lastscore = lastsc,
                 rootmvs   = rmvs,
                 window    = aspirWindow,
                 intuning  = tune,
-                stoptime1 = sttime1,
-                stoptime  = sttime
+                abortPolicy = abortPol
               }
     ((sc, path, rmvsf, timint, ch, seldepth), statf) <- runCState (alphaBeta abc) stati
     let n = sNodes $ mstats statf

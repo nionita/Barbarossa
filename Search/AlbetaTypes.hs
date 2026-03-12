@@ -1,6 +1,7 @@
 module Search.AlbetaTypes (
     DoResult(..),
     Comm(..),
+    AbortPolicy(..),
     ABControl(..),
     SStats(..),
     ssts0, formatStats, addStats,
@@ -10,6 +11,17 @@ module Search.AlbetaTypes (
 import Data.Int
 import Struct.Struct
 
+data AbortPolicy
+    = AbortByTime {
+          firstMoveMs :: Int,
+          laterMovesMs :: Int
+      }
+    | AbortByNodes {
+          nodeBudget :: Int
+      }
+    | NoAbort
+    deriving Show
+
 data ABControl = ABC {
         maxdepth  :: Int,
         lastpv    :: [Move],
@@ -17,8 +29,7 @@ data ABControl = ABC {
         rootmvs   :: [Move],
         window    :: Int,
         intuning  :: Bool,
-        stoptime1 :: Int,
-        stoptime  :: Int
+        abortPolicy :: AbortPolicy
     } deriving Show
 
 data DoResult = Exten !Int !Bool !Bool	-- return mit extension, iscapt & canlmr

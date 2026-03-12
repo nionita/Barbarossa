@@ -120,8 +120,7 @@ data PVStRO
     = PVStRO {
           draft  :: !Int,	-- root search depth
           tuning :: !Bool,	-- in tuning we do not prune nor reduce (self play)
-          abmil1 :: !Int,	-- abort after this millisecond when in first root move
-          abmili :: !Int	-- abort after this millisecond when from second root move
+          abpol  :: !AbortPolicy	-- search abort policy (time, nodes or none)
     } deriving Show
 
 data PVState
@@ -227,7 +226,7 @@ resetNSt :: Path -> Killer -> NodeState -> NodeState
 resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, rbmch = 0 }
 
 pvro00 :: PVStRO
-pvro00 = PVStRO { draft = 0, tuning = False, abmil1 = 0, abmili = 0 }
+pvro00 = PVStRO { draft = 0, tuning = False, abpol = NoAbort }
 
 alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int, Int)
 alphaBeta abc = do
@@ -238,7 +237,7 @@ alphaBeta abc = do
         -- We have lastpath as a parameter here (can change after fail low or high)
         searchFull    lp  = pvRootSearch alpha0 beta0 d lp  rmvs False
         pvro = PVStRO { draft = d, tuning = intuning abc,
-                            abmil1 = stoptime1 abc, abmili = stoptime abc }
+                            abpol = abortPolicy abc }
         pvs0 = pvsInit { ronly = pvro }	-- :: PVState
     -- We will get a result and a final state:
     (r, s) <- if useAspirWin
@@ -1034,20 +1033,32 @@ timeToAbort a act = do
        then return a
        else do
            let ro = ronly s
-           if draft ro > 1 && abmili ro > 0
-              then if timeNodes .&. sNodes (stats s) /= 0
-                      then act
-                      else do
-                          rmn <- lift getRootMoveNumber
-                          !abrt <- lift $ isTimeout $ if rmn > 1 then abmili ro else abmil1 ro
-                          if abrt
-                             then do
-                                 let msg = if rmn > 1 then "Time abort in move 1" else "Time abort"
-                                 lift $ informStr msg
-                                 put s { abort = True }
-                                 return a
-                             else act
-              else act
+           if draft ro <= 1
+              then act
+              else case abpol ro of
+                       AbortByTime t1 ti ->
+                           if ti > 0
+                              then if timeNodes .&. sNodes (stats s) /= 0
+                                      then act
+                                      else do
+                                          rmn <- lift getRootMoveNumber
+                                          !abrt <- lift $ isTimeout $ if rmn > 1 then ti else t1
+                                          if abrt
+                                             then do
+                                                 let msg = if rmn > 1 then "Time abort in move 1" else "Time abort"
+                                                 lift $ informStr msg
+                                                 put s { abort = True }
+                                                 return a
+                                             else act
+                              else act
+                       AbortByNodes nmax ->
+                           if nmax > 0 && sNodes (stats s) >= fromIntegral nmax
+                              then do
+                                  lift $ informStr "Nodes abort"
+                                  put s { abort = True }
+                                  return a
+                              else act
+                       NoAbort -> act
     where timeNodes = 4 * 1024 - 1	-- check time every so many nodes
 
 {-# INLINE whenAbort #-}

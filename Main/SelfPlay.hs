@@ -51,6 +51,7 @@ data Options = Options {
         optDepth    :: Int,		-- search depth for self play
         optLogLev   :: LogLevel,		-- log level: 0 (debug) to 5 (never)
         optNodes    :: Maybe Int,	-- search nodes per move for self play
+        optNodeMargin :: Int,	-- percentual safety margin for nodes passed to search
         optNSkip    :: Maybe Int,	-- number of fens to skip (Nothing = none)
         optNFens    :: Maybe Int,	-- number of fens (Nothing = all)
         optMatch    :: Maybe String,	-- match between configs in the given directory
@@ -70,6 +71,7 @@ defaultOptions = Options {
         optDepth    = 1,
         optLogLev   = LogNever,		-- default: never log
         optNodes    = Nothing,
+        optNodeMargin = 10,
         optNSkip    = Nothing,
         optNFens    = Nothing,
         optMatch    = Nothing,
@@ -101,6 +103,9 @@ addDepth ns opt = opt { optDepth = read ns }
 -- If we want to limit also the depth: set depth after nodes
 addNodes :: String -> Options -> Options
 addNodes ns opt = opt { optNodes = Just $ read ns, optDepth = 40 }
+
+addNodeMargin :: String -> Options -> Options
+addNodeMargin ns opt = opt { optNodeMargin = read ns }
 
 addNSkip :: String -> Options -> Options
 addNSkip ns opt = opt { optNSkip = Just $ read ns }
@@ -147,6 +152,7 @@ options = [
         Option "o" ["output"]  (ReqArg addOFile "STRING") "Output file",
         Option "d" ["depth"]   (ReqArg addDepth "STRING") "Search depth",
         Option "n" ["nodes"]   (ReqArg addNodes "STRING") "Search nodes budget per move",
+        Option "M" ["node-margin"] (ReqArg addNodeMargin "INT") "Safety margin percent for node budget (default 10)",
         -- Option "t" ["threads"] (ReqArg addNThrds "STRING") "Number of threads",
         Option "s" ["skip"]    (ReqArg addNSkip "STRING")  "Number of fens to skip",
         Option "f" ["fens"]    (ReqArg addNFens "STRING")  "Number of fens to play",
@@ -171,6 +177,8 @@ validateOptions opts
         = ioError $ userError "--perf cannot be combined with --output"
     | optPerfTest opts && (optPlayer1 opts /= Nothing || optPlayer2 opts /= Nothing)
         = ioError $ userError "--perf cannot be combined with --player1/--player2"
+    | optNodeMargin opts < 0 || optNodeMargin opts > 99
+        = ioError $ userError "--node-margin must be in [0,99]"
     | otherwise = return ()
 
 buildFlavor, otherBuildCmd :: String
@@ -321,6 +329,7 @@ matchFile opts dir = do
         putStrLn $ "Playing games from " ++ optAFenFile opts
         putStrLn $ "Play depth  " ++ show (optDepth opts)
         putStrLn $ "Play nodes  " ++ show (optNodes opts)
+        putStrLn $ "Node margin " ++ show (optNodeMargin opts) ++ "%"
     let mids = (,) <$> optPlayer1 opts <*> optPlayer2 opts
     case mids of
         Nothing -> do
@@ -338,7 +347,7 @@ matchFile opts dir = do
             when debug $ do
                 ctxLog LogInfo $ "Player 1 config: " ++ show eval1
                 ctxLog LogInfo $ "Player 2 config: " ++ show eval2
-            foldlM (playEveryGame (optDepth opts) (optNodes opts) (id1, eval1) (id2, eval2))
+            foldlM (playEveryGame (optDepth opts) (optNodes opts) (optNodeMargin opts) (id1, eval1) (id2, eval2))
                    (GameScore 0 0 0) fens
 
 getFenWithRewind :: Handle -> IO String
@@ -465,15 +474,16 @@ oracleAndFeats depth hi _ho mn k () = do	-- not functional yet
 playEveryGame
     :: Int
     -> Maybe Int
+    -> Int
     -> (String, EvalState)	-- "player" 1
     -> (String, EvalState)	-- "player" 2
     -> GameScore
     -> String
     -> CtxIO GameScore
-playEveryGame depth maybeNodes (id1, eval1) (id2, eval2) wdl fen = do
+playEveryGame depth maybeNodes nodeMarginPc (id1, eval1) (id2, eval2) wdl fen = do
     let pos = posFromFen fen
-    gr1 <- playGame depth maybeNodes pos (id1, eval1) (id2, eval2)
-    gr2 <- playGame depth maybeNodes pos (id2, eval2) (id1, eval1)
+    gr1 <- playGame depth maybeNodes nodeMarginPc pos (id1, eval1) (id2, eval2)
+    gr2 <- playGame depth maybeNodes nodeMarginPc pos (id2, eval2) (id1, eval1)
     let wdl1 = scoreGameResult id1 gr1	-- game result from
         wdl2 = scoreGameResult id1 gr2	-- POV of id1
     return $! addGameScores wdl $ addGameScores wdl1 wdl2
@@ -584,11 +594,16 @@ stopNodes :: Maybe Int -> Int -> Bool
 stopNodes Nothing _    = False
 stopNodes (Just n1) n2 = n2 >= n1
 
+nodesForSearch :: Int -> Maybe Int -> Maybe Int
+nodesForSearch _ Nothing = Nothing
+nodesForSearch _ (Just n) | n <= 0 = Just n
+nodesForSearch pc (Just n) = Just $ max 1 $ n - n * pc `div` 100
+
 -- Play the given position to the end using node budget or fixed depth with 2 configurations
 -- It can be used only to optimize eval weights but not time or search parameters
 -- The result contains the winner (if any) and a reason for termination
-playGame :: Int -> Maybe Int -> MyPos -> (String, EvalState) -> (String, EvalState) -> CtxIO GameResult
-playGame d maybeNodes pos (ide1, eval1) (ide2, eval2) = do
+playGame :: Int -> Maybe Int -> Int -> MyPos -> (String, EvalState) -> (String, EvalState) -> CtxIO GameResult
+playGame d maybeNodes nodeMarginPc pos (ide1, eval1) (ide2, eval2) = do
     ctxLog LogWarning "--------------------------"
     ctxLog LogWarning $ "Setup new game between " ++ ide1 ++ " and " ++ ide2
     chg <- readChanging
@@ -622,12 +637,13 @@ playGame d maybeNodes pos (ide1, eval1) (ide2, eval2) = do
                   []   -> return $ GameAborted "Empty stack in crtStatus"
                   p0:_ -> do
                       let mbNodes = aloNodes maybeNodes (plNodes player1)
+                          searchNodes = nodesForSearch nodeMarginPc mbNodes
                           curfen = posToFen p0
                       ctxLog LogInfo $ "Real ply " ++ show j ++ " engine " ++ plName player1
-                          ++ " (nodes budget: " ++ show mbNodes ++ ")"
+                          ++ " (nodes budget: " ++ show mbNodes ++ ", search budget: " ++ show searchNodes ++ ")"
                       ctxLog LogInfo $ "Current fen: " ++ curfen
                       -- Search to depth or node budget:
-                      (sc, path, nodes) <- iterativeDeepening d mbNodes
+                      (sc, path, nodes) <- iterativeDeepening d searchNodes
                       ctxLog LogInfo $ "Real ply " ++ show j ++ " returns " ++ show sc ++ " / " ++ show path
                           ++ " / " ++ show nodes
                       case path of
@@ -714,7 +730,7 @@ iterativeDeepening depth maybeMaxNodes = do
               --when debug $ lift $ do
               --    putStrLn $ "In iter deep go: " ++ show d
               --    hFlush stdout
-              (path, sc, rmvsf, _timint, sfin, _) <- bestMoveCont True d 0 0 sini lsc lpv rmvs
+              (path, sc, rmvsf, _timint, sfin, _) <- bestMoveCont True maybeMaxNodes d 0 0 sini lsc lpv rmvs
               let nodes = fromIntegral $ sNodes $ mstats sfin
               -- We don't want to search less than depth 2, because depth 1 delivers
               -- erroneus moves by currently not updating the best score

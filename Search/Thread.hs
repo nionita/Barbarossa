@@ -126,7 +126,9 @@ bestMoveCont draft stati lastsc lpv rmvs = do
                 lastpv = lpv,
                 lastscore = lastsc,
                 rootmvs   = rmvs,
-                window    = aspirWindow
+                window    = aspirWindow,
+                intuning  = False,
+                abortPolicy = NoAbort
               }
     ((sc, path, rmvsf, timint, ch, seldepth), statf) <- runCState (alphaBeta abc) stati
     let n = sNodes $ mstats statf
