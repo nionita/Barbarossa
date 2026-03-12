@@ -13,7 +13,6 @@ import Control.Monad (when, void)
 import Control.Concurrent
 import Control.Exception
 import Data.Char (isSpace)
-import Data.IORef
 import Data.List (intersperse)
 import Data.Maybe (fromMaybe, isJust)
 import Foreign hiding (void)
@@ -22,8 +21,6 @@ import System.Directory
 import System.Environment (getArgs)
 import System.FilePath
 import System.IO
-import System.IO.Unsafe (unsafePerformIO)
-import System.Mem.StableName (StableName, makeStableName)
 -- import System.Time
 
 import Struct.Struct
@@ -66,10 +63,6 @@ data Options = Options {
         -- SPRT elo1
         optFenPrintEvery :: Int,
         -- print every Nth input fen
-        optDiagStructs :: Bool,
-        -- emit internal state/hash/history diagnostics
-        optDiagSearchEvery :: Int,
-        -- print search diagnostics every N depth iterations
         optAFenFile :: FilePath,	-- fen file with start positions
         optFOutFile :: FilePath		-- output file for filter option
     }
@@ -95,8 +88,6 @@ defaultOptions = Options {
         optSprtElo0  = Nothing,
         optSprtElo1  = Nothing,
         optFenPrintEvery = 10,
-        optDiagStructs = False,
-        optDiagSearchEvery = 10,
         optAFenFile = "alle.epd",
         optFOutFile = "vect.txt"
     }
@@ -156,12 +147,6 @@ addSprtElo1 ns opt = opt { optSprtElo1 = Just $ read ns }
 addFenPrintEvery :: String -> Options -> Options
 addFenPrintEvery ns opt = opt { optFenPrintEvery = read ns }
 
-setDiagStructs :: Options -> Options
-setDiagStructs opt = opt { optDiagStructs = True }
-
-addDiagSearchEvery :: String -> Options -> Options
-addDiagSearchEvery ns opt = opt { optDiagSearchEvery = read ns }
-
 addIFile :: FilePath -> Options -> Options
 addIFile fi opt = opt { optAFenFile = fi }
 
@@ -193,8 +178,6 @@ options = [
         Option "" ["sprt-elo0"]  (ReqArg addSprtElo0  "DOUBLE") "SPRT H0 elo bound (default 0.0 when SPRT is enabled)",
         Option "" ["sprt-elo1"]  (ReqArg addSprtElo1  "DOUBLE") "SPRT H1 elo bound (default 2.0 when SPRT is enabled)",
         Option "" ["print-fen-every"] (ReqArg addFenPrintEvery "INT") "Print every Nth input fen before pair play (default 10)",
-        Option "" ["diag-structs"] (NoArg setDiagStructs) "Emit internal state/hash/history diagnostics while playing",
-        Option "" ["diag-search-every"] (ReqArg addDiagSearchEvery "INT") "With --diag-structs, print search diagnostics every N depth iterations (default 10)",
         Option "i" ["input"]   (ReqArg addIFile "STRING") "Input (fen) file",
         Option "o" ["output"]  (ReqArg addOFile "STRING") "Output file",
         Option "d" ["depth"]   (ReqArg addDepth "STRING") "Search depth",
@@ -247,8 +230,6 @@ validateOptions opts
         = ioError $ userError "--node-margin must be in [0,99]"
     | optFenPrintEvery opts <= 0
         = ioError $ userError "--print-fen-every must be > 0"
-    | optDiagSearchEvery opts <= 0
-        = ioError $ userError "--diag-search-every must be > 0"
     | sprtEnabled opts && optMatch opts == Nothing
         = ioError $ userError "SPRT options require --match"
     | sprtEnabled opts && (sprtAlpha cfg <= 0 || sprtAlpha cfg >= 1)
@@ -262,19 +243,13 @@ validateOptions opts
     | otherwise = return ()
     where cfg = getSprtConfig opts
 
-buildFlavor, otherBuildCmd, noFreeCacheBuild :: String
+buildFlavor, otherBuildCmd :: String
 #ifdef REPRO_HIST
 buildFlavor = "reproducible history (REPRO_HIST enabled)"
 otherBuildCmd = "stack build Barbarossa:exe:SelfPlay"
 #else
 buildFlavor = "default history (randomized small init)"
 otherBuildCmd = "stack build --flag Barbarossa:reproselfplay Barbarossa:exe:SelfPlay"
-#endif
-
-#ifdef SELFPLAY_NO_FREECACHE
-noFreeCacheBuild = "enabled"
-#else
-noFreeCacheBuild = "disabled"
 #endif
 
 showBuildInfo :: IO ()
@@ -417,9 +392,6 @@ matchFile opts dir = do
         putStrLn $ "Play depth  " ++ show (optDepth opts)
         putStrLn $ "Play nodes  " ++ show (optNodes opts)
         putStrLn $ "Node margin " ++ show (optNodeMargin opts) ++ "%"
-        putStrLn $ "SELFPLAY_NO_FREECACHE: " ++ noFreeCacheBuild
-        putStrLn $ "diag-structs: " ++ show (optDiagStructs opts)
-        putStrLn $ "diag-search-every: " ++ show (optDiagSearchEvery opts)
     let mids = (,) <$> optPlayer1 opts <*> optPlayer2 opts
     case mids of
         Nothing -> do
@@ -445,7 +417,7 @@ matchFile opts dir = do
                     ++ " elo0=" ++ show (sprtElo0 scfg)
                     ++ " elo1=" ++ show (sprtElo1 scfg)
             let startLine = fromMaybe 0 (optNSkip opts) + 1
-            acc <- playMatchPairs (optDepth opts) (optNodes opts) (optNodeMargin opts) (optFenPrintEvery opts) (optDiagStructs opts) (optDiagSearchEvery opts)
+            acc <- playMatchPairs (optDepth opts) (optNodes opts) (optNodeMargin opts) (optFenPrintEvery opts)
                                  (id1, eval1) (id2, eval2) msprt (zip [startLine..] fens)
             liftIO $ printMatchSummary msprt acc
             return (matWdl acc)
@@ -632,16 +604,14 @@ playOnePair
     :: Int
     -> Maybe Int
     -> Int
-    -> Bool
-    -> Int
     -> (String, EvalState)
     -> (String, EvalState)
     -> String
     -> CtxIO PairResult
-playOnePair depth maybeNodes nodeMarginPc diagStructs diagSearchEvery (id1, eval1) (id2, eval2) fen = do
+playOnePair depth maybeNodes nodeMarginPc (id1, eval1) (id2, eval2) fen = do
     let pos = posFromFen fen
-    gr1 <- playGame depth maybeNodes nodeMarginPc diagStructs diagSearchEvery pos (id1, eval1) (id2, eval2)
-    gr2 <- playGame depth maybeNodes nodeMarginPc diagStructs diagSearchEvery pos (id2, eval2) (id1, eval1)
+    gr1 <- playGame depth maybeNodes nodeMarginPc pos (id1, eval1) (id2, eval2)
+    gr2 <- playGame depth maybeNodes nodeMarginPc pos (id2, eval2) (id1, eval1)
     case (pairWdl id1 gr1, pairWdl id1 gr2) of
         (Just r1, Just r2) -> do
             let wdl1  = scoreGameResult id1 gr1
@@ -656,14 +626,12 @@ playMatchPairs
     -> Maybe Int
     -> Int
     -> Int
-    -> Bool
-    -> Int
     -> (String, EvalState)
     -> (String, EvalState)
     -> Maybe SprtState
     -> [(Int, String)]
     -> CtxIO MatchAcc
-playMatchPairs depth maybeNodes nodeMarginPc printEvery diagStructs diagSearchEvery (id1, eval1) (id2, eval2) msprt fens =
+playMatchPairs depth maybeNodes nodeMarginPc printEvery (id1, eval1) (id2, eval2) msprt fens =
     go (MatchAcc (GameScore 0 0 0) emptyPenta 0 0 Nothing MatchTermMaxPairs) fens
     where
       go acc [] = return acc { matTerm = MatchTermMaxPairs }
@@ -671,7 +639,7 @@ playMatchPairs depth maybeNodes nodeMarginPc printEvery diagStructs diagSearchEv
           when (lineNo `mod` printEvery == 0) $ liftIO $ do
               putStrLn $ show lineNo ++ ": " ++ fen
               hFlush stdout
-          pres <- playOnePair depth maybeNodes nodeMarginPc diagStructs diagSearchEvery (id1, eval1) (id2, eval2) fen
+          pres <- playOnePair depth maybeNodes nodeMarginPc (id1, eval1) (id2, eval2) fen
           let accTried = acc { matPairsTried = matPairsTried acc + 1 }
           case pres of
               PairIncomplete -> go accTried rest
@@ -815,75 +783,17 @@ nodesForSearch _ Nothing = Nothing
 nodesForSearch _ (Just n) | n <= 0 = Just n
 nodesForSearch pc (Just n) = Just $ max 1 $ n - n * pc `div` 100
 
-stableIdFromRegistry :: IORef (Int, [(StableName a, Int)]) -> a -> IO Int
-stableIdFromRegistry reg x = do
-    sn <- makeStableName x
-    atomicModifyIORef' reg $ \(nextId, pairs) ->
-        case lookupId sn pairs of
-            Just i  -> ((nextId, pairs), i)
-            Nothing -> ((nextId + 1, (sn, nextId) : pairs), nextId)
-    where
-      lookupId _ [] = Nothing
-      lookupId k ((k2, i):xs)
-          | k == k2   = Just i
-          | otherwise = lookupId k xs
-
-{-# NOINLINE stateIdRegistry #-}
-stateIdRegistry :: IORef (Int, [(StableName MyState, Int)])
-stateIdRegistry = unsafePerformIO $ newIORef (1, [])
-
-{-# NOINLINE cacheIdRegistry #-}
-cacheIdRegistry :: IORef (Int, [(StableName Cache, Int)])
-cacheIdRegistry = unsafePerformIO $ newIORef (1, [])
-
-{-# NOINLINE histIdRegistry #-}
-histIdRegistry :: IORef (Int, [(StableName History, Int)])
-histIdRegistry = unsafePerformIO $ newIORef (1, [])
-
-forceStateCheckpoint :: Bool -> MyState -> CtxIO ()
-forceStateCheckpoint False _ = return ()
-forceStateCheckpoint True st = liftIO $ do
-    _ <- evaluate $! rootmn st
-    _ <- evaluate $! length (stack st)
-    case stack st of
-        []  -> return ()
-        p:_ -> do
-            _ <- evaluate $! zobkey p
-            return ()
-
-
-diagStateTags :: Bool -> String -> MyState -> CtxIO ()
-diagStateTags False _ _ = return ()
-diagStateTags True label st = liftIO $ do
-    stTag <- stableIdFromRegistry stateIdRegistry st
-    hTag <- stableIdFromRegistry cacheIdRegistry (hash st)
-    hiTag <- stableIdFromRegistry histIdRegistry (hist st)
-    let stk = stack st
-        topKey = case stk of
-            []  -> "empty"
-            p:_ -> show (zobkey p)
-    putStrLn $ "[diag] " ++ label
-        ++ " st#" ++ show stTag
-        ++ " hash#" ++ show hTag
-        ++ " hist#" ++ show hiTag
-        ++ " stackLen=" ++ show (length stk)
-        ++ " topZk=" ++ topKey
-    hFlush stdout
 -- Play the given position to the end using node budget or fixed depth with 2 configurations
 -- It can be used only to optimize eval weights but not time or search parameters
 -- The result contains the winner (if any) and a reason for termination
-playGame :: Int -> Maybe Int -> Int -> Bool -> Int -> MyPos -> (String, EvalState) -> (String, EvalState) -> CtxIO GameResult
-playGame d maybeNodes nodeMarginPc diagStructs diagSearchEvery pos (ide1, eval1) (ide2, eval2) = do
+playGame :: Int -> Maybe Int -> Int -> MyPos -> (String, EvalState) -> (String, EvalState) -> CtxIO GameResult
+playGame d maybeNodes nodeMarginPc pos (ide1, eval1) (ide2, eval2) = do
     ctxLog LogWarning "--------------------------"
     ctxLog LogWarning $ "Setup new game between " ++ ide1 ++ " and " ++ ide2
     chg <- readChanging
-#ifndef SELFPLAY_NO_FREECACHE
     let oldHash = hash $ crtStatus chg
-#endif
     (hash1, hash2, hist1, hist2) <- liftIO $ do
-#ifndef SELFPLAY_NO_FREECACHE
         freeCache oldHash
-#endif
         (,,,) <$> newCache 1 <*> newCache 1 <*> newHist <*> newHist
     let state1 = posToState pos hash1 hist1 eval1
         state2 = posToState pos hash2 hist2 eval2
@@ -900,18 +810,11 @@ playGame d maybeNodes nodeMarginPc diagStructs diagSearchEvery pos (ide1, eval1)
         player2 = Player { plName = ide2, plChg = chg2, plNodes = 0 }
     ctxLog LogWarning $ "Color for " ++ ide1 ++ ": " ++ show color1
     ctxLog LogWarning $ "Starting position: " ++ posToFen pos
-    diagStateTags diagStructs ("game-start " ++ ide1) state1
-    diagStateTags diagStructs ("game-start " ++ ide2) state2
-    forceStateCheckpoint diagStructs state1
-    forceStateCheckpoint diagStructs state2
     go (0::Int) player1 player2
     where go i player1 player2 = do
               start  <- asks strttm
               currms <- lift $ currMilli start
               let j = i + 1
-                  preState = crtStatus $ plChg player1
-              forceStateCheckpoint diagStructs preState
-              diagStateTags diagStructs ("ply " ++ show j ++ " pre-search " ++ plName player1) preState
               -- Prepare for chg1 to search:
               modifyChanging $ const (plChg player1) { forGui = Nothing, srchStrtMs = currms,
                                             totBmCh = 0, lastChDr = 0 }
@@ -925,7 +828,7 @@ playGame d maybeNodes nodeMarginPc diagStructs diagSearchEvery pos (ide1, eval1)
                           ++ " (nodes budget: " ++ show mbNodes ++ ", search budget: " ++ show searchNodes ++ ")"
                       ctxLog LogInfo $ "Current fen: " ++ curfen
                       -- Search to depth or node budget:
-                      (sc, path, nodes) <- iterativeDeepeningDbg diagStructs diagSearchEvery (plName player1) j d searchNodes
+                      (sc, path, nodes) <- iterativeDeepening d searchNodes
                       ctxLog LogInfo $ "Real ply " ++ show j ++ " returns " ++ show sc ++ " / " ++ show path
                           ++ " / " ++ show nodes
                       case path of
@@ -955,10 +858,6 @@ playGame d maybeNodes nodeMarginPc diagStructs diagSearchEvery pos (ide1, eval1)
                              chg1f <- readChanging
                              s1fin <- execCState (doRealMove m) (crtStatus chg1f)
                              s2ini <- execCState (doRealMove m) (crtStatus (plChg player2))
-                             forceStateCheckpoint diagStructs s1fin
-                             forceStateCheckpoint diagStructs s2ini
-                             diagStateTags diagStructs ("ply " ++ show j ++ " post-move " ++ plName player1) s1fin
-                             diagStateTags diagStructs ("ply " ++ show j ++ " mirrored-for " ++ plName player2) s2ini
                              case stack s1fin of
                                []  -> return $ GameAborted "Empty stack in s1fin"
                                p:_ -> do
@@ -1006,43 +905,24 @@ playGame d maybeNodes nodeMarginPc diagStructs diagSearchEvery pos (ide1, eval1)
                                               (player1 { plChg = chg1n, plNodes = subNodes mbNodes nodes})
 
 iterativeDeepening :: Int -> Maybe Int -> CtxIO (Int, [Move], Int)
-iterativeDeepening = iterativeDeepeningDbg False 10 "" 0
-
-iterativeDeepeningDbg :: Bool -> Int -> String -> Int -> Int -> Maybe Int -> CtxIO (Int, [Move], Int)
-iterativeDeepeningDbg diagStructs diagSearchEvery plName ply depth maybeMaxNodes = do
+iterativeDeepening depth maybeMaxNodes = do
+    --when debug $ lift $ do
+    --    putStrLn $ "In iter deep: " ++ show depth
+    --    hFlush stdout
     chg <- readChanging
     go 1 (crtStatus chg) Nothing [] []
-    where
-      shouldPrintDepth d = diagStructs && d `mod` diagSearchEvery == 0
-      go d sini lsc lpv rmvs = do
-          let nodesBefore = fromIntegral (sNodes $ mstats sini) :: Int
-          when (shouldPrintDepth d) $ liftIO $ do
-              let stk = stack sini
-                  topKey = case stk of
-                      []  -> "empty"
-                      p:_ -> show (zobkey p)
-              putStrLn $ "[diag-search] ply " ++ show ply
-                  ++ " engine=" ++ plName
-                  ++ " depth=" ++ show d
-                  ++ " startNodes=" ++ show nodesBefore
-                  ++ " stackLen=" ++ show (length stk)
-                  ++ " topZk=" ++ topKey
-              hFlush stdout
-          (path, sc, rmvsf, _timint, sfin, _) <- bestMoveCont True maybeMaxNodes d 0 0 sini lsc lpv rmvs
-          let nodes = fromIntegral $ sNodes $ mstats sfin
-          when (shouldPrintDepth d) $ liftIO $ do
-              putStrLn $ "[diag-search] ply " ++ show ply
-                  ++ " engine=" ++ plName
-                  ++ " depth=" ++ show d
-                  ++ " done score=" ++ show sc
-                  ++ " pathLen=" ++ show (length path)
-                  ++ " endNodes=" ++ show nodes
-              hFlush stdout
-          -- We don't want to search less than depth 2, because depth 1 delivers
-          -- erroneus moves by currently not updating the best score
-          if d > 1 && (null path || d >= depth || stopNodes maybeMaxNodes nodes)
-             then return (sc, path, nodes)
-             else go (d+1) sfin (Just sc) path rmvsf
+    where go d sini lsc lpv rmvs = do
+              --when debug $ lift $ do
+              --    putStrLn $ "In iter deep go: " ++ show d
+              --    hFlush stdout
+              (path, sc, rmvsf, _timint, sfin, _) <- bestMoveCont True maybeMaxNodes d 0 0 sini lsc lpv rmvs
+              let nodes = fromIntegral $ sNodes $ mstats sfin
+              -- We don't want to search less than depth 2, because depth 1 delivers
+              -- erroneus moves by currently not updating the best score
+              if d > 1 && (null path || d >= depth || stopNodes maybeMaxNodes nodes)
+                 then return (sc, path, nodes)
+                 else go (d+1) sfin (Just sc) path rmvsf
+
 -- Append error info to error file:
 collectError :: SomeException -> IO ()
 collectError e = handle cannot $ do
@@ -1202,18 +1082,6 @@ noMatingMaterial p
     | occup p == kings p .|. bishops p
         && popCount (occup p) == 3     = True
     | otherwise                        = False
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
