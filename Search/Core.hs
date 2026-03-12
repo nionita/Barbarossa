@@ -600,8 +600,9 @@ nullMoveFailsHigh pos nst b d
                        if nullSeq (pathMoves val)
                           then return $ NullMoveLow
                           else return $ NullMoveThreat val
-    where d1  = nmDArr1 `unsafeAt` d	-- here we have always d >= 1
-          d2  = nmDArr2 `unsafeAt` d	-- this is for bigger differences
+    where dIx = max 0 $ min 20 d
+          d1  = nmDArr1 `unsafeAt` dIx
+          d2  = nmDArr2 `unsafeAt` dIx
           nmb = if nulSubAct then b - (nulSubmrg * scoreGrain) else b
           nma = nmb - (nulMargin * scoreGrain)
           bigDiff = 500	-- if we are very far ahead
