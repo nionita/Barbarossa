@@ -20,9 +20,6 @@ import Moves.Internal.Base
 import Moves.Internal.BaseTypes (Game)
 import Moves.Notation
 
-
-
-
 -- This is a specialized monad transformer for state
 absurd :: String -> Game ()
 absurd s = logmes $ "Absurd: " ++ s	-- used for messages when assertions fail
@@ -180,8 +177,8 @@ data Path
 mated :: Int
 mated = - mateScore
 drawPath, matedPath :: Path
-drawPath  = Path { pathScore = 0, pathDepth = 20, pathMoves = Seq [], pathMPos = Nothing }
-matedPath = Path { pathScore = mated, pathDepth = 20, pathMoves = Seq [], pathMPos = Nothing }
+drawPath  = Path { pathScore = 0, pathDepth = 25, pathMoves = Seq [], pathMPos = Nothing }
+matedPath = Path { pathScore = mated, pathDepth = 25, pathMoves = Seq [], pathMPos = Nothing }
 
 alpha0, beta0 :: Int
 alpha0 = mated - 1
@@ -600,18 +597,21 @@ nullMoveFailsHigh pos nst b d
                        if nullSeq (pathMoves val)
                           then return $ NullMoveLow
                           else return $ NullMoveThreat val
-    where dIx = max 0 $ min 20 d
+    where dIx = max 0 $ min nmDMaxIx d
           d1  = nmDArr1 `unsafeAt` dIx
           d2  = nmDArr2 `unsafeAt` dIx
           nmb = if nulSubAct then b - (nulSubmrg * scoreGrain) else b
           nma = nmb - (nulMargin * scoreGrain)
           bigDiff = 500	-- if we are very far ahead
 
--- This is now more than reduction 3 for depth over 9
+-- This is now more than reduction 3 for depth over 9 (extended to depth 25)
+nmDMaxIx :: Int
+nmDMaxIx = 25
+
 nmDArr1, nmDArr2 :: UArray Int Int
 ------------------------------0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16  17  18  19  20
-nmDArr1 = listArray (0, 20) [ 0, 0, 0, 0, 0, 1, 2, 3, 4, 4, 5, 6, 7, 7, 8, 9, 9, 10, 11, 11, 12 ]
-nmDArr2 = listArray (0, 20) [ 0, 0, 0, 0, 0, 0, 1, 2, 3, 3, 4, 5, 6, 6, 7, 8, 8,  9, 10, 10, 11 ]
+nmDArr1 = listArray (0, nmDMaxIx) [ 0, 0, 0, 0, 0, 1, 2, 3, 4, 4, 5, 6, 7, 7, 8, 9, 9, 10, 11, 11, 12, 13, 13, 14, 15, 15 ]
+nmDArr2 = listArray (0, nmDMaxIx) [ 0, 0, 0, 0, 0, 0, 1, 2, 3, 3, 4, 5, 6, 6, 7, 8, 8,  9, 10, 10, 11, 12, 12, 13, 14, 14 ]
 
 isCut :: Int -> NodeState -> Bool
 isCut b nst = pathScore (cursc nst) >= b

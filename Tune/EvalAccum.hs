@@ -16,7 +16,7 @@ import Control.Monad.ST
 
 import qualified Data.Vector.Unboxed as U
 import qualified Data.Vector.Unboxed.Mutable as V
--- import Data.Vector.Generic 
+-- import Data.Vector.Generic
 
 import Struct.Struct
 import Struct.ParamsPost (optSpaceNames, optSpaceInit)

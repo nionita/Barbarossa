@@ -296,9 +296,9 @@ pushToLightCorner sq = abs $ r - f
 ------ King Safety ------
 kingSafe :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 kingSafe p !ew = mad (ewKingSafe ew) ksafe
-    where !ksafe = ksSide (yo p) (yoKAttacs p) (myPAttacs p) (myNAttacs p) (myBAttacs p) (myRAttacs p) 
+    where !ksafe = ksSide (yo p) (yoKAttacs p) (myPAttacs p) (myNAttacs p) (myBAttacs p) (myRAttacs p)
                           (myQAttacs p) (myKAttacs p) (myAttacs p)
-                 - ksSide (me p) (myKAttacs p) (yoPAttacs p) (yoNAttacs p) (yoBAttacs p) (yoRAttacs p) 
+                 - ksSide (me p) (myKAttacs p) (yoPAttacs p) (yoNAttacs p) (yoBAttacs p) (yoRAttacs p)
                           (yoQAttacs p) (yoKAttacs p) (yoAttacs p)
 
 -- To make the sum and count in one pass
@@ -978,9 +978,8 @@ kdDistArr = listArray (0, 14) $ [-4,-3,-3,-3,-2,-2,-1, 0, 1, 2, 2, 3, 3, 3, 4]
 kdDist :: Int -> Int
 kdDist = (kdDistArr `unsafeAt`) . (7+)
 
-
 ------ Advanced pawns, on 6th & 7th rows (not passed) ------
- 
+
 advPawns :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 advPawns p !ew = mad (ewAdvPawn6 ew) ap6 .
                  mad (ewAdvPawn5 ew) ap5
@@ -1041,25 +1040,25 @@ pawnEndGame p
           -- This will be another specialized evaluation function...
           -- But now we consider only the material difference (which consists only of pawns)
           withQueens = maDiff
- 
+
 escMeWhite :: Square -> Square -> (Bool, (Square, Int))
 escMeWhite !ksq !psq = (esc, (psq, dis))
     where !tsq = promoW psq
           !dis = squareDistance psq tsq
           !esc = dis < squareDistance ksq tsq
- 
+
 escYoWhite :: Square -> Square -> (Bool, (Square, Int))
 escYoWhite !ksq !psq = (esc, (psq, dis))
     where !tsq = promoW psq
           !dis = squareDistance psq tsq
           !esc = dis < squareDistance ksq tsq - 1       -- because we move
- 
+
 escMeBlack :: Square -> Square -> (Bool, (Square, Int))
 escMeBlack !ksq !psq = (esc, (psq, dis))
     where !tsq = promoB psq
           !dis = squareDistance psq tsq
           !esc = dis < squareDistance ksq tsq
- 
+
 escYoBlack :: Square -> Square -> (Bool, (Square, Int))
 escYoBlack !ksq !psq = (esc, (psq, dis))
     where !tsq = promoB psq

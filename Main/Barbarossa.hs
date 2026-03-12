@@ -39,7 +39,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.8.0"
-progVerSuff = "codex/sprtfix"
+progVerSuff = "codex/d25"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -280,7 +280,7 @@ doUci = do
     evid <- asks evpid
     answer $ idName ++ " " ++ evid
     answer idAuthor
-    mapM_ sendOption guiUciOptions 
+    mapM_ sendOption guiUciOptions
     answer uciOk
 
 doIsReady :: CtxIO ()
@@ -313,7 +313,6 @@ setOptionHash sval =
             modifyChanging $ \c -> c { crtStatus = st { hash = ha }}
             ctxLog LogInfo $ "Cache was set on " ++ sval ++ " MB"
         _           -> ctxLog LogError $ "GUI: wrong number of MB for option Hash: " ++ sval
-    
 
 ignore :: CtxIO ()
 ignore = notImplemented "ignored"
@@ -375,7 +374,7 @@ doGo cmds = do
             else do
                 let (tim, tpm, mtg) = getUCITime cmds $ myColor chg
                     rept = countRepetitions $ crtStatus chg
-                    md   = 20	-- max search depth
+                    md   = 25	-- max search depth
                     dpt  = fromMaybe md (findDepth cmds)
                 startWorking tim tpm mtg dpt rept
 

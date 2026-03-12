@@ -47,4 +47,3 @@ configFileNames pver psuff = map cfname $ tails [psuff, pver]
     where fnprf = "evalParams"
           fnsuf = ".txt"
           cfname = concat . (++ [fnsuf]) . intersperse "-" . (fnprf :) . reverse
-

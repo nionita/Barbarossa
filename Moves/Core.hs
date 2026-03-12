@@ -317,7 +317,6 @@ setPiece sq c f !p
           bsq = uBit sq
           !nbsq = complement bsq
 
-
 data CheckInfo = NormalCheck Piece !Square
                | QueenCheck Piece !Square
 
@@ -496,7 +495,7 @@ castKingRookOk !p Black = epcas p .&. b63 /= 0 where b63 = uBit 63
 
 {-# INLINE castQueenRookOk #-}
 castQueenRookOk :: MyPos -> Color -> Bool
-castQueenRookOk !p White = epcas p .&.  b0 /= 0 where b0 = 1 
+castQueenRookOk !p White = epcas p .&.  b0 /= 0 where b0 = 1
 castQueenRookOk !p Black = epcas p .&. b56 /= 0 where b56 = uBit 56
 
 {-# INLINE checkOk #-}
@@ -858,7 +857,7 @@ chooseAttacker pos !frompieces
 data Attacks = Attacks {
                    atAtt, atOcc, atBQ, atRQ, atRst :: !BBoard
                }
- 
+
 -- The new attacks are calculated once per central square with this function,
 -- which is more heavy, and then updated with newAttacs incrementally, which is cheaper
 theAttacs :: MyPos -> Square -> Attacks
@@ -880,7 +879,7 @@ theAttacs pos sq = axx
           !rqa = rAttacs occ sq .&. rq
           !ats = bqa .|. rqa .|. rst    -- these are all attackers
           !axx = Attacks ats occ bq rq rst      -- this is result and state for the next step
- 
+
 newAttacs :: Square -> BBoard -> Attacks -> Attacks
 newAttacs sq !moved !atts = axx
     where !mvc = complement moved

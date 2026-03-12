@@ -82,7 +82,7 @@ newHist = do
 {-# INLINE histw #-}
 histw :: Int -> Int32
 histw !d = 1 `unsafeShiftL` dm
-    where !dm = maxd - d
+    where !dm = max 0 (maxd - d)
           maxd = 31
 
 -- We don't use negative history (i.e. when move did not cut)

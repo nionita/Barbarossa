@@ -23,7 +23,7 @@ rBits = listArray (0, 63) $ map sixtyfour [
         11, 10, 10, 10, 10, 10, 10, 11,
         12, 11, 11, 11, 11, 11, 11, 12
     ]
- 
+
 bBits = listArray (0, 63) $ map sixtyfour [
         6, 5, 5, 5, 5, 5, 5, 6,
         5, 5, 5, 5, 5, 5, 5, 5,

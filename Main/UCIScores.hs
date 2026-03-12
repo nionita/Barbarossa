@@ -79,7 +79,7 @@ main = do
     when debug $ putStrLn $ "Options: " ++ show aopts
     let (opts, rest) = aopts
     setCurrentDirectory $ optCwd opts
-    if length rest == 1 
+    if length rest == 1
        then do
            let input = head rest
            dex <- doesDirectoryExist input

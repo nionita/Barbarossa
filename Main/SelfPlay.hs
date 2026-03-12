@@ -1082,11 +1082,3 @@ noMatingMaterial p
     | occup p == kings p .|. bishops p
         && popCount (occup p) == 3     = True
     | otherwise                        = False
-
-
-
-
-
-
-
-

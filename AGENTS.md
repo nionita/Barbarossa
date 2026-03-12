@@ -20,4 +20,11 @@
 
 ## Line Endings
 
-- After every source change, restore Unix file format (LF only) for all source files
+Before any build, check these line ending rules for all changes source files:
+- no unnecessary empty spaces before an end of line
+- restore Unix file format (LF only)
+
+## Empty lines
+Before any build, check these empty lines rules:
+- no empty lines at the end of a source file
+- no more than 1 consecutive empty lines in the source files

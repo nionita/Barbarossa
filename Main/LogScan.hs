@@ -61,26 +61,25 @@ theOptions = do
 -- DATA TYPES --
 
 -- | Represents a chess position with its evaluation score and FEN notation
-data Position = Position 
+data Position = Position
   { posScore :: Int    -- ^ Evaluation score from the engine
   , posFen :: String   -- ^ FEN (Forsyth-Edwards Notation) string
   } deriving (Show, Eq)
 
 -- | Types of lines in the log file
-data LineType 
+data LineType
   = OtherLine           -- ^ Lines we don't care about (Type 0)
   | PositionLine Position  -- ^ Lines containing position information (Type 1)
   | NewGameLine         -- ^ Lines marking the start of a new game (Type 2)
   deriving (Show, Eq)
 
 -- | Possible game outcomes
-data GameWinner 
+data GameWinner
   = WhiteWon      -- ^ White won the game
   | BlackWon      -- ^ Black won the game
   | DrawGame      -- ^ Game was a draw
   | UnclearGame   -- ^ Cannot determine the outcome
   deriving (Show, Eq)
-
 
 -- PARSING FUNCTIONS --
 
@@ -90,7 +89,7 @@ data GameWinner
 parseLineType :: String -> LineType
 parseLineType line
   | "[Info]: New game" `isPrefixOf` dropWhile (/= '[') line = NewGameLine
-  | "[Info]: Origin" `isPrefixOf` dropWhile (/= '[') line = 
+  | "[Info]: Origin" `isPrefixOf` dropWhile (/= '[') line =
       case extractScoreAndFen line of
         Just (score, fen) -> PositionLine (Position score fen)
         Nothing -> OtherLine
@@ -100,7 +99,7 @@ parseLineType line
 -- The line format is: <ms> [Info]: Origin |<fen1>|<draft>|<score>|<fen2>
 -- Returns Just (score, fen2) if parsing succeeds, Nothing otherwise
 extractScoreAndFen :: String -> Maybe (Int, String)
-extractScoreAndFen line = 
+extractScoreAndFen line =
   let parts = splitOnPipe line
   in if length parts >= 5
      then case reads (parts !! 3) of
@@ -121,12 +120,11 @@ splitOnPipe = go ""
 -- The side to move is the second field in FEN notation
 -- Returns 'w' for white, 'b' for black, or '?' if parsing fails
 getSideToMove :: String -> Char
-getSideToMove fen = 
+getSideToMove fen =
   let fields = words fen
   in if length fields >= 2
      then head (fields !! 1)
      else '?'
-
 
 -- GAME GROUPING FUNCTIONS --
 
@@ -159,7 +157,6 @@ groupByGames lineTypes =
       where
         go (PositionLine pos) acc = pos : acc
         go _ acc = acc
-
 
 -- GAME RESULT DETERMINATION --
 
@@ -199,7 +196,6 @@ determineGameResult trackCount lowLimit highLimit positions =
               then if side == 'w' then BlackWon else WhiteWon
               else UnclearGame
 
-
 -- OUTPUT GENERATION --
 
 -- | Convert a position to a CSV output line
@@ -236,7 +232,6 @@ processGame trackCount lowLimit highLimit positions =
        UnclearGame -> []
        _ -> map (`positionToOutput` result) positions
 
-
 -- MAIN PROCESSING FUNCTION --
 
 -- | Main function to process a log file and generate training data
@@ -246,7 +241,7 @@ processGame trackCount lowLimit highLimit positions =
 --   trackCount: how many last positions to examine (typically 4-5)
 --   lowLimit: max score magnitude for draw (typically 100)
 --   highLimit: min score magnitude for decided game (typically 400)
--- 
+--
 -- The function reads the input file, processes each line, groups positions
 -- into games, determines game results, and writes CSV output
 processLogFile :: FilePath -> FilePath -> Int -> Int -> Int -> IO ()
@@ -254,16 +249,16 @@ processLogFile inputFile outputFile trackCount lowLimit highLimit = do
   -- Read input file
   content <- readFile inputFile
   let linesOfFile = lines content
-      
+
       -- Parse each line to determine its type
       lineTypes = map parseLineType linesOfFile
-      
+
       -- Group positions by games
       games = groupByGames lineTypes
-      
+
       -- Process each game and collect output lines
       outputLines = concatMap (processGame trackCount lowLimit highLimit) games
-  
+
   -- Write output file
   writeFile outputFile (unlines outputLines)
 
