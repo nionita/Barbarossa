@@ -939,7 +939,7 @@ searchParams ds opts = do
             opNames   = optSpaceNames,
             opDataset = ds,
             opMax     = optOptim opts,
-            opFails   = 0,
+            opFails   = optDims,	-- to stop the search when nothing changed after one full round
             opFixIdx  = optFixIdx opts,
             opHistory = []
         }
@@ -967,7 +967,7 @@ optimDim k op
     let ((best, bl, since), first)
             | hit:_ <- opHistory op = (hit, False)
             | otherwise             = ((U.fromList optSpaceInit, 1e100, 0), True)
-    if opFails op > 0 && since > opFails op
+    if since > opFails op
        then return (False, op)
        else do
            let candidates = generateCandidates best first ix
