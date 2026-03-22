@@ -35,6 +35,7 @@ import Moves.Notation
 import Moves.History
 import Search.CStateMonad (execCState)
 import Eval.FileParams (makeEvalState)
+import Eval.Core (initEvalState)
 -- import Eval.Eval	-- not yet needed
 import Uci.UciGlue
 
@@ -44,6 +45,7 @@ debug = False
 data Options = Options {
         optPlayer1  :: Maybe String,	-- player 1 config file
         optPlayer2  :: Maybe String,	-- player 2 config file
+        optBaseCurrent :: Bool,	-- player 2 uses compiled-in current weights
         optConfFile :: Maybe String,	-- config file
         optParams   :: [String],	-- list of eval parameter assignements
         -- optNThreads :: Int,		-- number of threads - not used for self play now
@@ -71,6 +73,7 @@ defaultOptions :: Options
 defaultOptions = Options {
         optPlayer1  = Nothing,
         optPlayer2  = Nothing,
+        optBaseCurrent = False,
         optConfFile = Nothing,
         optParams   = [],
         -- optNThreads = 1,
@@ -96,6 +99,9 @@ setPlayer1 cf opt = opt { optPlayer1 = Just cf }
 
 setPlayer2 :: String -> Options -> Options
 setPlayer2 cf opt = opt { optPlayer2 = Just cf }
+
+setBaseCurrent :: Options -> Options
+setBaseCurrent opt = opt { optBaseCurrent = True }
 
 setConfFile :: String -> Options -> Options
 setConfFile cf opt = opt { optConfFile = Just cf }
@@ -168,6 +174,7 @@ options :: [OptDescr (Options -> Options)]
 options = [
         Option "a" ["player1"] (ReqArg setPlayer1 "STRING") "Configuration file for player 1",
         Option "b" ["player2"] (ReqArg setPlayer2 "STRING") "Configuration file for player 2",
+        Option "" ["base-current"] (NoArg setBaseCurrent) "Use current compiled weights as player 2 baseline",
         Option "c" ["config"]  (ReqArg setConfFile "STRING") "Configuration file",
         Option "p" ["param"]   (ReqArg addParam "STRING") "Eval/search/time params: name=value,...",
         Option "m" ["match"]   (ReqArg addMatch "STRING") "Match between 2 configs in the given directory",
@@ -196,7 +203,7 @@ theOptions = do
         (o, n, []) -> return (foldr ($) defaultOptions o, n)
         (_, _, es) -> ioError (userError (concat es ++ usageInfo header options))
     where header = "Usage: " ++ idName
-              ++ " [-c CONF] [-m DIR [-a CFILE1] -b CFILE2] [-P] [-B] [-i FENFILE [-s SKIP][-f FENS]] [-o OUTFILE] [-d DEPTH]"
+              ++ " [-c CONF] [-m DIR [-a CFILE1] (-b CFILE2 | --base-current)] [-P] [-B] [-i FENFILE [-s SKIP][-f FENS]] [-o OUTFILE] [-d DEPTH]"
           idName = "SelfPlay"
 
 data SprtConfig = SprtConfig {
@@ -226,6 +233,14 @@ validateOptions opts
         = ioError $ userError "--perf cannot be combined with --output"
     | optPerfTest opts && (optPlayer1 opts /= Nothing || optPlayer2 opts /= Nothing)
         = ioError $ userError "--perf cannot be combined with --player1/--player2"
+    | optPerfTest opts && optBaseCurrent opts
+        = ioError $ userError "--perf cannot be combined with --base-current"
+    | optBaseCurrent opts && optPlayer2 opts /= Nothing
+        = ioError $ userError "--base-current cannot be combined with --player2"
+    | optMatch opts /= Nothing && optPlayer1 opts == Nothing
+        = ioError $ userError "--match requires --player1"
+    | optMatch opts /= Nothing && not (optBaseCurrent opts) && optPlayer2 opts == Nothing
+        = ioError $ userError "--match requires either --player2 or --base-current"
     | optNodeMargin opts < 0 || optNodeMargin opts > 99
         = ioError $ userError "--node-margin must be in [0,99]"
     | optFenPrintEvery opts <= 0
@@ -392,20 +407,24 @@ matchFile opts dir = do
         putStrLn $ "Play depth  " ++ show (optDepth opts)
         putStrLn $ "Play nodes  " ++ show (optNodes opts)
         putStrLn $ "Node margin " ++ show (optNodeMargin opts) ++ "%"
-    let mids = (,) <$> optPlayer1 opts <*> optPlayer2 opts
-    case mids of
+    case optPlayer1 opts of
         Nothing -> do
-            liftIO $ putStrLn "For a match we need 2 configs as players"
+            liftIO $ putStrLn "For a match we need a challenger config as player 1"
             return (GameScore 0 0 0)
-        Just (id1, id2) -> do
+        Just id1 -> do
             ctxLog LogWarning $ "Players from directory " ++ dir
             ctxLog LogWarning $ "Player 1 " ++ id1
-            ctxLog LogWarning $ "Player 2 " ++ id2
             fens <- getFens (optAFenFile opts) (fromMaybe 0 (optNSkip opts)) (fromMaybe 1 (optNFens opts))
-            (eval1, eval2) <- liftIO $ do
+            (id2, eval1, eval2) <- liftIO $ do
                 (_, eval1) <- makeEvalState (Just id1) [] "progver" "progsuf"
-                (_, eval2) <- makeEvalState (Just id2) [] "progver" "progsuf"
-                return (eval1, eval2)
+                if optBaseCurrent opts
+                   then return ("<compiled>", eval1, initEvalState [])
+                   else case optPlayer2 opts of
+                            Just cf -> do
+                                (_, eval2) <- makeEvalState (Just cf) [] "progver" "progsuf"
+                                return (cf, eval1, eval2)
+                            Nothing -> error "matchFile: missing baseline selector"
+            ctxLog LogWarning $ "Player 2 " ++ id2
             when debug $ do
                 ctxLog LogInfo $ "Player 1 config: " ++ show eval1
                 ctxLog LogInfo $ "Player 2 config: " ++ show eval2
