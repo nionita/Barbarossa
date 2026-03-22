@@ -823,10 +823,9 @@ playGame :: Int -> Maybe Int -> Int -> MyPos -> (String, EvalState) -> (String, 
 playGame d maybeNodes nodeMarginPc pos (ide1, eval1) (ide2, eval2) = do
     ctxLog LogWarning "--------------------------"
     ctxLog LogWarning $ "Setup new game between " ++ ide1 ++ " and " ++ ide2
+    ctx <- ask
     chg <- readChanging
-    let oldHash = hash $ crtStatus chg
     (hash1, hash2, hist1, hist2) <- liftIO $ do
-        freeCache oldHash
         (,,,) <$> newCache 1 <*> newCache 1 <*> newHist <*> newHist
     let state1 = posToState pos hash1 hist1 eval1
         state2 = posToState pos hash2 hist2 eval2
@@ -843,7 +842,11 @@ playGame d maybeNodes nodeMarginPc pos (ide1, eval1) (ide2, eval2) = do
         player2 = Player { plName = ide2, plChg = chg2, plNodes = 0 }
     ctxLog LogWarning $ "Color for " ++ ide1 ++ ": " ++ show color1
     ctxLog LogWarning $ "Starting position: " ++ posToFen pos
-    go (0::Int) player1 player2
+    let cleanup = do
+            runReaderT (modifyChanging $ const chg) ctx
+            freeCache hash1
+            freeCache hash2
+    liftIO $ finally (runReaderT (go (0::Int) player1 player2) ctx) cleanup
     where go i player1 player2 = do
               start  <- asks strttm
               currms <- lift $ currMilli start
