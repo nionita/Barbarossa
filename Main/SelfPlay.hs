@@ -56,6 +56,7 @@ data Options = Options {
         optNSkip    :: Maybe Int,	-- number of fens to skip (Nothing = none)
         optNFens    :: Maybe Int,	-- number of fens (Nothing = all)
         optMatch    :: Maybe String,	-- match between configs in the given directory
+        optSprtDir  :: Maybe String,	-- SPRT match between configs in the given directory
         optPerfTest :: Bool,		-- perf test on input fen file
         optBuildInfo :: Bool,		-- print build flavor and opposite build command
         optSprtAlpha :: Maybe Double,	-- SPRT alpha
@@ -80,10 +81,11 @@ defaultOptions = Options {
         optDepth    = 1,
         optLogLev   = LogNever,		-- default: never log
         optNodes    = Nothing,
-        optNodeMargin = 10,
+        optNodeMargin = 50,
         optNSkip    = Nothing,
         optNFens    = Nothing,
         optMatch    = Nothing,
+        optSprtDir  = Nothing,
         optPerfTest = False,
         optBuildInfo = False,
         optSprtAlpha = Nothing,
@@ -132,6 +134,9 @@ addNFens ns opt = opt { optNFens = Just $ read ns }
 addMatch :: String -> Options -> Options
 addMatch ns opt = opt { optMatch = Just ns }
 
+addSprtDir :: String -> Options -> Options
+addSprtDir ns opt = opt { optSprtDir = Just ns }
+
 setPerfTest :: Options -> Options
 setPerfTest opt = opt { optPerfTest = True }
 
@@ -178,18 +183,19 @@ options = [
         Option "c" ["config"]  (ReqArg setConfFile "STRING") "Configuration file",
         Option "p" ["param"]   (ReqArg addParam "STRING") "Eval/search/time params: name=value,...",
         Option "m" ["match"]   (ReqArg addMatch "STRING") "Match between 2 configs in the given directory",
+        Option "" ["sprt"]     (ReqArg addSprtDir "STRING") "SPRT match between 2 configs in the given directory",
         Option "P" ["perf"]    (NoArg setPerfTest) "Performance test on input FEN file",
         Option "B" ["build-info"] (NoArg setBuildInfo) "Show build flavor and opposite build command",
         Option "" ["sprt-alpha"] (ReqArg addSprtAlpha "DOUBLE") "SPRT alpha (default 0.05 when SPRT is enabled)",
         Option "" ["sprt-beta"]  (ReqArg addSprtBeta  "DOUBLE") "SPRT beta (default 0.05 when SPRT is enabled)",
         Option "" ["sprt-elo0"]  (ReqArg addSprtElo0  "DOUBLE") "SPRT H0 elo bound (default 0.0 when SPRT is enabled)",
-        Option "" ["sprt-elo1"]  (ReqArg addSprtElo1  "DOUBLE") "SPRT H1 elo bound (default 2.0 when SPRT is enabled)",
+        Option "" ["sprt-elo1"]  (ReqArg addSprtElo1  "DOUBLE") "SPRT H1 elo bound (default 5.0 when SPRT is enabled)",
         Option "" ["print-fen-every"] (ReqArg addFenPrintEvery "INT") "Print every Nth input fen before pair play (default 10)",
         Option "i" ["input"]   (ReqArg addIFile "STRING") "Input (fen) file",
         Option "o" ["output"]  (ReqArg addOFile "STRING") "Output file",
         Option "d" ["depth"]   (ReqArg addDepth "STRING") "Search depth",
         Option "n" ["nodes"]   (ReqArg addNodes "STRING") "Search nodes budget per move",
-        Option "M" ["node-margin"] (ReqArg addNodeMargin "INT") "Safety margin percent for node budget (default 10)",
+        Option "M" ["node-margin"] (ReqArg addNodeMargin "INT") "Safety margin percent for node budget (default 50)",
         -- Option "t" ["threads"] (ReqArg addNThrds "STRING") "Number of threads",
         Option "s" ["skip"]    (ReqArg addNSkip "STRING")  "Number of fens to skip",
         Option "f" ["fens"]    (ReqArg addNFens "STRING")  "Number of fens to play",
@@ -203,7 +209,7 @@ theOptions = do
         (o, n, []) -> return (foldr ($) defaultOptions o, n)
         (_, _, es) -> ioError (userError (concat es ++ usageInfo header options))
     where header = "Usage: " ++ idName
-              ++ " [-c CONF] [-m DIR [-a CFILE1] (-b CFILE2 | --base-current)] [-P] [-B] [-i FENFILE [-s SKIP][-f FENS]] [-o OUTFILE] [-d DEPTH]"
+              ++ " [-c CONF] [(-m DIR | --sprt DIR) [-a CFILE1] (-b CFILE2 | --base-current)] [-P] [-B] [-i FENFILE [-s SKIP][-f FENS]] [-o OUTFILE] [-d DEPTH]"
           idName = "SelfPlay"
 
 data SprtConfig = SprtConfig {
@@ -213,8 +219,14 @@ data SprtConfig = SprtConfig {
         sprtElo1  :: !Double
     }
 
+matchDir :: Options -> Maybe String
+matchDir opts = case (optMatch opts, optSprtDir opts) of
+    (Just _, Just _) -> Nothing
+    (mdir, Nothing)  -> mdir
+    (Nothing, sdir)  -> sdir
+
 sprtEnabled :: Options -> Bool
-sprtEnabled opts = optMatch opts /= Nothing && any isJust
+sprtEnabled opts = isJust (optSprtDir opts) || any isJust
     [optSprtAlpha opts, optSprtBeta opts, optSprtElo0 opts, optSprtElo1 opts]
 
 getSprtConfig :: Options -> SprtConfig
@@ -222,13 +234,15 @@ getSprtConfig opts = SprtConfig {
         sprtAlpha = fromMaybe 0.05 (optSprtAlpha opts),
         sprtBeta  = fromMaybe 0.05 (optSprtBeta opts),
         sprtElo0  = fromMaybe 0.0  (optSprtElo0 opts),
-        sprtElo1  = fromMaybe 2.0  (optSprtElo1 opts)
+        sprtElo1  = fromMaybe 5.0  (optSprtElo1 opts)
     }
 
 validateOptions :: Options -> IO ()
 validateOptions opts
-    | optPerfTest opts && optMatch opts /= Nothing
-        = ioError $ userError "--perf cannot be combined with --match"
+    | optMatch opts /= Nothing && optSprtDir opts /= Nothing
+        = ioError $ userError "--match cannot be combined with --sprt"
+    | optPerfTest opts && isJust (matchDir opts)
+        = ioError $ userError "--perf cannot be combined with --match/--sprt"
     | optPerfTest opts && optFOutFile opts /= optFOutFile defaultOptions
         = ioError $ userError "--perf cannot be combined with --output"
     | optPerfTest opts && (optPlayer1 opts /= Nothing || optPlayer2 opts /= Nothing)
@@ -237,16 +251,16 @@ validateOptions opts
         = ioError $ userError "--perf cannot be combined with --base-current"
     | optBaseCurrent opts && optPlayer2 opts /= Nothing
         = ioError $ userError "--base-current cannot be combined with --player2"
-    | optMatch opts /= Nothing && optPlayer1 opts == Nothing
+    | isJust (matchDir opts) && optPlayer1 opts == Nothing
         = ioError $ userError "--match requires --player1"
-    | optMatch opts /= Nothing && not (optBaseCurrent opts) && optPlayer2 opts == Nothing
+    | isJust (matchDir opts) && not (optBaseCurrent opts) && optPlayer2 opts == Nothing
         = ioError $ userError "--match requires either --player2 or --base-current"
     | optNodeMargin opts < 0 || optNodeMargin opts > 99
         = ioError $ userError "--node-margin must be in [0,99]"
     | optFenPrintEvery opts <= 0
         = ioError $ userError "--print-fen-every must be > 0"
-    | sprtEnabled opts && optMatch opts == Nothing
-        = ioError $ userError "SPRT options require --match"
+    | sprtEnabled opts && not (isJust (matchDir opts))
+        = ioError $ userError "SPRT options require --match or --sprt"
     | sprtEnabled opts && (sprtAlpha cfg <= 0 || sprtAlpha cfg >= 1)
         = ioError $ userError "SPRT alpha must be between 0 and 1"
     | sprtEnabled opts && (sprtBeta cfg <= 0 || sprtBeta cfg >= 1)
@@ -315,7 +329,7 @@ main = do
            ctx <- initContext opts
            if optPerfTest opts
               then runReaderT (perfTestFile opts) ctx
-              else case optMatch opts of
+              else case matchDir opts of
                         Nothing  -> runReaderT (filterFile opts) ctx
                         Just dir -> do
                             GameScore w d l <- runReaderT (matchFile opts dir) ctx
