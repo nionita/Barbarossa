@@ -9,7 +9,7 @@
 
 module Main (main) where
 import Control.Monad.Reader
-import Control.Monad (when, void)
+import Control.Monad (when, void, forever)
 import Control.Concurrent
 import Control.Exception
 import Data.Char (isSpace)
@@ -21,6 +21,7 @@ import System.Directory
 import System.Environment (getArgs)
 import System.FilePath
 import System.IO
+import Data.Time.Clock (UTCTime)
 -- import System.Time
 
 import Struct.Struct
@@ -327,6 +328,7 @@ main = do
        else do
            validateOptions opts
            ctx <- initContext opts
+           runReaderT (startWriter False) ctx
            if optPerfTest opts
               then runReaderT (perfTestFile opts) ctx
               else case matchDir opts of
@@ -735,6 +737,20 @@ theLogger lchan lst = do
             hPutStrLn h s
             hFlush h
             theLogger lchan lst
+
+startWriter :: Bool -> CtxIO ()
+startWriter inter = do
+    ctx <- ask
+    void $ liftIO $ forkIO
+         $ theWriter inter (writer ctx) (logger ctx) (LogInfo >= loglev ctx) (strttm ctx)
+
+theWriter :: Bool -> Chan String -> Chan String -> Bool -> UTCTime -> IO ()
+theWriter inter wchan lchan mustlog refs = forever $ do
+    s <- readChan wchan
+    when inter $ do
+        putStrLn s
+        hFlush stdout
+    when mustlog $ logging lchan refs "Output" s
 
 newThread :: CtxIO () -> CtxIO ThreadId
 newThread a = do
