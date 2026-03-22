@@ -246,8 +246,10 @@ data SprtSave = SprtSave {
         savePlayer2        :: !(Maybe FilePath),
         saveBaseCurrent    :: !Bool,
         saveInputFile      :: !FilePath,
-        saveSkip           :: !Int,
-        saveFens           :: !Int,
+        saveOrigSkip       :: !Int,
+        saveOrigPairs      :: !Int,
+        saveNextPairIndex  :: !Int,
+        saveRemainingPairs :: !Int,
         saveDepth          :: !Int,
         saveNodes          :: !(Maybe Int),
         saveNodeMargin     :: !Int,
@@ -259,6 +261,7 @@ data SprtSave = SprtSave {
         saveWdl            :: !GameScore,
         savePenta          :: !PentaScore,
         saveLastLLR        :: !(Maybe Double),
+        saveVerdict        :: !SprtResult,
         saveElapsedSeconds :: !Double
     }
 
@@ -319,8 +322,10 @@ readSaveFile fileName = do
         <*> reqRead "player2" mp
         <*> reqRead "baseCurrent" mp
         <*> reqRead "inputFile" mp
-        <*> reqRead "skip" mp
-        <*> reqRead "fens" mp
+        <*> reqRead "origSkip" mp
+        <*> reqRead "origPairs" mp
+        <*> reqRead "nextPairIndex" mp
+        <*> reqRead "remainingPairs" mp
         <*> reqRead "depth" mp
         <*> reqRead "nodes" mp
         <*> reqRead "nodeMargin" mp
@@ -334,6 +339,7 @@ readSaveFile fileName = do
                 <$> reqRead "pWW" mp <*> reqRead "pWD" mp <*> reqRead "pWL" mp
                 <*> reqRead "pDD" mp <*> reqRead "pLD" mp <*> reqRead "pLL" mp)
         <*> reqRead "lastLLR" mp
+        <*> reqRead "verdict" mp
         <*> reqRead "elapsedSeconds" mp
     where
       insertUnique mp (k, v)
@@ -357,8 +363,10 @@ writeSaveFile fileName save = do
             , "player2 = " ++ show (savePlayer2 save)
             , "baseCurrent = " ++ show (saveBaseCurrent save)
             , "inputFile = " ++ show (saveInputFile save)
-            , "skip = " ++ show (saveSkip save)
-            , "fens = " ++ show (saveFens save)
+            , "origSkip = " ++ show (saveOrigSkip save)
+            , "origPairs = " ++ show (saveOrigPairs save)
+            , "nextPairIndex = " ++ show (saveNextPairIndex save)
+            , "remainingPairs = " ++ show (saveRemainingPairs save)
             , "depth = " ++ show (saveDepth save)
             , "nodes = " ++ show (saveNodes save)
             , "nodeMargin = " ++ show (saveNodeMargin save)
@@ -377,6 +385,7 @@ writeSaveFile fileName save = do
             , "pLD = " ++ show ld
             , "pLL = " ++ show ll
             , "lastLLR = " ++ show (saveLastLLR save)
+            , "verdict = " ++ show (saveVerdict save)
             , "elapsedSeconds = " ++ show (saveElapsedSeconds save)
             ]
     writeFile tmp $ unlines ls
@@ -392,8 +401,8 @@ saveToOptions opts save = opts {
         optDepth = saveDepth save,
         optNodes = saveNodes save,
         optNodeMargin = saveNodeMargin save,
-        optNSkip = Just $ saveSkip save,
-        optNFens = Just $ saveFens save,
+        optNSkip = Just $ saveOrigSkip save,
+        optNFens = Just $ resumeTotalPairs opts save,
         optSprtAlpha = Just $ sprtAlpha $ saveSprtCfg save,
         optSprtBeta = Just $ sprtBeta $ saveSprtCfg save,
         optSprtElo0 = Just $ sprtElo0 $ saveSprtCfg save,
@@ -403,14 +412,23 @@ saveToOptions opts save = opts {
         optAFenFile = saveInputFile save
     }
 
+resumeTotalPairs :: Options -> SprtSave -> Int
+resumeTotalPairs opts save =
+    case optNFens opts of
+        Just n | canExtendSavedSprt save && n > saveOrigPairs save -> n
+        _ -> saveOrigPairs save
+
+canExtendSavedSprt :: SprtSave -> Bool
+canExtendSavedSprt save = saveVerdict save == SprtContinue && saveRemainingPairs save == 0
+
 validateResumeConflicts :: Options -> SprtSave -> IO ()
 validateResumeConflicts opts save = do
     chkMaybe "player1" (optPlayer1 opts) Nothing (Just $ savePlayer1 save)
     chkMaybe "player2" (optPlayer2 opts) Nothing (savePlayer2 save)
     chkBool "base-current" (optBaseCurrent opts) False (saveBaseCurrent save)
     chkVal "input" (optAFenFile opts) (optAFenFile defaultOptions) (saveInputFile save)
-    chkMaybe "skip" (optNSkip opts) Nothing (Just $ saveSkip save)
-    chkMaybe "fens" (optNFens opts) Nothing (Just $ saveFens save)
+    chkMaybe "skip" (optNSkip opts) Nothing (Just $ saveOrigSkip save)
+    chkFens
     chkVal "depth" (optDepth opts) (optDepth defaultOptions) (saveDepth save)
     chkMaybe "nodes" (optNodes opts) Nothing (saveNodes save)
     chkVal "node-margin" (optNodeMargin opts) (optNodeMargin defaultOptions) (saveNodeMargin save)
@@ -430,6 +448,12 @@ validateResumeConflicts opts save = do
       chkMaybe name cur def saved =
           when (cur /= def && cur /= saved) $
               ioError $ userError $ "--" ++ name ++ " conflicts with the SPRT save file"
+      chkFens = case optNFens opts of
+          Nothing -> return ()
+          Just n
+              | n == saveOrigPairs save -> return ()
+              | canExtendSavedSprt save && n > saveOrigPairs save -> return ()
+              | otherwise -> ioError $ userError "--fens conflicts with the SPRT save file"
 
 matchDir :: Options -> Maybe String
 matchDir opts = case (optMatch opts, optSprtDir opts) of
@@ -683,7 +707,14 @@ matchFile opts dir = do
             liftIO $ hFlush stdout
             let startLine = fromMaybe 0 (optNSkip runOpts) + 1
                 initialAcc = maybe emptyMatchAcc saveToMatchAcc msave
-                remainingFens = drop (matPairsTried initialAcc) $ zip [startLine..] fens
+                nextPairIndex = maybe 0 saveNextPairIndex msave
+                remainingPairs = case msave of
+                    Nothing -> length fens
+                    Just save
+                        | resumeTotalPairs opts save > saveOrigPairs save
+                            -> max 0 (length fens - nextPairIndex)
+                        | otherwise -> saveRemainingPairs save
+                remainingFens = take remainingPairs $ drop nextPairIndex $ zip [startLine..] fens
                 savePath = if isJust msprt then Just saveFileName else Nothing
             now <- liftIO getCurrentTime
             let matchInfo = MatchInfo {
@@ -695,7 +726,7 @@ matchFile opts dir = do
             acc <- playMatchPairs (optDepth runOpts) (optNodes runOpts) (optNodeMargin runOpts) (optStatsEvery runOpts)
                                  matchInfo initialAcc (id1, eval1) (id2, eval2) msprt remainingFens
             liftIO $ printMatchSummary matchInfo msprt acc
-            when (isJust msprt) $ liftIO $ removeCanonicalSaveIfExists
+            when (isJust msprt) $ liftIO $ finalizeSprtSave matchInfo acc
             return (matWdl acc)
 
 readAllLinesStrict :: FilePath -> IO [String]
@@ -880,6 +911,15 @@ removeCanonicalSaveIfExists = do
     ex <- doesFileExist saveFileName
     when ex $ removeFile saveFileName
 
+finalizeSprtSave :: MatchInfo -> MatchAcc -> IO ()
+finalizeSprtSave matchInfo acc = do
+    now <- getCurrentTime
+    case matchSavePath matchInfo of
+        Nothing -> return ()
+        Just path -> case finalSprtVerdict matchInfo acc of
+            SprtContinue -> writeSaveFile path $ matchToSave matchInfo acc (realToFrac $ diffUTCTime now (matchStartTime matchInfo))
+            _            -> removeCanonicalSaveIfExists
+
 addPentaScore :: PentaScore -> PentaScore -> PentaScore
 addPentaScore (PentaScore ww1 wd1 wl1 dd1 ld1 ll1) (PentaScore ww2 wd2 wl2 dd2 ld2 ll2) =
     PentaScore (ww1 + ww2) (wd1 + wd2) (wl1 + wl2) (dd1 + dd2) (ld1 + ld2) (ll1 + ll2)
@@ -1031,6 +1071,13 @@ sprtResultLine _ res = ["SPRT: " ++ sprtStatusText res]
 matchSprtResult :: SprtState -> MatchAcc -> SprtResult
 matchSprtResult ss acc = maybe SprtContinue (sprtResult ss) (matLastLLR acc)
 
+finalSprtVerdict :: MatchInfo -> MatchAcc -> SprtResult
+finalSprtVerdict matchInfo acc = case matchSavePath matchInfo of
+    Nothing -> SprtContinue
+    Just _ -> case matLastLLR acc of
+        Nothing -> SprtContinue
+        Just llr -> sprtResult (mkSprtState $ getSprtConfig $ matchOptions matchInfo) llr
+
 sprtStatusText :: SprtResult -> String
 sprtStatusText SprtContinue = "continue"
 sprtStatusText SprtH0 = "accepted H0"
@@ -1077,8 +1124,10 @@ matchToSave matchInfo acc elapsed = SprtSave {
         savePlayer2 = optPlayer2 opts,
         saveBaseCurrent = optBaseCurrent opts,
         saveInputFile = optAFenFile opts,
-        saveSkip = fromMaybe 0 $ optNSkip opts,
-        saveFens = matchMaxPairs matchInfo,
+        saveOrigSkip = fromMaybe 0 $ optNSkip opts,
+        saveOrigPairs = matchMaxPairs matchInfo,
+        saveNextPairIndex = matPairsTried acc,
+        saveRemainingPairs = max 0 (matchMaxPairs matchInfo - matPairsTried acc),
         saveDepth = optDepth opts,
         saveNodes = optNodes opts,
         saveNodeMargin = optNodeMargin opts,
@@ -1090,6 +1139,7 @@ matchToSave matchInfo acc elapsed = SprtSave {
         saveWdl = matWdl acc,
         savePenta = matPenta acc,
         saveLastLLR = matLastLLR acc,
+        saveVerdict = finalSprtVerdict matchInfo acc,
         saveElapsedSeconds = elapsed
     }
     where opts = matchOptions matchInfo
@@ -1391,7 +1441,7 @@ addGameScores :: GameScore -> GameScore -> GameScore
 addGameScores (GameScore w1 d1 l1) (GameScore w2 d2 l2) = GameScore (w1+w2) (d1+d2) (l1+l2)
 
 data SprtResult = SprtH0 | SprtH1 | SprtContinue
-    deriving (Eq, Show)
+    deriving (Eq, Show, Read)
 
 data SprtState = SprtState {
         sprtCfgState :: !SprtConfig,
