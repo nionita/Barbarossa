@@ -671,19 +671,21 @@ playMatchPairs depth maybeNodes nodeMarginPc printEvery (id1, eval1) (id2, eval2
     where
       go acc [] = return acc { matTerm = MatchTermMaxPairs }
       go acc ((lineNo, fen):rest) = do
-          when (lineNo `mod` printEvery == 0) $ liftIO $ do
-              putStrLn $ show lineNo ++ ": " ++ fen
-              hFlush stdout
           pres <- playOnePair depth maybeNodes nodeMarginPc (id1, eval1) (id2, eval2) fen
           let accTried = acc { matPairsTried = matPairsTried acc + 1 }
           case pres of
-              PairIncomplete -> go accTried rest
+              PairIncomplete -> do
+                  when (shouldPrintMatchStatus printEvery accTried) $
+                      liftIO $ printMatchProgress msprt lineNo fen accTried
+                  go accTried rest
               PairCompleted wdlp pp -> do
                   let penta' = addPentaScore (matPenta accTried) pp
                       wdl' = addGameScores (matWdl accTried) wdlp
                       done' = matPairsDone accTried + 1
                       llrM = fmap (`sprtPentaLLR` penta') msprt
                       acc' = accTried { matWdl = wdl', matPenta = penta', matPairsDone = done', matLastLLR = llrM }
+                  when (shouldPrintMatchStatus printEvery acc') $
+                      liftIO $ printMatchProgress msprt lineNo fen acc'
                   case (msprt, llrM) of
                       (Just ss, Just llr) -> case sprtResult ss llr of
                           SprtContinue -> go acc' rest
@@ -691,21 +693,57 @@ playMatchPairs depth maybeNodes nodeMarginPc printEvery (id1, eval1) (id2, eval2
                       _ -> go acc' rest
 
 printMatchSummary :: Maybe SprtState -> MatchAcc -> IO ()
-printMatchSummary _ acc = do
-    let GameScore w d l = matWdl acc
-        PentaScore ww wd wl dd ld ll = matPenta acc
-    putStrLn $ "Completed pairs: " ++ show (matPairsDone acc) ++ " / " ++ show (matPairsTried acc)
-    putStrLn $ "WDL: (" ++ show w ++ "," ++ show d ++ "," ++ show l ++ ")"
-    putStrLn $ "Penta (WW,WD,WL,DD,LD,LL): (" ++ show ww ++ "," ++ show wd ++ "," ++ show wl
-        ++ "," ++ show dd ++ "," ++ show ld ++ "," ++ show ll ++ ")"
-    case matLastLLR acc of
-        Nothing -> return ()
-        Just llr -> putStrLn $ "Final LLR: " ++ show llr
+printMatchSummary msprt acc = do
+    mapM_ putStrLn $ matchStatusLines msprt acc
     case matTerm acc of
         MatchTermMaxPairs -> putStrLn "Termination: max pairs reached"
         MatchTermSprt SprtH0 _ -> putStrLn "Termination: SPRT accepted H0"
         MatchTermSprt SprtH1 _ -> putStrLn "Termination: SPRT accepted H1"
         MatchTermSprt SprtContinue _ -> putStrLn "Termination: max pairs reached"
+
+shouldPrintMatchStatus :: Int -> MatchAcc -> Bool
+shouldPrintMatchStatus printEvery acc = matPairsTried acc > 0 && matPairsTried acc `mod` printEvery == 0
+
+printMatchProgress :: Maybe SprtState -> Int -> String -> MatchAcc -> IO ()
+printMatchProgress msprt lineNo fen acc = do
+    putStrLn $ show lineNo ++ ": " ++ fen
+    mapM_ putStrLn $ matchStatusLines msprt acc
+    hFlush stdout
+
+matchStatusLines :: Maybe SprtState -> MatchAcc -> [String]
+matchStatusLines msprt acc =
+    [ "Games: " ++ show (completedGames acc)
+    , "WDL: " ++ showGameScore (matWdl acc)
+    ] ++ sprtStatusLines msprt acc
+
+completedGames :: MatchAcc -> Int
+completedGames acc = w + d + l
+    where GameScore w d l = matWdl acc
+
+showGameScore :: GameScore -> String
+showGameScore (GameScore w d l) = "(" ++ show w ++ "," ++ show d ++ "," ++ show l ++ ")"
+
+showPentaScore :: PentaScore -> String
+showPentaScore (PentaScore ww wd wl dd ld ll) =
+    "(" ++ show ww ++ "," ++ show wd ++ "," ++ show wl ++ "," ++ show dd ++ "," ++ show ld ++ "," ++ show ll ++ ")"
+
+sprtStatusLines :: Maybe SprtState -> MatchAcc -> [String]
+sprtStatusLines Nothing _ = []
+sprtStatusLines (Just ss) acc =
+    [ "Completed pairs: " ++ show (matPairsDone acc) ++ " / " ++ show (matPairsTried acc)
+    , "Penta (WW,WD,WL,DD,LD,LL): " ++ showPentaScore (matPenta acc)
+    , "LLR: " ++ maybe "n/a" show (matLastLLR acc)
+    , "Bounds: [" ++ show (sprtLowerBound ss) ++ ", " ++ show (sprtUpperBound ss) ++ "]"
+    , "SPRT: " ++ sprtStatusText (matchSprtResult ss acc)
+    ]
+
+matchSprtResult :: SprtState -> MatchAcc -> SprtResult
+matchSprtResult ss acc = maybe SprtContinue (sprtResult ss) (matLastLLR acc)
+
+sprtStatusText :: SprtResult -> String
+sprtStatusText SprtContinue = "continue"
+sprtStatusText SprtH0 = "accepted H0"
+sprtStatusText SprtH1 = "accepted H1"
 
 -- The logger will be startet anyway, but will open a file
 -- only when it has to write the first message
