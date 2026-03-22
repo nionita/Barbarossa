@@ -9,11 +9,12 @@
 
 module Main (main) where
 import Control.Monad.Reader
-import Control.Monad (when, void, forever)
+import Control.Monad (when, void, forever, foldM)
 import Control.Concurrent
 import Control.Exception
 import Data.Char (isSpace)
 import Data.List (intersperse)
+import qualified Data.Map.Strict as M
 import Data.Maybe (fromMaybe, isJust)
 import Foreign hiding (void)
 import System.Console.GetOpt
@@ -25,6 +26,7 @@ import Data.Time.Clock (NominalDiffTime, UTCTime, addUTCTime, diffUTCTime, getCu
 import Data.Time.Format (defaultTimeLocale, formatTime)
 import Data.Time.LocalTime (TimeZone, getCurrentTimeZone, utcToLocalTime)
 import Text.Printf (printf)
+import Text.Read (readMaybe)
 -- import System.Time
 
 import Struct.Struct
@@ -68,6 +70,8 @@ data Options = Options {
         optSprtElo0  :: Maybe Double,	-- SPRT elo0
         optSprtElo1  :: Maybe Double,
         -- SPRT elo1
+        optSprtSaveMinutes :: Maybe Int,	-- SPRT save interval in minutes
+        optSprtLoad :: Maybe FilePath,	-- explicit SPRT save file to load
         optStatsEvery :: Int,
         -- print match stats every Nth input fen
         optAFenFile :: FilePath,	-- fen file with start positions
@@ -96,6 +100,8 @@ defaultOptions = Options {
         optSprtBeta  = Nothing,
         optSprtElo0  = Nothing,
         optSprtElo1  = Nothing,
+        optSprtSaveMinutes = Nothing,
+        optSprtLoad = Nothing,
         optStatsEvery = 10,
         optAFenFile = "alle.epd",
         optFOutFile = "vect.txt"
@@ -159,6 +165,12 @@ addSprtElo0 ns opt = opt { optSprtElo0 = Just $ read ns }
 addSprtElo1 :: String -> Options -> Options
 addSprtElo1 ns opt = opt { optSprtElo1 = Just $ read ns }
 
+addSprtSaveMinutes :: String -> Options -> Options
+addSprtSaveMinutes ns opt = opt { optSprtSaveMinutes = Just $ read ns }
+
+addSprtLoad :: FilePath -> Options -> Options
+addSprtLoad fp opt = opt { optSprtLoad = Just fp }
+
 addStatsEvery :: String -> Options -> Options
 addStatsEvery ns opt = opt { optStatsEvery = read ns }
 
@@ -194,6 +206,8 @@ options = [
         Option "" ["sprt-beta"]  (ReqArg addSprtBeta  "DOUBLE") "SPRT beta (default 0.05 when SPRT is enabled)",
         Option "" ["sprt-elo0"]  (ReqArg addSprtElo0  "DOUBLE") "SPRT H0 elo bound (default 0.0 when SPRT is enabled)",
         Option "" ["sprt-elo1"]  (ReqArg addSprtElo1  "DOUBLE") "SPRT H1 elo bound (default 5.0 when SPRT is enabled)",
+        Option "" ["sprt-save-minutes"] (ReqArg addSprtSaveMinutes "INT") "Save SPRT state every N minutes at the next stats print (default 15)",
+        Option "" ["sprt-load"] (ReqArg addSprtLoad "FILE") "Resume SPRT from a specific .sav file",
         Option "" ["stats-every"] (ReqArg addStatsEvery "INT") "Print match stats every Nth played pair (default 10)",
         Option "i" ["input"]   (ReqArg addIFile "STRING") "Input (fen) file",
         Option "o" ["output"]  (ReqArg addOFile "STRING") "Output file",
@@ -222,6 +236,200 @@ data SprtConfig = SprtConfig {
         sprtElo0  :: !Double,
         sprtElo1  :: !Double
     }
+    deriving (Show, Read)
+
+saveFileName :: FilePath
+saveFileName = "selfplay.sav"
+
+data SprtSave = SprtSave {
+        savePlayer1        :: !FilePath,
+        savePlayer2        :: !(Maybe FilePath),
+        saveBaseCurrent    :: !Bool,
+        saveInputFile      :: !FilePath,
+        saveSkip           :: !Int,
+        saveFens           :: !Int,
+        saveDepth          :: !Int,
+        saveNodes          :: !(Maybe Int),
+        saveNodeMargin     :: !Int,
+        saveStatsEvery     :: !Int,
+        saveSprtCfg        :: !SprtConfig,
+        saveSprtMinutes    :: !Int,
+        savePairsDone      :: !Int,
+        savePairsTried     :: !Int,
+        saveWdl            :: !GameScore,
+        savePenta          :: !PentaScore,
+        saveLastLLR        :: !(Maybe Double),
+        saveElapsedSeconds :: !Double
+    }
+
+canonicalSavePath :: FilePath -> FilePath
+canonicalSavePath dir = dir </> saveFileName
+
+discoverSprtSaveForOptions :: Options -> IO (Maybe FilePath)
+discoverSprtSaveForOptions opts =
+    case optSprtDir opts of
+        Nothing -> return Nothing
+        Just dir -> discoverSprtSaveInDir dir opts
+
+discoverSprtSaveInDir :: FilePath -> Options -> IO (Maybe FilePath)
+discoverSprtSaveInDir dir opts =
+    case optSprtLoad opts of
+        Just fp -> do
+            let path = resolveSavePath dir fp
+            ex <- doesFileExist path
+            if ex
+               then return $ Just path
+               else ioError $ userError $ "SPRT save file not found: " ++ path
+        Nothing -> do
+            ex <- doesDirectoryExist dir
+            if not ex
+               then return Nothing
+               else do
+                   files <- listDirectory dir
+                   let savs = [dir </> f | f <- files, takeExtension f == ".sav"]
+                   case savs of
+                       []  -> return Nothing
+                       [f] -> return $ Just f
+                       _   -> ioError $ userError $ "More than one .sav file found in " ++ dir
+
+resolveSavePath :: FilePath -> FilePath -> FilePath
+resolveSavePath dir fp
+    | isAbsolute fp = fp
+    | otherwise = dir </> fp
+
+trim :: String -> String
+trim = reverse . dropWhile isSpace . reverse . dropWhile isSpace
+
+readSaveFile :: FilePath -> IO SprtSave
+readSaveFile fileName = do
+    ls <- readAllLinesStrict fileName
+    let useful = filter (not . null) $ map trim $ filter (not . isComment) ls
+        isComment s = case dropWhile isSpace s of
+            '-':'-':_ -> True
+            _         -> False
+        parseLine ln = case break (== '=') ln of
+            (k, '=':v) -> Right (trim k, trim v)
+            _          -> Left $ "Invalid save file line: " ++ ln
+    entries <- case traverse parseLine useful of
+        Left err -> ioError $ userError err
+        Right xs -> return xs
+    mp <- foldM insertUnique M.empty entries
+    SprtSave
+        <$> reqRead "player1" mp
+        <*> reqRead "player2" mp
+        <*> reqRead "baseCurrent" mp
+        <*> reqRead "inputFile" mp
+        <*> reqRead "skip" mp
+        <*> reqRead "fens" mp
+        <*> reqRead "depth" mp
+        <*> reqRead "nodes" mp
+        <*> reqRead "nodeMargin" mp
+        <*> reqRead "statsEvery" mp
+        <*> reqRead "sprtCfg" mp
+        <*> reqRead "sprtMinutes" mp
+        <*> reqRead "pairsDone" mp
+        <*> reqRead "pairsTried" mp
+        <*> ((\w d l -> GameScore w d l) <$> reqRead "wdlW" mp <*> reqRead "wdlD" mp <*> reqRead "wdlL" mp)
+        <*> ((\ww wd wl dd ld ll -> PentaScore ww wd wl dd ld ll)
+                <$> reqRead "pWW" mp <*> reqRead "pWD" mp <*> reqRead "pWL" mp
+                <*> reqRead "pDD" mp <*> reqRead "pLD" mp <*> reqRead "pLL" mp)
+        <*> reqRead "lastLLR" mp
+        <*> reqRead "elapsedSeconds" mp
+    where
+      insertUnique mp (k, v)
+          | M.member k mp = ioError $ userError $ "Duplicate save file field: " ++ k
+          | otherwise = return $ M.insert k v mp
+      reqRead :: Read a => String -> M.Map String String -> IO a
+      reqRead key mp = case M.lookup key mp of
+          Nothing -> ioError $ userError $ "Missing save file field: " ++ key
+          Just v -> case readMaybe v of
+              Just a  -> return a
+              Nothing -> ioError $ userError $ "Invalid save file field: " ++ key ++ "=" ++ v
+
+writeSaveFile :: FilePath -> SprtSave -> IO ()
+writeSaveFile fileName save = do
+    let tmp = fileName ++ ".tmp"
+        GameScore w d l = saveWdl save
+        PentaScore ww wd wl dd ld ll = savePenta save
+        ls =
+            [ "-- SelfPlay SPRT save file"
+            , "player1 = " ++ show (savePlayer1 save)
+            , "player2 = " ++ show (savePlayer2 save)
+            , "baseCurrent = " ++ show (saveBaseCurrent save)
+            , "inputFile = " ++ show (saveInputFile save)
+            , "skip = " ++ show (saveSkip save)
+            , "fens = " ++ show (saveFens save)
+            , "depth = " ++ show (saveDepth save)
+            , "nodes = " ++ show (saveNodes save)
+            , "nodeMargin = " ++ show (saveNodeMargin save)
+            , "statsEvery = " ++ show (saveStatsEvery save)
+            , "sprtCfg = " ++ show (saveSprtCfg save)
+            , "sprtMinutes = " ++ show (saveSprtMinutes save)
+            , "pairsDone = " ++ show (savePairsDone save)
+            , "pairsTried = " ++ show (savePairsTried save)
+            , "wdlW = " ++ show w
+            , "wdlD = " ++ show d
+            , "wdlL = " ++ show l
+            , "pWW = " ++ show ww
+            , "pWD = " ++ show wd
+            , "pWL = " ++ show wl
+            , "pDD = " ++ show dd
+            , "pLD = " ++ show ld
+            , "pLL = " ++ show ll
+            , "lastLLR = " ++ show (saveLastLLR save)
+            , "elapsedSeconds = " ++ show (saveElapsedSeconds save)
+            ]
+    writeFile tmp $ unlines ls
+    ex <- doesFileExist fileName
+    when ex $ removeFile fileName
+    renameFile tmp fileName
+
+saveToOptions :: Options -> SprtSave -> Options
+saveToOptions opts save = opts {
+        optPlayer1 = Just $ savePlayer1 save,
+        optPlayer2 = savePlayer2 save,
+        optBaseCurrent = saveBaseCurrent save,
+        optDepth = saveDepth save,
+        optNodes = saveNodes save,
+        optNodeMargin = saveNodeMargin save,
+        optNSkip = Just $ saveSkip save,
+        optNFens = Just $ saveFens save,
+        optSprtAlpha = Just $ sprtAlpha $ saveSprtCfg save,
+        optSprtBeta = Just $ sprtBeta $ saveSprtCfg save,
+        optSprtElo0 = Just $ sprtElo0 $ saveSprtCfg save,
+        optSprtElo1 = Just $ sprtElo1 $ saveSprtCfg save,
+        optSprtSaveMinutes = Just $ saveSprtMinutes save,
+        optStatsEvery = saveStatsEvery save,
+        optAFenFile = saveInputFile save
+    }
+
+validateResumeConflicts :: Options -> SprtSave -> IO ()
+validateResumeConflicts opts save = do
+    chkMaybe "player1" (optPlayer1 opts) Nothing (Just $ savePlayer1 save)
+    chkMaybe "player2" (optPlayer2 opts) Nothing (savePlayer2 save)
+    chkBool "base-current" (optBaseCurrent opts) False (saveBaseCurrent save)
+    chkVal "input" (optAFenFile opts) (optAFenFile defaultOptions) (saveInputFile save)
+    chkMaybe "skip" (optNSkip opts) Nothing (Just $ saveSkip save)
+    chkMaybe "fens" (optNFens opts) Nothing (Just $ saveFens save)
+    chkVal "depth" (optDepth opts) (optDepth defaultOptions) (saveDepth save)
+    chkMaybe "nodes" (optNodes opts) Nothing (saveNodes save)
+    chkVal "node-margin" (optNodeMargin opts) (optNodeMargin defaultOptions) (saveNodeMargin save)
+    chkVal "stats-every" (optStatsEvery opts) (optStatsEvery defaultOptions) (saveStatsEvery save)
+    chkMaybe "sprt-alpha" (optSprtAlpha opts) Nothing (Just $ sprtAlpha $ saveSprtCfg save)
+    chkMaybe "sprt-beta" (optSprtBeta opts) Nothing (Just $ sprtBeta $ saveSprtCfg save)
+    chkMaybe "sprt-elo0" (optSprtElo0 opts) Nothing (Just $ sprtElo0 $ saveSprtCfg save)
+    chkMaybe "sprt-elo1" (optSprtElo1 opts) Nothing (Just $ sprtElo1 $ saveSprtCfg save)
+    chkMaybe "sprt-save-minutes" (optSprtSaveMinutes opts) Nothing (Just $ saveSprtMinutes save)
+    where
+      chkVal name cur def saved =
+          when (cur /= def && cur /= saved) $
+              ioError $ userError $ "--" ++ name ++ " conflicts with the SPRT save file"
+      chkBool name cur def saved =
+          when (cur /= def && cur /= saved) $
+              ioError $ userError $ "--" ++ name ++ " conflicts with the SPRT save file"
+      chkMaybe name cur def saved =
+          when (cur /= def && cur /= saved) $
+              ioError $ userError $ "--" ++ name ++ " conflicts with the SPRT save file"
 
 matchDir :: Options -> Maybe String
 matchDir opts = case (optMatch opts, optSprtDir opts) of
@@ -233,6 +441,9 @@ sprtEnabled :: Options -> Bool
 sprtEnabled opts = isJust (optSprtDir opts) || any isJust
     [optSprtAlpha opts, optSprtBeta opts, optSprtElo0 opts, optSprtElo1 opts]
 
+getSprtSaveMinutes :: Options -> Int
+getSprtSaveMinutes opts = fromMaybe 15 (optSprtSaveMinutes opts)
+
 getSprtConfig :: Options -> SprtConfig
 getSprtConfig opts = SprtConfig {
         sprtAlpha = fromMaybe 0.05 (optSprtAlpha opts),
@@ -242,39 +453,49 @@ getSprtConfig opts = SprtConfig {
     }
 
 validateOptions :: Options -> IO ()
-validateOptions opts
-    | optMatch opts /= Nothing && optSprtDir opts /= Nothing
-        = ioError $ userError "--match cannot be combined with --sprt"
-    | optPerfTest opts && isJust (matchDir opts)
-        = ioError $ userError "--perf cannot be combined with --match/--sprt"
-    | optPerfTest opts && optFOutFile opts /= optFOutFile defaultOptions
-        = ioError $ userError "--perf cannot be combined with --output"
-    | optPerfTest opts && (optPlayer1 opts /= Nothing || optPlayer2 opts /= Nothing)
-        = ioError $ userError "--perf cannot be combined with --player1/--player2"
-    | optPerfTest opts && optBaseCurrent opts
-        = ioError $ userError "--perf cannot be combined with --base-current"
-    | optBaseCurrent opts && optPlayer2 opts /= Nothing
-        = ioError $ userError "--base-current cannot be combined with --player2"
-    | isJust (matchDir opts) && optPlayer1 opts == Nothing
-        = ioError $ userError "--match requires --player1"
-    | isJust (matchDir opts) && not (optBaseCurrent opts) && optPlayer2 opts == Nothing
-        = ioError $ userError "--match requires either --player2 or --base-current"
-    | optNodeMargin opts < 0 || optNodeMargin opts > 99
-        = ioError $ userError "--node-margin must be in [0,99]"
-    | optStatsEvery opts <= 0
-        = ioError $ userError "--stats-every must be > 0"
-    | sprtEnabled opts && not (isJust (matchDir opts))
-        = ioError $ userError "SPRT options require --match or --sprt"
-    | sprtEnabled opts && (sprtAlpha cfg <= 0 || sprtAlpha cfg >= 1)
-        = ioError $ userError "SPRT alpha must be between 0 and 1"
-    | sprtEnabled opts && (sprtBeta cfg <= 0 || sprtBeta cfg >= 1)
-        = ioError $ userError "SPRT beta must be between 0 and 1"
-    | sprtEnabled opts && sprtAlpha cfg + sprtBeta cfg >= 1
-        = ioError $ userError "SPRT requires alpha + beta < 1"
-    | sprtEnabled opts && sprtElo0 cfg >= sprtElo1 cfg
-        = ioError $ userError "SPRT requires elo0 < elo1"
-    | otherwise = return ()
-    where cfg = getSprtConfig opts
+validateOptions opts = do
+    mresume <- discoverSprtSaveForOptions opts
+    let cfg = getSprtConfig opts
+        needsPlayers = isJust (matchDir opts) && not (isJust mresume && isJust (optSprtDir opts))
+    if | optMatch opts /= Nothing && optSprtDir opts /= Nothing
+           -> ioError $ userError "--match cannot be combined with --sprt"
+       | optPerfTest opts && isJust (matchDir opts)
+           -> ioError $ userError "--perf cannot be combined with --match/--sprt"
+       | optPerfTest opts && optFOutFile opts /= optFOutFile defaultOptions
+           -> ioError $ userError "--perf cannot be combined with --output"
+       | optPerfTest opts && (optPlayer1 opts /= Nothing || optPlayer2 opts /= Nothing)
+           -> ioError $ userError "--perf cannot be combined with --player1/--player2"
+       | optPerfTest opts && optBaseCurrent opts
+           -> ioError $ userError "--perf cannot be combined with --base-current"
+       | optBaseCurrent opts && optPlayer2 opts /= Nothing
+           -> ioError $ userError "--base-current cannot be combined with --player2"
+       | optSprtLoad opts /= Nothing && optSprtDir opts == Nothing
+           -> ioError $ userError "--sprt-load requires --sprt"
+       | optMatch opts /= Nothing && optSprtSaveMinutes opts /= Nothing
+           -> ioError $ userError "--sprt-save-minutes requires --sprt"
+       | optMatch opts /= Nothing && optSprtLoad opts /= Nothing
+           -> ioError $ userError "--sprt-load requires --sprt"
+       | needsPlayers && optPlayer1 opts == Nothing
+           -> ioError $ userError "--match requires --player1"
+       | needsPlayers && not (optBaseCurrent opts) && optPlayer2 opts == Nothing
+           -> ioError $ userError "--match requires either --player2 or --base-current"
+       | optNodeMargin opts < 0 || optNodeMargin opts > 99
+           -> ioError $ userError "--node-margin must be in [0,99]"
+       | optStatsEvery opts <= 0
+           -> ioError $ userError "--stats-every must be > 0"
+       | isJust (optSprtDir opts) && getSprtSaveMinutes opts <= 0
+           -> ioError $ userError "--sprt-save-minutes must be > 0"
+       | sprtEnabled opts && not (isJust (matchDir opts))
+           -> ioError $ userError "SPRT options require --match or --sprt"
+       | sprtEnabled opts && (sprtAlpha cfg <= 0 || sprtAlpha cfg >= 1)
+           -> ioError $ userError "SPRT alpha must be between 0 and 1"
+       | sprtEnabled opts && (sprtBeta cfg <= 0 || sprtBeta cfg >= 1)
+           -> ioError $ userError "SPRT beta must be between 0 and 1"
+       | sprtEnabled opts && sprtAlpha cfg + sprtBeta cfg >= 1
+           -> ioError $ userError "SPRT requires alpha + beta < 1"
+       | sprtEnabled opts && sprtElo0 cfg >= sprtElo1 cfg
+           -> ioError $ userError "SPRT requires elo0 < elo1"
+       | otherwise -> return ()
 
 buildFlavor, otherBuildCmd :: String
 #ifdef REPRO_HIST
@@ -421,24 +642,28 @@ matchFile opts dir = do
     ctx <- ask
     let logFileName = "selfplay-" ++ show (startSecond ctx) ++ ".log"
     startLogger logFileName
+    msavePath <- liftIO $ discoverSprtSaveInDir "." opts
+    msave <- liftIO $ traverse readSaveFile msavePath
+    liftIO $ maybe (return ()) (validateResumeConflicts opts) msave
+    let runOpts = maybe opts (saveToOptions opts) msave
     liftIO $ do
-        putStrLn $ "Playing games from " ++ optAFenFile opts
-        putStrLn $ "Play depth  " ++ show (optDepth opts)
-        putStrLn $ "Play nodes  " ++ show (optNodes opts)
-        putStrLn $ "Node margin " ++ show (optNodeMargin opts) ++ "%"
-    case optPlayer1 opts of
+        putStrLn $ "Playing games from " ++ optAFenFile runOpts
+        putStrLn $ "Play depth  " ++ show (optDepth runOpts)
+        putStrLn $ "Play nodes  " ++ show (optNodes runOpts)
+        putStrLn $ "Node margin " ++ show (optNodeMargin runOpts) ++ "%"
+    case optPlayer1 runOpts of
         Nothing -> do
             liftIO $ putStrLn "For a match we need a challenger config as player 1"
             return (GameScore 0 0 0)
         Just id1 -> do
             ctxLog LogWarning $ "Players from directory " ++ dir
             ctxLog LogWarning $ "Player 1 " ++ id1
-            fens <- getFens (optAFenFile opts) (fromMaybe 0 (optNSkip opts)) (fromMaybe 1 (optNFens opts))
+            fens <- getFens (optAFenFile runOpts) (fromMaybe 0 (optNSkip runOpts)) (fromMaybe 1 (optNFens runOpts))
             (id2, eval1, eval2) <- liftIO $ do
                 (_, eval1) <- makeEvalState (Just id1) [] "progver" "progsuf"
-                if optBaseCurrent opts
+                if optBaseCurrent runOpts
                    then return ("<compiled>", eval1, initEvalState [])
-                   else case optPlayer2 opts of
+                   else case optPlayer2 runOpts of
                             Just cf -> do
                                 (_, eval2) <- makeEvalState (Just cf) [] "progver" "progsuf"
                                 return (cf, eval1, eval2)
@@ -447,22 +672,29 @@ matchFile opts dir = do
             when debug $ do
                 ctxLog LogInfo $ "Player 1 config: " ++ show eval1
                 ctxLog LogInfo $ "Player 2 config: " ++ show eval2
-            let msprt = if sprtEnabled opts then Just $ mkSprtState (getSprtConfig opts) else Nothing
+            let msprt = if sprtEnabled runOpts then Just $ mkSprtState (getSprtConfig runOpts) else Nothing
             when (isJust msprt) $ liftIO $ do
-                let scfg = getSprtConfig opts
+                let scfg = getSprtConfig runOpts
                 putStrLn $ "SPRT enabled: alpha=" ++ show (sprtAlpha scfg)
                     ++ " beta=" ++ show (sprtBeta scfg)
                     ++ " elo0=" ++ show (sprtElo0 scfg)
                     ++ " elo1=" ++ show (sprtElo1 scfg)
-            let startLine = fromMaybe 0 (optNSkip opts) + 1
-            startTime <- liftIO getCurrentTime
+            when (isJust msave) $ liftIO $ putStrLn $ "Resuming SPRT from " ++ fromMaybe "" msavePath
+            let startLine = fromMaybe 0 (optNSkip runOpts) + 1
+                initialAcc = maybe emptyMatchAcc saveToMatchAcc msave
+                remainingFens = drop (matPairsTried initialAcc) $ zip [startLine..] fens
+                savePath = if isJust msprt then Just saveFileName else Nothing
+            now <- liftIO getCurrentTime
             let matchInfo = MatchInfo {
                     matchMaxPairs = length fens,
-                    matchStartTime = startTime
+                    matchStartTime = maybe now (\sv -> addUTCTime (negate $ realToFrac $ saveElapsedSeconds sv) now) msave,
+                    matchOptions = runOpts,
+                    matchSavePath = savePath
                 }
-            acc <- playMatchPairs (optDepth opts) (optNodes opts) (optNodeMargin opts) (optStatsEvery opts)
-                                 matchInfo (id1, eval1) (id2, eval2) msprt (zip [startLine..] fens)
+            acc <- playMatchPairs (optDepth runOpts) (optNodes runOpts) (optNodeMargin runOpts) (optStatsEvery runOpts)
+                                 matchInfo initialAcc (id1, eval1) (id2, eval2) msprt remainingFens
             liftIO $ printMatchSummary matchInfo msprt acc
+            when (isJust msprt) $ liftIO $ removeCanonicalSaveIfExists
             return (matWdl acc)
 
 readAllLinesStrict :: FilePath -> IO [String]
@@ -608,7 +840,9 @@ data MatchTerm = MatchTermSprt SprtResult Double | MatchTermMaxPairs
 
 data MatchInfo = MatchInfo {
         matchMaxPairs  :: !Int,
-        matchStartTime :: !UTCTime
+        matchStartTime :: !UTCTime,
+        matchOptions   :: !Options,
+        matchSavePath  :: !(Maybe FilePath)
     }
 
 data MatchAcc = MatchAcc {
@@ -617,6 +851,7 @@ data MatchAcc = MatchAcc {
         matPairsDone :: !Int,
         matPairsTried :: !Int,
         matLastLLR   :: !(Maybe Double),
+        matLastSaveElapsed :: !(Maybe Double),
         matTerm      :: MatchTerm
     }
 
@@ -624,6 +859,25 @@ data PairResult = PairIncomplete | PairCompleted !GameScore !PentaScore
 
 emptyPenta :: PentaScore
 emptyPenta = PentaScore 0 0 0 0 0 0
+
+emptyMatchAcc :: MatchAcc
+emptyMatchAcc = MatchAcc (GameScore 0 0 0) emptyPenta 0 0 Nothing Nothing MatchTermMaxPairs
+
+saveToMatchAcc :: SprtSave -> MatchAcc
+saveToMatchAcc save = MatchAcc {
+        matWdl = saveWdl save,
+        matPenta = savePenta save,
+        matPairsDone = savePairsDone save,
+        matPairsTried = savePairsTried save,
+        matLastLLR = saveLastLLR save,
+        matLastSaveElapsed = Just $ saveElapsedSeconds save,
+        matTerm = MatchTermMaxPairs
+    }
+
+removeCanonicalSaveIfExists :: IO ()
+removeCanonicalSaveIfExists = do
+    ex <- doesFileExist saveFileName
+    when ex $ removeFile saveFileName
 
 addPentaScore :: PentaScore -> PentaScore -> PentaScore
 addPentaScore (PentaScore ww1 wd1 wl1 dd1 ld1 ll1) (PentaScore ww2 wd2 wl2 dd2 ld2 ll2) =
@@ -675,13 +929,14 @@ playMatchPairs
     -> Int
     -> Int
     -> MatchInfo
+    -> MatchAcc
     -> (String, EvalState)
     -> (String, EvalState)
     -> Maybe SprtState
     -> [(Int, String)]
     -> CtxIO MatchAcc
-playMatchPairs depth maybeNodes nodeMarginPc printEvery matchInfo (id1, eval1) (id2, eval2) msprt fens =
-    go (MatchAcc (GameScore 0 0 0) emptyPenta 0 0 Nothing MatchTermMaxPairs) fens
+playMatchPairs depth maybeNodes nodeMarginPc printEvery matchInfo initAcc (id1, eval1) (id2, eval2) msprt fens =
+    go initAcc fens
     where
       go acc [] = return acc { matTerm = MatchTermMaxPairs }
       go acc ((lineNo, fen):rest) = do
@@ -689,22 +944,27 @@ playMatchPairs depth maybeNodes nodeMarginPc printEvery matchInfo (id1, eval1) (
           let accTried = acc { matPairsTried = matPairsTried acc + 1 }
           case pres of
               PairIncomplete -> do
-                  when (shouldPrintMatchStatus printEvery accTried) $
-                      liftIO $ printMatchProgress matchInfo msprt lineNo fen accTried
-                  go accTried rest
+                  accPrinted <- if shouldPrintMatchStatus printEvery accTried
+                      then liftIO $ printMatchProgress matchInfo msprt lineNo fen accTried
+                      else return accTried
+                  go accPrinted rest
               PairCompleted wdlp pp -> do
                   let penta' = addPentaScore (matPenta accTried) pp
                       wdl' = addGameScores (matWdl accTried) wdlp
                       done' = matPairsDone accTried + 1
                       llrM = fmap (`sprtPentaLLR` penta') msprt
-                      acc' = accTried { matWdl = wdl', matPenta = penta', matPairsDone = done', matLastLLR = llrM }
-                  when (shouldPrintMatchStatus printEvery acc') $
-                      liftIO $ printMatchProgress matchInfo msprt lineNo fen acc'
-                  case (msprt, llrM) of
-                      (Just ss, Just llr) -> case sprtResult ss llr of
-                          SprtContinue -> go acc' rest
-                          res          -> return acc' { matTerm = MatchTermSprt res llr }
-                      _ -> go acc' rest
+                      acc0 = accTried { matWdl = wdl', matPenta = penta', matPairsDone = done', matLastLLR = llrM }
+                      acc1 = case (msprt, llrM) of
+                          (Just ss, Just llr) -> case sprtResult ss llr of
+                              SprtContinue -> acc0
+                              res          -> acc0 { matTerm = MatchTermSprt res llr }
+                          _ -> acc0
+                  accPrinted <- if shouldPrintMatchStatus printEvery acc1
+                      then liftIO $ printMatchProgress matchInfo msprt lineNo fen acc1
+                      else return acc1
+                  case matTerm accPrinted of
+                      MatchTermMaxPairs -> go accPrinted rest
+                      MatchTermSprt _ _ -> return accPrinted
 
 printMatchSummary :: MatchInfo -> Maybe SprtState -> MatchAcc -> IO ()
 printMatchSummary matchInfo msprt acc = do
@@ -721,13 +981,15 @@ printMatchSummary matchInfo msprt acc = do
 shouldPrintMatchStatus :: Int -> MatchAcc -> Bool
 shouldPrintMatchStatus printEvery acc = matPairsTried acc > 0 && matPairsTried acc `mod` printEvery == 0
 
-printMatchProgress :: MatchInfo -> Maybe SprtState -> Int -> String -> MatchAcc -> IO ()
+printMatchProgress :: MatchInfo -> Maybe SprtState -> Int -> String -> MatchAcc -> IO MatchAcc
 printMatchProgress matchInfo msprt lineNo fen acc = do
     now <- getCurrentTime
     tz <- getCurrentTimeZone
     putStrLn $ show lineNo ++ ": " ++ fen
     mapM_ putStrLn $ matchStatusLines matchInfo tz now msprt acc
+    accSaved <- maybeSaveSprt matchInfo now acc
     hFlush stdout
+    return accSaved
 
 matchStatusLines :: MatchInfo -> TimeZone -> UTCTime -> Maybe SprtState -> MatchAcc -> [String]
 matchStatusLines matchInfo tz now msprt acc =
@@ -789,6 +1051,43 @@ etaText matchInfo tz now acc elapsed
 
 formatEta :: TimeZone -> UTCTime -> String
 formatEta tz utc = formatTime defaultTimeLocale "%d.%m.%Y %H:%M" (utcToLocalTime tz utc)
+
+maybeSaveSprt :: MatchInfo -> UTCTime -> MatchAcc -> IO MatchAcc
+maybeSaveSprt matchInfo now acc =
+    case matchSavePath matchInfo of
+        Nothing -> return acc
+        Just path -> do
+            let elapsed = realToFrac (diffUTCTime now (matchStartTime matchInfo)) :: Double
+                interval = fromIntegral (getSprtSaveMinutes $ matchOptions matchInfo) * 60.0
+                due = maybe (elapsed >= interval) (\lastSave -> elapsed - lastSave >= interval) (matLastSaveElapsed acc)
+            if not due
+               then return acc
+               else do
+                   writeSaveFile path $ matchToSave matchInfo acc elapsed
+                   return acc { matLastSaveElapsed = Just elapsed }
+
+matchToSave :: MatchInfo -> MatchAcc -> Double -> SprtSave
+matchToSave matchInfo acc elapsed = SprtSave {
+        savePlayer1 = fromMaybe (error "matchToSave: missing player1") $ optPlayer1 opts,
+        savePlayer2 = optPlayer2 opts,
+        saveBaseCurrent = optBaseCurrent opts,
+        saveInputFile = optAFenFile opts,
+        saveSkip = fromMaybe 0 $ optNSkip opts,
+        saveFens = matchMaxPairs matchInfo,
+        saveDepth = optDepth opts,
+        saveNodes = optNodes opts,
+        saveNodeMargin = optNodeMargin opts,
+        saveStatsEvery = optStatsEvery opts,
+        saveSprtCfg = getSprtConfig opts,
+        saveSprtMinutes = getSprtSaveMinutes opts,
+        savePairsDone = matPairsDone acc,
+        savePairsTried = matPairsTried acc,
+        saveWdl = matWdl acc,
+        savePenta = matPenta acc,
+        saveLastLLR = matLastLLR acc,
+        saveElapsedSeconds = elapsed
+    }
+    where opts = matchOptions matchInfo
 
 -- The logger will be startet anyway, but will open a file
 -- only when it has to write the first message
