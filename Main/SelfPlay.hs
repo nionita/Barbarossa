@@ -680,6 +680,7 @@ matchFile opts dir = do
                     ++ " elo0=" ++ show (sprtElo0 scfg)
                     ++ " elo1=" ++ show (sprtElo1 scfg)
             when (isJust msave) $ liftIO $ putStrLn $ "Resuming SPRT from " ++ fromMaybe "" msavePath
+            liftIO $ hFlush stdout
             let startLine = fromMaybe 0 (optNSkip runOpts) + 1
                 initialAcc = maybe emptyMatchAcc saveToMatchAcc msave
                 remainingFens = drop (matPairsTried initialAcc) $ zip [startLine..] fens
@@ -971,7 +972,7 @@ printMatchSummary matchInfo msprt acc = do
     now <- getCurrentTime
     tz <- getCurrentTimeZone
     putStrLn "=============="
-    mapM_ putStrLn $ matchStatusLines matchInfo tz now msprt acc
+    mapM_ putStrLn $ matchStatusLines True matchInfo tz now msprt acc
     case matTerm acc of
         MatchTermMaxPairs -> putStrLn "Termination: max pairs reached"
         MatchTermSprt SprtH0 _ -> putStrLn "Termination: SPRT accepted H0"
@@ -986,18 +987,19 @@ printMatchProgress matchInfo msprt lineNo fen acc = do
     now <- getCurrentTime
     tz <- getCurrentTimeZone
     putStrLn $ show lineNo ++ ": " ++ fen
-    mapM_ putStrLn $ matchStatusLines matchInfo tz now msprt acc
-    accSaved <- maybeSaveSprt matchInfo now acc
+    mapM_ putStrLn $ matchStatusLines False matchInfo tz now msprt acc
+    (accSaved, msavedAt) <- maybeSaveSprt matchInfo tz now acc
+    maybe (return ()) (\savedAt -> putStrLn $ "SPRT status saved: " ++ savedAt) msavedAt
     hFlush stdout
     return accSaved
 
-matchStatusLines :: MatchInfo -> TimeZone -> UTCTime -> Maybe SprtState -> MatchAcc -> [String]
-matchStatusLines matchInfo tz now msprt acc =
+matchStatusLines :: Bool -> MatchInfo -> TimeZone -> UTCTime -> Maybe SprtState -> MatchAcc -> [String]
+matchStatusLines isFinal matchInfo tz now msprt acc =
     [ "Games: " ++ show gamesDone ++ " / " ++ show gamesTotal
         ++ ", Games / sec: " ++ showGamesPerSec gamesDone elapsed
         ++ ", ETA: " ++ etaText matchInfo tz now acc elapsed
     , "WDL: " ++ showGameScore (matWdl acc)
-    ] ++ sprtStatusLines msprt acc
+    ] ++ sprtStatusLines isFinal msprt acc
     where
       gamesDone = playedGames acc
       gamesTotal = 2 * matchMaxPairs matchInfo
@@ -1013,15 +1015,18 @@ showPentaScore :: PentaScore -> String
 showPentaScore (PentaScore ww wd wl dd ld ll) =
     "(" ++ show ww ++ "," ++ show wd ++ "," ++ show wl ++ "," ++ show dd ++ "," ++ show ld ++ "," ++ show ll ++ ")"
 
-sprtStatusLines :: Maybe SprtState -> MatchAcc -> [String]
-sprtStatusLines Nothing _ = []
-sprtStatusLines (Just ss) acc =
+sprtStatusLines :: Bool -> Maybe SprtState -> MatchAcc -> [String]
+sprtStatusLines _ Nothing _ = []
+sprtStatusLines isFinal (Just ss) acc =
     [ "Completed pairs: " ++ show (matPairsDone acc) ++ " / " ++ show (matPairsTried acc)
     , "Penta (WW,WD,WL,DD,LD,LL): " ++ showPentaScore (matPenta acc)
     , "LLR: " ++ maybe "n/a" show (matLastLLR acc)
     , "Bounds: [" ++ show (sprtLowerBound ss) ++ ", " ++ show (sprtUpperBound ss) ++ "]"
-    , "SPRT: " ++ sprtStatusText (matchSprtResult ss acc)
-    ]
+    ] ++ sprtResultLine isFinal (matchSprtResult ss acc)
+
+sprtResultLine :: Bool -> SprtResult -> [String]
+sprtResultLine False SprtContinue = []
+sprtResultLine _ res = ["SPRT: " ++ sprtStatusText res]
 
 matchSprtResult :: SprtState -> MatchAcc -> SprtResult
 matchSprtResult ss acc = maybe SprtContinue (sprtResult ss) (matLastLLR acc)
@@ -1052,19 +1057,19 @@ etaText matchInfo tz now acc elapsed
 formatEta :: TimeZone -> UTCTime -> String
 formatEta tz utc = formatTime defaultTimeLocale "%d.%m.%Y %H:%M" (utcToLocalTime tz utc)
 
-maybeSaveSprt :: MatchInfo -> UTCTime -> MatchAcc -> IO MatchAcc
-maybeSaveSprt matchInfo now acc =
+maybeSaveSprt :: MatchInfo -> TimeZone -> UTCTime -> MatchAcc -> IO (MatchAcc, Maybe String)
+maybeSaveSprt matchInfo tz now acc =
     case matchSavePath matchInfo of
-        Nothing -> return acc
+        Nothing -> return (acc, Nothing)
         Just path -> do
             let elapsed = realToFrac (diffUTCTime now (matchStartTime matchInfo)) :: Double
                 interval = fromIntegral (getSprtSaveMinutes $ matchOptions matchInfo) * 60.0
                 due = maybe (elapsed >= interval) (\lastSave -> elapsed - lastSave >= interval) (matLastSaveElapsed acc)
             if not due
-               then return acc
+               then return (acc, Nothing)
                else do
                    writeSaveFile path $ matchToSave matchInfo acc elapsed
-                   return acc { matLastSaveElapsed = Just elapsed }
+                   return (acc { matLastSaveElapsed = Just elapsed }, Just $ formatEta tz now)
 
 matchToSave :: MatchInfo -> MatchAcc -> Double -> SprtSave
 matchToSave matchInfo acc elapsed = SprtSave {
