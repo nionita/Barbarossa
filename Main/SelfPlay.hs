@@ -21,7 +21,10 @@ import System.Directory
 import System.Environment (getArgs)
 import System.FilePath
 import System.IO
-import Data.Time.Clock (UTCTime)
+import Data.Time.Clock (NominalDiffTime, UTCTime, addUTCTime, diffUTCTime, getCurrentTime)
+import Data.Time.Format (defaultTimeLocale, formatTime)
+import Data.Time.LocalTime (TimeZone, getCurrentTimeZone, utcToLocalTime)
+import Text.Printf (printf)
 -- import System.Time
 
 import Struct.Struct
@@ -65,8 +68,8 @@ data Options = Options {
         optSprtElo0  :: Maybe Double,	-- SPRT elo0
         optSprtElo1  :: Maybe Double,
         -- SPRT elo1
-        optFenPrintEvery :: Int,
-        -- print every Nth input fen
+        optStatsEvery :: Int,
+        -- print match stats every Nth input fen
         optAFenFile :: FilePath,	-- fen file with start positions
         optFOutFile :: FilePath		-- output file for filter option
     }
@@ -93,7 +96,7 @@ defaultOptions = Options {
         optSprtBeta  = Nothing,
         optSprtElo0  = Nothing,
         optSprtElo1  = Nothing,
-        optFenPrintEvery = 10,
+        optStatsEvery = 10,
         optAFenFile = "alle.epd",
         optFOutFile = "vect.txt"
     }
@@ -156,8 +159,8 @@ addSprtElo0 ns opt = opt { optSprtElo0 = Just $ read ns }
 addSprtElo1 :: String -> Options -> Options
 addSprtElo1 ns opt = opt { optSprtElo1 = Just $ read ns }
 
-addFenPrintEvery :: String -> Options -> Options
-addFenPrintEvery ns opt = opt { optFenPrintEvery = read ns }
+addStatsEvery :: String -> Options -> Options
+addStatsEvery ns opt = opt { optStatsEvery = read ns }
 
 addIFile :: FilePath -> Options -> Options
 addIFile fi opt = opt { optAFenFile = fi }
@@ -191,7 +194,7 @@ options = [
         Option "" ["sprt-beta"]  (ReqArg addSprtBeta  "DOUBLE") "SPRT beta (default 0.05 when SPRT is enabled)",
         Option "" ["sprt-elo0"]  (ReqArg addSprtElo0  "DOUBLE") "SPRT H0 elo bound (default 0.0 when SPRT is enabled)",
         Option "" ["sprt-elo1"]  (ReqArg addSprtElo1  "DOUBLE") "SPRT H1 elo bound (default 5.0 when SPRT is enabled)",
-        Option "" ["print-fen-every"] (ReqArg addFenPrintEvery "INT") "Print every Nth input fen before pair play (default 10)",
+        Option "" ["stats-every"] (ReqArg addStatsEvery "INT") "Print match stats every Nth played pair (default 10)",
         Option "i" ["input"]   (ReqArg addIFile "STRING") "Input (fen) file",
         Option "o" ["output"]  (ReqArg addOFile "STRING") "Output file",
         Option "d" ["depth"]   (ReqArg addDepth "STRING") "Search depth",
@@ -258,8 +261,8 @@ validateOptions opts
         = ioError $ userError "--match requires either --player2 or --base-current"
     | optNodeMargin opts < 0 || optNodeMargin opts > 99
         = ioError $ userError "--node-margin must be in [0,99]"
-    | optFenPrintEvery opts <= 0
-        = ioError $ userError "--print-fen-every must be > 0"
+    | optStatsEvery opts <= 0
+        = ioError $ userError "--stats-every must be > 0"
     | sprtEnabled opts && not (isJust (matchDir opts))
         = ioError $ userError "SPRT options require --match or --sprt"
     | sprtEnabled opts && (sprtAlpha cfg <= 0 || sprtAlpha cfg >= 1)
@@ -452,9 +455,14 @@ matchFile opts dir = do
                     ++ " elo0=" ++ show (sprtElo0 scfg)
                     ++ " elo1=" ++ show (sprtElo1 scfg)
             let startLine = fromMaybe 0 (optNSkip opts) + 1
-            acc <- playMatchPairs (optDepth opts) (optNodes opts) (optNodeMargin opts) (optFenPrintEvery opts)
-                                 (id1, eval1) (id2, eval2) msprt (zip [startLine..] fens)
-            liftIO $ printMatchSummary msprt acc
+            startTime <- liftIO getCurrentTime
+            let matchInfo = MatchInfo {
+                    matchMaxPairs = length fens,
+                    matchStartTime = startTime
+                }
+            acc <- playMatchPairs (optDepth opts) (optNodes opts) (optNodeMargin opts) (optStatsEvery opts)
+                                 matchInfo (id1, eval1) (id2, eval2) msprt (zip [startLine..] fens)
+            liftIO $ printMatchSummary matchInfo msprt acc
             return (matWdl acc)
 
 readAllLinesStrict :: FilePath -> IO [String]
@@ -598,6 +606,11 @@ data PentaScore = PentaScore {
 
 data MatchTerm = MatchTermSprt SprtResult Double | MatchTermMaxPairs
 
+data MatchInfo = MatchInfo {
+        matchMaxPairs  :: !Int,
+        matchStartTime :: !UTCTime
+    }
+
 data MatchAcc = MatchAcc {
         matWdl       :: !GameScore,
         matPenta     :: !PentaScore,
@@ -661,12 +674,13 @@ playMatchPairs
     -> Maybe Int
     -> Int
     -> Int
+    -> MatchInfo
     -> (String, EvalState)
     -> (String, EvalState)
     -> Maybe SprtState
     -> [(Int, String)]
     -> CtxIO MatchAcc
-playMatchPairs depth maybeNodes nodeMarginPc printEvery (id1, eval1) (id2, eval2) msprt fens =
+playMatchPairs depth maybeNodes nodeMarginPc printEvery matchInfo (id1, eval1) (id2, eval2) msprt fens =
     go (MatchAcc (GameScore 0 0 0) emptyPenta 0 0 Nothing MatchTermMaxPairs) fens
     where
       go acc [] = return acc { matTerm = MatchTermMaxPairs }
@@ -676,7 +690,7 @@ playMatchPairs depth maybeNodes nodeMarginPc printEvery (id1, eval1) (id2, eval2
           case pres of
               PairIncomplete -> do
                   when (shouldPrintMatchStatus printEvery accTried) $
-                      liftIO $ printMatchProgress msprt lineNo fen accTried
+                      liftIO $ printMatchProgress matchInfo msprt lineNo fen accTried
                   go accTried rest
               PairCompleted wdlp pp -> do
                   let penta' = addPentaScore (matPenta accTried) pp
@@ -685,16 +699,19 @@ playMatchPairs depth maybeNodes nodeMarginPc printEvery (id1, eval1) (id2, eval2
                       llrM = fmap (`sprtPentaLLR` penta') msprt
                       acc' = accTried { matWdl = wdl', matPenta = penta', matPairsDone = done', matLastLLR = llrM }
                   when (shouldPrintMatchStatus printEvery acc') $
-                      liftIO $ printMatchProgress msprt lineNo fen acc'
+                      liftIO $ printMatchProgress matchInfo msprt lineNo fen acc'
                   case (msprt, llrM) of
                       (Just ss, Just llr) -> case sprtResult ss llr of
                           SprtContinue -> go acc' rest
                           res          -> return acc' { matTerm = MatchTermSprt res llr }
                       _ -> go acc' rest
 
-printMatchSummary :: Maybe SprtState -> MatchAcc -> IO ()
-printMatchSummary msprt acc = do
-    mapM_ putStrLn $ matchStatusLines msprt acc
+printMatchSummary :: MatchInfo -> Maybe SprtState -> MatchAcc -> IO ()
+printMatchSummary matchInfo msprt acc = do
+    now <- getCurrentTime
+    tz <- getCurrentTimeZone
+    putStrLn "=============="
+    mapM_ putStrLn $ matchStatusLines matchInfo tz now msprt acc
     case matTerm acc of
         MatchTermMaxPairs -> putStrLn "Termination: max pairs reached"
         MatchTermSprt SprtH0 _ -> putStrLn "Termination: SPRT accepted H0"
@@ -704,21 +721,28 @@ printMatchSummary msprt acc = do
 shouldPrintMatchStatus :: Int -> MatchAcc -> Bool
 shouldPrintMatchStatus printEvery acc = matPairsTried acc > 0 && matPairsTried acc `mod` printEvery == 0
 
-printMatchProgress :: Maybe SprtState -> Int -> String -> MatchAcc -> IO ()
-printMatchProgress msprt lineNo fen acc = do
+printMatchProgress :: MatchInfo -> Maybe SprtState -> Int -> String -> MatchAcc -> IO ()
+printMatchProgress matchInfo msprt lineNo fen acc = do
+    now <- getCurrentTime
+    tz <- getCurrentTimeZone
     putStrLn $ show lineNo ++ ": " ++ fen
-    mapM_ putStrLn $ matchStatusLines msprt acc
+    mapM_ putStrLn $ matchStatusLines matchInfo tz now msprt acc
     hFlush stdout
 
-matchStatusLines :: Maybe SprtState -> MatchAcc -> [String]
-matchStatusLines msprt acc =
-    [ "Games: " ++ show (completedGames acc)
+matchStatusLines :: MatchInfo -> TimeZone -> UTCTime -> Maybe SprtState -> MatchAcc -> [String]
+matchStatusLines matchInfo tz now msprt acc =
+    [ "Games: " ++ show gamesDone ++ " / " ++ show gamesTotal
+        ++ ", Games / sec: " ++ showGamesPerSec gamesDone elapsed
+        ++ ", ETA: " ++ etaText matchInfo tz now acc elapsed
     , "WDL: " ++ showGameScore (matWdl acc)
     ] ++ sprtStatusLines msprt acc
+    where
+      gamesDone = playedGames acc
+      gamesTotal = 2 * matchMaxPairs matchInfo
+      elapsed = diffUTCTime now (matchStartTime matchInfo)
 
-completedGames :: MatchAcc -> Int
-completedGames acc = w + d + l
-    where GameScore w d l = matWdl acc
+playedGames :: MatchAcc -> Int
+playedGames acc = 2 * matPairsTried acc
 
 showGameScore :: GameScore -> String
 showGameScore (GameScore w d l) = "(" ++ show w ++ "," ++ show d ++ "," ++ show l ++ ")"
@@ -744,6 +768,27 @@ sprtStatusText :: SprtResult -> String
 sprtStatusText SprtContinue = "continue"
 sprtStatusText SprtH0 = "accepted H0"
 sprtStatusText SprtH1 = "accepted H1"
+
+showGamesPerSec :: Int -> NominalDiffTime -> String
+showGamesPerSec games elapsed
+    | elapsed <= 0 = "n/a"
+    | otherwise = printf "%.1f" (fromIntegral games / realToFrac elapsed :: Double)
+
+etaText :: MatchInfo -> TimeZone -> UTCTime -> MatchAcc -> NominalDiffTime -> String
+etaText matchInfo tz now acc elapsed
+    | gamesDone <= 0 = "n/a"
+    | gamesDone >= gamesTotal = formatEta tz now
+    | elapsed <= 0 = "n/a"
+    | otherwise = formatEta tz $ addUTCTime remainingSeconds now
+    where
+      gamesDone = playedGames acc
+      gamesTotal = 2 * matchMaxPairs matchInfo
+      gamesPerSec = fromIntegral gamesDone / realToFrac elapsed :: Double
+      remainingGames = gamesTotal - gamesDone
+      remainingSeconds = realToFrac (fromIntegral remainingGames / gamesPerSec :: Double)
+
+formatEta :: TimeZone -> UTCTime -> String
+formatEta tz utc = formatTime defaultTimeLocale "%d.%m.%Y %H:%M" (utcToLocalTime tz utc)
 
 -- The logger will be startet anyway, but will open a file
 -- only when it has to write the first message
