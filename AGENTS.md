@@ -4,6 +4,12 @@
 
 - Module exports must be always explicit
 
+## Editing notes
+
+- In this repo, `apply_patch` can intermittently fail with a Windows sandbox refresh/setup error even when the patch itself is correct.
+- If that happens, retry with a smaller patch first.
+- If it still fails, use a non-destructive shell-based file edit as fallback, then re-check formatting and line endings.
+
 ## Build Identity
 
 - Before any build, check the chess engine identity is correctnes, which means: top-level variable progVerSuff in Main/Barbarossa.hs is set to the branch name
