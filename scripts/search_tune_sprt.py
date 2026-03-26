@@ -552,14 +552,12 @@ def execute_run(
             "stdout_path": str(stdout_path),
             "stderr_path": str(stderr_path),
             "stage_dir": str(stage_dir),
-            "verdict": verdict,
+            "verdict": verdict or "undecided",
         }
         record["sprt"].append(stage_record)
         if verdict == "H1":
             continue
-        if verdict == "H0":
-            break
-        raise fail(f"SelfPlay SPRT {label} finished without accepted H0/H1 for run {run_dir.name}")
+        break
 
     if record["sprt"] and record["sprt"][-1]["pairs"] == 100000 and record["sprt"][-1]["verdict"] == "H1":
         record["sprt_passed_100k"] = True
