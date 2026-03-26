@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Search TuneSGD parameters and validate candidates with SelfPlay SPRT."""
+"""Search TuneSGD k values for a fixed q and validate candidates with SelfPlay SPRT."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ class SearchParams:
 
     @property
     def key(self) -> str:
-        return make_key(self.k, self.q_ticks)
+        return str(self.k)
 
 
 def normalize_path(path_text: str) -> Path:
@@ -58,10 +58,6 @@ def fail(message: str) -> RuntimeError:
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def make_key(k: int, q_ticks: int) -> str:
-    return f"{k}:{q_ticks}"
 
 
 def parse_decimal(text: str) -> Decimal:
@@ -101,28 +97,22 @@ def parse_k_spec(values: list[str]) -> tuple[int, int]:
     return lo, hi
 
 
-def parse_q_spec(values: list[str]) -> tuple[int, int]:
-    if len(values) not in (1, 2):
-        raise fail("--q expects one value or two values")
-    nums = [parse_q_value(v) for v in values]
-    if len(nums) == 1:
-        return nums[0], nums[0]
-    lo, hi = nums
-    if lo > hi:
-        lo, hi = hi, lo
-    return lo, hi
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Alternate TuneSGD and SelfPlay SPRT runs while searching k/q."
+        description="Alternate TuneSGD and SelfPlay SPRT runs while searching k for a fixed q."
     )
     parser.add_argument("--work-dir", required=True, help="Root directory for the search")
     parser.add_argument("--tune-input", required=True, help="TuneSGD input directory or file")
     parser.add_argument("--selfplay-input", required=True, help="SelfPlay input FEN file")
     parser.add_argument("--k", required=True, nargs="+", help="One integer or two integers")
-    parser.add_argument("--q", required=True, nargs="+", help="One value or two values in 0.05 steps")
+    parser.add_argument("--q", required=True, help="One fixed value in 0.05 steps")
     parser.add_argument("--tune-optim", required=True, type=int, help="TuneSGD -O value")
+    parser.add_argument(
+        "--selfplay-max-pairs",
+        type=int,
+        default=30000,
+        help="SelfPlay -f max pairs (default: 30000)",
+    )
     parser.add_argument("--sprt-alpha", type=float, default=0.05, help="SelfPlay SPRT alpha")
     parser.add_argument("--sprt-beta", type=float, default=0.05, help="SelfPlay SPRT beta")
     parser.add_argument("--sprt-elo0", type=float, default=0.0, help="SelfPlay SPRT elo0")
@@ -168,131 +158,127 @@ def midpoint(lo: int, hi: int) -> int:
     return (lo + hi) // 2
 
 
-def default_fixed_value(lo: int, hi: int) -> int:
-    return midpoint(lo, hi)
-
-
-def state_matches_args(state: dict[str, Any], args: argparse.Namespace, tune_input: Path, selfplay_input: Path) -> bool:
-    checks = {
-        "tune_input": str(tune_input),
-        "selfplay_input": str(selfplay_input),
-        "tune_optim": args.tune_optim,
-        "k_spec": [*parse_k_spec(args.k)],
-        "q_spec": [*parse_q_spec(args.q)],
-        "sprt_alpha": args.sprt_alpha,
-        "sprt_beta": args.sprt_beta,
-        "sprt_elo0": args.sprt_elo0,
-        "sprt_elo1": args.sprt_elo1,
-    }
-    for key, value in checks.items():
-        if state.get(key) != value:
-            return False
-    return True
-
-
-def build_initial_state(args: argparse.Namespace, tune_input: Path, selfplay_input: Path) -> dict[str, Any]:
-    k_lo, k_hi = parse_k_spec(args.k)
-    q_lo, q_hi = parse_q_spec(args.q)
+def build_session(
+    args: argparse.Namespace,
+    tune_input: Path,
+    selfplay_input: Path,
+    q_ticks: int,
+    k_lo: int,
+    k_hi: int,
+) -> dict[str, Any]:
     return {
-        "schema": 1,
         "created_at": utc_now(),
         "updated_at": utc_now(),
+        "finished": False,
         "tune_input": str(tune_input),
         "selfplay_input": str(selfplay_input),
         "tune_optim": args.tune_optim,
+        "selfplay_max_pairs": args.selfplay_max_pairs,
         "sprt_alpha": args.sprt_alpha,
         "sprt_beta": args.sprt_beta,
         "sprt_elo0": args.sprt_elo0,
         "sprt_elo1": args.sprt_elo1,
+        "q_ticks": q_ticks,
         "k_spec": [k_lo, k_hi],
-        "q_spec": [q_lo, q_hi],
         "k_interval": [k_lo, k_hi],
-        "q_interval": [q_lo, q_hi],
-        "axis_turn": "k",
         "best_loss": None,
-        "best_loss_params": None,
-        "incumbent": {"mode": "base-current", "config_path": None, "source_run": None},
+        "best_k": None,
         "records": {},
-        "next_run_id": 1,
     }
 
 
-def load_or_init_state(work_dir: Path, args: argparse.Namespace, tune_input: Path, selfplay_input: Path) -> dict[str, Any]:
+def migrate_legacy_state(old: dict[str, Any]) -> dict[str, Any]:
+    incumbent = old.get("incumbent")
+    if not isinstance(incumbent, dict) or incumbent.get("mode") not in {"base-current", "config"}:
+        incumbent = {"mode": "base-current", "config_path": None, "source_run": None}
+    next_run_id = old.get("next_run_id")
+    if not isinstance(next_run_id, int) or next_run_id < 1:
+        next_run_id = 1
+    return {
+        "schema": 2,
+        "created_at": old.get("created_at", utc_now()),
+        "updated_at": utc_now(),
+        "next_run_id": next_run_id,
+        "incumbent": incumbent,
+        "session": None,
+    }
+
+
+def load_or_init_state(
+    work_dir: Path,
+    args: argparse.Namespace,
+    tune_input: Path,
+    selfplay_input: Path,
+    q_ticks: int,
+    k_lo: int,
+    k_hi: int,
+) -> dict[str, Any]:
     state_path = work_dir / STATE_FILE
     if state_path.exists():
-        state = load_json(state_path)
-        if not state_matches_args(state, args, tune_input, selfplay_input):
-            raise fail(f"Existing state in {state_path} does not match the current CLI arguments")
-        return state
-    return build_initial_state(args, tune_input, selfplay_input)
+        loaded = load_json(state_path)
+        schema = loaded.get("schema")
+        state = loaded if schema == 2 else migrate_legacy_state(loaded)
+    else:
+        state = {
+            "schema": 2,
+            "created_at": utc_now(),
+            "updated_at": utc_now(),
+            "next_run_id": 1,
+            "incumbent": {"mode": "base-current", "config_path": None, "source_run": None},
+            "session": None,
+        }
+
+    session = state.get("session")
+    desired = {
+        "tune_input": str(tune_input),
+        "selfplay_input": str(selfplay_input),
+        "tune_optim": args.tune_optim,
+        "selfplay_max_pairs": args.selfplay_max_pairs,
+        "sprt_alpha": args.sprt_alpha,
+        "sprt_beta": args.sprt_beta,
+        "sprt_elo0": args.sprt_elo0,
+        "sprt_elo1": args.sprt_elo1,
+        "q_ticks": q_ticks,
+        "k_spec": [k_lo, k_hi],
+    }
+    if not isinstance(session, dict):
+        state["session"] = build_session(args, tune_input, selfplay_input, q_ticks, k_lo, k_hi)
+    else:
+        matches = all(session.get(key) == value for key, value in desired.items())
+        if not matches:
+            state["session"] = build_session(args, tune_input, selfplay_input, q_ticks, k_lo, k_hi)
+    return state
 
 
 def save_state(work_dir: Path, state: dict[str, Any]) -> None:
     state["updated_at"] = utc_now()
+    session = state.get("session")
+    if isinstance(session, dict):
+        session["updated_at"] = utc_now()
     write_json(work_dir / STATE_FILE, state)
 
 
-def get_record(state: dict[str, Any], params: SearchParams) -> dict[str, Any] | None:
-    record = state["records"].get(params.key)
+def get_session(state: dict[str, Any]) -> dict[str, Any]:
+    session = state.get("session")
+    if not isinstance(session, dict):
+        raise fail("Missing active session in state")
+    return session
+
+
+def get_record(session: dict[str, Any], k: int) -> dict[str, Any] | None:
+    record = session["records"].get(str(k))
     return record if isinstance(record, dict) else None
 
 
-def set_record(state: dict[str, Any], params: SearchParams, record: dict[str, Any]) -> None:
-    state["records"][params.key] = record
-    current = state.get("best_loss")
+def set_record(session: dict[str, Any], k: int, record: dict[str, Any]) -> None:
+    session["records"][str(k)] = record
     tune = record.get("tune")
+    current = session.get("best_loss")
     if isinstance(tune, dict) and isinstance(tune.get("loss"), (int, float)):
         loss = float(tune["loss"])
         if current is None or loss < current:
-            state["best_loss"] = loss
-            state["best_loss_params"] = {"k": params.k, "q_ticks": params.q_ticks}
-
-
-def get_best_loss_params(state: dict[str, Any]) -> SearchParams | None:
-    raw = state.get("best_loss_params")
-    if not isinstance(raw, dict):
-        return None
-    return SearchParams(k=int(raw["k"]), q_ticks=int(raw["q_ticks"]))
-
-
-def choose_fixed_other(state: dict[str, Any], axis: str) -> int:
-    best = get_best_loss_params(state)
-    if axis == "k":
-        if best is not None:
-            return best.q_ticks
-        q_lo, q_hi = state["q_spec"]
-        return default_fixed_value(q_lo, q_hi)
-    if best is not None:
-        return best.k
-    k_lo, k_hi = state["k_spec"]
-    return default_fixed_value(k_lo, k_hi)
-
-
-def choose_axis(state: dict[str, Any]) -> str | None:
-    k_lo, k_hi = state["k_interval"]
-    q_lo, q_hi = state["q_interval"]
-    k_open = k_lo < k_hi
-    q_open = q_lo < q_hi
-    if not k_open and not q_open:
-        return None
-    turn = state["axis_turn"]
-    if turn == "k":
-        if k_open:
-            return "k"
-        if q_open:
-            return "q"
-    else:
-        if q_open:
-            return "q"
-        if k_open:
-            return "k"
-    return None
-
-
-def build_params(axis: str, axis_value: int, other_value: int) -> SearchParams:
-    if axis == "k":
-        return SearchParams(k=axis_value, q_ticks=other_value)
-    return SearchParams(k=other_value, q_ticks=axis_value)
+            session["best_loss"] = loss
+            session["best_k"] = k
 
 
 def line_probe_values(lo: int, hi: int) -> list[int]:
@@ -304,16 +290,15 @@ def line_probe_values(lo: int, hi: int) -> list[int]:
     return [mid, lo, hi]
 
 
-def extract_line_losses(state: dict[str, Any], axis: str, other_value: int, values: list[int]) -> dict[int, float]:
+def extract_line_losses(session: dict[str, Any], values: list[int]) -> dict[int, float]:
     found: dict[int, float] = {}
     for value in values:
-        params = build_params(axis, value, other_value)
-        record = get_record(state, params)
+        record = get_record(session, value)
         if record is None:
             continue
-        loss = record.get("tune_loss")
-        if isinstance(loss, (int, float)):
-            found[value] = float(loss)
+        tune = record.get("tune")
+        if isinstance(tune, dict) and isinstance(tune.get("loss"), (int, float)):
+            found[value] = float(tune["loss"])
     return found
 
 
@@ -336,31 +321,25 @@ def tighten_interval(lo: int, hi: int, losses: dict[int, float]) -> tuple[int, i
     return new_lo, new_hi
 
 
-def advance_search_frontier(state: dict[str, Any]) -> SearchParams | None:
+def advance_search_frontier(session: dict[str, Any], q_ticks: int) -> SearchParams | None:
     guard = 0
     while True:
         guard += 1
         if guard > 10000:
             raise fail("Search frontier did not converge")
-        axis = choose_axis(state)
-        if axis is None:
-            return None
-        lo, hi = state[f"{axis}_interval"]
-        other_value = choose_fixed_other(state, axis)
+        lo, hi = session["k_interval"]
         probes = line_probe_values(lo, hi)
-        missing = [
-            build_params(axis, value, other_value)
-            for value in probes
-            if get_record(state, build_params(axis, value, other_value)) is None
-        ]
+        missing = [SearchParams(k=value, q_ticks=q_ticks) for value in probes if get_record(session, value) is None]
         if missing:
             return missing[0]
-        losses = extract_line_losses(state, axis, other_value, probes)
+        losses = extract_line_losses(session, probes)
         if len(losses) != len(probes):
-            raise fail(f"Missing losses for axis {axis} within [{lo}, {hi}] at fixed value {other_value}")
+            raise fail(f"Missing losses for k interval [{lo}, {hi}]")
         new_lo, new_hi = tighten_interval(lo, hi, losses)
-        state[f"{axis}_interval"] = [new_lo, new_hi]
-        state["axis_turn"] = "q" if axis == "k" else "k"
+        session["k_interval"] = [new_lo, new_hi]
+        if new_lo == new_hi and get_record(session, new_lo) is not None:
+            session["finished"] = True
+            return None
 
 
 def run_command(cmd: list[str], cwd: Path, stdout_path: Path, stderr_path: Path) -> subprocess.CompletedProcess[str]:
@@ -455,6 +434,8 @@ def selfplay_command(
         str(candidate_path),
         "-i",
         str(selfplay_input),
+        "-f",
+        str(args.selfplay_max_pairs),
         "-n",
         str(pairs),
         "--sprt-alpha",
@@ -496,6 +477,7 @@ def update_best_incumbent(work_dir: Path, state: dict[str, Any], candidate_path:
 def execute_run(
     work_dir: Path,
     state: dict[str, Any],
+    session: dict[str, Any],
     args: argparse.Namespace,
     tune_exe: Path,
     selfplay_exe: Path,
@@ -520,6 +502,14 @@ def execute_run(
         "run_dir": str(run_dir),
         "run_name": run_dir.name,
         "params": {"k": params.k, "q_ticks": params.q_ticks, "q": params.q_text},
+        "search": {
+            "k_spec": list(session["k_spec"]),
+            "k_interval_at_start": list(session["k_interval"]),
+            "tune_input": str(tune_input),
+            "selfplay_input": str(selfplay_input),
+            "tune_optim": args.tune_optim,
+            "selfplay_max_pairs": args.selfplay_max_pairs,
+        },
         "started_at": utc_now(),
         "completed_at": None,
         "tune": {
@@ -589,6 +579,7 @@ def summarize_result(record: dict[str, Any]) -> str:
         f"k={record['params']['k']} "
         f"q={record['params']['q']} "
         f"loss={record['tune']['loss']} "
+        f"maxpairs={record['search']['selfplay_max_pairs']} "
         f"{last_text}"
     )
 
@@ -599,6 +590,12 @@ def main() -> int:
     if args.tune_optim <= 0:
         print("ERROR: --tune-optim must be > 0", file=sys.stderr)
         return 2
+    if args.selfplay_max_pairs <= 0:
+        print("ERROR: --selfplay-max-pairs must be > 0", file=sys.stderr)
+        return 2
+
+    k_lo, k_hi = parse_k_spec(args.k)
+    q_ticks = parse_q_value(args.q)
 
     tune_input = resolve_existing_path(args.tune_input, "TuneSGD input")
     selfplay_input = resolve_existing_path(args.selfplay_input, "SelfPlay input")
@@ -608,41 +605,46 @@ def main() -> int:
     tune_exe = resolve_executable_from_env("TUNESGD_PATH")
     selfplay_exe = resolve_executable_from_env("SELFPLAY_PATH")
 
-    state = load_or_init_state(work_dir, args, tune_input, selfplay_input)
+    state = load_or_init_state(work_dir, args, tune_input, selfplay_input, q_ticks, k_lo, k_hi)
+    session = get_session(state)
     save_state(work_dir, state)
 
-    while True:
-        params = advance_search_frontier(state)
-        if params is None:
-            break
-        record = get_record(state, params)
-        if record is None:
-            print(f"Running k={params.k} q={params.q_text}")
-            record = execute_run(
-                work_dir,
-                state,
-                args,
-                tune_exe,
-                selfplay_exe,
-                tune_input,
-                selfplay_input,
-                params,
-            )
-            set_record(state, params, record)
-            save_state(work_dir, state)
-            print(summarize_result(record))
-        else:
-            set_record(state, params, record)
-            save_state(work_dir, state)
+    if not session.get("finished", False):
+        while True:
+            params = advance_search_frontier(session, q_ticks)
+            if params is None:
+                break
+            record = get_record(session, params.k)
+            if record is None:
+                print(f"Running k={params.k} q={params.q_text}")
+                record = execute_run(
+                    work_dir,
+                    state,
+                    session,
+                    args,
+                    tune_exe,
+                    selfplay_exe,
+                    tune_input,
+                    selfplay_input,
+                    params,
+                )
+                set_record(session, params.k, record)
+                save_state(work_dir, state)
+                print(summarize_result(record))
+            else:
+                set_record(session, params.k, record)
+                save_state(work_dir, state)
 
-    best = get_best_loss_params(state)
-    if best is None:
-        print("Search finished without any recorded TuneSGD loss.")
+    session["finished"] = True
+    save_state(work_dir, state)
+
+    best_k = session.get("best_k")
+    best_loss = session.get("best_loss")
+    q_text = format_q_ticks(q_ticks)
+    if best_k is None or best_loss is None:
+        print(f"Search finished without any recorded TuneSGD loss for q={q_text}.")
     else:
-        print(
-            "Search finished. "
-            f"Best loss point: k={best.k} q={best.q_text} loss={state['best_loss']}"
-        )
+        print(f"Search finished. Best loss point for q={q_text}: k={best_k} loss={best_loss}")
     incumbent = state["incumbent"]
     if incumbent["mode"] == "base-current":
         print("Best SPRT incumbent: compiled current weights")
