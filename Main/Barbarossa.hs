@@ -39,7 +39,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.8.0"
-progVerSuff = "cxi25"
+progVerSuff = "race"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
@@ -129,6 +129,7 @@ initContext opts = do
             | otherwise             = stringToParams $ concat $ intersperse "," $ optParams opts
     (parc, evs) <- makeEvalState (optConfFile opts) paramList progVersion progVerSuff
     let chg = Chg {
+            searchToken = 0,
             working = False,
             compThread = Nothing,
             crtStatus = posToState initPos ha hi evs,
@@ -267,6 +268,10 @@ interpret uci =
 
 doQuit :: CtxIO Bool
 doQuit = do
+    mchg <- stopSearch
+    case mchg >>= compThread of
+        Just tid -> liftIO $ killThread tid
+        Nothing  -> return ()
     ctxLog LogInfo "Normal exit"
     let ms = 500   -- sleep 0.5 second to let the channels time to process
     liftIO $ threadDelay $ ms * 1000
@@ -474,28 +479,34 @@ startWorking tim tpm mtg dpt rept = do
     ctxLog DebugUci $ "Start at " ++ show currms
         ++ " to search: " ++ show tim ++ " / " ++ show tpm ++ " / " ++ show mtg
         ++ " - maximal " ++ show dpt ++ " plys"
-    modifyChanging $ \c -> c { working = True, srchStrtMs = currms, totBmCh = 0,
-                               lastChDr = 0, crtStatus = posNewSearch (crtStatus c) }
-    tid <- newThread (startSearchThread tim tpm mtg dpt rept)
-    modifyChanging (\c -> c { compThread = Just tid })
-    return ()
+    tok <- beginSearch $ \c -> c {
+            srchStrtMs = currms,
+            totBmCh = 0,
+            lastChDr = 0,
+            crtStatus = posNewSearch (crtStatus c)
+        }
+    tid <- newThread (startSearchThread tok tim tpm mtg dpt rept)
+    ok <- attachSearchThread tok tid
+    unless ok $ liftIO $ killThread tid
 
--- We use modifyChanging in at least 2 threads: in the reader and
--- in the search thread (here in giveBestMove)
--- This is not good, then it can lead to race conditions. We should
--- find another scheme, for example with STM
-startSearchThread :: Int -> Int -> Int -> Int -> Int -> CtxIO ()
-startSearchThread tim tpm mtg dpt rept =
-    ctxCatch (void $ searchTheTree 1 dpt 0 0 tim tpm mtg rept Nothing [] [])
+startSearchThread :: Int -> Int -> Int -> Int -> Int -> Int -> CtxIO ()
+startSearchThread tok tim tpm mtg dpt rept =
+    ctxCatch (void $ searchTheTree tok 1 dpt 0 0 tim tpm mtg rept Nothing [] [])
         $ \e -> do
             chg <- readChanging
-            let mes = "searchTheTree terminated by exception: " ++ show e
-            answer $ infos mes
-            case forGui chg of
-                Just ms -> giveBestMove ms
-                Nothing -> return ()
-            ctxLog LogError mes
-            lift $ collectError $ SomeException (SearchException mes)
+            if searchToken chg /= tok || not (working chg)
+               then ctxLog DebugUci "search thread stopped"
+               else case fromException e of
+                        Just ThreadKilled -> ctxLog DebugUci "search thread killed"
+                        _ -> do
+                            let mes = "searchTheTree terminated by exception: " ++ show e
+                            answer $ infos mes
+                            msnap <- finishSearch tok
+                            case msnap >>= forGui of
+                                Just ms -> reportBestMove (msnap >>= (Just . crtStatus)) ms
+                                Nothing -> return ()
+                            ctxLog LogError mes
+                            lift $ collectError $ SomeException (SearchException mes)
 
 data SearchException = SearchException String deriving (Show, Typeable)
 
@@ -508,8 +519,8 @@ ctxCatch a f = do
             (\e -> runReaderT (f e) ctx)
 
 -- Search with the given depth
-searchTheTree :: Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Maybe Int -> [Move] -> [Move] -> CtxIO Int
-searchTheTree draft mdraft timx1 timx tim tpm mtg rept lsc lpv rmvs = do
+searchTheTree :: Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Maybe Int -> [Move] -> [Move] -> CtxIO Int
+searchTheTree tok draft mdraft timx1 timx tim tpm mtg rept lsc lpv rmvs = do
     ctxLog LogInfo $ "searchTheTree starts draft " ++ show draft
     ctx <- ask
     chg <- readChanging
@@ -520,58 +531,60 @@ searchTheTree draft mdraft timx1 timx tim tpm mtg rept lsc lpv rmvs = do
              | otherwise = lastChDr chg
     when (ch > 0) $
         ctxLog LogInfo $ "Changes in draft " ++ show draft ++ ": " ++ show ch ++ " / " ++ show totch
-    modifyChanging $
+    ok <- publishSearchProgress tok $
         \c -> c { crtStatus = stfin, totBmCh = totch, lastChDr = ldCh, forGui = Just path }
-    currms <- lift $ currMilli (strttm ctx)
-    let (ms, mx) = compTime tim tpm mtg sc rept
-        exte = maybe False id $ do
-                  los <- lsc
-                  gls <- lmvScore chg
-                  return $ sc < los - extendScoreMargin
-                        || sc < gls - extendScoreMargin
-        reds = case lmvScore chg of
-                   Just osc -> timeProlongation osc sc
-                   _        -> 1
-        redp  = reduceBegin $ realPly chg
-        start = srchStrtMs chg
-        used  = currms - start
-        over  = mx > 0 && used >= mx
-        onlyone = ms > 0 && length rmvsf == 1 && draft >= 4	-- only in normal play
-        draftmax = draft >= mdraft	--  or maximal draft
-        mes = "Draft " ++ show draft ++ " Score " ++ show sc ++ " path " ++ show path
-                  ++ " ms " ++ show ms ++ " used " ++ show used
-    ctxLog LogInfo mes
-    ctxLog LogInfo $ "Time factors (reds/redp): " ++ show reds ++ " / " ++ show redp
-    (justStop, mxr) <- if mx > 0
-                          then stopByChance (reds * redp) exte ms used mx draft ch totch ldCh
-                          else return (False, 0)
-    ctxLog LogInfo $ "compTime (ms/mx/mxr): " ++ show ms ++ " / " ++ show mx ++ " / " ++ show mxr
-    if draftmax || timint || over || onlyone || justStop
-       then do
-           ctxLog LogInfo $ "searchTheTree terminated in first if: "
-               ++ show draftmax ++ "/"
-               ++ show timint ++ "/"
-               ++ show over ++ "/"
-               ++ show onlyone ++ "/"
-               ++ show justStop
-           -- Store last score for this move
-           modifyChanging $ \c -> c { lmvScore = Just sc }
-           giveBestMove path
-           return sc
+    if not ok
+       then return sc
        else do
-           ctxLog LogInfo $ "searchTheTree finishes draft " ++ show draft
-           chg' <- readChanging
-           if working chg'
-               then if mx == 0	-- no time constraint (take original maximum)
-                       then searchTheTree (draft+1) mdraft 0 0 tim tpm mtg rept (Just sc) path rmvsf
-                       else do
-                           let mxt  = start + mxr
-                               mxt1 = start + mxr `div` firstMoveTimeReductionFactor
-                           searchTheTree (draft+1) mdraft mxt1 mxt tim tpm mtg rept (Just sc) path rmvsf
-               else do
-                   ctxLog DebugUci "in searchTheTree: not working"
-                   giveBestMove path -- was stopped
-                   return sc
+           currms <- lift $ currMilli (strttm ctx)
+           let (ms, mx) = compTime tim tpm mtg sc rept
+               exte = maybe False id $ do
+                         los <- lsc
+                         gls <- lmvScore chg
+                         return $ sc < los - extendScoreMargin
+                               || sc < gls - extendScoreMargin
+               reds = case lmvScore chg of
+                          Just osc -> timeProlongation osc sc
+                          _        -> 1
+               redp  = reduceBegin $ realPly chg
+               start = srchStrtMs chg
+               used  = currms - start
+               over  = mx > 0 && used >= mx
+               onlyone = ms > 0 && length rmvsf == 1 && draft >= 4	-- only in normal play
+               draftmax = draft >= mdraft	--  or maximal draft
+               mes = "Draft " ++ show draft ++ " Score " ++ show sc ++ " path " ++ show path
+                         ++ " ms " ++ show ms ++ " used " ++ show used
+           ctxLog LogInfo mes
+           ctxLog LogInfo $ "Time factors (reds/redp): " ++ show reds ++ " / " ++ show redp
+           (justStop, mxr) <- if mx > 0
+                                 then stopByChance (reds * redp) exte ms used mx draft ch totch ldCh
+                                 else return (False, 0)
+           ctxLog LogInfo $ "compTime (ms/mx/mxr): " ++ show ms ++ " / " ++ show mx ++ " / " ++ show mxr
+           if draftmax || timint || over || onlyone || justStop
+              then do
+                  ctxLog LogInfo $ "searchTheTree terminated in first if: "
+                      ++ show draftmax ++ "/"
+                      ++ show timint ++ "/"
+                      ++ show over ++ "/"
+                      ++ show onlyone ++ "/"
+                      ++ show justStop
+                  -- Store last score for this move
+                  void $ publishSearchProgress tok $ \c -> c { lmvScore = Just sc }
+                  giveBestMove tok path
+                  return sc
+              else do
+                  ctxLog LogInfo $ "searchTheTree finishes draft " ++ show draft
+                  chg' <- readChanging
+                  if working chg' && searchToken chg' == tok
+                      then if mx == 0	-- no time constraint (take original maximum)
+                              then searchTheTree tok (draft+1) mdraft 0 0 tim tpm mtg rept (Just sc) path rmvsf
+                              else do
+                                  let mxt  = start + mxr
+                                      mxt1 = start + mxr `div` firstMoveTimeReductionFactor
+                                  searchTheTree tok (draft+1) mdraft mxt1 mxt tim tpm mtg rept (Just sc) path rmvsf
+                      else do
+                          ctxLog DebugUci "in searchTheTree: not working"
+                          return sc
     where firstMoveTimeReductionFactor = 3
 
 -- The time management changes like this:
@@ -653,17 +666,23 @@ timeProlongation osc sc
           tpMargin = 8
           fm = fromIntegral tpMargin
 
-giveBestMove :: [Move] -> CtxIO ()
-giveBestMove mvs = do
-    -- ctxLog "Info" $ "The moves: " ++ show mvs
-    modifyChanging $ \c -> c { working = False, compThread = Nothing, forGui = Nothing }
+reportBestMove :: Maybe MyState -> [Move] -> CtxIO ()
+reportBestMove mstt mvs = do
     case mvs of
         []  -> answer $ infos "empty pv"
         m:_ -> answer $ bestMove m Nothing
-    cng <- readChanging
-    let mst = mstats $ crtStatus cng
-    ctxLog LogInfo $ "Search statistics:"
-    mapM_ (ctxLog LogInfo) $ formatStats mst
+    case mstt of
+        Just st -> do
+            ctxLog LogInfo $ "Search statistics:"
+            mapM_ (ctxLog LogInfo) $ formatStats $ mstats st
+        Nothing -> return ()
+
+giveBestMove :: Int -> [Move] -> CtxIO ()
+giveBestMove tok mvs = do
+    msnap <- finishSearch tok
+    case msnap of
+        Just snap -> reportBestMove (Just $ crtStatus snap) mvs
+        Nothing   -> return ()
 
 beforeReadLoop :: CtxIO ()
 beforeReadLoop = do
@@ -681,15 +700,16 @@ beforeProgExit = return ()
 
 doStop :: CtxIO ()
 doStop = do
-    chg <- readChanging
-    modifyChanging $ \c -> c { working = False, compThread = Nothing }
-    case compThread chg of
-        Just tid -> do
-            liftIO $ killThread tid
-            case forGui chg of
-                Just ms -> giveBestMove ms
+    mchg <- stopSearch
+    case mchg of
+        Just chg -> do
+            case compThread chg of
+                Just tid -> liftIO $ killThread tid
                 Nothing  -> return ()
-        _ -> return ()
+            case forGui chg of
+                Just ms -> reportBestMove (Just $ crtStatus chg) ms
+                Nothing -> return ()
+        Nothing -> return ()
 
 doPonderhit :: CtxIO ()
 doPonderhit = notImplemented "doPonderhit"

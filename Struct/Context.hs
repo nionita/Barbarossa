@@ -5,7 +5,9 @@ module Struct.Context (
     LogLevel(..),
     Changing(..),
     IterResult,
-    levToPrf, readChanging, modifyChanging, ctxLog, logging,
+    levToPrf, readChanging, modifyChanging,
+    beginSearch, attachSearchThread, publishSearchProgress,
+    finishSearch, stopSearch, ctxLog, logging,
     getMyTime, formatMyTime, startSecond, currMilli,
     answer, bestMove, infos,
     informGuiBM, informGuiCM, informGuiDraft, informGuiSt
@@ -51,6 +53,7 @@ data Context = Ctx {
 
 -- This is the variable context part (global mutable context)
 data Changing = Chg {
+        searchToken :: Int,            -- token of the latest started search
         working    :: Bool,             -- are we in tree search?
         compThread :: Maybe ThreadId,   -- the search thread id
         crtStatus  :: MyState,          -- current state
@@ -77,6 +80,59 @@ modifyChanging :: (Changing -> Changing) -> CtxIO ()
 modifyChanging f = do
     ctx <- ask
     liftIO $ modifyMVar_ (change ctx) (return . f)
+
+beginSearch :: (Changing -> Changing) -> CtxIO Int
+beginSearch f = do
+    ctx <- ask
+    liftIO $ modifyMVar (change ctx) $ \c -> do
+        let tok = searchToken c + 1
+            c' = (f c) {
+                    searchToken = tok,
+                    working = True,
+                    compThread = Nothing,
+                    forGui = Nothing
+                 }
+        return (c', tok)
+
+attachSearchThread :: Int -> ThreadId -> CtxIO Bool
+attachSearchThread tok tid = do
+    ctx <- ask
+    liftIO $ modifyMVar (change ctx) $ \c ->
+        if working c && searchToken c == tok
+           then do
+               let c' = c { compThread = Just tid }
+               return (c', True)
+           else return (c, False)
+
+publishSearchProgress :: Int -> (Changing -> Changing) -> CtxIO Bool
+publishSearchProgress tok f = do
+    ctx <- ask
+    liftIO $ modifyMVar (change ctx) $ \c ->
+        if working c && searchToken c == tok
+           then do
+               let c' = f c
+               return (c', True)
+           else return (c, False)
+
+finishSearch :: Int -> CtxIO (Maybe Changing)
+finishSearch tok = do
+    ctx <- ask
+    liftIO $ modifyMVar (change ctx) $ \c ->
+        if working c && searchToken c == tok
+           then do
+               let c' = c { working = False, compThread = Nothing, forGui = Nothing }
+               return (c', Just c)
+           else return (c, Nothing)
+
+stopSearch :: CtxIO (Maybe Changing)
+stopSearch = do
+    ctx <- ask
+    liftIO $ modifyMVar (change ctx) $ \c ->
+        if working c
+           then do
+               let c' = c { working = False, compThread = Nothing, forGui = Nothing }
+               return (c', Just c)
+           else return (c, Nothing)
 
 ctxLog :: LogLevel -> String -> CtxIO ()
 ctxLog lev mes = do

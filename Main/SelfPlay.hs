@@ -548,6 +548,7 @@ initContext opts = do
             | otherwise             = stringToParams $ concat $ intersperse "," $ optParams opts
     (parc, evs) <- makeEvalState (optConfFile opts) paramList "progver" "progsuf"
     let chg = Chg {
+            searchToken = 0,
             working = False,
             compThread = Nothing,
             crtStatus = posToState initPos ha hi evs,
