@@ -34,12 +34,12 @@ import Struct.Status
 import Struct.Context
 import Struct.Config
 import Hash.TransTab
-import Search.AlbetaTypes (SStats(..), ssts0)
+import Search.AlbetaTypes (DoResult(..), SStats(..), ssts0)
 import Moves.Core
 import Moves.Internal.Base
 import Moves.Notation
 import Moves.History
-import Search.CStateMonad (execCState)
+import Search.CStateMonad (CState, runCState, execCState)
 import Eval.FileParams (makeEvalState)
 import Eval.Core (initEvalState)
 -- import Eval.Eval	-- not yet needed
@@ -64,6 +64,7 @@ data Options = Options {
         optMatch    :: Maybe String,	-- match between configs in the given directory
         optSprtDir  :: Maybe String,	-- SPRT match between configs in the given directory
         optPerfTest :: Bool,		-- perf test on input fen file
+        optPerft    :: Bool,		-- perft on a single FEN
         optBuildInfo :: Bool,		-- print build flavor and opposite build command
         optSprtAlpha :: Maybe Double,	-- SPRT alpha
         optSprtBeta  :: Maybe Double,	-- SPRT beta
@@ -74,6 +75,9 @@ data Options = Options {
         optSprtLoad :: Maybe FilePath,	-- explicit SPRT save file to load
         optStatsEvery :: Int,
         -- print match stats every Nth input fen
+        optFenPrintEvery :: Int,
+        -- print every Nth input fen
+        optFen      :: Maybe String,	-- single fen for perft
         optAFenFile :: FilePath,	-- fen file with start positions
         optFOutFile :: FilePath		-- output file for filter option
     }
@@ -95,6 +99,7 @@ defaultOptions = Options {
         optMatch    = Nothing,
         optSprtDir  = Nothing,
         optPerfTest = False,
+        optPerft    = False,
         optBuildInfo = False,
         optSprtAlpha = Nothing,
         optSprtBeta  = Nothing,
@@ -103,6 +108,8 @@ defaultOptions = Options {
         optSprtSaveMinutes = Nothing,
         optSprtLoad = Nothing,
         optStatsEvery = 10,
+        optFenPrintEvery = 10,
+        optFen      = Nothing,
         optAFenFile = "alle.epd",
         optFOutFile = "vect.txt"
     }
@@ -150,6 +157,9 @@ addSprtDir ns opt = opt { optSprtDir = Just ns }
 setPerfTest :: Options -> Options
 setPerfTest opt = opt { optPerfTest = True }
 
+setPerft :: Options -> Options
+setPerft opt = opt { optPerft = True }
+
 setBuildInfo :: Options -> Options
 setBuildInfo opt = opt { optBuildInfo = True }
 
@@ -177,6 +187,9 @@ addStatsEvery ns opt = opt { optStatsEvery = read ns }
 addIFile :: FilePath -> Options -> Options
 addIFile fi opt = opt { optAFenFile = fi }
 
+addFen :: String -> Options -> Options
+addFen fen opt = opt { optFen = Just fen }
+
 addOFile :: FilePath -> Options -> Options
 addOFile fi opt = opt { optFOutFile = fi }
 
@@ -201,6 +214,7 @@ options = [
         Option "m" ["match"]   (ReqArg addMatch "STRING") "Match between 2 configs in the given directory",
         Option "" ["sprt"]     (ReqArg addSprtDir "STRING") "SPRT match between 2 configs in the given directory",
         Option "P" ["perf"]    (NoArg setPerfTest) "Performance test on input FEN file",
+        Option "" ["perft"]    (NoArg setPerft) "Perft on a single FEN",
         Option "B" ["build-info"] (NoArg setBuildInfo) "Show build flavor and opposite build command",
         Option "" ["sprt-alpha"] (ReqArg addSprtAlpha "DOUBLE") "SPRT alpha (default 0.05 when SPRT is enabled)",
         Option "" ["sprt-beta"]  (ReqArg addSprtBeta  "DOUBLE") "SPRT beta (default 0.05 when SPRT is enabled)",
@@ -210,6 +224,7 @@ options = [
         Option "" ["sprt-load"] (ReqArg addSprtLoad "FILE") "Resume SPRT from a specific .sav file",
         Option "" ["stats-every"] (ReqArg addStatsEvery "INT") "Print match stats every Nth played pair (default 10)",
         Option "i" ["input"]   (ReqArg addIFile "STRING") "Input (fen) file",
+        Option "" ["fen"]      (ReqArg addFen "STRING") "Input FEN for perft",
         Option "o" ["output"]  (ReqArg addOFile "STRING") "Output file",
         Option "d" ["depth"]   (ReqArg addDepth "STRING") "Search depth",
         Option "n" ["nodes"]   (ReqArg addNodes "STRING") "Search nodes budget per move",
@@ -227,7 +242,7 @@ theOptions = do
         (o, n, []) -> return (foldr ($) defaultOptions o, n)
         (_, _, es) -> ioError (userError (concat es ++ usageInfo header options))
     where header = "Usage: " ++ idName
-              ++ " [-c CONF] [(-m DIR | --sprt DIR) [-a CFILE1] (-b CFILE2 | --base-current)] [-P] [-B] [-i FENFILE [-s SKIP][-f FENS]] [-o OUTFILE] [-d DEPTH]"
+              ++ " [-c CONF] [(-m DIR | --sprt DIR) [-a CFILE1] (-b CFILE2 | --base-current)] [-P] [--perft --fen FEN] [-B] [-i FENFILE [-s SKIP][-f FENS]] [-o OUTFILE] [-d DEPTH]"
           idName = "SelfPlay"
 
 data SprtConfig = SprtConfig {
@@ -485,6 +500,8 @@ validateOptions opts = do
            -> ioError $ userError "--match cannot be combined with --sprt"
        | optPerfTest opts && isJust (matchDir opts)
            -> ioError $ userError "--perf cannot be combined with --match/--sprt"
+       | optPerfTest opts && optPerft opts
+           -> ioError $ userError "--perf cannot be combined with --perft"
        | optPerfTest opts && optFOutFile opts /= optFOutFile defaultOptions
            -> ioError $ userError "--perf cannot be combined with --output"
        | optPerfTest opts && (optPlayer1 opts /= Nothing || optPlayer2 opts /= Nothing)
@@ -503,6 +520,28 @@ validateOptions opts = do
            -> ioError $ userError "--match requires --player1"
        | needsPlayers && not (optBaseCurrent opts) && optPlayer2 opts == Nothing
            -> ioError $ userError "--match requires either --player2 or --base-current"
+       | optPerft opts && optMatch opts /= Nothing
+           -> ioError $ userError "--perft cannot be combined with --match"
+       | optPerft opts && optPerfTest opts
+           -> ioError $ userError "--perft cannot be combined with --perf"
+       | optPerft opts && optAFenFile opts /= optAFenFile defaultOptions
+           -> ioError $ userError "--perft cannot be combined with --input"
+       | optPerft opts && optFOutFile opts /= optFOutFile defaultOptions
+           -> ioError $ userError "--perft cannot be combined with --output"
+       | optPerft opts && (optPlayer1 opts /= Nothing || optPlayer2 opts /= Nothing)
+           -> ioError $ userError "--perft cannot be combined with --player1/--player2"
+       | optPerft opts && optNodes opts /= Nothing
+           -> ioError $ userError "--perft cannot be combined with --nodes"
+       | optPerft opts && optNodeMargin opts /= optNodeMargin defaultOptions
+           -> ioError $ userError "--perft cannot be combined with --node-margin"
+       | optPerft opts && optNSkip opts /= Nothing
+           -> ioError $ userError "--perft cannot be combined with --skip"
+       | optPerft opts && optNFens opts /= Nothing
+           -> ioError $ userError "--perft cannot be combined with --fens"
+       | optPerft opts && optFen opts == Nothing
+           -> ioError $ userError "--perft requires --fen"
+       | optPerft opts && optDepth opts < 1
+           -> ioError $ userError "--perft requires --depth >= 1"
        | optNodeMargin opts < 0 || optNodeMargin opts > 99
            -> ioError $ userError "--node-margin must be in [0,99]"
        | optStatsEvery opts <= 0
@@ -519,6 +558,8 @@ validateOptions opts = do
            -> ioError $ userError "SPRT requires alpha + beta < 1"
        | sprtEnabled opts && sprtElo0 cfg >= sprtElo1 cfg
            -> ioError $ userError "SPRT requires elo0 < elo1"
+       | optFenPrintEvery opts <= 0
+           -> ioError $ userError "--print-fen-every must be > 0"
        | otherwise -> return ()
 
 buildFlavor, otherBuildCmd :: String
@@ -578,9 +619,11 @@ main = do
            validateOptions opts
            ctx <- initContext opts
            runReaderT (startWriter False) ctx
-           if optPerfTest opts
-              then runReaderT (perfTestFile opts) ctx
-              else case matchDir opts of
+           if optPerft opts
+              then runReaderT (perftCommand opts) ctx
+              else if optPerfTest opts
+                      then runReaderT (perfTestFile opts) ctx
+                      else case matchDir opts of
                         Nothing  -> runReaderT (filterFile opts) ctx
                         Just dir -> do
                             GameScore w d l <- runReaderT (matchFile opts dir) ctx
@@ -612,6 +655,71 @@ data PerfAcc = PerfAcc {
         perfInvalid :: !Int,
         perfNodes   :: !Int
     }
+
+perftCommand :: Options -> CtxIO ()
+perftCommand opts = do
+    ctx <- ask
+    let logFileName = "selfplay-" ++ show (startSecond ctx) ++ ".log"
+        fen = fromMaybe "" (optFen opts)
+    startLogger logFileName
+    liftIO $ do
+        putStrLn $ "Perft from FEN  " ++ fen
+        putStrLn $ "Max depth       " ++ show (optDepth opts)
+    posRes <- liftIO $ try (evaluate (posFromFen fen)) :: CtxIO (Either SomeException MyPos)
+    case posRes of
+        Left e -> liftIO $ ioError $ userError $ "Invalid FEN for --perft: " ++ show e
+        Right pos -> do
+            chg <- readChanging
+            let crts = crtStatus chg
+                sini = posToState pos (hash crts) (hist crts) (evalst crts)
+            mapM_ (printPerftDepth sini) [1 .. optDepth opts]
+
+printPerftDepth :: MyState -> Int -> CtxIO ()
+printPerftDepth sini depth = do
+    acc <- perftDivide sini depth
+    liftIO $ do
+        putStrLn $ "Depth " ++ show depth
+        mapM_ (\(mv, nodes) -> putStrLn $ show mv ++ " " ++ show nodes) (perftMoves acc)
+        putStrLn $ "Legal moves: " ++ show (perftLegalMoves acc)
+        putStrLn $ "Nodes:       " ++ show (perftNodes acc)
+
+data PerftDivide = PerftDivide {
+        perftMoves      :: ![(Move, Integer)],
+        perftLegalMoves :: !Int,
+        perftNodes      :: !Integer
+    }
+
+perftDivide :: MyState -> Int -> CtxIO PerftDivide
+perftDivide sini depth = do
+    (moves, _) <- runCState (uncurry (++) <$> genMoves depth) sini
+    foldM step (PerftDivide [] 0 0) moves
+    where step acc mv = do
+              (res, s1) <- runCState (doMove mv) sini
+              case res of
+                  Illegal -> return acc
+                  _ -> do
+                      (nodes, _s2) <- runCState (perftCount (depth - 1) <* undoMove) s1
+                      let moveNodes = if depth == 1 then 1 else nodes
+                      return acc {
+                              perftMoves = perftMoves acc ++ [(mv, moveNodes)],
+                              perftLegalMoves = perftLegalMoves acc + 1,
+                              perftNodes = perftNodes acc + moveNodes
+                          }
+
+perftCount :: Int -> CState MyState CtxIO Integer
+perftCount 0 = return 1
+perftCount depth = do
+    moves <- uncurry (++) <$> genMoves depth
+    go moves 0
+    where go [] !acc = return acc
+          go (mv:mvs) !acc = do
+              res <- doMove mv
+              case res of
+                  Illegal -> go mvs acc
+                  _ -> do
+                      nodes <- perftCount (depth - 1)
+                      undoMove
+                      go mvs (acc + nodes)
 
 perfTestFile :: Options -> CtxIO ()
 perfTestFile opts = do
