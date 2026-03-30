@@ -126,50 +126,49 @@ uBitClear bb sq = bb .&. uBit sq == 0
 -- Move from a node to a descendent - the real move version
 doRealMove :: Move -> Game DoResult
 doRealMove m = safeStack $ \s pc -> do
-    let !m1 = checkCastle (checkEnPas m pc) pc
-        il = occup pc `uBitClear` fromSquare m1	-- Moving a non-existent piece?
-        kc = kings pc `uBitSet` toSquare m1	-- Capturing one king?
-        p' = doFromToMove m1 pc
+    let m1 = checkCastle (checkEnPas m pc) pc
     -- If the move is real and one of those conditions occur,
     -- then we are really in trouble...
-    if (il || kc)
-       then do
-           logMes $ "Illegal REAL move or position: move = " ++ show m
-                    ++ ", il = " ++ show il ++ ", kc = " ++ show kc ++ "\n"
-           logMes $ "Illegal position (after the move):\n" ++ showMyPos p'
-           logMes $ "Stack:\n" ++ showStack 3 (stack s)
-           -- After an illegal result there must be no undo!
-           return Illegal
-       else if not $ checkOk p'
-               then return Illegal
+    if occup pc `uBitClear` fromSquare m1	-- Moving a non-existent piece?
+       then logIllegal True False s pc m1
+       else if kings pc `uBitSet` toSquare m1	-- Capturing one king?
+               then logIllegal True True s pc m1
                else do
-                   put s { stack = p' : stack s }
-                   return $ Exten 0 False False
+                   let p = doFromToMove m1 pc
+                   if not $ checkOk p
+                           then return Illegal
+                           else do
+                               put s { stack = p : stack s }
+                               return $ Exten 0 False False
 
 -- Move from a node to a descendent - the normal search version
 doMove :: Move -> Game DoResult
-doMove m = safeStack $ \s pc -> do
-    let il  = occup pc `uBitClear` fromSquare m	-- Moving a non-existent piece?
-        kc  = kings pc `uBitSet` toSquare m	-- Capturing one king?
-        sts = posEval p (evalst s)
-        p   = doFromToMove m pc { staticScore = sts }
-    if (il || kc)
-       then do
-           logMes $ "Illegal move or position: move = " ++ show m
-                    ++ ", il = " ++ show il ++ ", kc = " ++ show kc ++ "\n"
-           logMes $ "Illegal position (after the move):\n" ++ showMyPos p
-           logMes $ "Stack:\n" ++ showStack 3 (stack s)
-           -- After an illegal result there must be no undo!
-           return Illegal
-       else if not $ checkOk p
-               then return Illegal
+doMove m = safeStack $ \s pc ->
+    if occup pc `uBitClear` fromSquare m	-- Moving a non-existent piece?
+       then logIllegal False False s pc m
+       else if kings pc `uBitSet` toSquare m	-- Capturing one king?
+               then logIllegal False True s pc m
                else do
-                   put s { stack = p : stack s }
-                   if checkRemisRules p (stack s)
-                      then return Final
-                      else return $ if captOrPromo pc m
-                                       then Exten (exten pc p) True True
-                                       else Exten (exten pc p) False (noLMR pc m)
+                   let p = doFromToMove m pc { staticScore = posEval p (evalst s) }
+                   if not $ checkOk p
+                      then return Illegal
+                      else do
+                          put s { stack = p : stack s }
+                          if checkRemisRules p (stack s)
+                             then return Final
+                             else return $ if captOrPromo pc m
+                                              then Exten (exten pc p) True True
+                                              else Exten (exten pc p) False (noLMR pc m)
+
+logIllegal :: Bool -> Bool -> MyState -> MyPos -> Move -> Game DoResult
+logIllegal real kingcapt s p m = do
+    when real $ logMes "Illegal real move!"
+    logMes $ "Illegal move " ++ show m ++ " in position:\n" ++ showMyPos p
+    if kingcapt
+       then logMes "King will be captured"
+       else logMes "Move non-existent piece"
+    logMes $ "Stack:\n" ++ showStack 3 (stack s)
+    return Illegal
 
 -- Move from a node to a descendent - the QS search version
 -- Here we do only a restricted check for illegal moves

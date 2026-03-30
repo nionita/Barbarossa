@@ -256,24 +256,6 @@ isDiag Knight = False
 isDiag Rook   = False
 isDiag _      = True
 
-isKingAt :: Square -> MyPos -> Bool
-isKingAt !sq !p = kkrq p `testBit` sq
-    && diag p `testBit` sq
-    && not (slide p `testBit` sq)
-
-isKingMoving :: Move -> MyPos -> Bool
-isKingMoving m !p = isKingAt src p
-    where src = fromSquare m
-
-isPawnAt :: Square -> MyPos -> Bool
-isPawnAt !sq !p = diag p `testBit` sq
-    && not (kkrq p `testBit` sq)
-    && not (slide p `testBit` sq)
-
-isPawnMoving :: Move -> MyPos -> Bool
-isPawnMoving m !p = isPawnAt src p
-    where src = fromSquare m
-
 {-# INLINE moveFromTo #-}
 moveFromTo :: Square -> Square -> Move
 moveFromTo f t = Move $ encodeFromTo f t
@@ -309,13 +291,13 @@ showWord64 x = reverse $ take 16 (map f xs)
 --   tosq - to square (6 bits)
 {-# INLINE moveIsNormal #-}
 moveIsNormal :: Move -> Bool
-moveIsNormal (Move m) = m .&. 0x6000 /= 0x6000
+moveIsNormal (Move w) = w .&. 0x6000 /= 0x6000
 
 -- For which color is the move:
 {-# INLINE moveColor #-}
 moveColor :: Move -> Color
-moveColor (Move m)
-    | m .&. 0x8000 == 0 = White
+moveColor (Move w)
+    | w .&. 0x8000 == 0 = White
     | otherwise         = Black
 
 -- En passant is coded:
@@ -422,14 +404,16 @@ moveHisAdr (Move w) = fromIntegral $ (w `unsafeShiftR` 12) .&. 0x7
 moveHisOfs :: Move -> Int
 moveHisOfs (Move w) = fromIntegral $ w `unsafeShiftR` 15
 
--- {-# INLINE fromSquare #-}
+-- fromSquare is complex when promo, but simple for the rest
+simpleFromSquare :: Word16 -> Square
+simpleFromSquare w = fromIntegral (w `unsafeShiftR` 6) .&. 0x3F
+
 fromSquare :: Move -> Square
 fromSquare m@(Move w)
-    | moveIsPromo m       = let !ffl = (w `unsafeShiftR` 6) .&. 0x7
-                            in case moveColor m of
-                                   White -> fromIntegral $ 0x30 .|. ffl
-                                   Black -> fromIntegral $ 0x08 .|. ffl
-    | otherwise           = fromIntegral (w `unsafeShiftR` 6) .&. 0x3F
+    | moveIsPromo m = case moveColor m of
+                          White -> fromIntegral $ 0x30 .|. ((w `unsafeShiftR` 6) .&. 0x7)
+                          Black -> fromIntegral $ 0x08 .|. ((w `unsafeShiftR` 6) .&. 0x7)
+    | otherwise     = simpleFromSquare w
 
 {-# INLINE toSquare #-}
 toSquare :: Move -> Square
@@ -445,26 +429,28 @@ moveAddPiece :: Piece -> Move -> Move
 moveAddPiece piece (Move w)
     = Move $ (fromIntegral (fromEnum piece) `unsafeShiftL` 12) .|. (w .&. 0x8FFF)
 
+-- The next 2 functions is used only in real moves (Moves/Internal/Base.hs)
+-- or notation (Moves/Notation.hs), which are not on the hot path of the code
+-- So it is pointless to optimize them more
 checkCastle :: Move -> MyPos -> Move
-checkCastle m p
-    | moveIsNormal m && isKingMoving m p
-        = case ds of
-            2  -> makeCastleFor c True
-            -2 -> makeCastleFor c False
+checkCastle m@(Move w) p
+    | moveIsNormal m -- Next line means: isKingAt f p
+        && kkrq p `testBit` f && diag p `testBit` f && not (slide p `testBit` f)
+        = case toSquare m - simpleFromSquare w of
+            -2 -> makeCastleFor (moving p) False
+            2  -> makeCastleFor (moving p) True
             _  -> m
     | otherwise = m
-    where s = fromSquare m
-          d = toSquare m
-          ds = d - s
-          c = moving p
+    where f = simpleFromSquare w
 
 checkEnPas :: Move -> MyPos -> Move
-checkEnPas m p
-    | moveIsNormal m && isPawnMoving m p
-         = if (epcas p .&. epMask) `testBit` t then makeEnPas f t else m
-    | otherwise        = m
-    where f = fromSquare m
-          t = toSquare m
+checkEnPas m@(Move w) p
+    | moveIsNormal m -- Next line means: isPawnAt f p
+        && diag p `testBit` f && not (kkrq p `testBit` f) && not (slide p `testBit` f)
+        = if (epcas p .&. epMask) `testBit` t then makeEnPas f t else m
+    | otherwise = m
+    where t = toSquare m
+          f = simpleFromSquare w
 
 activatePromo :: Char -> Move -> Move
 activatePromo b m = makePromo p f t
