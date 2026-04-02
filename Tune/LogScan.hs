@@ -5,6 +5,7 @@ module Tune.LogScan
     , GameWinner(..)
     , LineType(..)
     , LogEvent(..)
+    , NoEvalInfo(..)
     , OriginInfo(..)
     , Position(..)
     , ReplayGame(..)
@@ -53,6 +54,7 @@ data Position = Position
 data LineType
     = OtherLine
     | PositionLine Position
+    | NoEvalLine NoEvalInfo
     | NewGameLine
     deriving (Eq, Show)
 
@@ -74,6 +76,11 @@ data OriginInfo = OriginInfo
     , originDepth   :: Int
     , originScore   :: Int
     , originEvalFen :: String
+    } deriving (Eq, Show)
+
+data NoEvalInfo = NoEvalInfo
+    { noEvalFen   :: String
+    , noEvalDepth :: Int
     } deriving (Eq, Show)
 
 data SearchSummary = SearchSummary
@@ -100,7 +107,9 @@ data ReplayTurn = ReplayTurn
     , turnReplyMove     :: Maybe ReplayMove
     , turnReplyWarning  :: Maybe String
     , turnSearch        :: Maybe SearchSummary
+    , turnNoEval        :: Maybe NoEvalInfo
     , turnOrigin        :: Maybe OriginInfo
+    , turnMatchedNoEval :: Maybe NoEvalInfo
     , turnMatchedOrigin :: Maybe OriginInfo
     } deriving (Eq, Show)
 
@@ -131,6 +140,7 @@ data LogEvent
     | CurrentFenEvent String
     | RealMoveEvent Int String String
     | BestMoveEvent String
+    | NoEvalEvent NoEvalInfo
     | OriginEvent OriginInfo
     | DraftEvent SearchSummary
     | WinnerEvent String String
@@ -141,8 +151,10 @@ data LogEvent
 data TurnBuilder = TurnBuilder
     { tbCurrentFen    :: Maybe String
     , tbPlayedMoveUci :: Maybe String
+    , tbBestNoEval    :: Maybe NoEvalInfo
     , tbBestOrigin    :: Maybe OriginInfo
     , tbBestSearch    :: Maybe SearchSummary
+    , tbMatchedNoEval :: Maybe NoEvalInfo
     , tbMatchedOrigin :: Maybe OriginInfo
     } deriving (Eq, Show)
 
@@ -179,6 +191,7 @@ parseLineType :: String -> LineType
 parseLineType line =
     case parseLogEvent line of
         NewGameEvent -> NewGameLine
+        NoEvalEvent noEval -> NoEvalLine noEval
         OriginEvent origin ->
             PositionLine Position
                 { posDepth = originDepth origin
@@ -209,6 +222,8 @@ parseLogEvent line =
                 parseRealMove rest
             | Just moveUci <- stripPrefix "[Output]: bestmove " msg ->
                 BestMoveEvent moveUci
+            | Just noEval <- parseNoEvalLine msg ->
+                NoEvalEvent noEval
             | Just origin <- parseOriginLine msg ->
                 OriginEvent origin
             | Just draft <- stripPrefix "[Info]: Draft " msg >>= parseDraftLine ->
@@ -273,6 +288,19 @@ parseOriginLine msg = do
                , originDepth = depth
                , originScore = score
                , originEvalFen = parts !! 4
+               }
+
+parseNoEvalLine :: String -> Maybe NoEvalInfo
+parseNoEvalLine msg = do
+    rest <- stripPrefix "[Info]: NoEval " msg
+    let parts = splitOnPipe rest
+    if length parts < 3
+       then Nothing
+       else do
+           depth <- readMaybe (parts !! 2)
+           pure NoEvalInfo
+               { noEvalFen = parts !! 1
+               , noEvalDepth = depth
                }
 
 parseDraftLine :: String -> Maybe SearchSummary
@@ -361,28 +389,35 @@ splitWhen p = go
             (chunk, [])     -> [chunk]
             (chunk, _:rest) -> chunk : go rest
 
-groupByGames :: [LineType] -> [[Position]]
+groupByGames :: [LineType] -> [[LineType]]
 groupByGames lineTypes =
-    let chunks = splitWhen (== NewGameLine) lineTypes
-        games = map extractPositions chunks
-    in filter (not . null) games
+    filter hasPositionChunk (splitWhen (== NewGameLine) lineTypes)
   where
-    extractPositions :: [LineType] -> [Position]
-    extractPositions = foldr go []
-      where
-        go (PositionLine pos) acc = pos : acc
-        go _ acc                  = acc
+    hasPositionChunk = any isPositionLine
+    isPositionLine (PositionLine _) = True
+    isPositionLine _                = False
 
-determineGameResult :: Int -> Int -> Int -> [Position] -> GameWinner
-determineGameResult trackCount lowLimit highLimit positions =
-    let lastN = take trackCount (reverse positions)
-        scores = map posScore lastN
+determineGameResult :: Int -> Int -> Int -> [LineType] -> GameWinner
+determineGameResult trackCount lowLimit highLimit lineTypes =
+    let indexedPositions =
+            [ (idx, pos)
+            | (idx, PositionLine pos) <- zip [0 :: Int ..] lineTypes
+            ]
+        lastN = take trackCount (reverse indexedPositions)
+        scores = map (posScore . snd) lastN
+        tailStart = minimumMaybe (map fst lastN)
+        hasNoEvalInTail =
+            case tailStart of
+                Nothing -> False
+                Just idx0 -> any isNoEvalLine (drop idx0 lineTypes)
     in if null lastN
        then UnclearGame
+       else if hasNoEvalInTail
+            then UnclearGame
        else if all (\s -> abs s <= lowLimit) scores
             then DrawGame
-            else if all (\s -> abs s >= highLimit) scores
-                 then determineWinner (last lastN)
+       else if all (\s -> abs s >= highLimit) scores
+                 then determineWinner (snd (last lastN))
                  else UnclearGame
   where
     determineWinner :: Position -> GameWinner
@@ -394,6 +429,14 @@ determineGameResult trackCount lowLimit highLimit positions =
            else if score <= negate highLimit
                 then if side == 'w' then BlackWon else WhiteWon
                 else UnclearGame
+
+    isNoEvalLine :: LineType -> Bool
+    isNoEvalLine (NoEvalLine _) = True
+    isNoEvalLine _              = False
+
+minimumMaybe :: [Int] -> Maybe Int
+minimumMaybe [] = Nothing
+minimumMaybe xs = Just (minimum xs)
 
 positionToOutput :: Position -> GameWinner -> String
 positionToOutput pos gameResult =
@@ -410,9 +453,13 @@ positionToOutput pos gameResult =
             (BlackWon, 'b') -> 2
             _               -> 1
 
-processGame :: Int -> Int -> Int -> Int -> [Position] -> [String]
-processGame minDepth trackCount lowLimit highLimit positions =
-    let result = determineGameResult trackCount lowLimit highLimit positions
+processGame :: Int -> Int -> Int -> Int -> [LineType] -> [String]
+processGame minDepth trackCount lowLimit highLimit lineTypes =
+    let positions =
+            [ pos
+            | PositionLine pos <- lineTypes
+            ]
+        result = determineGameResult trackCount lowLimit highLimit lineTypes
     in case result of
         UnclearGame -> []
         _ ->
@@ -472,6 +519,8 @@ updateGameBuilder findKind minDepth targetFen event builder =
         BestMoveEvent moveUci ->
             let builder1 = ensurePending builder
             in builder1 { gbPending = fmap (\tb -> tb { tbPlayedMoveUci = Just moveUci }) (gbPending builder1) }
+        NoEvalEvent noEval ->
+            updateNoEval findKind minDepth targetFen noEval builder
         OriginEvent origin ->
             updateOrigin findKind minDepth targetFen origin builder
         DraftEvent draft ->
@@ -490,8 +539,10 @@ newTurnBuilder :: Maybe String -> TurnBuilder
 newTurnBuilder fen = TurnBuilder
     { tbCurrentFen = fen
     , tbPlayedMoveUci = Nothing
+    , tbBestNoEval = Nothing
     , tbBestOrigin = Nothing
     , tbBestSearch = Nothing
+    , tbMatchedNoEval = Nothing
     , tbMatchedOrigin = Nothing
     }
 
@@ -530,9 +581,52 @@ turnBuilderEmpty :: TurnBuilder -> Bool
 turnBuilderEmpty turnBuilder =
     tbCurrentFen turnBuilder == Nothing
         && tbPlayedMoveUci turnBuilder == Nothing
+        && tbBestNoEval turnBuilder == Nothing
         && tbBestOrigin turnBuilder == Nothing
         && tbBestSearch turnBuilder == Nothing
+        && tbMatchedNoEval turnBuilder == Nothing
         && tbMatchedOrigin turnBuilder == Nothing
+
+updateNoEval :: FindKind -> Int -> String -> NoEvalInfo -> GameBuilder -> GameBuilder
+updateNoEval findKind minDepth targetFen noEval builder =
+    let builder1 = ensurePendingFromNoEval builder noEval
+        matchedHere = noEvalMatchesTarget findKind minDepth targetFen noEval
+        builder2
+            | matchedHere && not (gbMatched builder1) =
+                builder1
+                    { gbTurnsRev = []
+                    , gbPending = Just (newTurnBuilder (Just (noEvalFen noEval)))
+                    }
+            | otherwise =
+                builder1
+        pending1 = fmap (attachNoEval noEval) (gbPending builder2)
+        pending2 =
+            if matchedHere
+               then fmap (\tb -> tb { tbMatchedNoEval = tbMatchedNoEval tb <|> Just noEval }) pending1
+               else pending1
+    in builder2
+        { gbPending = pending2
+        , gbMatched = gbMatched builder2 || matchedHere
+        }
+
+ensurePendingFromNoEval :: GameBuilder -> NoEvalInfo -> GameBuilder
+ensurePendingFromNoEval builder noEval =
+    case gbPending builder of
+        Nothing ->
+            builder { gbPending = Just (attachNoEval noEval (newTurnBuilder (Just (noEvalFen noEval)))) }
+        Just pending
+            | tbCurrentFen pending == Nothing || tbCurrentFen pending == Just (noEvalFen noEval) ->
+                builder
+            | otherwise ->
+                let builder' = pushPending builder
+                in builder' { gbPending = Just (attachNoEval noEval (newTurnBuilder (Just (noEvalFen noEval)))) }
+
+attachNoEval :: NoEvalInfo -> TurnBuilder -> TurnBuilder
+attachNoEval noEval turnBuilder =
+    turnBuilder
+        { tbCurrentFen = tbCurrentFen turnBuilder <|> Just (noEvalFen noEval)
+        , tbBestNoEval = betterNoEval (tbBestNoEval turnBuilder) noEval
+        }
 
 updateOrigin :: FindKind -> Int -> String -> OriginInfo -> GameBuilder -> GameBuilder
 updateOrigin findKind minDepth targetFen origin builder =
@@ -579,6 +673,12 @@ attachDraft :: SearchSummary -> TurnBuilder -> TurnBuilder
 attachDraft summary turnBuilder =
     turnBuilder { tbBestSearch = betterSummary (tbBestSearch turnBuilder) summary }
 
+betterNoEval :: Maybe NoEvalInfo -> NoEvalInfo -> Maybe NoEvalInfo
+betterNoEval Nothing noEval = Just noEval
+betterNoEval (Just oldNoEval) noEval
+    | noEvalDepth noEval >= noEvalDepth oldNoEval = Just noEval
+    | otherwise = Just oldNoEval
+
 betterOrigin :: Maybe OriginInfo -> OriginInfo -> Maybe OriginInfo
 betterOrigin Nothing origin = Just origin
 betterOrigin (Just oldOrigin) origin
@@ -600,6 +700,15 @@ originMatchesTarget findKind minDepth targetFen origin
             MatchEval -> originEvalFen origin == targetFen
             MatchBoth -> originOrigFen origin == targetFen || originEvalFen origin == targetFen
 
+noEvalMatchesTarget :: FindKind -> Int -> String -> NoEvalInfo -> Bool
+noEvalMatchesTarget findKind minDepth targetFen noEval
+    | noEvalDepth noEval < minDepth = False
+    | otherwise =
+        case findKind of
+            MatchOrig -> noEvalFen noEval == targetFen
+            MatchEval -> False
+            MatchBoth -> noEvalFen noEval == targetFen
+
 finalizeReplayGame :: String -> GameBuilder -> ReplayGame
 finalizeReplayGame targetFen builder =
     let turns0 = reverse (gbTurnsRev finalBuilder)
@@ -619,7 +728,7 @@ finalizeReplayGame targetFen builder =
 
 dropBeforeMatched :: [TurnBuilder] -> [TurnBuilder]
 dropBeforeMatched turns =
-    case dropWhile ((== Nothing) . tbMatchedOrigin) turns of
+    case dropWhile (\turn -> tbMatchedOrigin turn == Nothing && tbMatchedNoEval turn == Nothing) turns of
         [] -> turns
         matchedTurns -> matchedTurns
 
@@ -670,7 +779,9 @@ resolveTurn turnBuilder nextFen isLastTurn =
         , turnReplyMove = replyResolution
         , turnReplyWarning = replyWarning
         , turnSearch = tbBestSearch turnBuilder
+        , turnNoEval = tbBestNoEval turnBuilder
         , turnOrigin = tbBestOrigin turnBuilder
+        , turnMatchedNoEval = tbMatchedNoEval turnBuilder
         , turnMatchedOrigin = tbMatchedOrigin turnBuilder
         }
 
@@ -844,6 +955,7 @@ renderTurnComment :: ReplayTurn -> String
 renderTurnComment turn =
     case filter (not . null)
         [ renderSearchComment (turnSearch turn)
+        , renderNoEvalComment (turnMatchedNoEval turn)
         , renderOriginComment (turnMatchedOrigin turn)
         , renderMoveWarning (turnMove turn) (turnMoveWarning turn)
         ] of
@@ -874,6 +986,11 @@ renderOriginComment (Just origin) =
     "matched depth " ++ show (originDepth origin)
         ++ " eval " ++ originEvalFen origin
 
+renderNoEvalComment :: Maybe NoEvalInfo -> String
+renderNoEvalComment Nothing = ""
+renderNoEvalComment (Just noEval) =
+    "matched no-eval depth " ++ show (noEvalDepth noEval)
+
 renderMoveWarning :: Maybe ReplayMove -> Maybe String -> String
 renderMoveWarning Nothing Nothing = ""
 renderMoveWarning Nothing (Just warning) = warning
@@ -895,6 +1012,7 @@ renderTerminalComment :: ReplayTurn -> Maybe String
 renderTerminalComment turn =
     case filter (not . null)
         [ renderSearchComment (turnSearch turn)
+        , renderNoEvalComment (turnMatchedNoEval turn)
         , renderOriginComment (turnMatchedOrigin turn)
         ] of
         [] -> Nothing

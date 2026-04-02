@@ -293,7 +293,9 @@ pvRootSearch a b d lastpath rmvs aspir = do
     case pathMPos (cursc nstf) of
         Just opos -> lift $ logmes $ "Origin |" ++ posToFen pos ++ "|" ++ show d
                                 ++ "|" ++ show (staticScore opos) ++ "|" ++ posToFen opos
-        _         -> return ()
+        Nothing
+            | d == 1 -> lift $ logmes $ "NoEval |" ++ posToFen pos ++ "|" ++ show d
+            | otherwise -> return ()
     abrt <- gets abort
     reportStats
     let (sc, pm) | d > 1             = (pathScore (cursc nstf), pathMoves (cursc nstf))

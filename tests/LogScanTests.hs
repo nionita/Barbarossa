@@ -6,6 +6,7 @@ import Tune.LogScan
     ( FindKind(..)
     , LogEvent(..)
     , LineType(..)
+    , NoEvalInfo(..)
     , parseLineType
     , parseLogEvent
     , processLogContent
@@ -26,6 +27,8 @@ tests = TestList
     , TestLabel "malformed depth is ignored" testMalformedDepth
     , TestLabel "game result still uses all positions" testResultUsesAllPositions
     , TestLabel "current fen line parses" testParseCurrentFen
+    , TestLabel "no eval line parses" testParseNoEval
+    , TestLabel "no eval tail suppresses attribution" testNoEvalTailIsUnclear
     , TestLabel "replay mode renders PGN from explicit moves" testReplayModePgn
     , TestLabel "replay mode infers missing move from next position" testReplayModeInference
     , TestLabel "replay mode handles side local bestmove logs" testReplayModeBestmoveInference
@@ -65,6 +68,20 @@ testParseCurrentFen =
         assertEqual "current fen event should be parsed"
             (CurrentFenEvent startFen)
             (parseLogEvent ("0 [Info]: Current fen: " ++ startFen))
+
+testParseNoEval :: Test
+testParseNoEval =
+    TestCase $
+        assertEqual "no eval event should be parsed"
+            (NoEvalEvent (NoEvalInfo fenAfterE4E5 1))
+            (parseLogEvent ("0 [Info]: NoEval |" ++ fenAfterE4E5 ++ "|1"))
+
+testNoEvalTailIsUnclear :: Test
+testNoEvalTailIsUnclear =
+    TestCase $
+        assertEqual "games with no-eval gaps near the end should be dropped"
+            []
+            (lines (processLogContent 6 2 100 400 noEvalTailLog))
 
 testReplayModePgn :: Test
 testReplayModePgn =
@@ -120,6 +137,15 @@ mixedDepthWinnerLog =
         [ "0 [Info]: New game"
         , originLine 5 500 fenW
         , originLine 6 (-500) fenW
+        ]
+
+noEvalTailLog :: String
+noEvalTailLog =
+    unlines
+        [ "0 [Info]: New game"
+        , originLine 6 500 fenW
+        , "0 [Info]: NoEval |" ++ startFen ++ "|1"
+        , originLine 8 520 fenW
         ]
 
 malformedDepthLine :: String
@@ -187,7 +213,7 @@ sparseReplayLog =
         , "6 [Info]: Draft 6 Score 20 path [e2e4,e7e5] ms 0 used 10"
         , "7 [Output]: bestmove e2e4"
         , "8 [Info]: searchTheTree starts draft 1"
-        , "9 [Info]: Origin |" ++ fenAfterE4E5 ++ "|15|30|" ++ fenAfterE4E5Nf3
+        , "9 [Info]: NoEval |" ++ fenAfterE4E5 ++ "|1"
         , "10 [Info]: Draft 15 Score 30 path [g1f3,b8c6] ms 0 used 10"
         , "11 [Output]: bestmove g1f3"
         , "12 [Warning]: Mate (Alpha wins)"
