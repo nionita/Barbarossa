@@ -240,13 +240,26 @@ executable UCIScores
 
 executable LogScan
   Main-is:      Main/LogScan.hs
-  -- other-modules:
+  Other-modules:
+      LogScan.Core
   -- other-extensions:    RankNTypes
   Build-depends:
       base >=4.18
       -- filepath,
       -- containers >=0.5,
   Ghc-options:         -O2 -Wall
+
+test-suite logscan-tests
+  Type: exitcode-stdio-1.0
+  Main-is: tests/LogScanTests.hs
+  Hs-source-dirs: .
+  Build-depends:
+      base >= 4.18,
+      HUnit
+  Other-modules:
+      LogScan.Core
+  Ghc-options: -Wall
+               -fno-warn-tabs
 
 test-suite selfplay-sprt-tests
   Type: exitcode-stdio-1.0
