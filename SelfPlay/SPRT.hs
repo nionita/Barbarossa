@@ -4,6 +4,8 @@ module SelfPlay.SPRT
     , SprtConfig(..)
     , SprtResult(..)
     , SprtState
+    , sprtLowerBound
+    , sprtUpperBound
     , emptyPenta
     , addPentaScore
     , classifyPair

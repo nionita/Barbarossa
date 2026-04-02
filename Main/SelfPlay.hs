@@ -34,6 +34,9 @@ import SelfPlay.SPRT
     , PentaScore(..)
     , SprtConfig(..)
     , SprtResult(..)
+    , SprtState
+    , sprtLowerBound
+    , sprtUpperBound
     , emptyPenta
     , addPentaScore
     , classifyPair

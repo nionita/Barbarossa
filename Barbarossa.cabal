@@ -40,7 +40,6 @@ Executable Barbarossa
       text,
       template-haskell
   Other-modules:
-      SelfPlay.SPRT,
       Eval.Core,
       Eval.FileParams,
       Hash.TransTab,
@@ -106,6 +105,7 @@ Executable SelfPlay
       text,
       template-haskell
   Other-modules:
+      SelfPlay.SPRT,
       Eval.Core,
       Eval.FileParams,
       Hash.TransTab,
