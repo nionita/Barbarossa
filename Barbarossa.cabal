@@ -40,6 +40,7 @@ Executable Barbarossa
       text,
       template-haskell
   Other-modules:
+      SelfPlay.SPRT,
       Eval.Core,
       Eval.FileParams,
       Hash.TransTab,
@@ -247,6 +248,18 @@ executable LogScan
       -- containers >=0.5,
   Ghc-options:         -O2 -Wall
 
+test-suite selfplay-sprt-tests
+  Type: exitcode-stdio-1.0
+  Main-is: tests/SelfPlaySPRTTests.hs
+  Hs-source-dirs: .
+  Build-depends:
+      base >= 4.18,
+      HUnit
+  Other-modules:
+      SelfPlay.SPRT
+  Ghc-options: -Wall
+               -fno-warn-tabs
+
 -- Executable Evolve
 --   Main-is:	Main/Evolve.hs
 --   Build-depends: base >= 4.5, async, transformers, directory, filepath, process,
@@ -266,4 +279,3 @@ executable LogScan
 --               -- -msse4.2
 --               -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques
 --               -ddump-opt-cmm -ddump-asm
-
