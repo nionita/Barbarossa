@@ -241,12 +241,23 @@ executable UCIScores
 executable LogScan
   Main-is:      Main/LogScan.hs
   Other-modules:
+      Hash.Zobrist,
+      Moves.Core,
+      Moves.Internal.BitBoard,
+      Moves.Internal.Pattern,
+      Moves.Internal.Magics,
+      Moves.Internal.GenMagics,
+      Moves.Internal.Moves,
+      Moves.Notation,
+      Moves.ShowMe,
+      Struct.Struct,
       Tune.LogScan
   -- other-extensions:    RankNTypes
   Build-depends:
-      base >=4.18
-      -- filepath,
-      -- containers >=0.5,
+      base >=4.18,
+      array,
+      containers,
+      random
   Ghc-options:         -O2 -Wall
 
 test-suite logscan-tests
@@ -255,8 +266,21 @@ test-suite logscan-tests
   Hs-source-dirs: .
   Build-depends:
       base >= 4.18,
-      HUnit
+      HUnit,
+      array,
+      containers,
+      random
   Other-modules:
+      Hash.Zobrist,
+      Moves.Core,
+      Moves.Internal.BitBoard,
+      Moves.Internal.Pattern,
+      Moves.Internal.Magics,
+      Moves.Internal.GenMagics,
+      Moves.Internal.Moves,
+      Moves.Notation,
+      Moves.ShowMe,
+      Struct.Struct,
       Tune.LogScan
   Ghc-options: -Wall
                -fno-warn-tabs

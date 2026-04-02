@@ -3,7 +3,8 @@
 
 module Moves.Notation (
     fromNiceNotation,
-    posToFen
+    posToFen,
+    toNiceNotation
 ) where
 
 import Data.Bits
