@@ -1,6 +1,6 @@
 module Main (main) where
 
-import Data.List (isInfixOf)
+import Data.List (isInfixOf, isSuffixOf)
 import Test.HUnit
 import Tune.LogScan
     ( FindKind(..)
@@ -36,6 +36,10 @@ tests = TestList
     , TestLabel "continuous old-log tail still attributes winner in old mode" testContinuousTailStillAttributes
     , TestLabel "discontinuous old-log tail is dropped in old mode" testDiscontinuousTailIsDropped
     , TestLabel "replay mode renders PGN from explicit moves" testReplayModePgn
+    , TestLabel "replay mode infers terminal result without winner line" testReplayModeInfersTerminalResult
+    , TestLabel "replay mode infers result from decisive final score" testReplayModeInfersScoreResult
+    , TestLabel "replay mode keeps unknown result when final state is non-terminal" testReplayModeKeepsUnknownResult
+    , TestLabel "replay mode wraps movetext by whole move units" testReplayModeWrapsMovetext
     , TestLabel "replay mode infers missing move from next position" testReplayModeInference
     , TestLabel "replay mode handles side local bestmove logs" testReplayModeBestmoveInference
     ]
@@ -127,7 +131,57 @@ testReplayModePgn =
                 assertContains "PGN should contain first white move" "1. e4 {score 20 depth 6 pv e2e4 e7e5" pgn
                 assertContains "PGN should contain black move" "1... e5 {score -15 depth 6 pv e7e5 g1f3" pgn
                 assertContains "PGN should contain final white move" "2. Nf3 {score 30 depth 6 pv g1f3 b8c6" pgn
+                assertContains "PGN header should contain explicit result" "[Result \"1-0\"]" pgn
                 assertContains "PGN should contain result" "1-0" pgn
+
+testReplayModeInfersTerminalResult :: Test
+testReplayModeInfersTerminalResult =
+    TestCase $
+        case processReplayLogContent MatchBoth 6 mateEndFen replayMateLogNoWinner of
+            Left err ->
+                assertFailure err
+            Right pgn -> do
+                assertContains "PGN header should contain inferred mate result" "[Result \"1-0\"]" pgn
+                assertContains "PGN should end with inferred mate result" "1-0" pgn
+
+testReplayModeInfersScoreResult :: Test
+testReplayModeInfersScoreResult =
+    TestCase $
+        case processReplayLogContent MatchBoth 6 fenAfterE4E5 replayLogNoWinnerDecisive of
+            Left err ->
+                assertFailure err
+            Right pgn -> do
+                assertContains "PGN header should contain inferred score result" "[Result \"0-1\"]" pgn
+                assertBool "PGN should end with inferred score result"
+                    (case reverse (filter (not . null) (lines pgn)) of
+                        lastLine:_ -> "0-1" `isSuffixOf` lastLine
+                        [] -> False)
+
+testReplayModeKeepsUnknownResult :: Test
+testReplayModeKeepsUnknownResult =
+    TestCase $
+        case processReplayLogContent MatchBoth 6 fenAfterE4E5 replayLogNoWinnerUndecisive of
+            Left err ->
+                assertFailure err
+            Right pgn -> do
+                assertContains "PGN header should keep unknown result" "[Result \"*\"]" pgn
+                assertBool "PGN should still end with unknown result"
+                    (case reverse (filter (not . null) (lines pgn)) of
+                        lastLine:_ -> "*" `isSuffixOf` lastLine
+                        [] -> False)
+
+testReplayModeWrapsMovetext :: Test
+testReplayModeWrapsMovetext =
+    TestCase $
+        case processReplayLogContent MatchBoth 6 fenAfterE4E5 replayLog of
+            Left err ->
+                assertFailure err
+            Right pgn -> do
+                let movetextLines = getMovetextLines pgn
+                assertBool "movetext should be wrapped to multiple lines" (length movetextLines > 1)
+                assertBool "wrapped lines should keep comments balanced"
+                    (all hasBalancedBraces movetextLines)
+                assertContains "wrapped output should continue at the next move boundary" "}\n1... e5" pgn
 
 testReplayModeInference :: Test
 testReplayModeInference =
@@ -263,6 +317,50 @@ replayLogWithMissingBlackMove =
         , "16 [Warning]: Mate (Alpha wins)"
         ]
 
+replayLogNoWinnerDecisive :: String
+replayLogNoWinnerDecisive =
+    unlines
+        [ "0 [Info]: New game"
+        , "1 [Warning]: Setup new game between Alpha and Beta"
+        , "2 [Warning]: Color for Alpha: White"
+        , "3 [Warning]: Color for Beta: Black"
+        , "4 [Warning]: Starting position: " ++ startFen
+        , "5 [Info]: Current fen: " ++ startFen
+        , "6 [Info]: Origin |" ++ startFen ++ "|6|20|" ++ fenAfterE4E5
+        , "7 [Info]: Draft 6 Score 20 path [e2e4,e7e5] ms 0 used 10"
+        , "8 [Info]: Real move 1 from Alpha: e2e4"
+        , "9 [Info]: Current fen: " ++ fenAfterE4
+        , "10 [Info]: Origin |" ++ fenAfterE4 ++ "|6|-15|" ++ fenAfterE4E5Nf3
+        , "11 [Info]: Draft 6 Score -15 path [e7e5,g1f3] ms 0 used 10"
+        , "12 [Info]: Real move 2 from Beta: e7e5"
+        , "13 [Info]: Current fen: " ++ fenAfterE4E5
+        , "14 [Info]: Origin |" ++ fenAfterE4E5 ++ "|6|-600|" ++ fenAfterE4E5Nf3
+        , "15 [Info]: Draft 6 Score -600 path [g1f3,b8c6] ms 0 used 10"
+        , "16 [Info]: Real move 3 from Alpha: g1f3"
+        ]
+
+replayLogNoWinnerUndecisive :: String
+replayLogNoWinnerUndecisive =
+    unlines
+        [ "0 [Info]: New game"
+        , "1 [Warning]: Setup new game between Alpha and Beta"
+        , "2 [Warning]: Color for Alpha: White"
+        , "3 [Warning]: Color for Beta: Black"
+        , "4 [Warning]: Starting position: " ++ startFen
+        , "5 [Info]: Current fen: " ++ startFen
+        , "6 [Info]: Origin |" ++ startFen ++ "|6|20|" ++ fenAfterE4E5
+        , "7 [Info]: Draft 6 Score 20 path [e2e4,e7e5] ms 0 used 10"
+        , "8 [Info]: Real move 1 from Alpha: e2e4"
+        , "9 [Info]: Current fen: " ++ fenAfterE4
+        , "10 [Info]: Origin |" ++ fenAfterE4 ++ "|6|-15|" ++ fenAfterE4E5Nf3
+        , "11 [Info]: Draft 6 Score -15 path [e7e5,g1f3] ms 0 used 10"
+        , "12 [Info]: Real move 2 from Beta: e7e5"
+        , "13 [Info]: Current fen: " ++ fenAfterE4E5
+        , "14 [Info]: Origin |" ++ fenAfterE4E5 ++ "|6|30|" ++ fenAfterE4E5Nf3
+        , "15 [Info]: Draft 6 Score 30 path [g1f3,b8c6] ms 0 used 10"
+        , "16 [Info]: Real move 3 from Alpha: g1f3"
+        ]
+
 sparseReplayLog :: String
 sparseReplayLog =
     unlines
@@ -293,5 +391,35 @@ fenAfterE4E5 = "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR/ w KQkq e6 0 2"
 fenAfterE4E5Nf3 :: String
 fenAfterE4E5Nf3 = "rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R/ b KQkq - 1 2"
 
+mateStartFen :: String
+mateStartFen = "7k/5Q2/6K1/8/8/8/8/8 w - - 0 1"
+
+mateEndFen :: String
+mateEndFen = "7k/6Q1/6K1/8/8/8/8/8 b - - 1 1"
+
+replayMateLogNoWinner :: String
+replayMateLogNoWinner =
+    unlines
+        [ "0 [Info]: New game"
+        , "1 [Warning]: Setup new game between Alpha and Beta"
+        , "2 [Warning]: Color for Alpha: White"
+        , "3 [Warning]: Color for Beta: Black"
+        , "4 [Warning]: Starting position: " ++ mateStartFen
+        , "5 [Info]: Current fen: " ++ mateStartFen
+        , "6 [Info]: Origin |" ++ mateStartFen ++ "|6|999|" ++ mateEndFen
+        , "7 [Info]: Draft 6 Score 999 path [f7g7] ms 0 used 10"
+        , "8 [Info]: Real move 1 from Alpha: f7g7"
+        ]
+
 fenW :: String
 fenW = "8/8/8/8/8/8/8/8 w - - 0 1"
+
+getMovetextLines :: String -> [String]
+getMovetextLines pgn =
+    case dropWhile (not . null) (lines pgn) of
+        [] -> []
+        (_:movetextLines) -> filter (not . null) movetextLines
+
+hasBalancedBraces :: String -> Bool
+hasBalancedBraces line =
+    length (filter (== '{') line) == length (filter (== '}') line)

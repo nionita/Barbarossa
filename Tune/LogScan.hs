@@ -936,9 +936,10 @@ legalMovesForPosition pos
 
 renderReplayPgn :: ReplayGame -> String
 renderReplayPgn game =
-    unlines (headerLines ++ ["", movetext])
+    unlines (headerLines ++ [""] ++ movetextLines)
   where
-    (movetextTokens, finalResult) = renderMovetext game
+    replayOutcome = effectiveReplayResult game
+    (movetextTokens, finalResult) = renderMovetext game replayOutcome
     headerLines =
         [ pgnTag "Event" "LogScan Debug"
         , pgnTag "Annotator" "LogScan"
@@ -954,53 +955,142 @@ renderReplayPgn game =
             [ pgnTag "SetUp" "1"
             , pgnTag "FEN" (replayStartFen game)
             ]
-    movetext = unwords movetextTokens ++ " " ++ finalResult
+    movetextLines = wrapMovetextUnits 120 (movetextTokens ++ [finalResult])
 
-renderMovetext :: ReplayGame -> ([String], String)
-renderMovetext game = go [] (replayTurns game)
+effectiveReplayResult :: ReplayGame -> ReplayResult
+effectiveReplayResult game =
+    case replayResult game of
+        ReplayUnknown ->
+            case inferReplayResult game of
+                ReplayUnknown -> inferReplayScoreResult game
+                replayOutcome -> replayOutcome
+        replayOutcome -> replayOutcome
+
+inferReplayResult :: ReplayGame -> ReplayResult
+inferReplayResult game =
+    case finalReplayFen game of
+        Nothing -> ReplayUnknown
+        Just fen ->
+            let pos = posFromFen fen
+                side = getSideToMove fen
+            in case legalMovesForPosition pos of
+                [] | inCheck pos ->
+                    if side == 'w'
+                       then ReplayBlackWins "Inferred mate"
+                       else ReplayWhiteWins "Inferred mate"
+                [] ->
+                    ReplayDraw "Inferred stalemate"
+                _ ->
+                    ReplayUnknown
+
+inferReplayScoreResult :: ReplayGame -> ReplayResult
+inferReplayScoreResult game =
+    case listToMaybe (reverse decisiveTurns) of
+        Just turn -> replayResultFromScore (turnCurrentFen turn) (turnScore turn)
+        Nothing -> ReplayUnknown
   where
-    go acc [] = (reverse acc, replayResultToken (replayResult game))
-    go acc (turn:rest) =
+    decisiveTurns =
+        filter (\turn -> abs (turnScore turn) >= replayScoreResultThreshold) (replayTurns game)
+
+replayScoreResultThreshold :: Int
+replayScoreResultThreshold = 450
+
+turnScore :: ReplayTurn -> Int
+turnScore turn =
+    case turnSearch turn of
+        Just summary -> summaryScore summary
+        Nothing ->
+            case turnOrigin turn of
+                Just origin -> originScore origin
+                Nothing ->
+                    case turnMatchedOrigin turn of
+                        Just origin -> originScore origin
+                        Nothing -> 0
+
+replayResultFromScore :: String -> Int -> ReplayResult
+replayResultFromScore currentFen score =
+    let side = getSideToMove currentFen
+    in if score >= replayScoreResultThreshold
+          then if side == 'w'
+                  then ReplayWhiteWins "Inferred from score"
+                  else ReplayBlackWins "Inferred from score"
+       else if score <= negate replayScoreResultThreshold
+               then if side == 'w'
+                       then ReplayBlackWins "Inferred from score"
+                       else ReplayWhiteWins "Inferred from score"
+            else ReplayUnknown
+
+finalReplayFen :: ReplayGame -> Maybe String
+finalReplayFen game =
+    case reverse (replayTurns game) of
+        [] -> Just (replayStartFen game)
+        turn:_ -> resolvedTurnFen turn
+
+resolvedTurnFen :: ReplayTurn -> Maybe String
+resolvedTurnFen turn =
+    resolvedReplyFen turn <|> resolvedVisibleFen turn <|> Just (turnCurrentFen turn)
+
+resolvedVisibleFen :: ReplayTurn -> Maybe String
+resolvedVisibleFen turn = do
+    replayMove <- turnMove turn
+    applyMoveUci (turnCurrentFen turn) (replayMoveUci replayMove)
+
+resolvedReplyFen :: ReplayTurn -> Maybe String
+resolvedReplyFen turn = do
+    visibleFen <- resolvedVisibleFen turn
+    replyMove <- turnReplyMove turn
+    applyMoveUci visibleFen (replayMoveUci replyMove)
+
+renderMovetext :: ReplayGame -> ReplayResult -> ([String], String)
+renderMovetext game replayOutcome = go 1 [] (replayTurns game)
+  where
+    go _ acc [] = (reverse acc, replayResultToken replayOutcome)
+    go moveNumber acc (turn:rest) =
         case turnMove turn of
             Just replayMove ->
-                let acc1 = (renderMoveToken turn replayMove ++ renderTurnComment turn) : acc
+                let visibleSide = getSideToMove (turnCurrentFen turn)
+                    visibleToken = renderMoveToken moveNumber visibleSide replayMove ++ renderTurnComment turn
+                    nextMoveNumber = advanceMoveNumber moveNumber visibleSide
+                    acc1 = visibleToken : acc
                 in case turnReplyMove turn of
                     Just replyMove ->
-                        go ((renderReplyMoveToken turn replyMove ++ renderReplyComment turn) : acc1) rest
+                        let replySide = oppositeSide visibleSide
+                            replyToken = renderMoveToken nextMoveNumber replySide replyMove ++ renderReplyComment turn
+                            moveNumberAfterReply = advanceMoveNumber nextMoveNumber replySide
+                        in go moveNumberAfterReply (replyToken : acc1) rest
                     Nothing
                         | Just warning <- turnReplyWarning turn ->
                             let stopComment = "{stopped: " ++ sanitizeComment warning ++ "}"
                             in (reverse (stopComment : acc1), "*")
                         | otherwise ->
-                            go acc1 rest
+                            go nextMoveNumber acc1 rest
             Nothing
                 | null rest ->
                     let endComment =
                             case turnMoveWarning turn of
                                 Just warning -> Just ("{stopped: " ++ sanitizeComment warning ++ "}")
                                 Nothing -> renderTerminalComment turn
-                    in (reverse (maybe acc (:acc) endComment), replayResultToken (replayResult game))
+                    in (reverse (maybe acc (:acc) endComment), replayResultToken replayOutcome)
                 | otherwise ->
                     let stopComment = "{stopped: " ++ sanitizeComment (fromMaybe "missing move" (turnMoveWarning turn)) ++ "}"
                     in (reverse (stopComment : acc), "*")
 
-renderMoveToken :: ReplayTurn -> ReplayMove -> String
-renderMoveToken turn replayMove =
-    show moveNumber ++ suffix ++ replayMoveSan replayMove
+renderMoveToken :: Int -> Char -> ReplayMove -> String
+renderMoveToken moveNumber side replayMove =
+    show moveNumber ++ suffixForSide side ++ replayMoveSan replayMove
   where
-    moveNumber = fenMoveNumber (turnCurrentFen turn)
-    suffix
-        | getSideToMove (turnCurrentFen turn) == 'w' = ". "
-        | otherwise = "... "
+    suffixForSide 'w' = ". "
+    suffixForSide _ = "... "
 
-renderReplyMoveToken :: ReplayTurn -> ReplayMove -> String
-renderReplyMoveToken turn replayMove =
-    show moveNumber ++ suffix ++ replayMoveSan replayMove
-  where
-    moveNumber = fenMoveNumber (turnCurrentFen turn)
-    suffix
-        | getSideToMove (turnCurrentFen turn) == 'w' = "... "
-        | otherwise = ". "
+advanceMoveNumber :: Int -> Char -> Int
+advanceMoveNumber moveNumber side
+    | side == 'b' = moveNumber + 1
+    | otherwise = moveNumber
+
+oppositeSide :: Char -> Char
+oppositeSide 'w' = 'b'
+oppositeSide 'b' = 'w'
+oppositeSide side = side
 
 renderTurnComment :: ReplayTurn -> String
 renderTurnComment turn =
@@ -1078,6 +1168,23 @@ replayResultToken replayOutcome =
         ReplayAborted _   -> "*"
         ReplayUnknown     -> "*"
 
+wrapMovetextUnits :: Int -> [String] -> [String]
+wrapMovetextUnits maxWidth units = finalize currentLine completedLines
+  where
+    (currentLine, completedLines) = foldl packUnit ("", []) units
+
+    packUnit :: (String, [String]) -> String -> (String, [String])
+    packUnit ("", linesAcc) unit = (unit, linesAcc)
+    packUnit (current, linesAcc) unit
+        | length current + 1 + length unit <= maxWidth =
+            (current ++ " " ++ unit, linesAcc)
+        | otherwise =
+            (unit, linesAcc ++ [current])
+
+    finalize :: String -> [String] -> [String]
+    finalize "" linesAcc = linesAcc
+    finalize current linesAcc = linesAcc ++ [current]
+
 pgnTag :: String -> String -> String
 pgnTag key value = "[" ++ key ++ " \"" ++ escapeTagValue value ++ "\"]"
 
@@ -1094,10 +1201,3 @@ sanitizeComment = map replaceBrace
     replaceBrace '{' = '('
     replaceBrace '}' = ')'
     replaceBrace c = c
-
-fenMoveNumber :: String -> Int
-fenMoveNumber fen =
-    case words fen of
-        (_:_:_:_:_:fullmove:_) ->
-            fromMaybe 1 (readMaybe fullmove)
-        _ -> 1
