@@ -15,3 +15,7 @@ __pycache__/
 # Added 26.02.2026
 other/
 stack.yaml.lock
+
+tests/data/
+*.hp
+*.prof
