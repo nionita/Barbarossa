@@ -5,11 +5,13 @@ import Test.HUnit
 import Tune.LogScan
     ( FindKind(..)
     , LogEvent(..)
+    , LogFormat(..)
     , LineType(..)
     , NoEvalInfo(..)
     , parseLineType
     , parseLogEvent
     , processLogContent
+    , processLogContentWithFormat
     , processReplayLogContent
     )
 
@@ -29,6 +31,10 @@ tests = TestList
     , TestLabel "current fen line parses" testParseCurrentFen
     , TestLabel "no eval line parses" testParseNoEval
     , TestLabel "no eval tail suppresses attribution" testNoEvalTailIsUnclear
+    , TestLabel "new mode ignores old-log continuity heuristic" testNewModeIgnoresOldContinuityHeuristic
+    , TestLabel "same root tail still attributes winner in old mode" testSameRootTailStillAttributes
+    , TestLabel "continuous old-log tail still attributes winner in old mode" testContinuousTailStillAttributes
+    , TestLabel "discontinuous old-log tail is dropped in old mode" testDiscontinuousTailIsDropped
     , TestLabel "replay mode renders PGN from explicit moves" testReplayModePgn
     , TestLabel "replay mode infers missing move from next position" testReplayModeInference
     , TestLabel "replay mode handles side local bestmove logs" testReplayModeBestmoveInference
@@ -82,6 +88,34 @@ testNoEvalTailIsUnclear =
         assertEqual "games with no-eval gaps near the end should be dropped"
             []
             (lines (processLogContent 6 2 100 400 noEvalTailLog))
+
+testNewModeIgnoresOldContinuityHeuristic :: Test
+testNewModeIgnoresOldContinuityHeuristic =
+    TestCase $
+        assertEqual "new mode should not reject discontinuous old-log tails"
+            [fenAfterE4 ++ ",500,2", fenAfterE4E5Nf3 ++ ",520,2"]
+            (lines (processLogContent 6 2 100 400 discontinuousTailLog))
+
+testSameRootTailStillAttributes :: Test
+testSameRootTailStillAttributes =
+    TestCase $
+        assertEqual "multiple depths for the same root should not be treated as discontinuous in old mode"
+            [fenAfterE4 ++ ",500,2", fenAfterE4E5Nf3 ++ ",520,2"]
+            (lines (processLogContentWithFormat OldLogFormat 6 2 100 400 sameRootTailLog))
+
+testContinuousTailStillAttributes :: Test
+testContinuousTailStillAttributes =
+    TestCase $
+        assertEqual "continuous visible tail should still allow attribution for old logs"
+            [fenAfterE4 ++ ",500,2", fenAfterE4E5Nf3 ++ ",520,2"]
+            (lines (processLogContentWithFormat OldLogFormat 6 2 100 400 continuousTailLog))
+
+testDiscontinuousTailIsDropped :: Test
+testDiscontinuousTailIsDropped =
+    TestCase $
+        assertEqual "discontinuous visible tail should be rejected for old logs"
+            []
+            (lines (processLogContentWithFormat OldLogFormat 6 2 100 400 discontinuousTailLog))
 
 testReplayModePgn :: Test
 testReplayModePgn =
@@ -148,13 +182,41 @@ noEvalTailLog =
         , originLine 8 520 fenW
         ]
 
+sameRootTailLog :: String
+sameRootTailLog =
+    unlines
+        [ "0 [Info]: New game"
+        , originLine 6 500 fenAfterE4
+        , originLine 7 520 fenAfterE4E5Nf3
+        ]
+
+continuousTailLog :: String
+continuousTailLog =
+    unlines
+        [ "0 [Info]: New game"
+        , originLineFrom startFen 6 500 fenAfterE4
+        , originLineFrom fenAfterE4E5 7 520 fenAfterE4E5Nf3
+        ]
+
+discontinuousTailLog :: String
+discontinuousTailLog =
+    unlines
+        [ "0 [Info]: New game"
+        , originLineFrom startFen 6 500 fenAfterE4
+        , originLineFrom fenW 7 520 fenAfterE4E5Nf3
+        ]
+
 malformedDepthLine :: String
 malformedDepthLine =
     "0 [Info]: Origin |" ++ fenW ++ "|bad-depth|200|" ++ fenW
 
 originLine :: Int -> Int -> String -> String
 originLine depth score finalFen =
-    "0 [Info]: Origin |" ++ startFen ++ "|" ++ show depth ++ "|" ++ show score ++ "|" ++ finalFen
+    originLineFrom startFen depth score finalFen
+
+originLineFrom :: String -> Int -> Int -> String -> String
+originLineFrom origFen depth score finalFen =
+    "0 [Info]: Origin |" ++ origFen ++ "|" ++ show depth ++ "|" ++ show score ++ "|" ++ finalFen
 
 replayLog :: String
 replayLog =

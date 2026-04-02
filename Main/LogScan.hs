@@ -2,7 +2,12 @@ module Main (main) where
 
 import System.Console.GetOpt
 import System.Environment (getArgs)
-import Tune.LogScan (FindKind(..), processLogContent, processReplayLogContent)
+import Tune.LogScan
+    ( FindKind(..)
+    , LogFormat(..)
+    , processLogContentWithFormat
+    , processReplayLogContent
+    )
 
 data Options = Options
     { optInPath      :: FilePath
@@ -11,6 +16,7 @@ data Options = Options
     , optLowLimit    :: Int
     , optHighLimit   :: Int
     , optMinDepth    :: Int
+    , optLogFormat   :: LogFormat
     , optFindFen     :: Maybe String
     , optFindKind    :: FindKind
     , optPgnOutPath  :: Maybe FilePath
@@ -25,6 +31,7 @@ defaultOptions = Options
     , optLowLimit = 100
     , optHighLimit = 450
     , optMinDepth = 6
+    , optLogFormat = NewLogFormat
     , optFindFen = Nothing
     , optFindKind = MatchBoth
     , optPgnOutPath = Nothing
@@ -48,6 +55,14 @@ setHighLimit ba opt = opt { optHighLimit = read ba }
 
 setMinDepth :: String -> Options -> Options
 setMinDepth ba opt = opt { optMinDepth = read ba }
+
+setLogFormat :: String -> Options -> Options
+setLogFormat formatName opt =
+    opt { optLogFormat = parseLogFormat formatName }
+  where
+    parseLogFormat "new" = NewLogFormat
+    parseLogFormat "old" = OldLogFormat
+    parseLogFormat otherFormat = error $ "Invalid --log-format value: " ++ otherFormat
 
 setFindFen :: String -> Options -> Options
 setFindFen fen opt = opt { optFindFen = Just fen }
@@ -75,6 +90,7 @@ options =
     , Option "H" ["high"] (ReqArg setHighLimit "INT") "High limit for unclear games"
     , Option "L" ["low"] (ReqArg setLowLimit "INT") "Low limit for unclear games"
     , Option "d" ["min-depth"] (ReqArg setMinDepth "INT") "Minimum Origin depth to emit"
+    , Option "" ["log-format"] (ReqArg setLogFormat "new|old") "Log format for CSV extraction (default: new)"
     , Option "" ["find-fen"] (ReqArg setFindFen "FEN") "Target FEN for replay mode"
     , Option "" ["find-kind"] (ReqArg setFindKind "orig|eval|both") "Match target against original or evaluated Origin FEN"
     , Option "" ["pgn-out"] (ReqArg setPgnOutPath "PATH") "PGN output file for replay mode"
@@ -90,14 +106,14 @@ theOptions = do
 
 usageHeader :: String
 usageHeader =
-    "Usage: LogScan -i PATH (-o PATH [-t TRACK -L LOW -H HIGH -d MIN_DEPTH] | "
+    "Usage: LogScan -i PATH (-o PATH [-t TRACK -L LOW -H HIGH -d MIN_DEPTH --log-format new|old] | "
         ++ "--find-fen FEN --pgn-out PATH [--find-kind orig|eval|both] [--match-depth INT])"
 
-processLogFile :: FilePath -> FilePath -> Int -> Int -> Int -> Int -> IO ()
-processLogFile inputFile outputFile trackCount lowLimit highLimit minDepth = do
+processLogFile :: FilePath -> FilePath -> Int -> Int -> Int -> Int -> LogFormat -> IO ()
+processLogFile inputFile outputFile trackCount lowLimit highLimit minDepth logFormat = do
     content <- readFile inputFile
     writeFile outputFile $
-        processLogContent minDepth trackCount lowLimit highLimit content
+        processLogContentWithFormat logFormat minDepth trackCount lowLimit highLimit content
 
 processReplayFile :: FilePath -> FilePath -> FindKind -> Int -> String -> IO ()
 processReplayFile inputFile outputFile findKind matchDepth targetFen = do
@@ -125,7 +141,7 @@ main = do
         Nothing -> do
             outputPath <- requireValue "CSV output path (-o/--output)" (optOutPath opts)
             processLogFile inputPath outputPath
-                (optTrackCount opts) (optLowLimit opts) (optHighLimit opts) (optMinDepth opts)
+                (optTrackCount opts) (optLowLimit opts) (optHighLimit opts) (optMinDepth opts) (optLogFormat opts)
         Just targetFen -> do
             pgnOutPath <- requireMaybeValue "PGN output path (--pgn-out)" (optPgnOutPath opts)
             processReplayFile inputPath pgnOutPath (optFindKind opts) (optMatchDepth opts) targetFen

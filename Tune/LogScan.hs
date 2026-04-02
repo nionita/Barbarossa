@@ -4,6 +4,7 @@ module Tune.LogScan
     ( FindKind(..)
     , GameWinner(..)
     , LineType(..)
+    , LogFormat(..)
     , LogEvent(..)
     , NoEvalInfo(..)
     , OriginInfo(..)
@@ -21,12 +22,13 @@ module Tune.LogScan
     , positionToOutput
     , processGame
     , processLogContent
+    , processLogContentWithFormat
     , processReplayLogContent
     , renderReplayPgn
     ) where
 
 import Data.Char (isDigit)
-import Data.List (find, intercalate, isPrefixOf, stripPrefix)
+import Data.List (find, groupBy, intercalate, isPrefixOf, stripPrefix)
 import Data.Maybe (fromMaybe, listToMaybe)
 import Control.Applicative ((<|>))
 import Text.Read (readMaybe)
@@ -49,6 +51,7 @@ data Position = Position
     { posDepth :: Int
     , posScore :: Int
     , posFen   :: String
+    , posOrigFen :: String
     } deriving (Eq, Show)
 
 data LineType
@@ -69,6 +72,11 @@ data FindKind
     = MatchOrig
     | MatchEval
     | MatchBoth
+    deriving (Eq, Show)
+
+data LogFormat
+    = NewLogFormat
+    | OldLogFormat
     deriving (Eq, Show)
 
 data OriginInfo = OriginInfo
@@ -197,6 +205,7 @@ parseLineType line =
                 { posDepth = originDepth origin
                 , posScore = originScore origin
                 , posFen = originEvalFen origin
+                , posOrigFen = originOrigFen origin
                 }
         _ -> OtherLine
 
@@ -398,18 +407,26 @@ groupByGames lineTypes =
     isPositionLine _                = False
 
 determineGameResult :: Int -> Int -> Int -> [LineType] -> GameWinner
-determineGameResult trackCount lowLimit highLimit lineTypes =
+determineGameResult = determineGameResultWithFormat NewLogFormat
+
+determineGameResultWithFormat :: LogFormat -> Int -> Int -> Int -> [LineType] -> GameWinner
+determineGameResultWithFormat logFormat trackCount lowLimit highLimit lineTypes =
     let indexedPositions =
             [ (idx, pos)
             | (idx, PositionLine pos) <- zip [0 :: Int ..] lineTypes
             ]
         lastN = take trackCount (reverse indexedPositions)
         scores = map (posScore . snd) lastN
+        tailPositions = map snd (reverse lastN)
         tailStart = minimumMaybe (map fst lastN)
         hasNoEvalInTail =
             case tailStart of
                 Nothing -> False
                 Just idx0 -> any isNoEvalLine (drop idx0 lineTypes)
+        hasContinuousTail =
+            case logFormat of
+                NewLogFormat -> True
+                OldLogFormat -> visibleTailIsContinuous tailPositions
     in if null lastN
        then UnclearGame
        else if hasNoEvalInTail
@@ -417,7 +434,9 @@ determineGameResult trackCount lowLimit highLimit lineTypes =
        else if all (\s -> abs s <= lowLimit) scores
             then DrawGame
        else if all (\s -> abs s >= highLimit) scores
-                 then determineWinner (snd (last lastN))
+                 then if hasContinuousTail
+                         then determineWinner (snd (last lastN))
+                         else UnclearGame
                  else UnclearGame
   where
     determineWinner :: Position -> GameWinner
@@ -438,6 +457,32 @@ minimumMaybe :: [Int] -> Maybe Int
 minimumMaybe [] = Nothing
 minimumMaybe xs = Just (minimum xs)
 
+visibleTailIsContinuous :: [Position] -> Bool
+visibleTailIsContinuous positions =
+    all positionsContinuous (zip rootTail (drop 1 rootTail))
+  where
+    rootTail = map last (groupBy sameRoot positions)
+    sameRoot pos1 pos2 = sameReplayFen (posOrigFen pos1) (posOrigFen pos2)
+
+positionsContinuous :: (Position, Position) -> Bool
+positionsContinuous (pos1, pos2) =
+    let rootFen1 = posOrigFen pos1
+        rootFen2 = posOrigFen pos2
+    in sameReplayFen rootFen1 rootFen2
+        || rootsReachableInOneOrTwoPlies rootFen1 rootFen2
+
+rootsReachableInOneOrTwoPlies :: String -> String -> Bool
+rootsReachableInOneOrTwoPlies rootFen1 rootFen2 =
+    not (null (matchingMoves rootFen1 rootFen2))
+        || any replyReachesNextRoot firstPlyPositions
+  where
+    firstPlyPositions =
+        [ posToFen (doFromToMove move (posFromFen rootFen1))
+        | move <- legalMovesForPosition (posFromFen rootFen1)
+        ]
+    replyReachesNextRoot currentFen =
+        not (null (matchingMoves currentFen rootFen2))
+
 positionToOutput :: Position -> GameWinner -> String
 positionToOutput pos gameResult =
     posFen pos ++ "," ++ show (posScore pos) ++ "," ++ show resultCode
@@ -454,12 +499,15 @@ positionToOutput pos gameResult =
             _               -> 1
 
 processGame :: Int -> Int -> Int -> Int -> [LineType] -> [String]
-processGame minDepth trackCount lowLimit highLimit lineTypes =
+processGame = processGameWithFormat NewLogFormat
+
+processGameWithFormat :: LogFormat -> Int -> Int -> Int -> Int -> [LineType] -> [String]
+processGameWithFormat logFormat minDepth trackCount lowLimit highLimit lineTypes =
     let positions =
             [ pos
             | PositionLine pos <- lineTypes
             ]
-        result = determineGameResult trackCount lowLimit highLimit lineTypes
+        result = determineGameResultWithFormat logFormat trackCount lowLimit highLimit lineTypes
     in case result of
         UnclearGame -> []
         _ ->
@@ -467,10 +515,13 @@ processGame minDepth trackCount lowLimit highLimit lineTypes =
                 filter (\pos -> posDepth pos >= minDepth) positions
 
 processLogContent :: Int -> Int -> Int -> Int -> String -> String
-processLogContent minDepth trackCount lowLimit highLimit content =
+processLogContent = processLogContentWithFormat NewLogFormat
+
+processLogContentWithFormat :: LogFormat -> Int -> Int -> Int -> Int -> String -> String
+processLogContentWithFormat logFormat minDepth trackCount lowLimit highLimit content =
     let lineTypes = map parseLineType (lines content)
         games = groupByGames lineTypes
-        outputLines = concatMap (processGame minDepth trackCount lowLimit highLimit) games
+        outputLines = concatMap (processGameWithFormat logFormat minDepth trackCount lowLimit highLimit) games
     in unlines outputLines
 
 processReplayLogContent :: FindKind -> Int -> String -> String -> Either String String
