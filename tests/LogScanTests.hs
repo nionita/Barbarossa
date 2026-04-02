@@ -1,7 +1,7 @@
 module Main (main) where
 
-import LogScan.Core (LineType(..), parseLineType, processLogContent)
 import Test.HUnit
+import Tune.LogScan (LineType(..), parseLineType, processLogContent)
 
 main :: IO ()
 main = do

@@ -1,4 +1,4 @@
-module LogScan.Core
+module Tune.LogScan
     ( GameWinner(..)
     , LineType(..)
     , Position(..)

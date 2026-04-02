@@ -4,9 +4,9 @@
 
 module Main (main) where
 
-import LogScan.Core (processLogContent)
 import System.Console.GetOpt
 import System.Environment (getArgs)
+import Tune.LogScan (processLogContent)
 
 data Options = Options {
         optInPath     :: FilePath,  -- input file

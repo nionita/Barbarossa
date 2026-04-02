@@ -241,7 +241,7 @@ executable UCIScores
 executable LogScan
   Main-is:      Main/LogScan.hs
   Other-modules:
-      LogScan.Core
+      Tune.LogScan
   -- other-extensions:    RankNTypes
   Build-depends:
       base >=4.18
@@ -257,7 +257,7 @@ test-suite logscan-tests
       base >= 4.18,
       HUnit
   Other-modules:
-      LogScan.Core
+      Tune.LogScan
   Ghc-options: -Wall
                -fno-warn-tabs
 
