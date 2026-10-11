@@ -4,7 +4,8 @@
 
 module Main (main) where
 import Control.Monad (when, forM_)
-import Data.List (isSuffixOf, sort)
+import Data.List (isPrefixOf, isSuffixOf, elemIndex, nub, sort)
+import Data.Maybe (mapMaybe)
 import System.Console.GetOpt
 import System.Directory
 import System.Environment (getArgs)
@@ -44,6 +45,7 @@ data Options = Options {
         optValidBa   :: Int,	-- validate every so many batches
         optLossFun   :: Int,	-- loss function code
         optFixIdx    :: Int,	-- this weight will not be modified
+        optParams    :: [String],	-- parameters to optimize by search (empty = all)
         optX         :: Double,    	-- start x for Rosenbrock
         optY         :: Double,    	-- start x for Rosenbrock
         optLR        :: Double,	-- learning rate
@@ -72,6 +74,7 @@ defaultOptions = Options {
         optValidBa   = 0,
         optLossFun   = 1,	-- default lossScoreSigWeight
         optFixIdx    = 0,	-- default: material middle game not modified
+        optParams    = [],	-- default: all parameters
         optX         = 0,
         optY         = 0,
         optLR        = 0.1,
@@ -136,6 +139,15 @@ addValidBa ba opt = opt { optValidBa = read ba }
 addLossFun :: String -> Options -> Options
 addLossFun ba opt = opt { optLossFun = read ba }
 
+-- Comma separated list of parameter names to optimize
+addParams :: String -> Options -> Options
+addParams ba opt = opt { optParams = filter (not . null) (splitComma ba) }
+
+splitComma :: String -> [String]
+splitComma s = case break (== ',') s of
+                   (a, [])     -> [a]
+                   (a, _:rest) -> a : splitComma rest
+
 setFixIdx :: String -> Options -> Options
 setFixIdx ba opt = opt { optFixIdx = read ba }
 
@@ -172,6 +184,7 @@ options = [
         Option "l" ["lr"]       (ReqArg addLR      "FLOAT")  "Learning rate (0.1)",
         Option "m" ["max"]      (ReqArg addMaxChg  "FLOAT")  "Max param change (0.01)",
         Option "o" ["output"]   (ReqArg addOFile   "STRING") "Output directory",
+        Option "p" ["params"]   (ReqArg addParams  "LIST")   "Parameters to optimize (-O), comma separated",
         Option "q" ["frasc"]    (ReqArg setScoreWei "FLOAT") "Score weight for score/result loss (0.5)",
         Option "r" ["rosen"]    (ReqArg addRosen "INT")      "Minimize Rosenbrock so many steps",
         Option "s" ["shuffle"]  (NoArg  setShuffle)          "Shuffle training files",
@@ -899,19 +912,31 @@ data OptimState = OptimState {
         opMax     :: Int,	-- maximum steps
         opFails   :: Int,	-- maximum fails to improve for termination
         opFixIdx  :: Int,	-- fixed weight
+        opDims    :: [Int],	-- dimensions to optimize, in the order of the search
         opHistory :: [(OptParams, Double, Int)]	-- training history (params, loss & fails)
     }
 
 searchParams :: Dataset -> Options -> IO ()
 searchParams ds opts = do
+    dims <- if null (optParams opts)
+               then return [0 .. optDims - 1]
+               else case resolveDims (optParams opts) of
+                        Right is -> return is
+                        Left err -> ioError $ userError $ err ++ "\nValid names (with optional mid. or end.): "
+                                        ++ unwords (map (drop 4) (take (optDims `div` 2) optSpaceNames))
+    when (not $ null $ optParams opts) $ do
+        putStrLn $ "Optimize " ++ show (length dims) ++ " dimensions: "
+                   ++ unwords (map dimIdxToDimName dims)
+        hFlush stdout
     let lossf = optsToLossFunction opts
         opi = OptimState {
             opLoss    = lossf,
             opNames   = optSpaceNames,
             opDataset = ds,
             opMax     = optOptim opts,
-            opFails   = optDims,	-- to stop the search when nothing changed after one full round
+            opFails   = length dims,	-- to stop the search when nothing changed after one full round
             opFixIdx  = optFixIdx opts,
+            opDims    = dims,
             opHistory = []
         }
     opf <- loopCount optimDim opi
@@ -926,6 +951,18 @@ searchParams ds opts = do
 
 optDims :: Int
 optDims = length optSpaceInit
+
+-- Resolve parameter names to indices in the optimization space
+-- A name with prefix "mid." or "end." selects that dimension, a bare name selects both
+resolveDims :: [String] -> Either String [Int]
+resolveDims names = fmap (nub . concat) (mapM one names)
+    where one n
+              | isPhased n = maybe (Left $ unknown n) (\i -> Right [i]) (elemIndex n optSpaceNames)
+              | otherwise  = case mapMaybe (\p -> elemIndex (p ++ n) optSpaceNames) ["mid.", "end."] of
+                                 [] -> Left $ unknown n
+                                 is -> Right is
+          isPhased n = "mid." `isPrefixOf` n || "end." `isPrefixOf` n
+          unknown n  = "Unknown parameter: " ++ n
 
 optimDim :: Int -> OptimState -> IO (Bool, OptimState)
 optimDim k op
@@ -954,12 +991,15 @@ optimDim k op
                       oph   = (best', bl', 0) : opHistory op
                       gain  = round ((blf - bl') * 1000000 / blf) :: Int
                   putStrLn $ "*** New best: " ++ show bl' ++ " < " ++ show blf ++ " (" ++ show gain ++ " ppm)"
+                  putStrLn $ "    " ++ dimIdxToDimName ix ++ ": " ++ show (round (best U.! ix) :: Int)
+                             ++ " -> " ++ show (round (best' U.! ix) :: Int)
                   putStrLn $ show best'
                   return (True, op { opHistory = oph })
               else do
                   let oph = (best, blf, since + 1) : drop 1 (opHistory op)
                   return (True, op { opHistory = oph })
-    where ix = (k - 1) `mod` optDims
+    where dims = opDims op
+          ix   = dims !! ((k - 1) `mod` length dims)
 
 -- On the first step we also evaluate the original weights (first "candidate")
 generateCandidates :: OptParams -> Bool -> Int -> [OptParams]
