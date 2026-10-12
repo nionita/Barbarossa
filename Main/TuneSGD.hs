@@ -47,6 +47,7 @@ data Options = Options {
         optLossFun   :: Int,	-- loss function code
         optFixIdx    :: Int,	-- this weight will not be modified
         optParams    :: [String],	-- parameters to optimize by search (empty = all)
+        optRelabel   :: Int,	-- > 0: write input files with results drawn from the static eval (seed)
         optX         :: Double,    	-- start x for Rosenbrock
         optY         :: Double,    	-- start x for Rosenbrock
         optLR        :: Double,	-- learning rate
@@ -76,6 +77,7 @@ defaultOptions = Options {
         optLossFun   = 1,	-- default lossScoreSigWeight
         optFixIdx    = 0,	-- default: material middle game not modified
         optParams    = [],	-- default: all parameters
+        optRelabel   = 0,
         optX         = 0,
         optY         = 0,
         optLR        = 0.1,
@@ -149,6 +151,9 @@ splitComma s = case break (== ',') s of
                    (a, [])     -> [a]
                    (a, _:rest) -> a : splitComma rest
 
+setRelabel :: String -> Options -> Options
+setRelabel ba opt = opt { optRelabel = read ba }
+
 setFixIdx :: String -> Options -> Options
 setFixIdx ba opt = opt { optFixIdx = read ba }
 
@@ -194,6 +199,7 @@ options = [
         Option "x" ["xi"]       (ReqArg addX "INT")          "Start X for Rosenbrock",
         Option "y" ["yi"]       (ReqArg addY "INT")          "Start Y for Rosenbrock",
         Option "L" ["loss"]     (ReqArg addLossFun "INT")    "Loss function: 0 - 3 (0)",
+        Option "E" ["relabel"]  (ReqArg setRelabel "INT")    "Seed: write the input files to -o with results drawn from the static eval (-k, -c)",
         Option "F" ["fix"]      (ReqArg setFixIdx "INT")     "Fix this index 0 - dimensions (0)",
         Option "R" ["result"]   (NoArg  setResult)           "Input file format: fen,result",
         Option "S" ["score"]    (NoArg  setScore)            "Input file format: fen,score",
@@ -212,7 +218,9 @@ theOptions = do
 main :: IO ()
 main = do
     (opts, _) <- theOptions
-    if optTrain opts > 0 || optOptim opts > 0
+    if optRelabel opts > 0
+        then relabelFiles opts
+        else if optTrain opts > 0 || optOptim opts > 0
         then train opts
         else if optGener opts
                 then filterFile (optCsvPath opts) (optOutPath opts)
@@ -222,6 +230,55 @@ main = do
                         else if optRosen opts > 0
                                 then minRosenbrock (optX opts) (optY opts) (optLR opts) (optRosen opts)
                                 else putStrLn $ "No useful option, should be one of -t, -e or -g"
+
+-- Write copies of the input files (*-filt.csv) into the output directory, where the result is drawn
+-- from the win probability of the static evaluation of the position (no search):
+-- p = sigmoid(eval / k), the result is the sum of two draws with probability p each (win p^2,
+-- draw 2 p (1 - p), loss (1 - p)^2), so that the expected result / 2 is p.
+-- The score column is the static eval itself. The evaluation uses the compiled weights or the config
+-- given by -c. With these labels the loss has no hidden variables: its minimum is at the weights used.
+relabelFiles :: Options -> IO ()
+relabelFiles opts = do
+    when (null (optOutPath opts)) $ ioError $ userError "Relabel needs the output directory (-o)"
+    x0 <- startVector opts
+    let es    = vecToEvalState x0
+        scale = optSigScale opts	-- is 1 / k
+    files <- getFileList (optCsvPath opts) False (Just filteredCsv)
+    createDirectoryIfMissing True (optOutPath opts)
+    forM_ (zip [0 :: Int ..] files) $ \(i, inName) -> do
+        let outName = makeFileName inName (optOutPath opts) ".csv"
+            g0      = mkStdGen (optRelabel opts * 1000 + i)
+        putStrLn $ inName ++ " --> " ++ outName
+        hFlush stdout
+        hi <- openFile inName  ReadMode
+        ho <- openFile outName WriteMode
+        (_, n) <- loopCount (relabelLine es scale hi ho) (g0, 0 :: Int)
+        putStrLn $ show n ++ " records written"
+        hClose hi
+        hClose ho
+
+relabelLine :: EvalState -> Double -> Handle -> Handle -> Int -> (StdGen, Int) -> IO (Bool, (StdGen, Int))
+relabelLine es scale hi ho _ (g, n) = do
+    end <- hIsEOF hi
+    if end
+       then return (False, (g, n))
+       else do
+           line <- hGetLine hi
+           let (fen, _) = break ((==) ',') line
+           if null fen
+              then return (True, (g, n))
+              else do
+                  let pos     = posFromFen fen
+                      e       = posExactEval pos es
+                      p       = sigmoid (scale * fromIntegral e)
+                      pd      = 2 * p * (1 - p)
+                      pl      = (1 - p) * (1 - p)
+                      (u, g') = random g :: (Double, StdGen)
+                      r | u < pl      = 0
+                        | u < pl + pd = 1
+                        | otherwise   = 2 :: Int
+                  hPutStrLn ho $ fen ++ "," ++ show e ++ "," ++ show r
+                  return (True, (g', n + 1))
 
 -- Read a CSV file with fen, score, result and write in the output directory a filtered fen file,
 -- The file name is called like the input file (without .csv extension) with suffix -filt.csv
