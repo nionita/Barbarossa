@@ -157,6 +157,17 @@ weights; 42k games give +-3.1 Elo (95%), 6000 games +-8.
     run7-nat full step -1.46% / -2.35% (-3.9 +- 4.5); run7-natq2 full step (loss -2.35% at q=0.2) 0.0 +- 4.5. The loss sees the damage of the ±1 and 10% moves, but is
     blind to the random-sign half-step move: the loss improves while the strength drops 7 Elo. This
     config is a test case any candidate loss must rank correctly.
+23. The search without eval margins (branch `nopr`: futility, null move and QS delta cut off, LMR on; in the
+    old SelfPlay futility and LMR were already off through the tuning flag, null move and delta cut were on).
+    run7-natq2 against the compiled weights, 12k games (+-5.8, second machine, 4 shards x 1500 pairs):
+    half step **+8.1**, full step **-7.9** (shards half +13/+3/-2/+19, full -1/-5/-15/-10). Old search at 20k
+    games: +6.3 and 0.0. Same shape, so the search margins are not what limits the full step (plan item 5
+    rejected). Fit through zero, half and full: a = 40, b = 48 (peak +8 at s = 0.42), old a = 25, b = 25,
+    within noise. Open: hidden variables of the feature set (proxy terms), data type (PV leaves of another
+    engine), compiled point already close to the strength optimum of this feature set. Proposed test: relabel the
+    positions with the compiled eval (no hidden variables by construction), start from the measured random
+    configs (rand-rel10 -15.8, rand-pm1 -10.1), tune, match; strength back to 0 means the method works for a
+    correct model and the problem is the feature set.
 
 ## Problems
 
