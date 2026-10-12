@@ -81,6 +81,14 @@ futilMargins d = futMinVal `unsafeShiftL` (d-1)	-- this is ok also for d == 1
 futMinVal :: Int
 futMinVal = 24
 
+-- Search switches. The cuts which compare the static score against margins are off, so that the
+-- search does not depend on the scale of the evaluation: futility pruning, null move, QS delta cut.
+-- LMR does not look at the evaluation and stays on.
+useFutility, useNullMove, useQsDelta :: Bool
+useFutility = False
+useNullMove = False
+useQsDelta  = False
+
 -- Parameters for null move pruning
 nulMargin, nulSubmrg, nulTrig :: Int
 nulMargin = 1		-- margin to search the null move (over beta) (in scoreGrain units!)
@@ -435,9 +443,6 @@ insertToPvs d p ps@(q:qs)
           qmate   = pnearmate $ pvPath q
           dscore  = 1
 
-getSelfplay :: Search Bool
-getSelfplay = gets (tuning . ronly)
-
 -- PV Search
 pvSearch :: NodeState -> Int -> Int -> Int -> Search Path
 pvSearch _ !a !b !d | d <= 0 = do
@@ -487,9 +492,8 @@ pvSearch nst !a !b !d = do
                 -- one variation. But the question is: is it possible that we don't find one?
                 -- And if yes: what to do in that case?
                 -- Futility pruning:
-                selfplay <- getSelfplay
-                let !prune | selfplay  = False
-                           | otherwise = isPruneFutil True d a (staticScore pos)
+                let !prune | useFutility = isPruneFutil True d a (staticScore pos)
+                           | otherwise   = False
                     !nsti  = resetNSt (pathFromScore a) (Killer []) nst'
                 -- Loop thru the moves
                 !nstf <- pvSLoop b d False prune nsti edges
@@ -543,9 +547,8 @@ pvZeroW !nst !b !d = do
                       ev:_ -> do
                         !nodes0 <- gets (sNodes . stats)
                         -- futility pruning:
-                        selfplay <- getSelfplay
-                        let !prune | selfplay  = False
-                                   | otherwise = isPruneFutil False d bGrain (staticScore pos)
+                        let !prune | useFutility = isPruneFutil False d bGrain (staticScore pos)
+                                   | otherwise   = False
                         -- Loop thru the moves
                         let kill1 = case nmhigh of
                                         NullMoveThreat s -> newTKiller pos d s
@@ -573,6 +576,7 @@ data NullMoveResult = NoNullMove | NullMoveHigh | NullMoveLow | NullMoveThreat P
 
 nullMoveFailsHigh :: MyPos -> NodeState -> Int -> Int -> Search NullMoveResult
 nullMoveFailsHigh pos nst b d
+    | not useNullMove = return NoNullMove
     | d < 2 || tacticalPos pos || zugZwang pos		-- no null move at d < 2
       || crtnt nst == AllNode = return NoNullMove	-- no null move in all nodes
     | otherwise = do
@@ -685,8 +689,7 @@ pvInnerLoopExten b d spec !exd nst = do
            -- Here we must be in a Cut node (will fail low)
            -- and we should have: crtnt = CutNode, nxtnt = AllNode
            old <- get
-           let d' | tuning (ronly old) = d1
-                  | otherwise          = reduceLmr (nearmate b) spec d1 (lmrlv old) (movno nst - spcno nst)
+           let d' = reduceLmr (nearmate b) spec d1 (lmrlv old) (movno nst - spcno nst)
            !s1 <- zeroWithLMR d' d1 (-a) (a+scoreGrain) nst
            whenAbort s1 $
                if pathScore s1 <= a
@@ -702,8 +705,7 @@ pvInnerLoopExtenZ b d spec !exd nst = do
     old  <- get
     -- late move reduction
     let !d1 = d + exd - 1	-- this is the normal (unreduced) depth for next search
-        d' | tuning (ronly old) = d1
-           | otherwise          = reduceLmr (nearmate b) spec d1 (lmrlv old) (movno nst - spcno nst)
+        d' = reduceLmr (nearmate b) spec d1 (lmrlv old) (movno nst - spcno nst)
         !onemB = scoreGrain - b
     zeroWithLMR d' d1 onemB b nst
 
@@ -947,13 +949,19 @@ qSearchLims !qsa !qsb front = do
        then qsInCheck qsa qsb pos
        else qsNormal  qsa qsb pos front
 
+-- The delta cut of the QS (switched by useQsDelta)
+qsDeltaCut :: Int -> Search Bool
+qsDeltaCut a
+    | useQsDelta = lift $ qsDelta a
+    | otherwise  = return False
+
 qsInCheck :: QSScore -> QSScore -> MyPos -> Search QSScore
 qsInCheck !qsa !qsb pos = do
     edges <- Alt <$> lift genEscapeMoves
     if noMove edges
        then return $ maxQSScore qsa (toQSScore mated)	-- remain in limits (a could even be minBound!)
        else do
-          !dcut <- lift $ qsDelta $ (qsScore qsa) - (staticScore pos) - qsDeltaMargin
+          !dcut <- qsDeltaCut $ (qsScore qsa) - (staticScore pos) - qsDeltaMargin
           if dcut
              then do
                  when collectFens $ finWithNodes "DELT"
@@ -968,7 +976,7 @@ qsNormal !qsa !qsb pos front
          when collectFens $ finWithNodes "BETA"
          return qsb
     | otherwise = do
-         !dcut <- lift $ qsDelta $ (qsScore qsa) - (staticScore pos) - qsDeltaMargin
+         !dcut <- qsDeltaCut $ (qsScore qsa) - (staticScore pos) - qsDeltaMargin
          if dcut
             then do
                 when collectFens $ finWithNodes "DELT"
