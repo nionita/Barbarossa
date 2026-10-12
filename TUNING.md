@@ -102,6 +102,61 @@ weights; 42k games give +-3.1 Elo (95%), 6000 games +-8.
     L1-L3, -0.11 for L4 (k=190). Without the 4 material / passed pawn sweep points all variants fall to
     |r| < 0.2, and on the 7 big tests (42k games) none correlates. Loss decreases do not predict gains for
     any variant. No variant is better than q=0; the test has little power for small differences.
+18. Re-scoring with Stockfish 18 (`rescore_sf.py`, `analyze_labels.py`; 20k all-phase positions, Texel error of
+    the label against the result, best k): gen3 static 0.0836 (k 200), SF depth 1 0.0986 (210), depth 6 0.0910
+    (210), depth 10 0.0915 (220). The playing engine's own eval predicts its games' results best (on-policy);
+    SF d6 is far better than d1, d10 adds nothing. A mix 0.7 gen3 + 0.3 SF6 gives 0.0816 (-2.4%), so SF
+    carries independent information. Cost: depth 6 about 770 pos/s on 4 workers (2M = 45 minutes).
+19. Tuning on 600k all-phase positions (`-Optim 184`): A SF6 labels q=0.3 k=240 (loss -2.4%), B gen3 q=0.3
+    k=220 (-3.4%), C gen3 q=0 k=190 (-1.3%, same as run4-all on 2M), D SF6 score only (q=1, k=190, -9.3%).
+    Weight deltas correlate 0.85-0.98 among A, B, C and run4-all, but D differs (0.68-0.77): mainly
+    ewEnpAttacked (+30 mid, others -3..-8), ewEnpHanging, ewWepAttacked, ewPawnBlockO, ewBackPawns, ewKingPawn.
+    Match of only D's en-prise group (ewEnpHanging/EnPrise/Attacked, ewWepTotal/Attacked) against compiled,
+    6000 games: **-22.1 +- 8.2 Elo** (three shards -23.0, -20.9, -22.4). The largest loss gain was a strength loss:
+    labels that already contain the capture outcomes of a search double-count with our own search.
+20. k for large q: the loss has a minimum in k only through the result term. In the linear regime
+    L(u) = (1-q)^2 E[r'^2] + 2(1-q) B u + A u^2 with u = 1/(4k), so k* grows like 1/(1-q). Measured on SF6
+    labels (600k): q=0 about 190, q=0.3 245, q=0.5 about 400, q=0.7 none up to 700, q=0.9 none up to 4000,
+    q=0.95 about 10000-20000. For q >= 0.7 k is a weighting choice (small k = win probability scale), not
+    something the loss decides.
+21. Distribution of the data: of the 198M lines about 133M positions are distinct (mean multiplicity 1.49);
+    44.6% of the records are in positions that occur more than once, 12.3% in positions that occur more than
+    10 times. The phase mix of records and of distinct positions differs by less than 1.5 points (opening
+    phases 11.0% against 9.8%). `prep_data.py --natural` makes a uniform sample of the lines without dedup
+    (`data-nat`, 2M, all phases except pawn endings; opening share +2 points against `data-all`). Runs on the
+    second machine (Ryzen 7 8700F): `run7-nat` (data-nat, q=0, k=200), `run7-natq2` (data-nat, q=0.2, k=205),
+    `run7-allq2` (data-all, q=0.2, k=205), compared with `run4-all`. Result: loss gains -1.32% (nat q=0),
+    -2.19% (nat q=0.2), -2.38% (dedup q=0.2), -1.36% (run4-all); weight deltas correlate 0.94-0.98 with
+    run4-all, mean difference to run4-all 3-4 units. Cross evaluation (q=0, k=200): every tuned config
+    gains -1.42 .. -1.47% on data-all and -1.20 .. -1.32% on data-nat, differences <= 0.1%. The dedup /
+    natural distribution does not change the optimum at this level.
+22. Matches of the run7 candidates and of random controls (second machine, 5 shards x 2000 pairs = 20k games,
+    +-4.5 Elo, 1000 nodes, against the compiled weights; groups `r7-*-h`, `rnd-*`):
+    half step of run7-nat +5.2, of run7-natq2 +6.3, of run7-allq2 +3.9 (run4-all half step +5.7 at 42k);
+    random +-1 on all 92 values (`rand-pm1.cfg`, mean change 1.0) **-10.1**; 10% of the value with random
+    sign, weights <= 5 untouched (`rand-rel10.cfg`, 67 values, mean change 5.9) **-15.8**; the magnitudes of
+    run7-nat's change with random signs at half step (`rand-sign-nat.cfg`, scale 0.5, mean change about 9)
+    **-7.4**. Consequences: (a) the compiled weights are NOT in a flat region: small random changes cost 7-16
+    Elo (sensitivity is per weight, not per size: +-1 on the tiny weights and 10% on the big ones cost more
+    than the half-step sign-shuffled move); (b) the loss direction carries real information: at the same step
+    size the tuned direction is 11-14 Elo better than a random one; (c) with the random half step at -7.4 the
+    strength curvature b of a random direction is about 30 Elo per (full step)^2, the same as the tuned
+    direction (a = 29, b = 35, finding 13): the overshoot at the full step is the generic cost of moving
+    18 units per weight. The half step is not a step length of an optimisation (we jump to the loss
+    minimum directly and a fraction of it has a HIGHER loss); it is a shrinkage towards the compiled point,
+    which was established by other methods (CLOP, SPSA, SPRT-tested changes) and is good in the directions
+    the loss cannot see. Iterating "tune again from the half step" therefore only walks back to the loss
+    minimum and is not a valid plan. Each random control is a single draw.
+    The three run7 variants give the same gain within noise, so data distribution and q do not matter.
+    Full steps (same 20k games protocol): run7-nat -3.9, run7-natq2 0.0 (run4-all -6.1 at 42k). Through
+    half and full step: a = 25, b = 29 (peak at s = 0.43, +5.3) for nat, a = 25, b = 25 (peak at 0.5,
+    +6.3) for natq2; run4-all a = 29, b = 35. All within the noise of each other.
+    Loss change of the same configs (data-all, L5 q=0 k=200 / q=0.2 k=205) against the Elo: rand-pm1
+    +1.39% / +1.85% (-10.1), rand-rel10 +1.02% / +1.60% (-15.8), rand-sign half step **-0.21% / -0.47%
+    (-7.4)**, run7-nat half step -1.00% / -1.59% (+5.2), run7-natq2 half step -1.13% / -1.85% (+6.3),
+    run7-nat full step -1.46% / -2.35% (-3.9 +- 4.5); run7-natq2 full step (loss -2.35% at q=0.2) 0.0 +- 4.5. The loss sees the damage of the ±1 and 10% moves, but is
+    blind to the random-sign half-step move: the loss improves while the strength drops 7 Elo. This
+    config is a test case any candidate loss must rank correctly.
 
 ## Problems
 
@@ -120,11 +175,15 @@ weights; 42k games give +-3.1 Elo (95%), 6000 games +-8.
 
 Done: all-phase data and k fit (12, 13), validation (14, 16), loss variants offline (17).
 
-1. Iterate: tune again from the half-step candidate (`-Config`, all-phase data, k = 190, one round) and test
-   its half step; repeat while it gains (a trust-region style procedure).
+1. (Withdrawn, see finding 22: iterating from the half step only walks back to the loss minimum.)
+   Instead: find a loss that ranks the measured configs correctly (the random controls of finding 22 and
+   the earlier sweeps are the validation set), then tune with it.
 2. q = 0.2 with k = 205 on the all-phase data (full tune and half-step match). Needs 80 + 55 minutes.
-3. Re-score the quiet positions with a strong engine at depth about 6 and use that as the score label with a
-   small q (the result stays the main label). Needs an engine binary and about 15 minutes on 8 cores.
+3. (Done, negative: findings 18-20.) Re-scoring with a strong engine at depth 6: its labels predict the
+   results worse than the playing engine's own eval; a score-only fit moves the en-prise terms and loses
+   about 22 Elo on that group. If used at all, tune with the en-prise and Wep terms fixed.
+3b. Natural data distribution (finding 21) and on-policy data: log the positions the HCE engine really
+   evaluates in its games from the match openings, with game order for TDLeaf-style targets.
 4. New eval terms: simplified en-prise (one weight on the number of own attacked pieces, rising),
    mover-only fork patterns (pawn push forking two pieces, knight fork squares, check and capture), knight
    outposts, supported pawns. Tune the new weights with the method, measure by match.
