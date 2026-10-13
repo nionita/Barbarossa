@@ -204,8 +204,10 @@ weights; 42k games give +-3.1 Elo (95%), 6000 games +-8.
     `self-both` +1.47, `sp-pst` -1.55, `sp-tuned` -1.44, `sp-both` -1.85, `hce-tuned` (chilo fit) -0.24 (%).
     It ranks well but has an offset (`pst40` at -1.0% played -2.2): the positions are those of the compiled
     engine, so a candidate that changes the play is measured partly off-policy; the Elo scale is rough (the
-    line through the played points predicted about +15 for `sp-both`). Pending: `sp-both` on
-    `open-chilo-eq.fen` (20k games) and at 10k nodes (4k games).
+    line through the played points predicted about +15 for `sp-both`). Confirmation of `sp-both`: on
+    `open-chilo-eq.fen` (20k games, 1000 nodes) **+19.1 +- 4.5** (shards +12 .. +25), at 10k nodes per move
+    (the regime of the data, 4k games) **+86.2 +- 10.0** (shards +75 .. +100). All matches of 24-29 ran with
+    the search of `nopr` (no futility, null move, QS delta cut) on both sides.
 
 How to repeat: the commands are in `README.md` of BarbarossaTuning, section "On-policy tuning of the HCE".
 Engine changes on `hvar`: `TuneSGD -X` (export), optional PST read from the config (`pst.mid.Ne4 = 37`, 1/8 cp,
