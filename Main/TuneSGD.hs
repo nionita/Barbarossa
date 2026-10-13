@@ -308,8 +308,10 @@ exportFiles :: Options -> IO ()
 exportFiles opts = do
     when (null (optOutPath opts)) $ ioError $ userError "Export needs the output directory (-o)"
     x0 <- startVector opts
+    pst <- configPst opts
     files <- getFileList (optCsvPath opts) False (Just filteredCsv)
     createDirectoryIfMissing True (optOutPath opts)
+    when (not $ null pst) $ putStrLn $ "Eval with the PST of the config (" ++ show (length pst) ++ " values)"
     let nw     = optDims `div` 2
         names  = map (drop 4) (take nw optSpaceNames)
         wmid   = map round $ take nw (U.toList x0) :: [Int]
@@ -317,7 +319,8 @@ exportFiles opts = do
         header = intercalate "," $ ["fen", "score", "result", "eval", "phase", "scale", "m50",
                                     "dmid", "dend", "const"] ++ names
         ex     = Export {
-                     exState  = vecToEvalState x0,
+                     exState  = initEvalState (zip optSpaceNames (U.toList x0) ++ pst),
+                     exHce    = vecToEvalState x0,
                      exProbes = featureProbes nw,
                      exNumW   = nw,
                      exWMid   = wmid,
@@ -336,13 +339,14 @@ exportFiles opts = do
         ExportStats n bad nonlin maxd sumd <- loopCount (exportLine ex hi ho) (ExportStats 0 0 0 0 0)
         putStrLn $ show n ++ " records written, " ++ show bad ++ " lines skipped"
         putStrLn $ "Term sum not linear in the weights: " ++ show nonlin ++ " records"
-        putStrLn $ "Eval - linear reconstruction (cp): max abs " ++ showFFloat (Just 3) maxd ""
+        putStrLn $ "Eval - linear reconstruction (cp, includes the PST if any): max abs " ++ showFFloat (Just 3) maxd ""
                    ++ ", mean abs " ++ showFFloat (Just 3) (sumd / fromIntegral (max 1 n)) ""
         hClose hi
         hClose ho
 
 data Export = Export {
-        exState  :: EvalState,	-- eval state with the start weights
+        exState  :: EvalState,	-- eval state with the start weights (and the PST of the config, if any)
+        exHce    :: EvalState,	-- eval state with the start weights only (for the linearity check)
         exProbes :: [(Int, Maybe Int, EvalState)],	-- unit weight states, see featureProbes
         exNumW   :: !Int,	-- number of weights (each has a mid and an end value)
         exWMid   :: [Int],	-- start weights, mid
@@ -382,8 +386,9 @@ exportLine ex hi ho _ st@(ExportStats n bad nonlin maxd sumd) = do
                        ev    = posExactEval p es
                        gph   = gamePhase p
                        m50   = get50Moves p
-                       MidEnd sm se = evalTermSum p es
-                       sf    = evalEndScale p se
+                       MidEnd sm se = evalTermSum p (exHce ex)
+                       MidEnd _ sef = evalTermSum p es
+                       sf    = evalEndScale p sef
                        fs    = positionFeatures ex p
                        fl    = U.toList fs
                        lm    = sum (zipWith (*) (exWMid ex) fl)
@@ -1159,11 +1164,17 @@ startVector opts = case optConFile opts of
         when (not fex) $ ioError $ userError $ "Config file not found: " ++ fn
         cont <- readFile fn
         let ps      = fileToParams cont
-            unknown = [ n | (n, _) <- ps, n `notElem` optSpaceNames ]
+            unknown = [ n | (n, _) <- ps, n `notElem` optSpaceNames, not ("pst." `isPrefixOf` n) ]
         when (not $ null unknown) $
             ioError $ userError $ "Unknown parameters in " ++ fn ++ ": " ++ unwords unknown
         putStrLn $ "Start vector from " ++ fn ++ " (" ++ show (length ps) ++ " values)"
         return $ U.fromList [ fromMaybe d (lookup n ps) | (n, d) <- zip optSpaceNames optSpaceInit ]
+
+-- The PST parameters (pst.*) of the config file given by -c, if any (only the export uses them)
+configPst :: Options -> IO [(String, Double)]
+configPst opts = case optConFile opts of
+    Nothing -> return []
+    Just fn -> filter (isPrefixOf "pst." . fst) . fileToParams <$> readFile fn
 
 -- Resolve parameter names to indices in the optimization space
 -- A name with prefix "mid." or "end." selects that dimension, a bare name selects both

@@ -8,6 +8,8 @@ module Struct.Status (
     EvalWeights(..)
 ) where
 
+import Data.Array.Unboxed (UArray)
+
 import Struct.Struct
 import Struct.Config
 import Struct.ParamsPost
@@ -31,5 +33,6 @@ data MyState = MyState {
 
 data EvalState = EvalState {
         esEParams   :: EvalParams,
-        esEWeights  :: EvalWeights
+        esEWeights  :: EvalWeights,
+        esPst       :: Maybe (UArray Int Int)	-- optional piece square table (mid & end), see Eval.Core
     } deriving Show

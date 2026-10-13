@@ -14,7 +14,9 @@ module Eval.Core (
 
 import Data.Array.Base (unsafeAt)
 import Data.Bits
-import Data.List (minimumBy)
+import Data.Char (ord)
+import Data.List (elemIndex, minimumBy, stripPrefix)
+import Data.Maybe (mapMaybe)
 import Data.Array.Unboxed
 import Data.Ord (comparing)
 import Data.Int
@@ -37,8 +39,48 @@ shift2Cp      = 3	-- we have 2^shift2Cp units per centipawn
 initEvalState :: [(String, Double)] -> EvalState
 initEvalState sds = EvalState {
         esEParams  = npSetParm (colParams sds :: CollectFor EvalParams),
-        esEWeights = npSetParm (colParams sds :: CollectFor EvalWeights)
+        esEWeights = npSetParm (colParams sds :: CollectFor EvalWeights),
+        esPst      = pstTable sds
     }
+
+-- Optional piece square table (experiment): parameters named pst.mid.<piece><square> and
+-- pst.end.<piece><square>, e.g. pst.mid.Ne4 = 37, piece one of PNBRQK, values in 1/8 centipawns
+-- like the weights. The table is from the owner's view (black pieces use the vertically mirrored
+-- square) and antisymmetric: pieces of the side to move add, the opponent's subtract
+-- Without such parameters there is no table and the eval is unchanged
+-- Index: phase * 384 + piece * 64 + square (phase 0 = mid, 1 = end)
+pstTable :: [(String, Double)] -> Maybe (UArray Int Int)
+pstTable sds
+    | null ps   = Nothing
+    | otherwise = Just $ listArray (0, 2 * 384 - 1) (replicate (2 * 384) 0) // ps
+    where ps = mapMaybe pstAssign sds
+
+pstAssign :: (String, Double) -> Maybe (Int, Int)
+pstAssign (name, v)
+    | Just rest <- stripPrefix "pst." name
+        = case rest of
+              'm':'i':'d':'.':pfr -> Just (entry 0 pfr)
+              'e':'n':'d':'.':pfr -> Just (entry 1 pfr)
+              _                   -> bad
+    | otherwise = Nothing
+    where bad :: a
+          bad = error $ "Wrong PST parameter: " ++ name
+          entry ph [pc, f, r]
+              | Just t <- elemIndex pc "PNBRQK", f >= 'a', f <= 'h', r >= '1', r <= '8'
+                  = (ph * 384 + t * 64 + (ord r - ord '1') * 8 + ord f - ord 'a', round v)
+          entry _ _ = bad
+
+pstTerm :: MyPos -> Maybe (UArray Int Int) -> MidEnd -> MidEnd
+pstTerm _ Nothing    = id
+pstTerm p (Just tab) = \acc -> MidEnd (mid acc + side 0) (end acc + side 384)
+    where !mw = moving p == White
+          own sq | mw        = sq
+                 | otherwise = sq `xor` 56
+          opp sq | mw        = sq `xor` 56
+                 | otherwise = sq
+          pcs = zip [0 ..] [pawns p, knights p, bishops p, rooks p, queens p, kings p]
+          side o = sum [ unsafeAt tab (o + t * 64 + own sq) | (t, bb) <- pcs, sq <- bbToSquares (bb .&. me p) ]
+                 - sum [ unsafeAt tab (o + t * 64 + opp sq) | (t, bb) <- pcs, sq <- bbToSquares (bb .&. yo p) ]
 
 matesc :: Int
 matesc = 20000 - 255	-- warning, this is also defined in Base.hs!!
@@ -101,6 +143,7 @@ normalEval sr p !sti = (sc * (128 - get50Moves p)) `unsafeShiftR` (shift2Cp + 15
 -- game phase interpolation, the end game scale factor and the 50 moves scaling
 -- Every term is linear in its weight (mad weight feature), so with a unit weight
 -- the sum is the feature value of that weight (used by the tuning export)
+-- The optional PST (pstTerm) is added as it is (no weight)
 {-# INLINE evalTermSum #-}
 evalTermSum :: MyPos -> EvalState -> MidEnd
 evalTermSum p !sti = foldr ($) (MidEnd 0 0) [
@@ -120,6 +163,7 @@ evalTermSum p !sti = foldr ($) (MidEnd 0 0) [
                        , backDiff p ew
                        , advPawns p ew
                        , passPawns gph ep p ew
+                       , pstTerm p (esPst sti)
                     ]
     where ep   = esEParams  sti
           ew   = esEWeights sti
