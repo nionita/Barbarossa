@@ -1,4 +1,4 @@
-# Tuning the HCE evaluation with TuneSGD - state of 2026-10-12
+# Tuning the HCE evaluation with TuneSGD - state of 2026-10-13
 
 Branch `tsub` (from `cxig`). Experiment folder on the tuning machine: `C:\Learn\Tune\cxig`, scripts also in
 `C:\Users\Nicu\Documents\GitHub\BarbarossaTuning`.
@@ -12,6 +12,9 @@ weights; 42k games give +-3.1 Elo (95%), 6000 games +-8.
   `run4-all\tuned.cfg` is at -6 Elo (finding 13) against about -22 for run3. It is not in the engine.
 - Where the strength is sensitive (material, passed pawn level) the loss and the strength agree; around the
   compiled values the strength is flat and the loss gains are small (findings 10, 11, 15).
+- On-policy data with real game results (branch `hvar`, findings 24-29): the full refit of the 92 weights gains
+  +6.7 Elo, together with a piece square table fitted jointly +27.9 Elo (1000 nodes, 20k games each). The
+  failures before came from the data, not from the loss or the method.
 
 ## Setup
 
@@ -163,6 +166,50 @@ weights; 42k games give +-3.1 Elo (95%), 6000 games +-8.
     measured so far is the point after two sweeps, not the loss minimum; B and C are intermediate states.
     Continuations with 4 more rounds (-Optim 368, `-Config` from the previous tuned.cfg): `run6-gq0-x`
     (real, 600k), `syn-a2`, `syn-b2`, `syn-c2`.
+24. Export and headroom (branch `hvar`, folder `C:\Learn\Tune\hvar`). `TuneSGD -X` writes for every position
+    the HCE eval, the 46 feature values and pseudo derivatives: the eval is exactly linear in the weights
+    before phase, scale factor and 50 moves (reconstruction <= 1.1 cp). `hv_fit.py` (BarbarossaTuning) fits on
+    top of it, k and offset refitted per model, the ridge prior of the PST chosen on held-out data. Chilo
+    all-phase data, 4M training, 2 x 500k validation from 9 held-out source files (game and position
+    disjoint), test loss against the HCE: PST (antisymmetric, own piece +1 / opponent -1, 2 x 384) -2.74%
+    (46% of the HCE -> gen3 gap), full refit of the 92 weights -2.01%, both -3.69% (62%). Of the PST gain the
+    placement is -1.80%, the material part (per piece means) -0.69%, only jointly, as a rescaling (k 191 ->
+    219); pawns and rooks carry most of the placement (7th rank and kingside pawns, rooks on the opponent's
+    kingside).
+25. The chilo PST in play (1000 nodes, 20k games, search of `nopr`): `pst40` (full PST) -2.2 +- 4.5,
+    `pst40-pos` (placement only) -11.7 +- 4.5. On HCE self-play positions (`data-self`) the same PST makes the
+    loss worse (+1.34% / +2.21%), in the order of the matches: fitted on gen3 games it describes gen3's play
+    (a proxy), not what the squares are worth to this engine.
+26. The `data-self` labels are not game results: LogScan adjudicates from Barbarossa's own last 5 search scores
+    (all |s| <= 100 draw, all >= 450 win or loss, otherwise the game is dropped). Fits on it improved its own
+    validation loss (-0.60% / -1.43%) and lost in play: `self-pst` -6.4 +- 4.5, `self-both` -46.2 +- 4.6.
+27. On-policy data with real results: `SelfPlay --data` writes the evaluated leaf of every move (as in the
+    Origin log lines) with the real game result, plus a .meta file (game, ply, root score). The compiled
+    engine against itself, 10k nodes, 40k games, 4.2M positions (two runs on `open-moves-uniq.fen`).
+    Yardstick: loss of a candidate's eval (exported with `-c`) on held-out games of this kind, c and k fitted
+    on one half, loss on the other, 95% interval by a bootstrap over games (positions of a game share the
+    result). It ranked the four candidates of 25 and 26 like the matches (r about -0.8) and predicted 26
+    correctly, where the LogScan labels predicted the opposite.
+28. Fit on these positions (`sp10k`: 3.5M training, validation shard `gen10k-b-s4`) and matches (1000 nodes,
+    20k games each against the compiled weights): `sp-tuned` (92 weights refitted) **+6.7 +- 4.5** (all 4
+    shards positive), `sp-pst` (compiled HCE + PST) +1.7 +- 4.5, `sp-both` (HCE and PST fitted jointly, tau 5)
+    **+27.9 +- 4.5** (shards +25 .. +33). The same kind of full refit that lost on chilo data (13: -6.1) gains
+    on on-policy data with real results, so the earlier failures came from the data (another engine's
+    games, adjudicated labels), not from the loss or the search method. The PST helps only when fitted
+    jointly with the HCE weights: alone on the fixed HCE it takes over material values (end game queen +208,
+    rook +92 cp) and is neutral; jointly the per piece means stay within +-9 cp and the HCE adapts (end game
+    material x1.19, bishop pair 386 -> 275 mid).
+29. Independent yardstick: 40k on-policy games on `open-chilo-eq.fen`, never used in a fit (test half 20k
+    games, +-0.2%). Loss against the compiled weights: `pst40` -1.00, `pst40-pos` +0.01, `self-pst` +0.71,
+    `self-both` +1.47, `sp-pst` -1.55, `sp-tuned` -1.44, `sp-both` -1.85, `hce-tuned` (chilo fit) -0.24 (%).
+    It ranks well but has an offset (`pst40` at -1.0% played -2.2): the positions are those of the compiled
+    engine, so a candidate that changes the play is measured partly off-policy; the Elo scale is rough (the
+    line through the played points predicted about +15 for `sp-both`). Pending: `sp-both` on
+    `open-chilo-eq.fen` (20k games) and at 10k nodes (4k games).
+
+How to repeat: the commands are in `README.md` of BarbarossaTuning, section "On-policy tuning of the HCE".
+Engine changes on `hvar`: `TuneSGD -X` (export), optional PST read from the config (`pst.mid.Ne4 = 37`, 1/8 cp,
+computed from all pieces at every eval: slow), `SelfPlay --data`.
 
 ## Problems
 
@@ -176,10 +223,17 @@ weights; 42k games give +-3.1 Elo (95%), 6000 games +-8.
 - The eval does not see forks or one-move tactics (pawn push forks, check and capture). The en-prise terms
   are mover-only and linear in piece values.
 - 42k games take about 50 minutes on this machine (3 shards, about 4.6 games/s each at 1000 nodes).
+- The PST of `hvar` is computed from all pieces at every eval; node-limited matches do not see its cost. Before
+  timed tests it must become incremental (with the moves, replacing the material term).
 
 ## Ways we see
 
-Done: all-phase data and k fit (12, 13), loss variants offline (15).
+Done: all-phase data and k fit (12, 13), loss variants offline (15), on-policy data with real results and a
+jointly fitted PST (24-29).
+
+0. Next (2026-10-13): confirm `sp-both` (other openings, 10k nodes), incremental PST and timed tests, which HCE
+   terms are redundant with the PST (refit without each), iterate: data from the new engine's self-play,
+   refit, test.
 
 1. Find a loss that ranks the measured configs correctly (the random controls of finding 20 and the earlier
    sweeps are the validation set), then tune with it.
