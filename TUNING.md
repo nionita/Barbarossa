@@ -209,6 +209,16 @@ weights; 42k games give +-3.1 Elo (95%), 6000 games +-8.
     (the regime of the data, 4k games) **+86.2 +- 10.0** (shards +75 .. +100). All matches of 24-29 ran with
     the search of `nopr` (no futility, null move, QS delta cut) on both sides.
 
+30. `sp-both` with the play search (branch `pstf`: futility, null move, QS delta cut on again; candidate with
+    the config PST against the compiled weights): 1000 nodes **+47.8 +- 4.5** (20k games, shards +44 .. +51),
+    10k nodes **+74.9 +- 9.6** (4k games). The eval-margin cuts, set for the old eval, do not eat the gain.
+    Speed (`pstf`, depth 10 on `tests/data/tests.fen`, deterministic perf build): old engine 636k nodes/s,
+    `sp-both` with the config PST (all pieces at every eval) 566k (-10.9%), with the compiled incremental
+    PST (Struct.Pst, sums in MyPos like mater) 620k (-2.5%); the rest is the bookkeeping in the move
+    execution (the old eval on the new build: 614k). `sp-both` is compiled into `pstf` (Struct.Weights,
+    Struct.Pst); the old engine is the same build with `results/hvar/old-compiled.cfg` (BarbarossaTuning:
+    old weights and `pst.off = 1`). Not yet tested: timed games.
+
 How to repeat: the commands are in `README.md` of BarbarossaTuning, section "On-policy tuning of the HCE".
 Engine changes on `hvar`: `TuneSGD -X` (export), optional PST read from the config (`pst.mid.Ne4 = 37`, 1/8 cp,
 computed from all pieces at every eval: slow), `SelfPlay --data`.
