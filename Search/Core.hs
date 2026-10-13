@@ -82,13 +82,13 @@ futilMargins d = futMinVal `unsafeShiftL` (d-1)	-- this is ok also for d == 1
 futMinVal :: Int
 futMinVal = 24
 
--- Search switches. The cuts which compare the static score against margins are off, so that the
--- search does not depend on the scale of the evaluation: futility pruning, null move, QS delta cut.
--- LMR does not look at the evaluation and stays on.
+-- Search switches for the cuts which compare the static score against margins: futility pruning,
+-- null move, QS delta cut. They were off for the eval tuning (branch nopr), so that the search does
+-- not depend on the scale of the evaluation; for play they are on. LMR does not look at the evaluation.
 useFutility, useNullMove, useQsDelta :: Bool
-useFutility = False
-useNullMove = False
-useQsDelta  = False
+useFutility = True
+useNullMove = True
+useQsDelta  = True
 
 -- Parameters for null move pruning
 nulMargin, nulSubmrg, nulTrig :: Int

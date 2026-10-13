@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Run SelfPlay perf tests in parallel across branches and aggregate results."""
+"""Run SelfPlay perf tests in parallel across branches and aggregate results.
+
+A variant is a branch suffix (SelfPlay-<branch>.exe with its compiled weights) or branch@config: the
+same executable with an eval config file (-c), e.g. pstf@C:/Learn/Tune/hvar/cand/sp-both.cfg to measure
+the speed of the PST eval. With --sequential the variants of a round run one after the other (less
+interference on machines which throttle under load).
+"""
 
 from __future__ import annotations
 
@@ -34,8 +40,11 @@ def normalize_path(path_text: str) -> Path:
     return Path(s)
 
 
-def run_one(exe: Path, input_file: Path, depth: int, branch: str, round_no: int) -> RoundStats:
+def run_one(exe: Path, config: Path | None, input_file: Path, depth: int, branch: str,
+            round_no: int) -> RoundStats:
     cmd = [str(exe), "-P", "-i", str(input_file), "-d", str(depth)]
+    if config is not None:
+        cmd += ["-c", str(config)]
     cp = subprocess.run(cmd, text=True, capture_output=True, check=False)
     if cp.returncode != 0:
         err = cp.stderr.strip() or cp.stdout.strip() or "unknown error"
@@ -80,7 +89,10 @@ def main() -> int:
         default="/c/astra/SelfPlay",
         help="Folder containing SelfPlay-<branch>.exe (default: /c/astra/SelfPlay)",
     )
-    parser.add_argument("branches", nargs="+", help="Branch suffixes (e.g. cxi cxis)")
+    parser.add_argument("--sequential", action="store_true",
+                        help="run the variants of a round one after the other (default: in parallel)")
+    parser.add_argument("branches", nargs="+",
+                        help="Variants: branch suffix (e.g. cxi cxis) or branch@config.cfg")
     args = parser.parse_args()
 
     if args.runs < 3:
@@ -94,20 +106,28 @@ def main() -> int:
 
     exe_dir = normalize_path(args.exe_dir)
     exes: dict[str, Path] = {}
-    for branch in args.branches:
+    configs: dict[str, Path | None] = {}
+    for variant in args.branches:
+        branch, _, cfg = variant.partition("@")
         exe = exe_dir / f"SelfPlay-{branch}.exe"
         if not exe.exists():
             print(f"ERROR: executable not found for branch '{branch}': {exe}", file=sys.stderr)
             return 2
-        exes[branch] = exe
+        exes[variant] = exe
+        configs[variant] = normalize_path(cfg) if cfg else None
+        if cfg and not configs[variant].exists():
+            print(f"ERROR: config not found for variant '{variant}': {configs[variant]}", file=sys.stderr)
+            return 2
 
     results: dict[str, list[RoundStats]] = {branch: [] for branch in args.branches}
 
     for round_no in range(1, args.runs + 1):
         print(f"Round {round_no}/{args.runs}")
-        with cf.ThreadPoolExecutor(max_workers=len(args.branches)) as pool:
+        workers = 1 if args.sequential else len(args.branches)
+        with cf.ThreadPoolExecutor(max_workers=workers) as pool:
             future_map = {
-                pool.submit(run_one, exes[branch], input_file, args.depth, branch, round_no): branch
+                pool.submit(run_one, exes[branch], configs[branch], input_file, args.depth, branch,
+                            round_no): branch
                 for branch in args.branches
             }
             round_stats: dict[str, RoundStats] = {}
