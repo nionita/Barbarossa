@@ -299,7 +299,8 @@ relabelLine es scale hi ho _ (g, n) = do
 --   dmid, dend: centipawns per unit of a mid / end weight times its feature, i.e. the pseudo derivative
 --          of eval to the mid / end weight i is f_i * dmid / f_i * dend (exact up to the integer shifts,
 --          as long as the scale factor stays, it depends on the sign of the end game sum)
---   const: centipawns of the part independent of the weights (epMovingMid, epMovingEnd)
+--   const: centipawns of the part independent of the weights (epMovingMid, epMovingEnd and the
+--          compiled PST, unless the config has pst.off = 1)
 --   f_i:   one column per weight, the value of its feature (mid and end use the same feature)
 -- So: eval ~ sum_i f_i * (wmid_i * dmid + wend_i * dend) + const
 -- A new term with feature z and weights zmid, zend adds z * (zmid * dmid + zend * dend), in the same way
@@ -387,7 +388,9 @@ exportLine ex hi ho _ st@(ExportStats n bad nonlin maxd sumd) = do
                        gph   = gamePhase p
                        m50   = get50Moves p
                        MidEnd sm se = evalTermSum p (exHce ex)
-                       MidEnd _ sef = evalTermSum p es
+                       MidEnd _ sef = evalFullSum p es
+                       MidEnd pm pe | esPstOn es = evalPstSum p
+                                    | otherwise  = MidEnd 0 0
                        sf    = evalEndScale p sef
                        fs    = positionFeatures ex p
                        fl    = U.toList fs
@@ -398,6 +401,7 @@ exportLine ex hi ho _ st@(ExportStats n bad nonlin maxd sumd) = do
                        dend  = fromIntegral (sf * (256 - gph)) * f50 / 64
                        cst   = fromIntegral (epMovingMid (esEParams es) * gph
                                              + epMovingEnd (esEParams es) * (256 - gph)) * f50
+                               + fromIntegral pm * dmid + fromIntegral pe * dend	-- compiled PST
                        evlin = fromIntegral lm * dmid + fromIntegral le * dend + cst
                        d     = abs (fromIntegral ev - evlin)
                        nonl  | lm == sm && le == se = 0

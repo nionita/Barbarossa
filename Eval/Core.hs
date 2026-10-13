@@ -10,6 +10,8 @@ module Eval.Core (
     gamePhase,
     evalTermSum,
     evalEndScale,
+    evalFullSum,
+    evalPstSum,
 ) where
 
 import Data.Array.Base (unsafeAt)
@@ -40,8 +42,13 @@ initEvalState :: [(String, Double)] -> EvalState
 initEvalState sds = EvalState {
         esEParams  = npSetParm (colParams sds :: CollectFor EvalParams),
         esEWeights = npSetParm (colParams sds :: CollectFor EvalWeights),
-        esPst      = pstTable sds
+        esPst      = pstTable sds,
+        esPstOn    = all (\(n, v) -> n /= "pst.off" || v == 0) sds
     }
+
+-- The compiled piece square table (Struct.Pst, summed incrementally in MyPos by Moves.Core) is part
+-- of the normal evaluation; a config parameter pst.off = 1 switches it off (e.g. to play the old
+-- evaluation against the new one in the same program)
 
 -- Optional piece square table (experiment): parameters named pst.mid.<piece><square> and
 -- pst.end.<piece><square>, e.g. pst.mid.Ne4 = 37, piece one of PNBRQK, values in 1/8 centipawns
@@ -57,6 +64,7 @@ pstTable sds
 
 pstAssign :: (String, Double) -> Maybe (Int, Int)
 pstAssign (name, v)
+    | name == "pst.off" = Nothing
     | Just rest <- stripPrefix "pst." name
         = case rest of
               'm':'i':'d':'.':pfr -> Just (entry 0 pfr)
@@ -135,7 +143,7 @@ normalEval :: SpecialResult -> MyPos -> EvalState -> Int
 normalEval sr p !sti = (sc * (128 - get50Moves p)) `unsafeShiftR` (shift2Cp + 15)
     where ep     = esEParams  sti
           !gph   = gamePhase p
-          !nev   = evalTermSum p sti
+          !nev   = evalFullSum p sti
           !eg = (end nev * scaleFactor p (end nev) sr) `unsafeShiftR` 6
           !sc = (mid nev + epMovingMid ep) * gph + (eg + epMovingEnd ep) * (256 - gph)
 
@@ -168,6 +176,22 @@ evalTermSum p !sti = foldr ($) (MidEnd 0 0) [
     where ep   = esEParams  sti
           ew   = esEWeights sti
           !gph = gamePhase p
+
+-- The term sum plus the compiled PST (if on): this is the sum the normal evaluation scales
+{-# INLINE evalFullSum #-}
+evalFullSum :: MyPos -> EvalState -> MidEnd
+evalFullSum p !sti
+    | esPstOn sti = MidEnd (mid nev + mid ps) (end nev + end ps)
+    | otherwise   = nev
+    where !nev = evalTermSum p sti
+          !ps  = evalPstSum p
+
+-- The compiled PST sums from the p.o.v. of the side to move
+{-# INLINE evalPstSum #-}
+evalPstSum :: MyPos -> MidEnd
+evalPstSum p
+    | moving p == White = MidEnd (pstMid p) (pstEnd p)
+    | otherwise         = MidEnd (negate (pstMid p)) (negate (pstEnd p))
 
 -- The end game scale factor of the normal evaluation (no special eval matched), given the
 -- end game part of the term sum: 64 means not reduced

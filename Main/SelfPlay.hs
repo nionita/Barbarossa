@@ -721,9 +721,16 @@ perftDivide sini depth = do
                               perftNodes = perftNodes acc + moveNodes
                           }
 
+-- Perft also checks at every node that the incremental PST sums are equal to the full computation
 perftCount :: Int -> CState MyState CtxIO Integer
-perftCount 0 = return 1
 perftCount depth = do
+    pos <- getPos
+    when (pstRecompute pos /= (pstMid pos, pstEnd pos)) $
+        error $ "Incremental PST sums wrong in " ++ posToFen pos
+    if depth == 0 then return 1 else perftChildren depth
+
+perftChildren :: Int -> CState MyState CtxIO Integer
+perftChildren depth = do
     moves <- uncurry (++) <$> genMoves depth
     go moves 0
     where go [] !acc = return acc

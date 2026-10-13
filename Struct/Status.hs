@@ -35,5 +35,6 @@ data MyState = MyState {
 data EvalState = EvalState {
         esEParams   :: EvalParams,
         esEWeights  :: EvalWeights,
-        esPst       :: Maybe (UArray Int Int)	-- optional piece square table (mid & end), see Eval.Core
+        esPst       :: Maybe (UArray Int Int),	-- optional piece square table (mid & end), see Eval.Core
+        esPstOn     :: Bool			-- use the compiled PST (incremental in MyPos), see Eval.Core
     } deriving Show

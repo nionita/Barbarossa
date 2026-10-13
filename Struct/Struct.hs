@@ -48,6 +48,7 @@ data MyPos = MyPos {
     me, yo, occup, kings, pawns :: !BBoard,	-- further heavy used bitboards computed for efficiency
     queens, rooks, bishops, knights, passed :: !BBoard,
     mater :: !Int,	-- material balance
+    pstMid, pstEnd :: !Int,	-- piece square table sums (mid, end), white p.o.v., incremental like mater
     staticScore :: Int,	-- lazy, not always needed
     lazyBits :: LazyBits	-- lazy of course
     }
@@ -199,7 +200,7 @@ caRAQb = 0x0C00000000000000	-- black: not attacked fields for queenside castle
 emptyPos :: MyPos
 emptyPos = MyPos {
         black = 0, slide = 0, kkrq = 0, diag = 0, epcas = 0,
-        zobkey = 0, mater = 0,
+        zobkey = 0, mater = 0, pstMid = 0, pstEnd = 0,
         me = 0, yo = 0, occup = 0, kings = 0, pawns = 0,
         queens = 0, rooks = 0, bishops = 0, knights = 0,
         staticScore = 0, passed = 0, lazyBits = leb
