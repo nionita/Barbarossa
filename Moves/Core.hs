@@ -40,12 +40,14 @@ fun Black = negate
 matPiece :: Color -> Piece -> Int
 matPiece c = fun c . matPiece1
 
--- The compiled piece square table (Struct.Pst) is summed incrementally in MyPos (pstMid, pstEnd),
--- like mater from white's p.o.v.: a black piece counts the negated value of the vertically
--- mirrored square. Index: color (white 0, black 384) + piece * 64 + square
-pstMidArr, pstEndArr :: A.UArray Int Int
-pstMidArr = pstArr fst
-pstEndArr = pstArr snd
+-- The compiled piece square table (Struct.Pst) is summed incrementally in MyPos (pstPack, packed
+-- mid and end, see Struct.Struct), like mater from white's p.o.v.: a black piece counts the negated
+-- value of the vertically mirrored square. Index: color (white 0, black 384) + piece * 64 + square
+-- The unpacked tables are used only to check the incremental sums (pstRecompute)
+pstMidArr, pstEndArr, pstPackArr :: A.UArray Int Int
+pstMidArr  = pstArr fst
+pstEndArr  = pstArr snd
+pstPackArr = A.listArray (0, 2 * 384 - 1) $ zipWith pstPacked (A.elems pstMidArr) (A.elems pstEndArr)
 
 pstArr :: ((Int, Int) -> Int) -> A.UArray Int Int
 pstArr f = A.listArray (0, 2 * 384 - 1) $ A.elems wh ++ [ negate (wh A.! (t * 64 + (sq `xor` 56)))
@@ -65,7 +67,12 @@ pstMidPiece c f sq = pstMidArr `unsafeAt` pstIndex c f sq
 pstEndPiece :: Color -> Piece -> Square -> Int
 pstEndPiece c f sq = pstEndArr `unsafeAt` pstIndex c f sq
 
--- The PST sums computed from all pieces (to check the incremental ones)
+{-# INLINE pstPackPiece #-}
+pstPackPiece :: Color -> Piece -> Square -> Int
+pstPackPiece c f sq = pstPackArr `unsafeAt` pstIndex c f sq
+
+-- The PST sums (mid, end) computed from all pieces with the unpacked tables (to check the
+-- incremental packed sums)
 pstRecompute :: MyPos -> (Int, Int)
 pstRecompute p = foldl' add (0, 0) [ (c, f, sq) | sq <- [0 .. 63], Busy c f <- [tabla p sq] ]
     where add (!m, !e) (c, f, sq) = (m + pstMidPiece c f sq, e + pstEndPiece c f sq)
@@ -338,16 +345,14 @@ setPiece sq c f !p
           slide = setCond (isSlide f)  $ slide p,
           kkrq  = setCond (isKkrq f)   $ kkrq p,
           diag  = setCond (isDiag f)   $ diag p,
-          zobkey = nzob, mater = nmat, pstMid = npm, pstEnd = npe }
+          zobkey = nzob, mater = nmat, pstPack = npp }
     where setCond cond = if cond then (.|. bsq) else (.&. nbsq)
           nzob = zobkey p `xor` zold `xor` znew
           nmat = mater p - mold + mnew
-          npm  = pstMid p - pmold + pstMidPiece c f sq
-          npe  = pstEnd p - peold + pstEndPiece c f sq
-          (!zold, !mold, !pmold, !peold) = case tabla p sq of
-                             Empty      -> (0, 0, 0, 0)
-                             Busy co fo -> (zobPiece co fo sq, matPiece co fo,
-                                            pstMidPiece co fo sq, pstEndPiece co fo sq)
+          npp  = pstPack p - ppold + pstPackPiece c f sq
+          (!zold, !mold, !ppold) = case tabla p sq of
+                             Empty      -> (0, 0, 0)
+                             Busy co fo -> (zobPiece co fo sq, matPiece co fo, pstPackPiece co fo sq)
           !znew = zobPiece c f sq
           !mnew = matPiece c f
           bsq = uBit sq
@@ -538,35 +543,33 @@ castQueenRookOk !p Black = epcas p .&. b56 /= 0 where b56 = uBit 56
 checkOk :: MyPos -> Bool
 checkOk p = yo p .&. kings p .&. myAttacs p == 0
 
--- Zobrist key, material and PST sums (mid, end)
-data ChangeAccum = CA !ZKey !Int !Int !Int
+-- Zobrist key, material and PST sums (packed)
+data ChangeAccum = CA !ZKey !Int !Int
 
 -- Accumulate a set of changes in MyPos (except BBoards) due to setting a piece on a square
 accumSetPiece :: Square -> Color -> Piece -> MyPos -> ChangeAccum -> ChangeAccum
-accumSetPiece sq c f !p (CA z m pm pe)
+accumSetPiece sq c f !p (CA z m pp)
     = case tabla p sq of
-        Empty      -> CA znew mnew pmnew penew
-        Busy co fo -> accumCapt sq co fo znew mnew pmnew penew
+        Empty      -> CA znew mnew ppnew
+        Busy co fo -> accumCapt sq co fo znew mnew ppnew
     where !znew  = z `xor` zobPiece c f sq
           !mnew  = m + matPiece c f
-          !pmnew = pm + pstMidPiece c f sq
-          !penew = pe + pstEndPiece c f sq
+          !ppnew = pp + pstPackPiece c f sq
 
 -- Accumulate a set of changes in MyPos (except BBoards) due to clearing a square
 accumClearSq :: Square -> MyPos -> ChangeAccum -> ChangeAccum
-accumClearSq sq p i@(CA z m pm pe)
+accumClearSq sq p i@(CA z m pp)
     = case tabla p sq of
         Empty      -> i
-        Busy co fo -> accumCapt sq co fo z m pm pe
+        Busy co fo -> accumCapt sq co fo z m pp
 
-accumCapt :: Square -> Color -> Piece -> ZKey -> Int -> Int -> Int -> ChangeAccum
-accumCapt sq !co !fo !z !m !pm !pe
-    = CA (z `xor` zco) (m - mco) (pm - pstMidPiece co fo sq) (pe - pstEndPiece co fo sq)
+accumCapt :: Square -> Color -> Piece -> ZKey -> Int -> Int -> ChangeAccum
+accumCapt sq !co !fo !z !m !pp = CA (z `xor` zco) (m - mco) (pp - pstPackPiece co fo sq)
     where !zco = zobPiece co fo sq
           !mco = matPiece co fo
 
 accumMoving :: MyPos -> ChangeAccum -> ChangeAccum
-accumMoving _ (CA z m pm pe) = CA (z `xor` zobMove) m pm pe
+accumMoving _ (CA z m pp) = CA (z `xor` zobMove) m pp
 
 -- Take an initial accumulation and a list of functions accum to accum
 -- and compute the final accumulation
@@ -708,7 +711,7 @@ doFromToMove :: Move -> MyPos -> MyPos
 doFromToMove m !p | moveIsNormal m
     = updatePos p {
           black = tblack, slide = tslide, kkrq  = tkkrq,  diag  = tdiag,
-          epcas = tepcas, zobkey = tzobkey, mater = tmater, pstMid = tpm, pstEnd = tpe
+          epcas = tepcas, zobkey = tzobkey, mater = tmater, pstPack = tpp
       }
     where src = fromSquare m
           dst = toSquare m
@@ -733,8 +736,8 @@ doFromToMove m !p | moveIsNormal m
                     in ((.|.) epBit, epSetZob epFld)
               | otherwise = (id, 0)
           !zob = zobkey p `xor` epcl `xor` epst `xor` zobcast
-          CA tzobkey tmater tpm tpe = case tabla p src of	-- identify the moving piece
-               Busy col fig -> chainAccum (CA zob (mater p) (pstMid p) (pstEnd p)) [
+          CA tzobkey tmater tpp = case tabla p src of	-- identify the moving piece
+               Busy col fig -> chainAccum (CA zob (mater p) (pstPack p)) [
                                    accumClearSq src p,
                                    accumSetPiece dst col fig p,
                                    accumMoving p
@@ -747,7 +750,7 @@ doFromToMove m !p | moveIsNormal m
 doFromToMove m !p | moveIsEnPas m
     = updatePos p {
           black = tblack, slide = tslide, kkrq  = tkkrq,  diag  = tdiag,
-          epcas = tepcas, zobkey = tzobkey, mater = tmater, pstMid = tpm, pstEnd = tpe
+          epcas = tepcas, zobkey = tzobkey, mater = tmater, pstPack = tpp
       }
     where src = fromSquare m
           dst = toSquare m
@@ -761,9 +764,9 @@ doFromToMove m !p | moveIsEnPas m
           tepcas = reset50Moves $ moveAndClearEp $ epcas p
           !epcl = epClrZob $ epcas p
           !zk = zobkey p `xor` epcl
-          CA tzobkey tmater tpm tpe
+          CA tzobkey tmater tpp
               | Busy col fig <- tabla p src	-- identify the moving piece
-                = chainAccum (CA zk (mater p) (pstMid p) (pstEnd p)) [
+                = chainAccum (CA zk (mater p) (pstPack p)) [
                                 accumClearSq src p,
                                 accumClearSq del p,
                                 accumSetPiece dst col fig p,
@@ -774,7 +777,7 @@ doFromToMove m !p | moveIsEnPas m
 doFromToMove m !p | moveIsCastle m
     = updatePos p {
           black = tblack, slide = tslide, kkrq  = tkkrq,  diag  = tdiag,
-          epcas = tepcas, zobkey = tzobkey, mater = tmater, pstMid = tpm, pstEnd = tpe
+          epcas = tepcas, zobkey = tzobkey, mater = tmater, pstPack = tpp
       }
     where src = fromSquare m
           dst = toSquare m
@@ -797,10 +800,10 @@ doFromToMove m !p | moveIsCastle m
           tepcas = reset50Moves $ moveAndClearEp $ epcas p `less` clearcast
           !epcl = epClrZob $ epcas p
           !zob = zobkey p `xor` epcl `xor` zobcast
-          CA tzobkey tmater tpm tpe
+          CA tzobkey tmater tpp
               | Busy col King <- tabla p src,	-- identify the moving piece (king)
                 Busy co1 Rook <- tabla p csr	-- identify the moving rook
-                = chainAccum (CA zob (mater p) (pstMid p) (pstEnd p)) [
+                = chainAccum (CA zob (mater p) (pstPack p)) [
                                 accumClearSq src p,
                                 accumSetPiece dst col King p,
                                 accumClearSq csr p,
@@ -812,7 +815,7 @@ doFromToMove m !p | moveIsCastle m
 doFromToMove m !p | moveIsPromo m
     = updatePos p0 {
           black = tblack, slide = tslide, kkrq = tkkrq, diag = tdiag,
-          epcas = tepcas, zobkey = tzobkey, mater = tmater, pstMid = tpm, pstEnd = tpe
+          epcas = tepcas, zobkey = tzobkey, mater = tmater, pstPack = tpp
       }
     where col = moving p	-- the new coding does not have correct fromSquare in promotion
           srank = if col == White then 6 else 1
@@ -830,7 +833,7 @@ doFromToMove m !p | moveIsPromo m
           tepcas = reset50Moves $ moveAndClearEp $ epcas p `less` clearcast
           !epcl = epClrZob $ epcas p0
           !zk = zobkey p0 `xor` epcl `xor` zobcast
-          CA tzobkey tmater tpm tpe = chainAccum (CA zk (mater p0) (pstMid p0) (pstEnd p0)) [
+          CA tzobkey tmater tpp = chainAccum (CA zk (mater p0) (pstPack p0)) [
                                 accumClearSq src p0,
                                 accumSetPiece dst col pie p0,
                                 accumMoving p0
@@ -843,7 +846,7 @@ reverseMoving p = updatePos p { epcas = tepcas, zobkey = z }
     where tepcas = moveAndClearEp $ epcas p
           !epcl = epClrZob $ epcas p
           !zk = zobkey p `xor` epcl
-          CA z _ _ _ = chainAccum (CA zk (mater p) (pstMid p) (pstEnd p)) [
+          CA z _ _ = chainAccum (CA zk (mater p) (pstPack p)) [
                        accumMoving p
                    ]
 

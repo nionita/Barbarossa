@@ -4,7 +4,7 @@ module Struct.Struct (
          Piece(..), Color(..), TabCont(..), MyPos(..), LazyBits(..),
          other, moving, epMask, fyMask, fyIncr, mvMask, caRiMa,
          caRKiw, caRQuw, caRMKw, caRMQw, caRAKw, caRAQw, caRKib, caRQub, caRMKb, caRMQb, caRAKb, caRAQb,
-         tabla, emptyPos, isReversible,
+         tabla, emptyPos, isReversible, pstMid, pstEnd, pstPacked,
          remis50Moves, set50Moves, reset50Moves, addHalfMove, get50Moves,
          fromSquare, toSquare, isSlide, isDiag, isKkrq,
          moveIsNormal, moveIsCastle, moveIsPromo, moveIsEnPas, moveColor, movePiece,
@@ -20,6 +20,7 @@ module Struct.Struct (
 import Data.Array.Unboxed
 import Data.Array.Base
 import Data.Char (ord, chr)
+import Data.Int (Int32)
 import Data.Word
 import Data.Bits
 import Numeric
@@ -48,7 +49,7 @@ data MyPos = MyPos {
     me, yo, occup, kings, pawns :: !BBoard,	-- further heavy used bitboards computed for efficiency
     queens, rooks, bishops, knights, passed :: !BBoard,
     mater :: !Int,	-- material balance
-    pstMid, pstEnd :: !Int,	-- piece square table sums (mid, end), white p.o.v., incremental like mater
+    pstPack :: !Int,	-- piece square table sums packed (see pstMid, pstEnd), white p.o.v., incremental
     staticScore :: Int,	-- lazy, not always needed
     lazyBits :: LazyBits	-- lazy of course
     }
@@ -197,10 +198,25 @@ caRMQb = 0x0E00000000000000	-- black: empty fields for queenside castle
 caRAKb = 0x6000000000000000	-- black: not attacked fields for kingside castle
 caRAQb = 0x0C00000000000000	-- black: not attacked fields for queenside castle
 
+-- The PST sums (mid, end) are kept packed in one Int: mid * 2^32 + end. Sums of packed values are
+-- the packed sums (as long as |end| < 2^31), so the move execution needs one lookup and one addition
+-- per changed piece; end is the sign extended low half, mid the rest
+{-# INLINE pstPacked #-}
+pstPacked :: Int -> Int -> Int
+pstPacked m e = m * 4294967296 + e
+
+{-# INLINE pstEnd #-}
+pstEnd :: MyPos -> Int
+pstEnd p = fromIntegral (fromIntegral (pstPack p) :: Int32)
+
+{-# INLINE pstMid #-}
+pstMid :: MyPos -> Int
+pstMid p = (pstPack p - pstEnd p) `unsafeShiftR` 32
+
 emptyPos :: MyPos
 emptyPos = MyPos {
         black = 0, slide = 0, kkrq = 0, diag = 0, epcas = 0,
-        zobkey = 0, mater = 0, pstMid = 0, pstEnd = 0,
+        zobkey = 0, mater = 0, pstPack = 0,
         me = 0, yo = 0, occup = 0, kings = 0, pawns = 0,
         queens = 0, rooks = 0, bishops = 0, knights = 0,
         staticScore = 0, passed = 0, lazyBits = leb
