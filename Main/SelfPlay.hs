@@ -1569,6 +1569,9 @@ writeGameData dout gr          recs = do
             hPutStrLn (doData dout) $ posToFen leaf ++ "," ++ show (staticScore leaf) ++ "," ++ show res
             hPutStrLn (doMeta dout) $ show g ++ "," ++ show (prPly r) ++ "," ++ b01 (prMoverWhite r)
                 ++ "," ++ show (prRoot r) ++ "," ++ b01 leafWhite ++ "," ++ map noComma (prMover r)
+    -- whole games on disk: progress is visible and a killed run loses at most the current game
+    hFlush (doData dout)
+    hFlush (doMeta dout)
     where b01 b = if b then "1" else "0"
           noComma c = if c == ',' then ';' else c
 
