@@ -147,9 +147,11 @@ parseFenPosition = do
     P.spaces
     ep <- P.many1 (P.oneOf "-abcdefgh36")
     P.spaces
-    h <- P.many1 P.digit
+    -- Half move clock and full move number: whole numbers (the full move number was read as one
+    -- character, so with 2 or more digits the moves after the FEN were ignored), both optional
+    h <- P.option "0" (P.many1 P.digit)
     P.spaces
-    _ <- P.anyChar
+    _ <- P.option "" (P.many1 P.digit)
     return $ s ++ " " ++ [c] ++ " " ++ cr ++ " " ++ ep ++ " " ++ h
 
 parseStartPos :: Parser UCIMess
