@@ -4,8 +4,9 @@
 
 module Main (main) where
 import Control.Monad (when, forM_)
-import Data.List (isPrefixOf, isSuffixOf, elemIndex, nub, sort)
+import Data.List (intercalate, isPrefixOf, isSuffixOf, elemIndex, nub, sort)
 import Data.Maybe (fromMaybe, mapMaybe)
+import Numeric (showFFloat)
 import System.Console.GetOpt
 import System.Directory
 import System.Environment (getArgs)
@@ -17,7 +18,8 @@ import Debug.Trace (traceShow)
 
 import qualified Data.Vector.Unboxed as U
 
-import Struct.Status (EvalState(..))
+import Struct.Status (EvalState(..), EvalParams(..))
+import Struct.MidEnd (MidEnd(MidEnd))
 import Struct.Struct
 import Struct.ParamsPost (optSpaceNames, optSpaceInit)
 import Struct.Config (fileToParams)
@@ -48,6 +50,7 @@ data Options = Options {
         optFixIdx    :: Int,	-- this weight will not be modified
         optParams    :: [String],	-- parameters to optimize by search (empty = all)
         optRelabel   :: Int,	-- > 0: write input files with results drawn from the static eval (seed)
+        optExport    :: Bool,	-- export eval features and pseudo derivatives for offline fitting
         optX         :: Double,    	-- start x for Rosenbrock
         optY         :: Double,    	-- start x for Rosenbrock
         optLR        :: Double,	-- learning rate
@@ -78,7 +81,8 @@ defaultOptions = Options {
         optFixIdx    = 0,	-- default: material middle game not modified
         optParams    = [],	-- default: all parameters
         optRelabel   = 0,
-        optX         = 0,
+        optExport    = False,
+        optX        = 0,
         optY         = 0,
         optLR        = 0.1,
         optMaxChange = 0.01,
@@ -154,6 +158,9 @@ splitComma s = case break (== ',') s of
 setRelabel :: String -> Options -> Options
 setRelabel ba opt = opt { optRelabel = read ba }
 
+setExport :: Options -> Options
+setExport opt = opt { optExport = True }
+
 setFixIdx :: String -> Options -> Options
 setFixIdx ba opt = opt { optFixIdx = read ba }
 
@@ -203,6 +210,7 @@ options = [
         Option "F" ["fix"]      (ReqArg setFixIdx "INT")     "Fix this index 0 - dimensions (0)",
         Option "R" ["result"]   (NoArg  setResult)           "Input file format: fen,result",
         Option "S" ["score"]    (NoArg  setScore)            "Input file format: fen,score",
+        Option "X" ["export"]   (NoArg  setExport)           "Export eval features of the input files to -o (-c)",
         Option "O" ["optim"]    (ReqArg addOptim   "INT")    "Optimize by random search"
     ]
 
@@ -218,7 +226,9 @@ theOptions = do
 main :: IO ()
 main = do
     (opts, _) <- theOptions
-    if optRelabel opts > 0
+    if optExport opts
+        then exportFiles opts
+        else if optRelabel opts > 0
         then relabelFiles opts
         else if optTrain opts > 0 || optOptim opts > 0
         then train opts
@@ -279,6 +289,120 @@ relabelLine es scale hi ho _ (g, n) = do
                         | otherwise   = 2 :: Int
                   hPutStrLn ho $ fen ++ "," ++ show e ++ "," ++ show r
                   return (True, (g', n + 1))
+
+-- Export for offline fitting: every input file (*-filt.csv: fen, score, result) is written to the
+-- output directory as <name>-exp.csv, with a header line and the columns:
+--   fen, score, result: as in the input
+--   eval:  posExactEval with the start weights (compiled or -c)
+--   phase: gamePhase (0 = end game, 254 = opening), scale: end game scale factor (64 = not reduced),
+--   m50:   50 moves counter
+--   dmid, dend: centipawns per unit of a mid / end weight times its feature, i.e. the pseudo derivative
+--          of eval to the mid / end weight i is f_i * dmid / f_i * dend (exact up to the integer shifts,
+--          as long as the scale factor stays, it depends on the sign of the end game sum)
+--   const: centipawns of the part independent of the weights (epMovingMid, epMovingEnd)
+--   f_i:   one column per weight, the value of its feature (mid and end use the same feature)
+-- So: eval ~ sum_i f_i * (wmid_i * dmid + wend_i * dend) + const
+-- A new term with feature z and weights zmid, zend adds z * (zmid * dmid + zend * dend), in the same way
+-- as it would do in the term sum of the engine. The start weights are written to weights.csv
+exportFiles :: Options -> IO ()
+exportFiles opts = do
+    when (null (optOutPath opts)) $ ioError $ userError "Export needs the output directory (-o)"
+    x0 <- startVector opts
+    files <- getFileList (optCsvPath opts) False (Just filteredCsv)
+    createDirectoryIfMissing True (optOutPath opts)
+    let nw     = optDims `div` 2
+        names  = map (drop 4) (take nw optSpaceNames)
+        wmid   = map round $ take nw (U.toList x0) :: [Int]
+        wend   = map round $ drop nw (U.toList x0) :: [Int]
+        header = intercalate "," $ ["fen", "score", "result", "eval", "phase", "scale", "m50",
+                                    "dmid", "dend", "const"] ++ names
+        ex     = Export {
+                     exState  = vecToEvalState x0,
+                     exProbes = featureProbes nw,
+                     exNumW   = nw,
+                     exWMid   = wmid,
+                     exWEnd   = wend
+                 }
+    withFile (optOutPath opts </> "weights.csv") WriteMode $ \fo -> do
+        hPutStrLn fo "name,mid,end"
+        forM_ (zip3 names wmid wend) $ \(n, m, e) -> hPutStrLn fo $ n ++ "," ++ show m ++ "," ++ show e
+    forM_ files $ \inName -> do
+        let outName = makeFileName inName (optOutPath opts) "-exp.csv"
+        putStrLn $ inName ++ " --> " ++ outName
+        hFlush stdout
+        hi <- openFile inName  ReadMode
+        ho <- openFile outName WriteMode
+        hPutStrLn ho header
+        ExportStats n bad nonlin maxd sumd <- loopCount (exportLine ex hi ho) (ExportStats 0 0 0 0 0)
+        putStrLn $ show n ++ " records written, " ++ show bad ++ " lines skipped"
+        putStrLn $ "Term sum not linear in the weights: " ++ show nonlin ++ " records"
+        putStrLn $ "Eval - linear reconstruction (cp): max abs " ++ showFFloat (Just 3) maxd ""
+                   ++ ", mean abs " ++ showFFloat (Just 3) (sumd / fromIntegral (max 1 n)) ""
+        hClose hi
+        hClose ho
+
+data Export = Export {
+        exState  :: EvalState,	-- eval state with the start weights
+        exProbes :: [(Int, Maybe Int, EvalState)],	-- unit weight states, see featureProbes
+        exNumW   :: !Int,	-- number of weights (each has a mid and an end value)
+        exWMid   :: [Int],	-- start weights, mid
+        exWEnd   :: [Int]	-- start weights, end
+    }
+
+-- Records, skipped lines, records where the term sum is not linear in the weights,
+-- maximum and sum of the absolute difference between eval and its linear reconstruction
+data ExportStats = ExportStats !Int !Int !Int !Double !Double
+
+-- Eval states to extract the feature values from the term sum: the mid value of weight i and the
+-- end value of weight j are 1, all others 0, so the term sum is MidEnd f_i f_j
+-- With n weights we need (n + 1) / 2 evaluations per position
+featureProbes :: Int -> [(Int, Maybe Int, EvalState)]
+featureProbes nw = [ (i, mj i, vecToEvalState (unitVec i (mj i))) | i <- [0 .. h - 1] ]
+    where h = (nw + 1) `div` 2
+          mj i | i + h < nw = Just (i + h)
+               | otherwise  = Nothing
+          unitVec i mj' = U.replicate (2 * nw) 0 U.// ((i, 1) : maybe [] (\j -> [(nw + j, 1)]) mj')
+
+positionFeatures :: Export -> MyPos -> U.Vector Int
+positionFeatures ex p = U.replicate (exNumW ex) 0 U.// concatMap one (exProbes ex)
+    where one (i, mj, es) = let MidEnd fi fj = evalTermSum p es
+                            in (i, fi) : maybe [] (\j -> [(j, fj)]) mj
+
+exportLine :: Export -> Handle -> Handle -> Int -> ExportStats -> IO (Bool, ExportStats)
+exportLine ex hi ho _ st@(ExportStats n bad nonlin maxd sumd) = do
+    end <- hIsEOF hi
+    if end
+       then return (False, st)
+       else do
+           line <- hGetLine hi
+           case splitComma line of
+               [fen, scs, res] | not (null fen) && not (null scs) && not (null res) -> do
+                   let p     = posFromFen fen
+                       es    = exState ex
+                       ev    = posExactEval p es
+                       gph   = gamePhase p
+                       m50   = get50Moves p
+                       MidEnd sm se = evalTermSum p es
+                       sf    = evalEndScale p se
+                       fs    = positionFeatures ex p
+                       fl    = U.toList fs
+                       lm    = sum (zipWith (*) (exWMid ex) fl)
+                       le    = sum (zipWith (*) (exWEnd ex) fl)
+                       f50   = fromIntegral (128 - m50) / 262144 :: Double	-- 2 ^ (shift2Cp + 15)
+                       dmid  = fromIntegral gph * f50
+                       dend  = fromIntegral (sf * (256 - gph)) * f50 / 64
+                       cst   = fromIntegral (epMovingMid (esEParams es) * gph
+                                             + epMovingEnd (esEParams es) * (256 - gph)) * f50
+                       evlin = fromIntegral lm * dmid + fromIntegral le * dend + cst
+                       d     = abs (fromIntegral ev - evlin)
+                       nonl  | lm == sm && le == se = 0
+                             | otherwise            = 1
+                   hPutStrLn ho $ intercalate "," $
+                       [fen, scs, res, show ev, show gph, show sf, show m50,
+                        showFFloat (Just 9) dmid "", showFFloat (Just 9) dend "",
+                        showFFloat (Just 4) cst ""] ++ map show fl
+                   return (True, ExportStats (n + 1) bad (nonlin + nonl) (max maxd d) (sumd + d))
+               _ -> return (True, ExportStats n (bad + 1) nonlin maxd sumd)
 
 -- Read a CSV file with fen, score, result and write in the output directory a filtered fen file,
 -- The file name is called like the input file (without .csv extension) with suffix -filt.csv

@@ -8,6 +8,8 @@ module Eval.Core (
     posEval,
     posExactEval,
     gamePhase,
+    evalTermSum,
+    evalEndScale,
 ) where
 
 import Data.Array.Base (unsafeAt)
@@ -90,28 +92,43 @@ trySpecials p = go
 normalEval :: SpecialResult -> MyPos -> EvalState -> Int
 normalEval sr p !sti = (sc * (128 - get50Moves p)) `unsafeShiftR` (shift2Cp + 15)
     where ep     = esEParams  sti
-          ew     = esEWeights sti
           !gph   = gamePhase p
-          !nev = foldr ($) (MidEnd 0 0) [
-                   materDiff p ew
-                 , evalBishops p ew
-                 , evalRookPawn p ew
-                 , kingSafe p ew
-                 , kingPlace ep p ew
-                 , mobiLity p ew
-                 , centerDiff p ew
-                 , spaceDiff p ew
-                 , adversDiff p ew
-                 , evalRookPlc p ew
-                 , enPrise p ew
-                 , pawnBl p ew
-                 , isolDiff p ew
-                 , backDiff p ew
-                 , advPawns p ew
-                 , passPawns gph ep p ew
-              ]
+          !nev   = evalTermSum p sti
           !eg = (end nev * scaleFactor p (end nev) sr) `unsafeShiftR` 6
           !sc = (mid nev + epMovingMid ep) * gph + (eg + epMovingEnd ep) * (256 - gph)
+
+-- The sum of all weighted eval terms (mid & end) in units of 1/8 centipawns, before the
+-- game phase interpolation, the end game scale factor and the 50 moves scaling
+-- Every term is linear in its weight (mad weight feature), so with a unit weight
+-- the sum is the feature value of that weight (used by the tuning export)
+{-# INLINE evalTermSum #-}
+evalTermSum :: MyPos -> EvalState -> MidEnd
+evalTermSum p !sti = foldr ($) (MidEnd 0 0) [
+                         materDiff p ew
+                       , evalBishops p ew
+                       , evalRookPawn p ew
+                       , kingSafe p ew
+                       , kingPlace ep p ew
+                       , mobiLity p ew
+                       , centerDiff p ew
+                       , spaceDiff p ew
+                       , adversDiff p ew
+                       , evalRookPlc p ew
+                       , enPrise p ew
+                       , pawnBl p ew
+                       , isolDiff p ew
+                       , backDiff p ew
+                       , advPawns p ew
+                       , passPawns gph ep p ew
+                    ]
+    where ep   = esEParams  sti
+          ew   = esEWeights sti
+          !gph = gamePhase p
+
+-- The end game scale factor of the normal evaluation (no special eval matched), given the
+-- end game part of the term sum: 64 means not reduced
+evalEndScale :: MyPos -> Int -> Int
+evalEndScale p eg = scaleFactor p eg NotMatched
 
 gamePhase :: MyPos -> Int
 gamePhase p = g
