@@ -28,7 +28,8 @@ data MyState = MyState {
         hist   :: History,	-- history table
         mstats :: SStats,	-- per move search statistics
         evalst :: EvalState,	-- eval status (parameter & statistics)
-        rootmn :: !Int		-- root move number
+        rootmn :: !Int,		-- root move number
+        lorig  :: Maybe MyPos	-- leaf (eval) position of the last root search iteration (data collection)
     }
 
 data EvalState = EvalState {

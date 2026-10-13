@@ -18,6 +18,7 @@ import Struct.Struct
 import Moves.Core
 import Moves.Internal.Base
 import Moves.Internal.BaseTypes (Game)
+import Struct.Status (MyState(..))
 import Moves.Notation
 
 -- This is a specialized monad transformer for state
@@ -299,8 +300,10 @@ pvRootSearch a b d lastpath rmvs aspir = do
     let !nsti = nst0 { cursc = pathFromScore a, cpos = pos }
     nstf <- pvLoop (pvInnerRoot b d) nsti edges
     case pathMPos (cursc nstf) of
-        Just opos -> lift $ logmes $ "Origin |" ++ posToFen pos ++ "|" ++ show d
-                                ++ "|" ++ show (staticScore opos) ++ "|" ++ posToFen opos
+        Just opos -> lift $ do
+            modify $ \s -> s { lorig = Just opos }
+            logmes $ "Origin |" ++ posToFen pos ++ "|" ++ show d
+                ++ "|" ++ show (staticScore opos) ++ "|" ++ posToFen opos
         Nothing
             | d == 1 -> lift $ logmes $ "NoEval |" ++ posToFen pos ++ "|" ++ show d
             | otherwise -> return ()

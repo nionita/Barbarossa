@@ -9,10 +9,11 @@
 
 module Main (main) where
 import Control.Monad.Reader
-import Control.Monad (when, void, forever, foldM)
+import Control.Monad (when, void, forever, foldM, forM_)
 import Control.Concurrent
 import Control.Exception
 import Data.Char (isSpace)
+import Data.IORef
 import Data.List (intersperse)
 import qualified Data.Map.Strict as M
 import Data.Maybe (fromMaybe, isJust)
@@ -94,7 +95,8 @@ data Options = Options {
         -- print every Nth input fen
         optFen      :: Maybe String,	-- single fen for perft
         optAFenFile :: FilePath,	-- fen file with start positions
-        optFOutFile :: FilePath		-- output file for filter option
+        optFOutFile :: FilePath,	-- output file for filter option
+        optDataFile :: Maybe FilePath	-- match: write leaf positions with game result (and .meta)
     }
 
 defaultOptions :: Options
@@ -126,7 +128,8 @@ defaultOptions = Options {
         optFenPrintEvery = 10,
         optFen      = Nothing,
         optAFenFile = "alle.epd",
-        optFOutFile = "vect.txt"
+        optFOutFile = "vect.txt",
+        optDataFile = Nothing
     }
 setPlayer1 :: String -> Options -> Options
 setPlayer1 cf opt = opt { optPlayer1 = Just cf }
@@ -208,6 +211,9 @@ addFen fen opt = opt { optFen = Just fen }
 addOFile :: FilePath -> Options -> Options
 addOFile fi opt = opt { optFOutFile = fi }
 
+setDataFile :: FilePath -> Options -> Options
+setDataFile fi opt = opt { optDataFile = Just fi }
+
 setLogLev :: String -> Options -> Options
 setLogLev lv opt = opt { optLogLev = llev }
     where llev = case levi of
@@ -247,7 +253,9 @@ options = [
         -- Option "t" ["threads"] (ReqArg addNThrds "STRING") "Number of threads",
         Option "s" ["skip"]    (ReqArg addNSkip "STRING")  "Number of fens to skip",
         Option "f" ["fens"]    (ReqArg addNFens "STRING")  "Number of fens to play",
-        Option "l" ["log"]     (ReqArg setLogLev "STRING") "Log leven from 0 to 5 (debug to never)"
+        Option "l" ["log"]     (ReqArg setLogLev "STRING") "Log leven from 0 to 5 (debug to never)",
+        Option "" ["data"]     (ReqArg setDataFile "FILE")
+               "Match: append the leaf position of every move with the game result to FILE (fen,score,result) and FILE.meta"
     ]
 
 theOptions :: IO (Options, [String])
@@ -768,7 +776,7 @@ perfLoop hi depth _k acc = do
                           let crts = crtStatus chg
                               sini = posToState pos (hash crts) (hist crts) (evalst crts)
                           modifyChanging $ \c -> c { crtStatus = sini }
-                          (_, _, nodes) <- iterativeDeepening depth Nothing
+                          (_, _, nodes, _) <- iterativeDeepening depth Nothing
                           let acc' = PerfAcc {
                                   perfValid = perfValid acc + 1,
                                   perfInvalid = perfInvalid acc,
@@ -839,8 +847,10 @@ matchFile opts dir = do
                     matchOptions = runOpts,
                     matchSavePath = savePath
                 }
+            mdo <- liftIO $ traverse openDataOut (optDataFile runOpts)
             acc <- playMatchPairs (optDepth runOpts) (optNodes runOpts) (optNodeMargin runOpts) (optStatsEvery runOpts)
-                                 matchInfo initialAcc (id1, eval1) (id2, eval2) msprt remainingFens
+                                 mdo matchInfo initialAcc (id1, eval1) (id2, eval2) msprt remainingFens
+            liftIO $ mapM_ closeDataOut mdo
             liftIO $ printMatchSummary matchInfo msprt acc
             when (isJust msprt) $ liftIO $ finalizeSprtSave matchInfo acc
             return (matWdl acc)
@@ -932,7 +942,7 @@ balancedPos hi ho mn k () = do
            let crts = crtStatus chg
                sini = posToState pos (hash crts) (hist crts) (evalst crts)
            modifyChanging $ \c -> c { crtStatus = sini }
-           (sc, path, _) <- iterativeDeepening 1 Nothing
+           (sc, path, _, _) <- iterativeDeepening 1 Nothing
            when (not (null path) && abs sc <= 150) $ lift $ hPutStrLn ho fen
            return (True, ())
 
@@ -1030,14 +1040,15 @@ playOnePair
     :: Int
     -> Maybe Int
     -> Int
+    -> Maybe DataOut
     -> (String, EvalState)
     -> (String, EvalState)
     -> String
     -> CtxIO PairResult
-playOnePair depth maybeNodes nodeMarginPc (id1, eval1) (id2, eval2) fen = do
+playOnePair depth maybeNodes nodeMarginPc mdo (id1, eval1) (id2, eval2) fen = do
     let pos = posFromFen fen
-    gr1 <- playGame depth maybeNodes nodeMarginPc pos (id1, eval1) (id2, eval2)
-    gr2 <- playGame depth maybeNodes nodeMarginPc pos (id2, eval2) (id1, eval1)
+    gr1 <- playGame depth maybeNodes nodeMarginPc mdo pos (id1, eval1) (id2, eval2)
+    gr2 <- playGame depth maybeNodes nodeMarginPc mdo pos (id2, eval2) (id1, eval1)
     case (pairWdl id1 gr1, pairWdl id1 gr2) of
         (Just r1, Just r2) -> do
             let wdl1  = scoreGameResult id1 gr1
@@ -1052,6 +1063,7 @@ playMatchPairs
     -> Maybe Int
     -> Int
     -> Int
+    -> Maybe DataOut
     -> MatchInfo
     -> MatchAcc
     -> (String, EvalState)
@@ -1059,12 +1071,12 @@ playMatchPairs
     -> Maybe SprtState
     -> [(Int, String)]
     -> CtxIO MatchAcc
-playMatchPairs depth maybeNodes nodeMarginPc printEvery matchInfo initAcc (id1, eval1) (id2, eval2) msprt fens =
+playMatchPairs depth maybeNodes nodeMarginPc printEvery mdo matchInfo initAcc (id1, eval1) (id2, eval2) msprt fens =
     go initAcc fens
     where
       go acc [] = return acc { matTerm = MatchTermMaxPairs }
       go acc ((lineNo, fen):rest) = do
-          pres <- playOnePair depth maybeNodes nodeMarginPc (id1, eval1) (id2, eval2) fen
+          pres <- playOnePair depth maybeNodes nodeMarginPc mdo (id1, eval1) (id2, eval2) fen
           let accTried = acc { matPairsTried = matPairsTried acc + 1 }
           case pres of
               PairIncomplete -> do
@@ -1293,7 +1305,7 @@ autoPlayToEnd d pos = do
     go (0::Int)
     where go i = do
               -- Search to depth:
-              (sc, path, _) <- iterativeDeepening d Nothing
+              (sc, path, _, _) <- iterativeDeepening d Nothing
               case path of
                  []  -> do
                      when (i>0) $ ctxLog LogError $ "Empty path when playing"
@@ -1355,8 +1367,9 @@ nodesForSearch pc (Just n) = Just $ max 1 $ n - n * pc `div` 100
 -- Play the given position to the end using node budget or fixed depth with 2 configurations
 -- It can be used only to optimize eval weights but not time or search parameters
 -- The result contains the winner (if any) and a reason for termination
-playGame :: Int -> Maybe Int -> Int -> MyPos -> (String, EvalState) -> (String, EvalState) -> CtxIO GameResult
-playGame d maybeNodes nodeMarginPc pos (ide1, eval1) (ide2, eval2) = do
+playGame :: Int -> Maybe Int -> Int -> Maybe DataOut -> MyPos -> (String, EvalState) -> (String, EvalState)
+         -> CtxIO GameResult
+playGame d maybeNodes nodeMarginPc mdo pos (ide1, eval1) (ide2, eval2) = do
     ctxLog LogWarning "--------------------------"
     ctxLog LogWarning $ "Setup new game between " ++ ide1 ++ " and " ++ ide2
     ctx <- ask
@@ -1382,14 +1395,20 @@ playGame d maybeNodes nodeMarginPc pos (ide1, eval1) (ide2, eval2) = do
             runReaderT (modifyChanging $ const chg) ctx
             freeCache hash1
             freeCache hash2
-    liftIO $ finally (runReaderT (go (0::Int) player1 player2) ctx) cleanup
-    where go i player1 player2 = do
+    recs <- liftIO $ newIORef []
+    gr <- liftIO $ finally (runReaderT (go recs (0::Int) player1 player2) ctx) cleanup
+    case mdo of
+        Just dout -> liftIO $ readIORef recs >>= writeGameData dout gr . reverse
+        Nothing   -> return ()
+    return gr
+    where go recs i player1 player2 = do
               start  <- asks strttm
               currms <- lift $ currMilli start
               let j = i + 1
               -- Prepare for chg1 to search:
               modifyChanging $ const (plChg player1) { forGui = Nothing, srchStrtMs = currms,
-                                            totBmCh = 0, lastChDr = 0 }
+                                            totBmCh = 0, lastChDr = 0,
+                                            crtStatus = (crtStatus (plChg player1)) { lorig = Nothing } }
               case (stack . crtStatus . plChg $ player1) of
                   []   -> return $ GameAborted "Empty stack in crtStatus"
                   p0:_ -> do
@@ -1400,7 +1419,7 @@ playGame d maybeNodes nodeMarginPc pos (ide1, eval1) (ide2, eval2) = do
                           ++ " (nodes budget: " ++ show mbNodes ++ ", search budget: " ++ show searchNodes ++ ")"
                       ctxLog LogInfo $ "Current fen: " ++ curfen
                       -- Search to depth or node budget:
-                      (sc, path, nodes) <- iterativeDeepening d searchNodes
+                      (sc, path, nodes, mleaf) <- iterativeDeepening d searchNodes
                       ctxLog LogInfo $ "Real ply " ++ show j ++ " returns " ++ show sc ++ " / " ++ show path
                           ++ " / " ++ show nodes
                       case path of
@@ -1427,6 +1446,8 @@ playGame d maybeNodes nodeMarginPc pos (ide1, eval1) (ide2, eval2) = do
                         m:_ -> do
                              ctxLog LogInfo $ "Real move " ++ show j
                                   ++ " from " ++ plName player1 ++ ": " ++ show m
+                             liftIO $ modifyIORef' recs
+                                    (PlyRec j (plName player1) (moving p0 == White) sc mleaf :)
                              chg1f <- readChanging
                              s1fin <- execCState (doRealMove m) (crtStatus chg1f)
                              s2ini <- execCState (doRealMove m) (crtStatus (plChg player2))
@@ -1473,10 +1494,10 @@ playGame d maybeNodes nodeMarginPc pos (ide1, eval1) (ide2, eval2) = do
                                          let state2 = s2ini { hist = hi, mstats = ssts0 }
                                              chg1n  = chg1f { crtStatus = s1fin }
                                              chg2n  = (plChg player2) { crtStatus = state2 }
-                                         go j (player2 { plChg = chg2n })
+                                         go recs j (player2 { plChg = chg2n })
                                               (player1 { plChg = chg1n, plNodes = subNodes mbNodes nodes})
 
-iterativeDeepening :: Int -> Maybe Int -> CtxIO (Int, [Move], Int)
+iterativeDeepening :: Int -> Maybe Int -> CtxIO (Int, [Move], Int, Maybe MyPos)
 iterativeDeepening depth maybeMaxNodes = do
     --when debug $ lift $ do
     --    putStrLn $ "In iter deep: " ++ show depth
@@ -1492,8 +1513,64 @@ iterativeDeepening depth maybeMaxNodes = do
               -- We don't want to search less than depth 2, because depth 1 delivers
               -- erroneus moves by currently not updating the best score
               if d > 1 && (null path || d >= depth || stopNodes maybeMaxNodes nodes)
-                 then return (sc, path, nodes)
+                 then return (sc, path, nodes, lorig sfin)
                  else go (d+1) sfin (Just sc) path rmvsf
+
+-- Data collection during a match (--data FILE): for every move the leaf position of the last
+-- root search iteration (the position which was evaluated, as in the Origin log lines) is kept
+-- and, when the game ends, appended with its static score and the game result to FILE,
+-- in the format fen,score,result (score and result from the side to move of the leaf,
+-- result 0 / 1 / 2 = loss / draw / win), as read by prep_data.py and TuneSGD
+-- FILE.meta has, in the same order: game number, ply, mover is white, root search score of the
+-- mover, leaf side to move is white, mover name
+-- Aborted games are not written
+data DataOut = DataOut {
+        doData  :: Handle,
+        doMeta  :: Handle,
+        doGames :: IORef Int
+    }
+
+-- One move of a game for the data collection
+data PlyRec = PlyRec {
+        prPly        :: !Int,	-- real ply
+        prMover      :: String,	-- name of the player who moved
+        prMoverWhite :: !Bool,	-- mover is white
+        prRoot       :: !Int,	-- root search score, mover p.o.v.
+        prLeaf       :: Maybe MyPos	-- leaf of the last root iteration
+    }
+
+openDataOut :: FilePath -> IO DataOut
+openDataOut fn = do
+    let mfn = fn ++ ".meta"
+    mex <- doesFileExist mfn
+    hd <- openFile fn AppendMode
+    hm <- openFile mfn AppendMode
+    when (not mex) $ hPutStrLn hm "game,ply,mover_white,root_score,leaf_white,mover"
+    gref <- newIORef 0
+    return DataOut { doData = hd, doMeta = hm, doGames = gref }
+
+closeDataOut :: DataOut -> IO ()
+closeDataOut dout = do
+    hClose (doData dout)
+    hClose (doMeta dout)
+
+writeGameData :: DataOut -> GameResult -> [PlyRec] -> IO ()
+writeGameData _    (GameAborted _) _    = return ()
+writeGameData dout gr          recs = do
+    g <- atomicModifyIORef' (doGames dout) (\n -> (n + 1, n + 1))
+    forM_ recs $ \r -> case prLeaf r of
+        Nothing   -> return ()
+        Just leaf -> do
+            let leafWhite = moving leaf == White
+                res = case gr of
+                          GameWin w _ | (w == prMover r) == (leafWhite == prMoverWhite r) -> 2
+                                      | otherwise                                         -> 0
+                          _ -> 1 :: Int
+            hPutStrLn (doData dout) $ posToFen leaf ++ "," ++ show (staticScore leaf) ++ "," ++ show res
+            hPutStrLn (doMeta dout) $ show g ++ "," ++ show (prPly r) ++ "," ++ b01 (prMoverWhite r)
+                ++ "," ++ show (prRoot r) ++ "," ++ b01 leafWhite ++ "," ++ map noComma (prMover r)
+    where b01 b = if b then "1" else "0"
+          noComma c = if c == ',' then ';' else c
 
 -- Append error info to error file:
 collectError :: SomeException -> IO ()

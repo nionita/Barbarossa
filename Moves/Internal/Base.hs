@@ -64,7 +64,8 @@ posToState p c h e = MyState {
                        hist = h,
                        mstats = ssts0,
                        evalst = e,
-                       rootmn = 1
+                       rootmn = 1,
+                       lorig = Nothing
                    }
     where stsc = posEval p e
           p'' = p { staticScore = stsc }
