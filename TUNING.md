@@ -168,6 +168,26 @@ weights; 42k games give +-3.1 Elo (95%), 6000 games +-8.
     positions with the compiled eval (no hidden variables by construction), start from the measured random
     configs (rand-rel10 -15.8, rand-pm1 -10.1), tune, match; strength back to 0 means the method works for a
     correct model and the problem is the feature set.
+24. Synthetic control without hidden variables (`TuneSGD -E SEED`: results drawn from the static eval of the
+    compiled weights, win p^2, draw 2p(1-p), loss (1-p)^2 with p = sigmoid(eval / 200), same 600k positions,
+    `data-syn-600k`; no search involved). The compiled weights are the loss minimum (k = 200: 52106, every
+    other config higher: rand-pm1 +2.07%, rand-sign +1.25%, run4-all +1.04%, run7-natq2 +1.35%, rand-rel10
+    +0.32%). Tunings (q = 0, k = 200, -Optim 184, run on the second machine) and matches in `nopr`, 12k
+    games (+-5.8) against the compiled weights:
+    A (start compiled): loss -0.008%, mean change per weight 2.2, strength +1.4 at full step, +1.6 at half
+    step (old search 20k games: +0.9 / -0.3): the noise floor of the method is 0; the real data moves 17.3
+    per weight (48 values at the cap) and gains +8.1 / -7.9 (half / full), so the real movement is signal
+    about a displaced optimum, not noise.
+    B (start rand-rel10, -11.9): loss back to the compiled level (+0.0006%), mean distance 5.6, strength -3.5.
+    C (start rand-pm1, -7.1): loss +0.12% above compiled, mean distance 6.9 (tiny weights moved by 5.4,
+    large ones by 11), strength -5.2. Partial recovery at best, not distinguishable from full recovery (B)
+    at +-8 for the differences.
+25. Convergence: 184 steps (2 rounds) do not settle. In round 2 of the real runs 77-82 of 92 steps still
+    improve and round 2 gives 23-30% of the loss gain; the largest weight change is 32 (2 x the cap of 16).
+    The synthetic runs also still improve (syn-b 50 steps, 17% of the gain in round 2). So the "full step"
+    measured so far is the point after two sweeps, not the loss minimum; B and C are intermediate states.
+    Continuations with 4 more rounds (-Optim 368, `-Config` from the previous tuned.cfg): `run6-gq0-x`
+    (real, 600k), `syn-a2`, `syn-b2`, `syn-c2`.
 
 ## Problems
 
