@@ -246,6 +246,13 @@ jointly fitted PST (24-29).
 0. Next (2026-10-13): confirm `sp-both` (other openings, 10k nodes), incremental PST and timed tests, which HCE
    terms are redundant with the PST (refit without each), iterate: data from the new engine's self-play,
    refit, test.
+0b. More on-policy data (35k training games were enough for +48; positions within a game are correlated).
+   Off-policy ideas (data of other engines): (1) their middle game positions as start positions of our
+   self-play with `--data` (our results, more varied positions; our search makes the QS leaves); (2) TD(lambda)
+   / TDLeaf targets mixing the result with our own later root scores (already in the .meta files, offline);
+   keep the result weight high, the LogScan labels (pure self reference) failed; (3) a fit on their data as
+   the center of the ridge prior of the on-policy fit; (4) their search scores as targets: least promising
+   (finding 17).
 
 1. Find a loss that ranks the measured configs correctly (the random controls of finding 20 and the earlier
    sweeps are the validation set), then tune with it.
