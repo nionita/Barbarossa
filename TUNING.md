@@ -218,6 +218,14 @@ weights; 42k games give +-3.1 Elo (95%), 6000 games +-8.
     execution (the old eval on the new build: 614k). `sp-both` is compiled into `pstf` (Struct.Weights,
     Struct.Pst); the old engine is the same build with `results/hvar/old-compiled.cfg` (BarbarossaTuning:
     old weights and `pst.off = 1`). Not yet tested: timed games.
+31. Timed games (fastchess on MEMO, 10+0.1 s, 2000 games, `open-moves-uniq.fen` with full move 1, both
+    engines the same `pstf` binary, `-l 5`): `sp-both` compiled (new) against the old weights with
+    `pst.off = 1` (old): **+90.0 +- 12.5 Elo** (62.7%, W/L/D 960 / 453 / 587, pentanomial 49 / 109 / 338 /
+    294 / 210). Same binary: this is the eval at equal speed, the cost of the PST bookkeeping (2-3% nodes/s
+    against the hvar binary) is not in it. A first attempt was invalid: the UCI parser read the FEN full
+    move number as one character, fastchess sent 32768 for the openings with full move 0, the moves after
+    the FEN were dropped and the engines played illegal moves (fixed in `pstf`, b6e9621; openings now with
+    full move 1).
 
 How to repeat: the commands are in `README.md` of BarbarossaTuning, section "On-policy tuning of the HCE".
 Engine changes on `hvar`: `TuneSGD -X` (export), optional PST read from the config (`pst.mid.Ne4 = 37`, 1/8 cp,
