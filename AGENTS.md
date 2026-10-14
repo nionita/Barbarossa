@@ -54,9 +54,9 @@ Refactorings of the eval, the search or the position state must not change the e
 
 ## SelfPlay and UCI Notes
 
-- SelfPlay names its log file after the start second, in the current directory: two SelfPlay processes started
-  in the same second in the same directory crash ("thread blocked indefinitely in an MVar operation"); run
-  parallel processes in separate directories.
+- SelfPlay names its log file `selfplay-<start second>-<pid>.log`, in the current directory (only with `-l`;
+  default is no log), so parallel processes in the same directory do not share it. If the log file cannot be
+  opened or written, the error goes to `Barbarossa_collected_errors.txt` and SelfPlay continues without logging.
 - Branch builds log at Info level by default (Origin lines included): for matches with fastchess or a GUI use
   `-l 5`.
 

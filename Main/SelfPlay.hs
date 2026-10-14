@@ -24,6 +24,7 @@ import System.Directory
 import System.Environment (getArgs)
 import System.FilePath
 import System.IO
+import System.Process (getCurrentPid)
 import Data.Time.Clock (NominalDiffTime, UTCTime, addUTCTime, diffUTCTime, getCurrentTime)
 import Data.Time.Format (defaultTimeLocale, formatTime)
 import Data.Time.LocalTime (TimeZone, getCurrentTimeZone, utcToLocalTime)
@@ -661,9 +662,7 @@ main = do
 
 filterFile :: Options -> CtxIO ()
 filterFile opts = do
-    ctx <- ask
-    let logFileName = "selfplay-" ++ show (startSecond ctx) ++ ".log"
-    startLogger logFileName
+    startLogger
     lift $ do
         putStrLn $ "Vectorizing " ++ optAFenFile opts
         putStrLn $ "Play depth  " ++ show (optDepth opts)
@@ -688,10 +687,8 @@ data PerfAcc = PerfAcc {
 
 perftCommand :: Options -> CtxIO ()
 perftCommand opts = do
-    ctx <- ask
-    let logFileName = "selfplay-" ++ show (startSecond ctx) ++ ".log"
-        fen = fromMaybe "" (optFen opts)
-    startLogger logFileName
+    let fen = fromMaybe "" (optFen opts)
+    startLogger
     liftIO $ do
         putStrLn $ "Perft from FEN  " ++ fen
         putStrLn $ "Max depth       " ++ show (optDepth opts)
@@ -761,8 +758,7 @@ perftChildren depth = do
 perfTestFile :: Options -> CtxIO ()
 perfTestFile opts = do
     ctx <- ask
-    let logFileName = "selfplay-" ++ show (startSecond ctx) ++ ".log"
-    startLogger logFileName
+    startLogger
     lift $ do
         putStrLn $ "Performance test from " ++ optAFenFile opts
         putStrLn $ "Search depth  " ++ show (optDepth opts)
@@ -833,9 +829,7 @@ perfLoop hi mho mhq depth _k acc = do
 matchFile :: Options -> String -> CtxIO GameScore
 matchFile opts dir = do
     liftIO $ setCurrentDirectory dir
-    ctx <- ask
-    let logFileName = "selfplay-" ++ show (startSecond ctx) ++ ".log"
-    startLogger logFileName
+    startLogger
     msavePath <- liftIO $ discoverSprtSaveInDir "." opts
     msave <- liftIO $ traverse readSaveFile msavePath
     liftIO $ maybe (return ()) (validateResumeConflicts opts) msave
@@ -1287,17 +1281,28 @@ matchToSave matchInfo acc elapsed = SprtSave {
 
 -- The logger will be startet anyway, but will open a file
 -- only when it has to write the first message
--- When it cannot open that file, it should at least consume the messages
--- so that the channel does not get stuck
+-- When it cannot open or write that file, it records the error and goes on
+-- consuming the messages without logging, so that the channel does not grow
 data LoggerState = LoggerFile String
                  | LoggerHandle Handle
                  | LoggerError
 
-startLogger :: String -> CtxIO ()
-startLogger file = do
+-- The log file name contains the start second and the process id, so that
+-- processes started in the same second in the same directory do not share it
+startLogger :: CtxIO ()
+startLogger = do
     ctx <- ask
-    void $ liftIO $ forkIO $ catch (theLogger (logger ctx) (LoggerFile file)) collectError
+    pid <- liftIO getCurrentPid
+    let file = "selfplay-" ++ show (startSecond ctx) ++ "-" ++ show pid ++ ".log"
+    void $ liftIO $ forkIO $ catch (theLogger (logger ctx) (LoggerFile file)) loggerEnd
     ctxLog LogInfo "Logger started"
+
+-- At program end the logger is blocked reading the channel, which nobody else
+-- references anymore: this is its normal end, not an error
+loggerEnd :: SomeException -> IO ()
+loggerEnd e
+    | Just BlockedIndefinitelyOnMVar <- fromException e = return ()
+    | otherwise                                         = collectError e
 
 -- Here the logger has a problem: at the end it does not flush the logfile
 -- This is important only for debug (for normal operation there will be no log)
@@ -1306,15 +1311,21 @@ theLogger lchan lst = do
     s <- readChan lchan
     case lst of
         LoggerError  -> theLogger lchan lst
-        LoggerFile f -> handle collectError $ do
-            h <- openFile f AppendMode
-            hPutStrLn h s
-            hFlush h
-            theLogger lchan (LoggerHandle h)
-        LoggerHandle h -> do
-            hPutStrLn h s
-            hFlush h
-            theLogger lchan lst
+        LoggerFile f -> do
+            eh <- try $ openFile f AppendMode
+            case eh of
+                Left e  -> loggerFailed e
+                Right h -> loggerWrite h s
+        LoggerHandle h -> loggerWrite h s
+    where loggerWrite h s = do
+              ew <- try $ hPutStrLn h s >> hFlush h
+              case ew of
+                  Left e   -> loggerFailed e
+                  Right () -> theLogger lchan (LoggerHandle h)
+          loggerFailed :: IOException -> IO ()
+          loggerFailed e = do
+              collectError $ toException e
+              theLogger lchan LoggerError
 
 startWriter :: Bool -> CtxIO ()
 startWriter inter = do

@@ -101,6 +101,7 @@ Executable SelfPlay
       vector-algorithms,
       random,
       directory,
+      process,
       transformers,
       QuickCheck,
       text,
