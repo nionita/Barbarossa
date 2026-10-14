@@ -14,7 +14,7 @@ import Control.Concurrent
 import Control.Exception
 import Data.Char (isSpace)
 import Data.IORef
-import Data.List (intersperse)
+import Data.List (intercalate, intersperse)
 import qualified Data.Map.Strict as M
 import Data.Maybe (fromMaybe, isJust)
 import Foreign hiding (void)
@@ -80,6 +80,7 @@ data Options = Options {
         optMatch    :: Maybe String,	-- match between configs in the given directory
         optSprtDir  :: Maybe String,	-- SPRT match between configs in the given directory
         optPerfTest :: Bool,		-- perf test on input fen file
+        optPerfScores :: Maybe FilePath,	-- perf test: write static eval and score per depth
         optPerft    :: Bool,		-- perft on a single FEN
         optBuildInfo :: Bool,		-- print build flavor and opposite build command
         optSprtAlpha :: Maybe Double,	-- SPRT alpha
@@ -116,6 +117,7 @@ defaultOptions = Options {
         optMatch    = Nothing,
         optSprtDir  = Nothing,
         optPerfTest = False,
+        optPerfScores = Nothing,
         optPerft    = False,
         optBuildInfo = False,
         optSprtAlpha = Nothing,
@@ -174,6 +176,9 @@ addSprtDir ns opt = opt { optSprtDir = Just ns }
 
 setPerfTest :: Options -> Options
 setPerfTest opt = opt { optPerfTest = True }
+
+setPerfScores :: FilePath -> Options -> Options
+setPerfScores fi opt = opt { optPerfScores = Just fi }
 
 setPerft :: Options -> Options
 setPerft opt = opt { optPerft = True }
@@ -235,6 +240,8 @@ options = [
         Option "m" ["match"]   (ReqArg addMatch "STRING") "Match between 2 configs in the given directory",
         Option "" ["sprt"]     (ReqArg addSprtDir "STRING") "SPRT match between 2 configs in the given directory",
         Option "P" ["perf"]    (NoArg setPerfTest) "Performance test on input FEN file",
+        Option "" ["perf-scores"] (ReqArg setPerfScores "FILE")
+               "Perf test: write fen, static eval and the search score of every depth 1 .. -d to FILE",
         Option "" ["perft"]    (NoArg setPerft) "Perft on a single FEN",
         Option "B" ["build-info"] (NoArg setBuildInfo) "Show build flavor and opposite build command",
         Option "" ["sprt-alpha"] (ReqArg addSprtAlpha "DOUBLE") "SPRT alpha (default 0.05 when SPRT is enabled)",
@@ -752,9 +759,11 @@ perfTestFile opts = do
         putStrLn $ "Performance test from " ++ optAFenFile opts
         putStrLn $ "Search depth  " ++ show (optDepth opts)
     hi <- liftIO $ openFile (optAFenFile opts) ReadMode
+    mho <- liftIO $ traverse (\fn -> openFile fn WriteMode) (optPerfScores opts)
     startMs <- liftIO $ currMilli (strttm ctx)
-    acc <- loopCount (perfLoop hi (optDepth opts)) (PerfAcc 0 0 0)
+    acc <- loopCount (perfLoop hi mho (optDepth opts)) (PerfAcc 0 0 0)
     endMs <- liftIO $ currMilli (strttm ctx)
+    liftIO $ mapM_ hClose mho
     let elapsedMs = max 1 (endMs - startMs)
         nps = perfNodes acc * 1000 `div` elapsedMs
     liftIO $ do
@@ -765,8 +774,8 @@ perfTestFile opts = do
         putStrLn $ "Nodes/second:       " ++ show nps
         hClose hi
 
-perfLoop :: Handle -> Int -> Int -> PerfAcc -> CtxIO (Bool, PerfAcc)
-perfLoop hi depth _k acc = do
+perfLoop :: Handle -> Maybe Handle -> Int -> Int -> PerfAcc -> CtxIO (Bool, PerfAcc)
+perfLoop hi mho depth _k acc = do
     end <- lift $ hIsEOF hi
     if end
        then return (False, acc)
@@ -783,7 +792,17 @@ perfLoop hi depth _k acc = do
                           let crts = crtStatus chg
                               sini = posToState pos (hash crts) (hist crts) (evalst crts)
                           modifyChanging $ \c -> c { crtStatus = sini }
-                          (_, _, nodes, _) <- iterativeDeepening depth Nothing
+                          nodes <- case mho of
+                              Nothing -> do
+                                  (_, _, nodes, _) <- iterativeDeepening depth Nothing
+                                  return nodes
+                              Just ho -> do
+                                  (scs, nodes) <- depthScores depth sini
+                                  let stsc = case stack sini of
+                                                 p0:_ -> staticScore p0
+                                                 []   -> 0
+                                  liftIO $ hPutStrLn ho $ intercalate "," $ fen : show stsc : map show scs
+                                  return nodes
                           let acc' = PerfAcc {
                                   perfValid = perfValid acc + 1,
                                   perfInvalid = perfInvalid acc,
@@ -1503,6 +1522,18 @@ playGame d maybeNodes nodeMarginPc mdo pos (ide1, eval1) (ide2, eval2) = do
                                              chg2n  = (plChg player2) { crtStatus = state2 }
                                          go recs j (player2 { plChg = chg2n })
                                               (player1 { plChg = chg1n, plNodes = subNodes mbNodes nodes})
+
+-- The search scores (side to move) of every iteration 1 .. depth from the given state, and the nodes
+-- (for the margin measurement: static eval against the search value per depth; unlike
+-- iterativeDeepening it reports also depth 1 and does not stop early)
+depthScores :: Int -> MyState -> CtxIO ([Int], Int)
+depthScores depth sini0 = go 1 sini0 Nothing [] [] []
+    where go d sini lsc lpv rmvs acc = do
+              (path, sc, rmvsf, _timint, sfin, _) <- bestMoveCont True Nothing d 0 0 sini lsc lpv rmvs
+              let acc' = sc : acc
+              if d >= depth || null path
+                 then return (reverse acc', fromIntegral $ sNodes $ mstats sfin)
+                 else go (d + 1) sfin (Just sc) path rmvsf acc'
 
 iterativeDeepening :: Int -> Maybe Int -> CtxIO (Int, [Move], Int, Maybe MyPos)
 iterativeDeepening depth maybeMaxNodes = do
