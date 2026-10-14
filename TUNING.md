@@ -244,6 +244,18 @@ weights; 42k games give +-3.1 Elo (95%), 6000 games +-8.
     `r2-both` against the compiled `fold` (SelfPlay): 1000 nodes +0.3 +- 4.4 (20k games), 10k nodes +6.8 +- 6.5
     (8k games): a small gain that shows only at depth. Learning curve of round 1 (joint fit on 25 / 50 / 100% of
     its data, independent yardstick): -1.16 / -1.53 / -1.85%, about 0.33% per doubling, no saturation then.
+35. Futility margins (`fold`, `24 << (d-1)`: 24 .. 768 cp for d = 1 .. 6), measured on 5k quiet positions of the
+    round 2 games with `SelfPlay -P --perf-quiet` (per depth the best value of the prunable quiet moves and of
+    the other moves, each child searched to d - 1, QS for d = 1) and `hv_margins.py` (BarbarossaTuning). A cut
+    is harmful when the best skipped quiet move beats both static + margin (the smallest alpha that prunes,
+    worst case) and the best searched move. Harmful at the current margins (old eval / new eval): d1 12.3 /
+    14.4%, d2 8.1 / 8.9%, d3 4.7 / 5.0%, d4 2.4 / 2.4%, d5 1.0 / 1.1%, d6 0.20 / 0.25%. Margins for 2% harmful
+    cuts (new): 72, 144, 192, 220, 244, 292; for 1%: 84, 248, 332, 356, 404, 424. So the doubling schedule takes
+    very different risks per depth (aggressive at d1-2, nearly no pruning at d5-6), and the new eval needs
+    slightly larger margins than the old one (5-10% more cp for the same risk; the broad measure with all
+    moves agrees), not smaller. Equal risk is not necessarily best (shallow errors are cheap, shallow nodes
+    many); candidates for node-limited matches at 50k nodes: A 72/144/192/224/248/296, B 24/48/96/192/256/320,
+    C 48/96/144/192/384/768.
 
 How to repeat: the commands are in `README.md` of BarbarossaTuning, section "On-policy tuning of the HCE".
 Engine changes on `hvar`: `TuneSGD -X` (export), optional PST read from the config (`pst.mid.Ne4 = 37`, 1/8 cp,
