@@ -226,6 +226,10 @@ weights; 42k games give +-3.1 Elo (95%), 6000 games +-8.
     move number as one character, fastchess sent 32768 for the openings with full move 0, the moves after
     the FEN were dropped and the engines played illegal moves (fixed in `pstf`, b6e9621; openings now with
     full move 1).
+32. Against the best previous version `boas` (own binary, everything included: eval, PST cost, search
+    changes since then), same conditions (10+0.1, 2000 games): **+78.6 +- 12.7 Elo** (61.1%, W/L/D 946 / 501 /
+    553, pentanomial 56 / 129 / 337 / 270 / 208). With 31: `old` (pstf code, old eval) and `boas` are about
+    equal (difference about 11 +- 18), the gain is the new eval.
 
 How to repeat: the commands are in `README.md` of BarbarossaTuning, section "On-policy tuning of the HCE".
 Engine changes on `hvar`: `TuneSGD -X` (export), optional PST read from the config (`pst.mid.Ne4 = 37`, 1/8 cp,
