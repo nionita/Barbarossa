@@ -1100,3 +1100,12 @@ quietPositiveSEE :: MyPos -> Int -> (Square, Square) -> Bool
 quietPositiveSEE !pos !v0 (!sqfa, !sq) = adv <= 0
     where !allAttRec = theAttacs pos sq
           adv = seeMoveValue pos allAttRec sqfa sq v0
+
+-- The longest prefix of a move sequence which can be really played from the given position:
+-- legalMove is only pseudo legal, so we check additionally that the moving side is not in check
+legalPrefix :: MyPos -> [Move] -> [Move]
+legalPrefix _ [] = []
+legalPrefix p (m:ms)
+    | legalMove p m && checkOk p' = m : legalPrefix p' ms
+    | otherwise                   = []
+    where p' = doFromToMove m p
