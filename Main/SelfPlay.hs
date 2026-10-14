@@ -9,14 +9,15 @@
 
 module Main (main) where
 import Control.Monad.Reader
-import Control.Monad (when, void, forever, foldM, forM_)
+import Control.Monad (when, void, forever, foldM, forM, forM_)
 import Control.Concurrent
 import Control.Exception
 import Data.Char (isSpace)
 import Data.IORef
 import Data.List (intercalate, intersperse)
+import Search.Core (qsValue)
 import qualified Data.Map.Strict as M
-import Data.Maybe (fromMaybe, isJust)
+import Data.Maybe (catMaybes, fromMaybe, isJust)
 import Foreign hiding (void)
 import System.Console.GetOpt
 import System.Directory
@@ -81,6 +82,7 @@ data Options = Options {
         optSprtDir  :: Maybe String,	-- SPRT match between configs in the given directory
         optPerfTest :: Bool,		-- perf test on input fen file
         optPerfScores :: Maybe FilePath,	-- perf test: write static eval and score per depth
+        optPerfQuiet :: Maybe FilePath,	-- perf test: write static eval and best quiet move value per depth
         optPerft    :: Bool,		-- perft on a single FEN
         optBuildInfo :: Bool,		-- print build flavor and opposite build command
         optSprtAlpha :: Maybe Double,	-- SPRT alpha
@@ -118,6 +120,7 @@ defaultOptions = Options {
         optSprtDir  = Nothing,
         optPerfTest = False,
         optPerfScores = Nothing,
+        optPerfQuiet = Nothing,
         optPerft    = False,
         optBuildInfo = False,
         optSprtAlpha = Nothing,
@@ -179,6 +182,9 @@ setPerfTest opt = opt { optPerfTest = True }
 
 setPerfScores :: FilePath -> Options -> Options
 setPerfScores fi opt = opt { optPerfScores = Just fi }
+
+setPerfQuiet :: FilePath -> Options -> Options
+setPerfQuiet fi opt = opt { optPerfQuiet = Just fi }
 
 setPerft :: Options -> Options
 setPerft opt = opt { optPerft = True }
@@ -242,6 +248,8 @@ options = [
         Option "P" ["perf"]    (NoArg setPerfTest) "Performance test on input FEN file",
         Option "" ["perf-scores"] (ReqArg setPerfScores "FILE")
                "Perf test: write fen, static eval and the search score of every depth 1 .. -d to FILE",
+        Option "" ["perf-quiet"] (ReqArg setPerfQuiet "FILE")
+               "Perf test: write fen, static eval and the best value of the prunable quiet moves per depth 1 .. -d",
         Option "" ["perft"]    (NoArg setPerft) "Perft on a single FEN",
         Option "B" ["build-info"] (NoArg setBuildInfo) "Show build flavor and opposite build command",
         Option "" ["sprt-alpha"] (ReqArg addSprtAlpha "DOUBLE") "SPRT alpha (default 0.05 when SPRT is enabled)",
@@ -760,10 +768,12 @@ perfTestFile opts = do
         putStrLn $ "Search depth  " ++ show (optDepth opts)
     hi <- liftIO $ openFile (optAFenFile opts) ReadMode
     mho <- liftIO $ traverse (\fn -> openFile fn WriteMode) (optPerfScores opts)
+    mhq <- liftIO $ traverse (\fn -> openFile fn WriteMode) (optPerfQuiet opts)
     startMs <- liftIO $ currMilli (strttm ctx)
-    acc <- loopCount (perfLoop hi mho (optDepth opts)) (PerfAcc 0 0 0)
+    acc <- loopCount (perfLoop hi mho mhq (optDepth opts)) (PerfAcc 0 0 0)
     endMs <- liftIO $ currMilli (strttm ctx)
     liftIO $ mapM_ hClose mho
+    liftIO $ mapM_ hClose mhq
     let elapsedMs = max 1 (endMs - startMs)
         nps = perfNodes acc * 1000 `div` elapsedMs
     liftIO $ do
@@ -774,8 +784,8 @@ perfTestFile opts = do
         putStrLn $ "Nodes/second:       " ++ show nps
         hClose hi
 
-perfLoop :: Handle -> Maybe Handle -> Int -> Int -> PerfAcc -> CtxIO (Bool, PerfAcc)
-perfLoop hi mho depth _k acc = do
+perfLoop :: Handle -> Maybe Handle -> Maybe Handle -> Int -> Int -> PerfAcc -> CtxIO (Bool, PerfAcc)
+perfLoop hi mho mhq depth _k acc = do
     end <- lift $ hIsEOF hi
     if end
        then return (False, acc)
@@ -792,11 +802,21 @@ perfLoop hi mho depth _k acc = do
                           let crts = crtStatus chg
                               sini = posToState pos (hash crts) (hist crts) (evalst crts)
                           modifyChanging $ \c -> c { crtStatus = sini }
-                          nodes <- case mho of
-                              Nothing -> do
+                          let stsc0 = case stack sini of
+                                          p0:_ -> staticScore p0
+                                          []   -> 0
+                          nodes <- case (mho, mhq) of
+                              (Nothing, Just hq) -> do
+                                  (mvs, nodes) <- quietScores depth sini
+                                  case mvs of
+                                      Just vs -> liftIO $ hPutStrLn hq $ intercalate "," $
+                                                     fen : show stsc0 : map show vs
+                                      Nothing -> return ()
+                                  return nodes
+                              (Nothing, Nothing) -> do
                                   (_, _, nodes, _) <- iterativeDeepening depth Nothing
                                   return nodes
-                              Just ho -> do
+                              (Just ho, _) -> do
                                   (scs, nodes) <- depthScores depth sini
                                   let stsc = case stack sini of
                                                  p0:_ -> staticScore p0
@@ -1522,6 +1542,32 @@ playGame d maybeNodes nodeMarginPc mdo pos (ide1, eval1) (ide2, eval2) = do
                                              chg2n  = (plChg player2) { crtStatus = state2 }
                                          go recs j (player2 { plChg = chg2n })
                                               (player1 { plChg = chg1n, plNodes = subNodes mbNodes nodes})
+
+-- For the futility margin measurement: futility pruning at a node of depth d skips the quiet moves
+-- accepted by canPruneMove; what they could bring is the best value over these moves of the negated
+-- value of the child, searched to depth d - 1 (QS for d = 1). Returns these values for d = 1 .. depth
+-- (Nothing when the position has no such move) and the nodes
+quietScores :: Int -> MyState -> CtxIO (Maybe [Int], Int)
+quietScores depth sini = do
+    ((mvs1, mvs2), _) <- runCState (genMoves 1) sini
+    let cands = case stack sini of
+                    p0:_ -> filter (canPruneMove p0) (mvs1 ++ mvs2)
+                    []   -> []
+    vals <- forM cands $ \m -> do
+        (r, schild) <- runCState (doMove m) sini
+        case r of
+            Illegal -> return Nothing
+            Final   -> return $ Just (replicate depth 0, 0)
+            _       -> do
+                (q, _) <- runCState qsValue schild
+                (scs, n) <- if depth > 1 then depthScores (depth - 1) schild else return ([], 0)
+                let vs  = q : scs
+                    vsf = take depth $ vs ++ repeat (last vs)	-- the search may end early (mate)
+                return $ Just (map negate vsf, n)
+    let ok = catMaybes vals
+    return $ if null ok
+                then (Nothing, sum (map snd ok))
+                else (Just $ foldr1 (zipWith max) (map fst ok), sum (map snd ok))
 
 -- The search scores (side to move) of every iteration 1 .. depth from the given state, and the nodes
 -- (for the margin measurement: static eval against the search value per depth; unlike

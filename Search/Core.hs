@@ -2,7 +2,8 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE PatternGuards #-}
 module Search.Core (
-    alphaBeta
+    alphaBeta,
+    qsValue
 ) where
 import Control.Monad
 import Control.Monad.State hiding (gets, modify)
@@ -225,6 +226,13 @@ emptySeq = Seq []
 ttPathMoves :: Int -> Move -> Seq Move
 ttPathMoves 0 _ = emptySeq
 ttPathMoves _ e = Seq [e]
+
+-- The QS value (side to move) of the current position with the full window, outside of a search
+-- (used to measure the search margins)
+qsValue :: Game Int
+qsValue = do
+    (q, _) <- runCState (pvQSearch alpha0 beta0) pvsInit
+    return $ qsScore q
 
 pvsInit :: PVState
 pvsInit = PVState { ronly = pvro00, stats = ssts0, absdp = 0, maxdp = 0, abort = False,
