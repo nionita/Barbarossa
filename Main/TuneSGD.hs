@@ -78,7 +78,7 @@ defaultOptions = Options {
         optBatchSz   = 3072,
         optValidBa   = 0,
         optLossFun   = 1,	-- default lossScoreSigWeight
-        optFixIdx    = 0,	-- default: material middle game not modified
+        optFixIdx    = -1,	-- default: none (the material weight, the former anchor, is in the PST now)
         optParams    = [],	-- default: all parameters
         optRelabel   = 0,
         optExport    = False,
@@ -207,7 +207,7 @@ options = [
         Option "y" ["yi"]       (ReqArg addY "INT")          "Start Y for Rosenbrock",
         Option "L" ["loss"]     (ReqArg addLossFun "INT")    "Loss function: 0 - 3 (0)",
         Option "E" ["relabel"]  (ReqArg setRelabel "INT")    "Seed: write the input files to -o with results drawn from the static eval (-k, -c)",
-        Option "F" ["fix"]      (ReqArg setFixIdx "INT")     "Fix this index 0 - dimensions (0)",
+        Option "F" ["fix"]      (ReqArg setFixIdx "INT")     "Fix this index 0 - dimensions (-1 = none)",
         Option "R" ["result"]   (NoArg  setResult)           "Input file format: fen,result",
         Option "S" ["score"]    (NoArg  setScore)            "Input file format: fen,score",
         Option "X" ["export"]   (NoArg  setExport)           "Export eval features of the input files to -o (-c)",

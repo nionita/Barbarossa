@@ -155,9 +155,7 @@ normalEval sr p !sti = (sc * (128 - get50Moves p)) `unsafeShiftR` (shift2Cp + 15
 {-# INLINE evalTermSum #-}
 evalTermSum :: MyPos -> EvalState -> MidEnd
 evalTermSum p !sti = foldr ($) (MidEnd 0 0) [
-                         materDiff p ew
-                       , evalBishops p ew
-                       , evalRookPawn p ew
+                         evalBishops p ew
                        , kingSafe p ew
                        , kingPlace ep p ew
                        , mobiLity p ew
@@ -442,10 +440,8 @@ kingSquare kingsb colorp = firstOne $ kingsb .&. colorp
 
 ------ Material ------
 
-materDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-materDiff p !ew = mad (ewMaterialDiff ew) md
-    where !md | moving p == White =   mater p
-              | otherwise         = - mater p
+-- Material is part of the compiled PST (the piece values on every square, see Struct.Pst), like the
+-- former terms for rook pawns and knights in the center (branch fold)
 
 ------ King placement and opennes ------
 
@@ -701,7 +697,6 @@ mobDiff p mylr yolr mypb yopb ew = mad (ewMobilityKnight ew) n .
 centerDiff :: MyPos -> EvalWeights -> MidEnd -> MidEnd
 centerDiff p !ew = mad (ewCenterPAtts ew) pd .
                    mad (ewCenterNAtts ew) nd .
-                   mad (ewCenterNOcc  ew) no .
                    mad (ewCenterBAtts ew) bd .
                    mad (ewCenterRAtts ew) rd .
                    mad (ewCenterQAtts ew) qd .
@@ -712,9 +707,6 @@ centerDiff p !ew = mad (ewCenterPAtts ew) pd .
           !mna = popCount $ myNAttacs p .&. excent
           !yna = popCount $ yoNAttacs p .&. excent
           !nd  = mna - yna
-          !mno = popCount $ me p .&. excent .&. knights p
-          !yno = popCount $ yo p .&. excent .&. knights p
-          !no  = mno - yno
           !mba = popCount $ myBAttacs p .&. excent
           !yba = popCount $ yoBAttacs p .&. excent
           !bd  = mba - yba
@@ -952,15 +944,6 @@ evalNRCorrection p = [md]
           !brp = - popCount (rooks p .&. yo p) * bpc * 12	-- 1/8 for each pawn under 5
           !md = wnp + wrp - bnp - brp
 --}
-
------- Rook pawn weakness ------
-
--- This function is already optimised
-evalRookPawn :: MyPos -> EvalWeights -> MidEnd -> MidEnd
-evalRookPawn p !ew = mad (ewRookPawn ew) rps
-    where !wrp = popCount $ pawns p .&. me p .&. rookFiles
-          !brp = popCount $ pawns p .&. yo p .&. rookFiles
-          !rps = wrp - brp
 
 ------ Blocked pawns ------
 
