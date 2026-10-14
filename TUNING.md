@@ -258,8 +258,12 @@ weights; 42k games give +-3.1 Elo (95%), 6000 games +-8.
     C 48/96/144/192/384/768.
     The margins are now eval parameters `epFutil1 .. epFutil6` (config); futility prunes in PV nodes up to depth
     5, in non-PV nodes up to 6 (guard `d >= maxFutilDepth && pv`). Direction tests at 50k nodes against the
-    defaults, 100 games each (+-55): A -45, B -17, C -38 (all negative, none significant alone); pending D
-    16/32/96/192/384/768 and E (depth 5, 6 = 30000: symmetric futility up to 4), 400 games each.
+    defaults, 100 games each (+-55): A -45, B -17, C -38 (all negative, none significant alone); D
+    16/32/96/192/384/768 (more pruning at d1-2) 400 games: -23.5 +- 26.7 (W/D/L 109/155/136); E 24/48/96/192/
+    30000/30000 (no futility at d5-6: symmetric up to 4 in PV and non-PV nodes) 400 games: -13.9 +- 26.6
+    (114/156/130). All five directions negative (weighted mean about -18 Elo over 1400 games): the default margins are
+    a local optimum of this search, although their measured risks per depth differ strongly; equal risk per depth
+    does not predict strength (as in the chilo BO experiments). Futility at d5-6 probably helps a little (E, not significant).
     Per game phase (5% harmful cuts, old / new, d1 .. d6): middle game (phase > 150) 56/80/100/112/136/140 and
     60/72/92/104/124/132; transition (80 .. 150) 52/92/124/152/176/188 and 56/104/124/152/164/204; end game (< 80)
     40/64/80/108/124/132 and 48/72/96/116/128/140. The transition needs the largest margins (+30-40% from
