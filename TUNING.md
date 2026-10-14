@@ -256,6 +256,19 @@ weights; 42k games give +-3.1 Elo (95%), 6000 games +-8.
     moves agrees), not smaller. Equal risk is not necessarily best (shallow errors are cheap, shallow nodes
     many); candidates for node-limited matches at 50k nodes: A 72/144/192/224/248/296, B 24/48/96/192/256/320,
     C 48/96/144/192/384/768.
+    The margins are now eval parameters `epFutil1 .. epFutil6` (config); futility prunes in PV nodes up to depth
+    5, in non-PV nodes up to 6 (guard `d >= maxFutilDepth && pv`). Direction tests at 50k nodes against the
+    defaults, 100 games each (+-55): A -45, B -17, C -38 (all negative, none significant alone); pending D
+    16/32/96/192/384/768 and E (depth 5, 6 = 30000: symmetric futility up to 4), 400 games each.
+    Per game phase (5% harmful cuts, old / new, d1 .. d6): middle game (phase > 150) 56/80/100/112/136/140 and
+    60/72/92/104/124/132; transition (80 .. 150) 52/92/124/152/176/188 and 56/104/124/152/164/204; end game (< 80)
+    40/64/80/108/124/132 and 48/72/96/116/128/140. The transition needs the largest margins (+30-40% from
+    depth 3), the end game not more than the middle game; the new eval moved the end game up (its scale).
+    Scale: the margins are in cp of the eval; when tuning changes the scale (new eval: pawn 89 cp in the
+    middle game, 130 in the end game, against 100 / 100), the risk of fixed cp margins changes. Ideas for later
+    (after the next training round, user decision: no futility tuning now): margins in units of the eval
+    (e.g. pawn value of the phase), phase dependent margins, a fixed k for all fits. Data, binaries and commands
+    to repeat: C:\Learn\Tune\hvar\margins (README.txt), `hv_margins.py --quiet-rest [--by-phase]`.
 
 How to repeat: the commands are in `README.md` of BarbarossaTuning, section "On-policy tuning of the HCE".
 Engine changes on `hvar`: `TuneSGD -X` (export), optional PST read from the config (`pst.mid.Ne4 = 37`, 1/8 cp,
