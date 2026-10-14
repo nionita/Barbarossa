@@ -230,6 +230,20 @@ weights; 42k games give +-3.1 Elo (95%), 6000 games +-8.
     changes since then), same conditions (10+0.1, 2000 games): **+78.6 +- 12.7 Elo** (61.1%, W/L/D 946 / 501 /
     553, pentanomial 56 / 129 / 337 / 270 / 208). With 31: `old` (pstf code, old eval) and `boas` are about
     equal (difference about 11 +- 18), the gain is the new eval.
+33. Branch `fold`: the pure piece-square terms are folded into the compiled PST: material (`ewMaterialDiff`
+    times `matPiece1` on every square of each piece type), `ewRookPawn` (pawns on the a and h files),
+    `ewCenterNOcc` (knights on c3-f6); the terms and their 3 weights are removed (43 weights), and the `mater`
+    field of the position (its last users, two special evaluations, compute it from the bitboards). The
+    eval is identical (505k positions) and the deterministic search too (same node counts on tests.fen and
+    10 special endgame positions). Not pure PST and kept: `ewAdvPawn5/6` (non passed pawns only) and
+    `ewKingPlaceCent` (opponent material, queens, pawn shelter).
+34. Round 2 of the on-policy iteration: data of the new engine (`pstf`, `sp-both` compiled), 80k games at 10k
+    nodes (8.1M positions), validation 2 shards (10k games, both opening files), export of `fold`. The fit
+    gains much less: `hce-tuned` -0.20 +- 0.12%, `hce-tuned+pst` (`r2-both`) -0.39 +- 0.19%, the ridge prior
+    hardly matters (tau 1.25 .. 20 equal on the selection half): near the fixed point of the iteration.
+    `r2-both` against the compiled `fold` (SelfPlay): 1000 nodes +0.3 +- 4.4 (20k games), 10k nodes +6.8 +- 6.5
+    (8k games): a small gain that shows only at depth. Learning curve of round 1 (joint fit on 25 / 50 / 100% of
+    its data, independent yardstick): -1.16 / -1.53 / -1.85%, about 0.33% per doubling, no saturation then.
 
 How to repeat: the commands are in `README.md` of BarbarossaTuning, section "On-policy tuning of the HCE".
 Engine changes on `hvar`: `TuneSGD -X` (export), optional PST read from the config (`pst.mid.Ne4 = 37`, 1/8 cp,
@@ -258,6 +272,8 @@ jointly fitted PST (24-29).
 0. Next (2026-10-13): confirm `sp-both` (other openings, 10k nodes), incremental PST and timed tests, which HCE
    terms are redundant with the PST (refit without each), iterate: data from the new engine's self-play,
    refit, test.
+0a. Round 3 with deeper data (round 2 at 10k nodes was near the fixed point, its gain showed only at depth):
+   self-play at 50k nodes per move from the engine with `r2-both`, then refit.
 0b. More on-policy data (35k training games were enough for +48; positions within a game are correlated).
    Off-policy ideas (data of other engines): (1) their middle game positions as start positions of our
    self-play with `--data` (our results, more varied positions; our search makes the QS leaves); (2) TD(lambda)
