@@ -320,7 +320,7 @@ scoreToMate f mywin p = Score msc
           !distk = squareDistance km ky	-- distance between kings - drive to low
           !distc = f kweak	-- driving function: drive to high
           !sc  = (winBonus + distc * distc - distk * distk) * 10
-          !mtr = if moving p == White then mater p else -(mater p)
+          !mtr = if moving p == White then materWhite p else - materWhite p
           !wsc = if mywin then sc else -sc
           !msc = (mtr `unsafeShiftL` shift2Cp) + wsc	-- here the score is in centipawns
 
@@ -1088,8 +1088,8 @@ pawnEndGame p
           !myking = kingSquare (kings p) (me p)
           !yoking = kingSquare (kings p) (yo p)
           (escMe, escYo, maDiff)
-              | moving p == White = (escMeWhite yoking, escYoBlack myking,   mater p)
-              | otherwise         = (escMeBlack yoking, escYoWhite myking, - mater p)
+              | moving p == White = (escMeWhite yoking, escYoBlack myking,   materWhite p)
+              | otherwise         = (escMeBlack yoking, escYoWhite myking, - materWhite p)
           mpsqs  = map escMe $ bbToSquares mfpbb	-- my pp squares & distances to promotion
           mescds = map snd $ filter fst mpsqs		-- my escaped passed pawns
           ypsqs  = map escYo $ bbToSquares yfpbb	-- your pp squares & distances to promotion
