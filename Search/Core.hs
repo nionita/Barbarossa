@@ -19,7 +19,7 @@ import Struct.Struct
 import Moves.Core
 import Moves.Internal.Base
 import Moves.Internal.BaseTypes (Game)
-import Struct.Status (MyState(..))
+import Struct.Status (MyState(..), EvalState(..), EvalParams(..))
 import Moves.Notation
 
 -- This is a specialized monad transformer for state
@@ -76,8 +76,15 @@ maxFutilDepth :: Int
 maxFutilDepth = 6
 
 -- Futility margins
-futilMargins :: Int -> Int
-futilMargins d = futMinVal `unsafeShiftL` (d-1)	-- this is ok also for d == 1
+-- The futility margins of the remaining depths 1 .. maxFutilDepth (index d - 1) come from the eval
+-- parameters epFutil1 .. epFutil6 (so they can be changed by a config); the defaults are
+-- futMinVal << (d - 1), as before
+defaultFutMargins :: UArray Int Int
+defaultFutMargins = listArray (0, maxFutilDepth - 1) [ futMinVal `unsafeShiftL` (d - 1) | d <- [1 .. maxFutilDepth] ]
+
+futMarginsOf :: EvalParams -> UArray Int Int
+futMarginsOf ep = listArray (0, maxFutilDepth - 1)
+                      [epFutil1 ep, epFutil2 ep, epFutil3 ep, epFutil4 ep, epFutil5 ep, epFutil6 ep]
 
 -- Parameters for futility pruning
 futMinVal :: Int
@@ -127,7 +134,8 @@ data PVStRO
     = PVStRO {
           draft  :: !Int,	-- root search depth
           tuning :: !Bool,	-- in tuning we do not prune nor reduce (self play)
-          abpol  :: !AbortPolicy	-- search abort policy (time, nodes or none)
+          abpol  :: !AbortPolicy,	-- search abort policy (time, nodes or none)
+          futmar :: !(UArray Int Int)	-- futility margins of the depths 1 .. maxFutilDepth (index d - 1)
     } deriving Show
 
 data PVState
@@ -247,7 +255,7 @@ resetNSt :: Path -> Killer -> NodeState -> NodeState
 resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, rbmch = 0 }
 
 pvro00 :: PVStRO
-pvro00 = PVStRO { draft = 0, tuning = False, abpol = NoAbort }
+pvro00 = PVStRO { draft = 0, tuning = False, abpol = NoAbort, futmar = defaultFutMargins }
 
 alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int, Int)
 alphaBeta abc = do
@@ -257,8 +265,9 @@ alphaBeta abc = do
         searchReduced a b = pvRootSearch a      b     d lpv rmvs True
         -- We have lastpath as a parameter here (can change after fail low or high)
         searchFull    lp  = pvRootSearch alpha0 beta0 d lp  rmvs False
-        pvro = PVStRO { draft = d, tuning = intuning abc,
-                            abpol = abortPolicy abc }
+    est <- gets evalst
+    let pvro = PVStRO { draft = d, tuning = intuning abc,
+                            abpol = abortPolicy abc, futmar = futMarginsOf (esEParams est) }
         pvs0 = pvsInit { ronly = pvro }	-- :: PVState
     -- We will get a result and a final state:
     (r, s) <- if useAspirWin
@@ -514,7 +523,8 @@ pvSearch nst !a !b !d = do
                 -- one variation. But the question is: is it possible that we don't find one?
                 -- And if yes: what to do in that case?
                 -- Futility pruning:
-                let !prune | useFutility = isPruneFutil True d a (staticScore pos)
+                fm <- gets (futmar . ronly)
+                let !prune | useFutility = isPruneFutil fm True d a (staticScore pos)
                            | otherwise   = False
                     !nsti  = resetNSt (pathFromScore a) (Killer []) nst'
                 -- Loop thru the moves
@@ -569,7 +579,8 @@ pvZeroW !nst !b !d = do
                       ev:_ -> do
                         !nodes0 <- gets (sNodes . stats)
                         -- futility pruning:
-                        let !prune | useFutility = isPruneFutil False d bGrain (staticScore pos)
+                        fm <- gets (futmar . ronly)
+                        let !prune | useFutility = isPruneFutil fm False d bGrain (staticScore pos)
                                    | otherwise   = False
                         -- Loop thru the moves
                         let kill1 = case nmhigh of
@@ -858,12 +869,13 @@ pvLoop f s (Alt (e:es)) = do
            else pvLoop f s' $ Alt es
 
 -- Futility pruning:
-isPruneFutil :: Bool -> Int -> Int -> Int -> Bool
-isPruneFutil pv d a v
+isPruneFutil :: UArray Int Int -> Bool -> Int -> Int -> Int -> Bool
+isPruneFutil fm pv d a v
     | nearmate a               = False
+    | d <  1                   = False
     | d >  maxFutilDepth       = False
     | d >= maxFutilDepth && pv = False	-- for PV nodes: less prune
-    | otherwise                = v + futilMargins d <= a
+    | otherwise                = v + fm `unsafeAt` (d - 1) <= a
 
 failHardNoValidMove :: Int -> Int -> MyPos -> Path
 failHardNoValidMove !a !b pos = trimaxPath a b $! if tacticalPos pos then matedPath else drawPath

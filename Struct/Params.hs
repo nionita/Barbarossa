@@ -26,5 +26,12 @@ params = [
         ("epPassBlockA",       17),
         ("epPassMin",          30),
         ("epPassMyCtrl",        6),
-        ("epPassYoCtrl",        7)
+        ("epPassYoCtrl",        7),
+        -- futility margins (cp) of the remaining depths 1 .. 6 (Search.Core, maxFutilDepth)
+        ("epFutil1",           24),
+        ("epFutil2",           48),
+        ("epFutil3",           96),
+        ("epFutil4",          192),
+        ("epFutil5",          384),
+        ("epFutil6",          768)
     ]
