@@ -219,6 +219,13 @@ nullSeq (Seq es) = null es
 emptySeq :: Seq Move
 emptySeq = Seq []
 
+-- The path of a TT cut: an upper limit entry (type 0) comes from a node where no move was better
+-- than alpha, its move is just the first generated one (not searched there, and possibly illegal,
+-- because the TT move is checked only for pseudo legality), so it must not be part of a path
+ttPathMoves :: Int -> Move -> Seq Move
+ttPathMoves 0 _ = emptySeq
+ttPathMoves _ e = Seq [e]
+
 pvsInit :: PVState
 pvsInit = PVState { ronly = pvro00, stats = ssts0, absdp = 0, maxdp = 0, abort = False,
                     lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
@@ -268,9 +275,13 @@ alphaBeta abc = do
         seldepth = maxdp s
     -- When aborted, return the last found good move
     -- We have to trust that abort is never done in draft 1!
+    -- The path goes to the GUI: cut it before the first illegal move (just a safety net,
+    -- the root move itself is always legal, and only that one is used in the next iteration)
     case r of (sc, Seq path, Alt rmvs', ch) -> if null path
                   then return (fromMaybe 0 $ lastscore abc, lastpv abc, [], timint, 0, 0)
-                  else return (sc, path, rmvs', timint, ch, seldepth)
+                  else do
+                      pos <- getPos
+                      return (sc, legalPrefix pos path, rmvs', timint, ch, seldepth)
 
 {--
 aspirWin :: Int -> Int -> Int -> Seq Move -> Alt Move -> Int -> m (Int, Seq Move, Alt Move)
@@ -471,7 +482,7 @@ pvSearch nst !a !b !d = do
          || tp == 0 && hsc <= a	-- we will fail low
        )
        then do
-           let !ttpath = Path { pathScore = trimax a b hsc, pathDepth = hdeep, pathMoves = Seq [e], pathMPos = Nothing }
+           let !ttpath = Path { pathScore = trimax a b hsc, pathDepth = hdeep, pathMoves = ttPathMoves tp e, pathMPos = Nothing }
            -- we will treat the beta cut here too, if it happens
            when (tp == 1 || tp == 2 && hsc > a) $ do
                adp <- gets absdp
@@ -527,7 +538,7 @@ pvZeroW !nst !b !d = do
     (hdeep, tp, hsc, e, nodes') <- reTrieve >> lift ttRead
     if hdeep >= d && (tp == 2 || tp == 1 && hsc >= b || tp == 0 && hsc < b)
        then do
-           let !ttpath = Path { pathScore = trimax bGrain b hsc, pathDepth = hdeep, pathMoves = Seq [e], pathMPos = Nothing }
+           let !ttpath = Path { pathScore = trimax bGrain b hsc, pathDepth = hdeep, pathMoves = ttPathMoves tp e, pathMPos = Nothing }
            -- we will treat the beta cut here too, if it happens
            when (tp == 1 || tp == 2 && hsc >= b) $ do
                adp <- gets absdp
@@ -1188,4 +1199,5 @@ informPV s d es = do
     let ss = stats st
     lift $ do
         n <- curNodes $ sNodes ss
-        informCtx (BestMv s d (maxdp st) n es)
+        pos <- getPos	-- called at root, cut the path before the first illegal move
+        informCtx (BestMv s d (maxdp st) n (legalPrefix pos es))
