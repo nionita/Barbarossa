@@ -14,7 +14,7 @@ import Control.Concurrent
 import Control.Exception
 import Data.Char (isSpace)
 import Data.IORef
-import Data.List (intercalate, intersperse)
+import Data.List (intercalate, intersperse, partition)
 import Search.Core (qsValue)
 import qualified Data.Map.Strict as M
 import Data.Maybe (catMaybes, fromMaybe, isJust)
@@ -249,7 +249,7 @@ options = [
         Option "" ["perf-scores"] (ReqArg setPerfScores "FILE")
                "Perf test: write fen, static eval and the search score of every depth 1 .. -d to FILE",
         Option "" ["perf-quiet"] (ReqArg setPerfQuiet "FILE")
-               "Perf test: write fen, static eval and the best value of the prunable quiet moves per depth 1 .. -d",
+               "Perf test: fen, static eval, best value of the prunable quiet moves and of the others per depth 1 .. -d",
         Option "" ["perft"]    (NoArg setPerft) "Perft on a single FEN",
         Option "B" ["build-info"] (NoArg setBuildInfo) "Show build flavor and opposite build command",
         Option "" ["sprt-alpha"] (ReqArg addSprtAlpha "DOUBLE") "SPRT alpha (default 0.05 when SPRT is enabled)",
@@ -809,8 +809,8 @@ perfLoop hi mho mhq depth _k acc = do
                               (Nothing, Just hq) -> do
                                   (mvs, nodes) <- quietScores depth sini
                                   case mvs of
-                                      Just vs -> liftIO $ hPutStrLn hq $ intercalate "," $
-                                                     fen : show stsc0 : map show vs
+                                      Just (qs, rs) -> liftIO $ hPutStrLn hq $ intercalate "," $
+                                                           fen : show stsc0 : map show (qs ++ rs)
                                       Nothing -> return ()
                                   return nodes
                               (Nothing, Nothing) -> do
@@ -1544,30 +1544,41 @@ playGame d maybeNodes nodeMarginPc mdo pos (ide1, eval1) (ide2, eval2) = do
                                               (player1 { plChg = chg1n, plNodes = subNodes mbNodes nodes})
 
 -- For the futility margin measurement: futility pruning at a node of depth d skips the quiet moves
--- accepted by canPruneMove; what they could bring is the best value over these moves of the negated
--- value of the child, searched to depth d - 1 (QS for d = 1). Returns these values for d = 1 .. depth
--- (Nothing when the position has no such move) and the nodes
-quietScores :: Int -> MyState -> CtxIO (Maybe [Int], Int)
+-- accepted by canPruneMove; it misses something only when the best of them beats alpha and the best of
+-- the other moves (which are still searched). Returns for d = 1 .. depth the best value over the quiet
+-- moves and the best value over the other moves of the negated value of the child, searched to depth
+-- d - 1 (QS for d = 1); noMoveValue when there is no such move; Nothing when there is no quiet move
+quietScores :: Int -> MyState -> CtxIO (Maybe ([Int], [Int]), Int)
 quietScores depth sini = do
     ((mvs1, mvs2), _) <- runCState (genMoves 1) sini
-    let cands = case stack sini of
-                    p0:_ -> filter (canPruneMove p0) (mvs1 ++ mvs2)
-                    []   -> []
-    vals <- forM cands $ \m -> do
-        (r, schild) <- runCState (doMove m) sini
-        case r of
-            Illegal -> return Nothing
-            Final   -> return $ Just (replicate depth 0, 0)
-            _       -> do
-                (q, _) <- runCState qsValue schild
-                (scs, n) <- if depth > 1 then depthScores (depth - 1) schild else return ([], 0)
-                let vs  = q : scs
-                    vsf = take depth $ vs ++ repeat (last vs)	-- the search may end early (mate)
-                return $ Just (map negate vsf, n)
-    let ok = catMaybes vals
-    return $ if null ok
-                then (Nothing, sum (map snd ok))
-                else (Just $ foldr1 (zipWith max) (map fst ok), sum (map snd ok))
+    let (quiets, rest) = case stack sini of
+                             p0:_ -> partition (canPruneMove p0) (mvs1 ++ mvs2)
+                             []   -> ([], [])
+    qvals <- mapM childValues quiets
+    rvals <- mapM childValues rest
+    let qok = catMaybes qvals
+        rok = catMaybes rvals
+        best []  = replicate depth noMoveValue
+        best vss = foldr1 (zipWith max) vss
+        nodes = sum (map snd qok) + sum (map snd rok)
+    return $ if null qok
+                then (Nothing, nodes)
+                else (Just (best (map fst qok), best (map fst rok)), nodes)
+    where childValues m = do
+              (r, schild) <- runCState (doMove m) sini
+              case r of
+                  Illegal -> return Nothing
+                  Final   -> return $ Just (replicate depth 0, 0)
+                  _       -> do
+                      (q, _) <- runCState qsValue schild
+                      (scs, n) <- if depth > 1 then depthScores (depth - 1) schild else return ([], 0)
+                      let vs  = q : scs
+                          vsf = take depth $ vs ++ repeat (last vs)	-- the search may end early (mate)
+                      return $ Just (map negate vsf, n)
+
+-- Value of "no such move" in the margin measurement
+noMoveValue :: Int
+noMoveValue = -32000
 
 -- The search scores (side to move) of every iteration 1 .. depth from the given state, and the nodes
 -- (for the margin measurement: static eval against the search value per depth; unlike
