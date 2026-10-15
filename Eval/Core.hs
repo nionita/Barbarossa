@@ -182,34 +182,39 @@ normalEval sr p !sti = (sc * tot) `unsafeShiftR` (shift2Cp + 28)
 {-# INLINE normalParts #-}
 normalParts :: SpecialResult -> MyPos -> EvalState -> (Int, Int, Int)
 normalParts sr p !sti
-    | epScaleNew ep == 0 = (sumWith sfo, sfo, (128 - m50) `unsafeShiftL` 13)
-    | otherwise          = (scn, sfn, drawScale ep p (scn >= 0) * (esM50 sti `unsafeAt` min 100 m50))
+    | epScaleNew ep == 0 = let !sfo = scaleFactor p (end nev) sr
+                           in (sumWith sfo, sfo, (128 - m50) `unsafeShiftL` 13)
+    | otherwise          = let !sfn = case scaleKnowledge p (end nev) of
+                                          Just s -> s
+                                          _      -> case sr of
+                                                        Scale s -> s
+                                                        _       -> 64
+                               !scn = sumWith sfn
+                               !dsc = drawScale ep p (scn >= 0)
+                           in (scn, sfn, dsc * (esM50 sti `unsafeAt` min 100 m50))
     where ep   = esEParams  sti
           !gph = gamePhase p
           !nev = evalFullSum p sti
           !m50 = get50Moves p
-          sfo  = scaleFactor p (end nev) sr
-          !sfn = case scaleKnowledge p (end nev) of
-                     Just s -> s
-                     _      -> case sr of
-                                   Scale s -> s
-                                   _       -> 64
-          !scn = sumWith sfn
           sumWith sf = (mid nev + epMovingMid ep) * gph
                      + (((end nev * sf) `unsafeShiftR` 6) + epMovingEnd ep) * (256 - gph)
 
 -- The drawishness factor of the new scaling (1/1024), given whether the side to move is the stronger
--- side (sign of the eval): product of the factors (1/64) which apply
+-- side (sign of the eval): product of the factors (1/64) which apply, in this order (rounding)
 drawScale :: EvalParams -> MyPos -> Bool -> Int
-drawScale ep p meStrong = foldl (\f t -> (f * t) `unsafeShiftR` 6) 1024 $ concat [
-                              [pawnFactor],
-                              [epScOcbOnly ep | ocb && others == 0],
-                              [epScOcbPcs ep  | ocb && others /= 0],
-                              [epScOneWing ep | oneWing],
-                              [epScRookEnd ep | rookEnd],
-                              [epScQueenEnd ep | queenEnd]
-                          ]
-    where strong | meStrong  = me p
+drawScale ep p meStrong = f4
+    where mul f t = (f * t) `unsafeShiftR` 6
+          !f0 = mul 1024 pawnFactor
+          !f1 | not ocb       = f0
+              | others == 0   = mul f0 (epScOcbOnly ep)
+              | otherwise     = mul f0 (epScOcbPcs ep)
+          !f2 | oneWing       = mul f1 (epScOneWing ep)
+              | otherwise     = f1
+          !f3 | rookEnd       = mul f2 (epScRookEnd ep)
+              | otherwise     = f2
+          !f4 | queenEnd      = mul f3 (epScQueenEnd ep)
+              | otherwise     = f3
+          strong | meStrong  = me p
                  | otherwise = yo p
           !spw   = pawns p .&. strong
           !nsp   = popCount spw
@@ -345,6 +350,7 @@ scaleFactor p eg sr
 
 -- The part of the end game scale factor which is chess knowledge (not a heuristic): the winning side
 -- (by the sign of the end game sum eg) has no pawns and at most a bishop more in pieces
+{-# INLINE scaleKnowledge #-}
 scaleKnowledge :: MyPos -> Int -> Maybe Int
 scaleKnowledge p eg
     | eg /= 0 && pawns p .&. winPart == 0
