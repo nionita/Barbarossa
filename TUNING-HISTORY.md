@@ -29,6 +29,7 @@ weights; 42k games give +-3.1 Elo (95%), 20k +-4.5, 6000 +-8.
 | 34 | Round 2 of the on-policy iteration (10k nodes) | -0.39% loss, +0.3 (1000 nodes) / +6.8 (10k) | compiled (small) |
 | 35 | Futility margins: harmful cut rates, 5 direction tests at 50k nodes | all directions -14 .. -45 | defaults are a local optimum |
 | 36 | Round 3 (50k nodes data), joint fit with round 2 data | -0.2% loss | fixed point, not compiled |
+| 37 | Hidden variables: drawishness scale (bias tables, fitted scale factors, 50 moves scale) | -2.0% loss; +10.6 Elo at 10k nodes (linear 50 moves); strong 50 moves scale -4 | worked (constrained, linear 50 moves) |
 
 Old plan items (2026-10-13) and what became of them: a loss that ranks the measured configs (replaced by the
 on-policy yardstick, 29); q = 0.2 on the all-phase data (obsolete: on-policy data is fitted on the result only);
@@ -304,6 +305,34 @@ valleys problem); piece value constants with variant builds (done differently: m
     was +0.3 Elo at 1000 nodes, +6.8 +- 6.5 at 10k): the HCE with PST is at the fixed point of the iteration
     for this engine, more data or deeper data of its own games does not move it. The deeper data is more
     predictable: k 148 (50k nodes) against 163 (10k nodes) for the same eval. Not matched, not compiled in.
+37. Hidden variables at the fixed point (branch `scale`). Bias tables (`hv_bias.py`) on the round 3 positions: per
+    group of a descriptor an own offset and k, fitted on training and measured on held-out games. The joint model
+    of all descriptors gains 3.0% of the loss, almost all as scale (k), not offset; forward selection: pawn count
+    2.0%, material signature +0.5, halfmove clock +0.3, opposite bishops +0.13, pawn wings +0.07, the rest nothing.
+    The missing variable is drawishness: with few pawns, opposite bishops, pawns on one wing, rook or queen
+    endings and a high 50 moves counter the eval is far too confident. The linear fit cannot express it (a
+    factor on the eval), the hand made `scaleFactor` rules were never tuned.
+    Export: `TuneSGD -X` writes eflat / eend (eval before the scale factor), special, sknow (knowledge part of
+    the scale factor). `hv_scale.py` fits eval' = (eflat + eend * s0) * s(position) * g(m50), s = product of table
+    factors (pawns of the stronger side 0 .. 8+, opposite bishops only / with pieces, stronger pawns on one wing,
+    R v R, Q v Q), g = (1 - m50 / 100) ^ p (p = 2.2 fits as well as a free quadratic or a table; the old linear
+    (128 - m50) / 128 gives 0.4% less). Engine: eval parameters epScaleNew (switch, default 0 = old), epScP0 ..
+    epScP8, epScOcbOnly, epScOcbPcs, epScOneWing, epScRookEnd, epScQueenEnd, epSc50Pow (< 0: old linear);
+    with the switch off the eval is identical (504k positions), with it on it agrees with the Python model
+    (mean 0.5 cp).
+    Matches against the compiled engine (same binary), 1000 nodes 10k games / 10k nodes 8k games:
+    `scale-pow` (free fit, normalized to the old k: middle game eval x 1.27 by mistake) -12.8 / -;
+    `scale-cap-lin` (pawn factors capped at 1, linear 50 moves) -3.2 / -; `scale-c-lin` (constrained fit:
+    factors <= 1, pawn factors monotone, no normalization, linear 50 moves: 22/36/52/59/63 for 0 .. 4 pawns, 64
+    from 5, opposite bishops only 23, with pieces 53, one wing 55, R v R 59, Q v Q 50) -1.1 / **+10.6 +- 6.3**;
+    `scale-c-pow` (the same with (1 - m50 / 100) ^ 2.2) -3.9 / -4.0. Yardsticks (self-play / engine games):
+    scale-c-lin -1.98 / -1.44%, scale-c-pow -2.43 / -1.92%.
+    Lessons: (1) an eval change must keep the cp scale of the middle game (margins and other cp constants), so
+    factors are 1 in normal positions and no normalization to the old k; (2) the constraint (<= 1, monotone)
+    costs no loss: the free fit's factors above 1 came from a small reference group (8+ pawns: 1.2%);
+    (3) the strong 50 moves scale predicts the result (high counter = game already drawn) but as an eval term it
+    costs about 15 Elo against the linear one: a predictor is not necessarily a good lever for move choice;
+    (4) the gain shows only at depth (as all eval gains before).
 
 How to repeat: the commands are in `README.md` of BarbarossaTuning, section "On-policy tuning of the HCE".
 Engine changes on `hvar`: `TuneSGD -X` (export), optional PST read from the config (`pst.mid.Ne4 = 37`, 1/8 cp,
