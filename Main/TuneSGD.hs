@@ -301,6 +301,13 @@ relabelLine es scale hi ho _ (g, n) = do
 --          as long as the scale factor stays, it depends on the sign of the end game sum)
 --   const: centipawns of the part independent of the weights (epMovingMid, epMovingEnd and the
 --          compiled PST, unless the config has pst.off = 1)
+--   eflat, eend: the eval in centipawns at a 50 moves counter of 0, split into the part the end game
+--          scale factor does not touch (mid game part and epMovingEnd) and the end game part before it,
+--          so eval ~ (eflat + eend * scale / 64) * (128 - m50) / 128
+--   special, spscore: 1 and its score when a special eval applies (posEval returns that score in play,
+--          posExactEval and this export use the normal eval), else 0 and 0
+--   sknow: the knowledge part of the scale factor (no pawns of the winning side, small material
+--          difference: Eval.Core.scaleKnowledge), -1 when it does not apply
 --   f_i:   one column per weight, the value of its feature (mid and end use the same feature)
 -- So: eval ~ sum_i f_i * (wmid_i * dmid + wend_i * dend) + const
 -- A new term with feature z and weights zmid, zend adds z * (zmid * dmid + zend * dend), in the same way
@@ -318,7 +325,8 @@ exportFiles opts = do
         wmid   = map round $ take nw (U.toList x0) :: [Int]
         wend   = map round $ drop nw (U.toList x0) :: [Int]
         header = intercalate "," $ ["fen", "score", "result", "eval", "phase", "scale", "m50",
-                                    "dmid", "dend", "const"] ++ names
+                                    "dmid", "dend", "const", "eflat", "eend", "special", "spscore",
+                                    "sknow"] ++ names
         ex     = Export {
                      exState  = initEvalState (zip optSpaceNames (U.toList x0) ++ pst),
                      exHce    = vecToEvalState x0,
@@ -388,7 +396,7 @@ exportLine ex hi ho _ st@(ExportStats n bad nonlin maxd sumd) = do
                        gph   = gamePhase p
                        m50   = get50Moves p
                        MidEnd sm se = evalTermSum p (exHce ex)
-                       MidEnd _ sef = evalFullSum p es
+                       MidEnd sfm sef = evalFullSum p es
                        MidEnd pm pe | esPstOn es = evalPstSum p
                                     | otherwise  = MidEnd 0 0
                        sf    = evalEndScale p sef
@@ -403,13 +411,20 @@ exportLine ex hi ho _ st@(ExportStats n bad nonlin maxd sumd) = do
                                              + epMovingEnd (esEParams es) * (256 - gph)) * f50
                                + fromIntegral pm * dmid + fromIntegral pe * dend	-- compiled PST
                        evlin = fromIntegral lm * dmid + fromIntegral le * dend + cst
+                       f0    = 1 / 2048 :: Double	-- 128 / 2 ^ (shift2Cp + 15)
+                       eflat = fromIntegral ((sfm + epMovingMid (esEParams es)) * gph
+                                             + epMovingEnd (esEParams es) * (256 - gph)) * f0
+                       eend  = fromIntegral (sef * (256 - gph)) * f0
+                       (spc, sps) = maybe (0, 0) (\s -> (1, s)) (evalSpecialScore p) :: (Int, Int)
+                       skn   = maybe (-1) id (scaleKnowledge p sef)
                        d     = abs (fromIntegral ev - evlin)
                        nonl  | lm == sm && le == se = 0
                              | otherwise            = 1
                    hPutStrLn ho $ intercalate "," $
                        [fen, scs, res, show ev, show gph, show sf, show m50,
                         showFFloat (Just 9) dmid "", showFFloat (Just 9) dend "",
-                        showFFloat (Just 4) cst ""] ++ map show fl
+                        showFFloat (Just 4) cst "", showFFloat (Just 3) eflat "",
+                        showFFloat (Just 3) eend "", show spc, show sps, show skn] ++ map show fl
                    return (True, ExportStats (n + 1) bad (nonlin + nonl) (max maxd d) (sumd + d))
                _ -> return (True, ExportStats n (bad + 1) nonlin maxd sumd)
 

@@ -12,6 +12,8 @@ module Eval.Core (
     evalEndScale,
     evalFullSum,
     evalPstSum,
+    evalSpecialScore,
+    scaleKnowledge,
 ) where
 
 import Data.Array.Base (unsafeAt)
@@ -115,15 +117,25 @@ type SpecialEval = MyPos -> SpecialResult
 
 evalDispatch :: MyPos -> EvalState -> Int
 evalDispatch p sti
-    = case trySpecials p (enp ++ peg) of
+    = case trySpecials p (specialsOf p) of
           Score s -> s
           sr      -> normalEval sr p sti
+
+-- The special eval functions which apply to a position
+specialsOf :: MyPos -> [SpecialEval]
+specialsOf p = enp ++ peg
     where -- No pawns at all
           enp  | pawns p == 0 = [evalNoPawns]
                | otherwise    = []
           -- Pawns end game
           peg  | kings p .|. pawns p == occup p = [pawnEndGame]
                | otherwise    = []
+
+-- The score of a special eval, when one applies (then posEval returns it instead of the normal eval)
+evalSpecialScore :: MyPos -> Maybe Int
+evalSpecialScore p = case trySpecials p (specialsOf p) of
+                         Score s -> Just s
+                         _       -> Nothing
 
 -- Try a list of special eval functions
 -- The first match will be the result of the whole try
@@ -209,8 +221,7 @@ gamePhase p = g
 scaleFactor :: MyPos -> Int -> SpecialResult -> Int
 scaleFactor p eg sr
     | eg == 0                                             = 64
-    | pawnsWin == 0
-      && nonPawnWin - nonPawnLos <= bishopMg              = noPawnsLowMatDiff nonPawnWin nonPawnLos
+    | Just s <- scaleKnowledge p eg                       = s
     -- Next one seems too low:
     | oppoBishops
       -- && nonPawnWin == bishopMg && nonPawnLos == bishopMg = 18 + 4 * (popCount $ passed p .&. winPart)
@@ -250,6 +261,23 @@ scaleFactor p eg sr
           kingSide  = fileE .|. fileF .|. fileG .|. fileH
           -- pawnsOnBothFlanks = pawns p .&. queenSide /= 0 && pawns p .&. kingSide /= 0
           winPawnsOneFlank  = pawnsWin .&. queenSide == 0 || pawnsWin .&. kingSide == 0
+
+-- The part of the end game scale factor which is chess knowledge (not a heuristic): the winning side
+-- (by the sign of the end game sum eg) has no pawns and at most a bishop more in pieces
+scaleKnowledge :: MyPos -> Int -> Maybe Int
+scaleKnowledge p eg
+    | eg /= 0 && pawns p .&. winPart == 0
+      && nonPawnWin - nonPawnLos <= matPiece1 Bishop = Just $ noPawnsLowMatDiff nonPawnWin nonPawnLos
+    | otherwise                                     = Nothing
+    where !winPart | eg > 0    = me p
+                   | otherwise = yo p
+          losPart = occup p `less` winPart
+          nonPawnWin = npMat winPart
+          nonPawnLos = npMat losPart
+          npMat part = matPiece1 Queen  * popCount (queens  p .&. part)
+                     + matPiece1 Rook   * popCount (rooks   p .&. part)
+                     + matPiece1 Bishop * popCount (bishops p .&. part)
+                     + matPiece1 Knight * popCount (knights p .&. part)
 
 noPawnsLowMatDiff :: Int -> Int -> Int
 noPawnsLowMatDiff npWin npLos
