@@ -36,5 +36,6 @@ data EvalState = EvalState {
         esEParams   :: EvalParams,
         esEWeights  :: EvalWeights,
         esPst       :: Maybe (UArray Int Int),	-- optional piece square table (mid & end), see Eval.Core
-        esPstOn     :: Bool			-- use the compiled PST (incremental in MyPos), see Eval.Core
+        esPstOn     :: Bool,			-- use the compiled PST (incremental in MyPos), see Eval.Core
+        esM50       :: UArray Int Int		-- 50 moves scale of the new scaling (1/1024), see Eval.Core
     } deriving Show

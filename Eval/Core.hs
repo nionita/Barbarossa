@@ -10,6 +10,7 @@ module Eval.Core (
     gamePhase,
     evalTermSum,
     evalEndScale,
+    evalScales,
     evalFullSum,
     evalPstSum,
     evalSpecialScore,
@@ -42,11 +43,22 @@ shift2Cp      = 3	-- we have 2^shift2Cp units per centipawn
 
 initEvalState :: [(String, Double)] -> EvalState
 initEvalState sds = EvalState {
-        esEParams  = npSetParm (colParams sds :: CollectFor EvalParams),
+        esEParams  = ep,
         esEWeights = npSetParm (colParams sds :: CollectFor EvalWeights),
         esPst      = pstTable sds,
-        esPstOn    = all (\(n, v) -> n /= "pst.off" || v == 0) sds
+        esPstOn    = all (\(n, v) -> n /= "pst.off" || v == 0) sds,
+        esM50      = m50Table (epSc50Pow ep)
     }
+    where ep = npSetParm (colParams sds :: CollectFor EvalParams)
+
+-- The 50 moves scale of the new scaling: (1 - m50 / 100) ^ (pw / 100) in 1/1024, for m50 = 0 .. 100;
+-- pw < 0: the old linear scale (128 - m50) / 128
+m50Table :: Int -> UArray Int Int
+m50Table pw
+    | pw < 0    = listArray (0, 100) [ (128 - m) * 8 | m <- [0 .. 100] ]
+    | otherwise = listArray (0, 100) [ round (1024 * (1 - fromIntegral m / 100 :: Double) ** e)
+                                     | m <- [0 .. 100 :: Int] ]
+    where e = fromIntegral pw / 100 :: Double
 
 -- The compiled piece square table (Struct.Pst, summed incrementally in MyPos by Moves.Core) is part
 -- of the normal evaluation; a config parameter pst.off = 1 switches it off (e.g. to play the old
@@ -152,12 +164,77 @@ trySpecials p = go
 -- we must divide again by 8 (see shift2Cp)
 -- For the 50 moves rscale we don't get to 0 but to 28/100 (see: 128 - ...)
 normalEval :: SpecialResult -> MyPos -> EvalState -> Int
-normalEval sr p !sti = (sc * (128 - get50Moves p)) `unsafeShiftR` (shift2Cp + 15)
-    where ep     = esEParams  sti
-          !gph   = gamePhase p
-          !nev   = evalFullSum p sti
-          !eg = (end nev * scaleFactor p (end nev) sr) `unsafeShiftR` 6
-          !sc = (mid nev + epMovingMid ep) * gph + (eg + epMovingEnd ep) * (256 - gph)
+normalEval sr p !sti = (sc * tot) `unsafeShiftR` (shift2Cp + 28)
+    where (sc, _, tot) = normalParts sr p sti
+
+-- The parts of the normal evaluation: the phase interpolated sum (1/8 cp * 256) with the end game
+-- part scaled by the end game scale factor (1/64, also returned), and the scale of the whole eval
+-- (1/2^20), so that eval = sum * scale / 2 ^ (shift2Cp + 28)
+-- Old scaling (epScaleNew = 0): end game scale factor = scaleFactor, whole eval scale = the linear
+-- 50 moves scale (128 - m50) / 128
+-- New scaling: end game scale factor = only the knowledge rule (scaleKnowledge), whole eval scale =
+-- drawScale (product of factors by pawns of the stronger side, opposite bishops, ...) times the
+-- 50 moves scale (1 - m50 / 100) ^ p (table esM50)
+{-# INLINE normalParts #-}
+normalParts :: SpecialResult -> MyPos -> EvalState -> (Int, Int, Int)
+normalParts sr p !sti
+    | epScaleNew ep == 0 = (sumWith sfo, sfo, (128 - m50) `unsafeShiftL` 13)
+    | otherwise          = (scn, sfn, drawScale ep p (scn >= 0) * (esM50 sti `unsafeAt` min 100 m50))
+    where ep   = esEParams  sti
+          !gph = gamePhase p
+          !nev = evalFullSum p sti
+          !m50 = get50Moves p
+          sfo  = scaleFactor p (end nev) sr
+          !sfn = case scaleKnowledge p (end nev) of
+                     Just s -> s
+                     _      -> case sr of
+                                   Scale s -> s
+                                   _       -> 64
+          !scn = sumWith sfn
+          sumWith sf = (mid nev + epMovingMid ep) * gph
+                     + (((end nev * sf) `unsafeShiftR` 6) + epMovingEnd ep) * (256 - gph)
+
+-- The drawishness factor of the new scaling (1/1024), given whether the side to move is the stronger
+-- side (sign of the eval): product of the factors (1/64) which apply
+drawScale :: EvalParams -> MyPos -> Bool -> Int
+drawScale ep p meStrong = foldl (\f t -> (f * t) `unsafeShiftR` 6) 1024 $ concat [
+                              [pawnFactor],
+                              [epScOcbOnly ep | ocb && others == 0],
+                              [epScOcbPcs ep  | ocb && others /= 0],
+                              [epScOneWing ep | oneWing],
+                              [epScRookEnd ep | rookEnd],
+                              [epScQueenEnd ep | queenEnd]
+                          ]
+    where strong | meStrong  = me p
+                 | otherwise = yo p
+          !spw   = pawns p .&. strong
+          !nsp   = popCount spw
+          pawnFactor = case nsp of
+                           0 -> epScP0 ep
+                           1 -> epScP1 ep
+                           2 -> epScP2 ep
+                           3 -> epScP3 ep
+                           4 -> epScP4 ep
+                           5 -> epScP5 ep
+                           6 -> epScP6 ep
+                           7 -> epScP7 ep
+                           _ -> epScP8 ep
+          others = knights p .|. rooks p .|. queens p
+          ocb    = popCount (bishops p) == 2 && popCount (bishops p .&. me p) == 1
+                   && popCount (bishops p .&. darkSquares) == 1
+          oneWing = spw /= 0 && (spw .&. queenSide == 0 || spw .&. kingSide == 0)
+          queenSide = fileA .|. fileB .|. fileC .|. fileD
+          kingSide  = fileE .|. fileF .|. fileG .|. fileH
+          rookEnd  = popCount (rooks p) == 2 && popCount (rooks p .&. me p) == 1
+                     && (knights p .|. bishops p .|. queens p) == 0
+          queenEnd = popCount (queens p) == 2 && popCount (queens p .&. me p) == 1
+                     && (knights p .|. bishops p .|. rooks p) == 0
+
+-- The end game scale factor (1/64) and the scale of the whole eval (1/2^20) of the normal evaluation
+-- (no special eval), see normalParts (for the tuning export)
+evalScales :: MyPos -> EvalState -> (Int, Int)
+evalScales p sti = (sf, tot)
+    where (_, sf, tot) = normalParts NotMatched p sti
 
 -- The sum of all weighted eval terms (mid & end) in units of 1/8 centipawns, before the
 -- game phase interpolation, the end game scale factor and the 50 moves scaling

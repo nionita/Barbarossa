@@ -22,6 +22,7 @@ import Struct.Status (EvalState(..), EvalParams(..))
 import Struct.MidEnd (MidEnd(MidEnd))
 import Struct.Struct
 import Struct.ParamsPost (optSpaceNames, optSpaceInit)
+import Struct.Params (params)
 import Struct.Config (fileToParams)
 import Moves.Core
 import Eval.Core
@@ -319,7 +320,7 @@ exportFiles opts = do
     pst <- configPst opts
     files <- getFileList (optCsvPath opts) False (Just filteredCsv)
     createDirectoryIfMissing True (optOutPath opts)
-    when (not $ null pst) $ putStrLn $ "Eval with the PST of the config (" ++ show (length pst) ++ " values)"
+    when (not $ null pst) $ putStrLn $ "Eval with the PST and eval parameters of the config (" ++ show (length pst) ++ " values)"
     let nw     = optDims `div` 2
         names  = map (drop 4) (take nw optSpaceNames)
         wmid   = map round $ take nw (U.toList x0) :: [Int]
@@ -399,12 +400,12 @@ exportLine ex hi ho _ st@(ExportStats n bad nonlin maxd sumd) = do
                        MidEnd sfm sef = evalFullSum p es
                        MidEnd pm pe | esPstOn es = evalPstSum p
                                     | otherwise  = MidEnd 0 0
-                       sf    = evalEndScale p sef
+                       (sf, tot) = evalScales p es	-- end game scale factor, scale of the whole eval
                        fs    = positionFeatures ex p
                        fl    = U.toList fs
                        lm    = sum (zipWith (*) (exWMid ex) fl)
                        le    = sum (zipWith (*) (exWEnd ex) fl)
-                       f50   = fromIntegral (128 - m50) / 262144 :: Double	-- 2 ^ (shift2Cp + 15)
+                       f50   = fromIntegral tot / 2147483648 :: Double	-- 2 ^ (shift2Cp + 28)
                        dmid  = fromIntegral gph * f50
                        dend  = fromIntegral (sf * (256 - gph)) * f50 / 64
                        cst   = fromIntegral (epMovingMid (esEParams es) * gph
@@ -1183,17 +1184,22 @@ startVector opts = case optConFile opts of
         when (not fex) $ ioError $ userError $ "Config file not found: " ++ fn
         cont <- readFile fn
         let ps      = fileToParams cont
-            unknown = [ n | (n, _) <- ps, n `notElem` optSpaceNames, not ("pst." `isPrefixOf` n) ]
+            unknown = [ n | (n, _) <- ps, n `notElem` optSpaceNames, not (isExtraParam n) ]
         when (not $ null unknown) $
             ioError $ userError $ "Unknown parameters in " ++ fn ++ ": " ++ unwords unknown
         putStrLn $ "Start vector from " ++ fn ++ " (" ++ show (length ps) ++ " values)"
         return $ U.fromList [ fromMaybe d (lookup n ps) | (n, d) <- zip optSpaceNames optSpaceInit ]
 
--- The PST parameters (pst.*) of the config file given by -c, if any (only the export uses them)
+-- The PST parameters (pst.*) and eval parameters (Struct.Params, e.g. epScaleNew) of the config file
+-- given by -c, if any (only the export uses them)
 configPst :: Options -> IO [(String, Double)]
 configPst opts = case optConFile opts of
     Nothing -> return []
-    Just fn -> filter (isPrefixOf "pst." . fst) . fileToParams <$> readFile fn
+    Just fn -> filter (isExtraParam . fst) . fileToParams <$> readFile fn
+
+-- Config parameters which are not weights: PST values and eval parameters
+isExtraParam :: String -> Bool
+isExtraParam n = "pst." `isPrefixOf` n || n `elem` map fst params
 
 -- Resolve parameter names to indices in the optimization space
 -- A name with prefix "mid." or "end." selects that dimension, a bare name selects both

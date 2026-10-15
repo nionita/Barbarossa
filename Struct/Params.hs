@@ -33,5 +33,26 @@ params = [
         ("epFutil3",           96),
         ("epFutil4",          192),
         ("epFutil5",          384),
-        ("epFutil6",          768)
+        ("epFutil6",          768),
+        -- drawishness scale of the whole eval (Eval.Core.normalParts), instead of the heuristic rules of
+        -- scaleFactor and the linear 50 moves scale when epScaleNew = 1; factors in 1/64 (64 = 1),
+        -- fitted by hv_scale.py (BarbarossaTuning) on the round 3 self-play data; the pawn factors are
+        -- normalized (x 148 / 134, the fitted sigmoid scales old / new) so that the eval keeps its
+        -- calibration (the same k)
+        ("epScaleNew",          0),
+        ("epScP0",             36),	-- stronger side (by the sign of the eval) has 0 .. 7, 8+ pawns
+        ("epScP1",             51),
+        ("epScP2",             69),
+        ("epScP3",             76),
+        ("epScP4",             81),
+        ("epScP5",             82),
+        ("epScP6",             82),
+        ("epScP7",             77),
+        ("epScP8",             71),
+        ("epScOcbOnly",        26),	-- opposite coloured bishops, no other pieces
+        ("epScOcbPcs",         53),	-- opposite coloured bishops and other pieces
+        ("epScOneWing",        57),	-- pawns of the stronger side on one wing only (a-d or e-h)
+        ("epScRookEnd",        59),	-- one rook each, no other pieces
+        ("epScQueenEnd",       52),	-- one queen each, no other pieces
+        ("epSc50Pow",         220)	-- 50 moves scale (1 - m50 / 100) ^ (epSc50Pow / 100), < 0: old linear
     ]
