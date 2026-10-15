@@ -273,6 +273,16 @@ weights; 42k games give +-3.1 Elo (95%), 6000 games +-8.
     (after the next training round, user decision: no futility tuning now): margins in units of the eval
     (e.g. pawn value of the phase), phase dependent margins, a fixed k for all fits. Data, binaries and commands
     to repeat: C:\Learn\Tune\hvar\margins (README.txt), `hv_margins.py --quiet-rest [--by-phase]`.
+36. Round 3 of the on-policy iteration: data of `fold` with `r2-both` compiled, 25k games at 50k nodes
+    (gen3 a/b on MEMO, c here; 2.6M positions), validation 2 shards (5k games, both opening files), training
+    2.0M positions. Fit (tau 0.6 .. 10, best 0.6): `hce-tuned` -0.22%, `hce-tuned+pst` -0.25% (test); the PST
+    adds almost nothing, the selection half prefers the HCE refit alone. Yardstick (va-02, k and c refitted):
+    `r3-tuned` -0.17 +- 0.20%, `r3-both` -0.22 +- 0.19%, half step -0.11 +- 0.08%. Joint fit with the round 2
+    data (8.9M positions, re-exported with the current build, best tau 2.5): `r3j-tuned` -0.07 +- 0.04%,
+    `r3j-both` -0.17 +- 0.15%, not better. All far below the yardstick offset (-0.8 .. -1%; `r2-both` at -0.39%
+    was +0.3 Elo at 1000 nodes, +6.8 +- 6.5 at 10k): the HCE with PST is at the fixed point of the iteration
+    for this engine, more data or deeper data of its own games does not move it. The deeper data is more
+    predictable: k 148 (50k nodes) against 163 (10k nodes) for the same eval. Not matched, not compiled in.
 
 How to repeat: the commands are in `README.md` of BarbarossaTuning, section "On-policy tuning of the HCE".
 Engine changes on `hvar`: `TuneSGD -X` (export), optional PST read from the config (`pst.mid.Ne4 = 37`, 1/8 cp,
