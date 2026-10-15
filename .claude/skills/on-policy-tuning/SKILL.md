@@ -5,10 +5,11 @@ description: One round of on-policy tuning of Barbarossa's HCE (weights + piece 
 
 # On-policy tuning round (Barbarossa HCE)
 
-Background and results: `TUNING.md` findings 24-35. The method works only with positions from the engine's own
-games labelled with the real game results (on-policy); data of other engines or adjudicated results (LogScan)
-made the engine weaker. Tools: BarbarossaTuning (`hv_*.py`, `run_*.ps1`), next to this repository.
-Python: see the user's machine notes (on the mini PC `C:\Users\Nicu\miniconda3a\envs\jacob\python.exe`).
+Background and results: `TUNING.md` (state, lessons, ideas) and `TUNING-HISTORY.md` findings 24-36. The method
+works only with positions from the engine's own games labelled with the real game results (on-policy); data of
+other engines or adjudicated results (LogScan) made the engine weaker. Tools: BarbarossaTuning (`hv_*.py`,
+`run_*.ps1`), next to this repository. Python: see the user's machine notes (on the mini PC
+`C:\Users\Nicu\miniconda3a\envs\jacob\python.exe`).
 
 ## 1. Data: the compiled engine plays itself
 
@@ -57,4 +58,5 @@ Python: see the user's machine notes (on the mini PC `C:\Users\Nicu\miniconda3a\
   `python scripts/config_to_pst.py --base Struct/Pst.hs <cfg> Struct/Pst.hs`.
 - Check: the new build without config gives the same `eval` column as the old build with `-c <cfg>` on the
   validation positions (0 differences). Then build, deploy, update the neutral config for the next round.
-- Record the round in `TUNING.md` (data, fit numbers, yardstick, matches) and commit.
+- Record the round as a new finding in `TUNING-HISTORY.md` (data, fit numbers, yardstick, matches; a row in its
+  summary table), update `TUNING.md` (state, lessons, ideas) and commit.
