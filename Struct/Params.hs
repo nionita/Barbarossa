@@ -54,5 +54,7 @@ params = [
         ("epScOneWing",        57),	-- pawns of the stronger side on one wing only (a-d or e-h)
         ("epScRookEnd",        59),	-- one rook each, no other pieces
         ("epScQueenEnd",       52),	-- one queen each, no other pieces
-        ("epSc50Pow",         220)	-- 50 moves scale (1 - m50 / 100) ^ (epSc50Pow / 100), < 0: old linear
+        ("epSc50Pow",         220),	-- 50 moves scale (1 - m50 / 100) ^ (epSc50Pow / 100), < 0: old linear
+        ("epSc50Knee",          0),	-- > 0: 50 moves scale of two linear segments, knee at this m50
+        ("epSc50KneeH",      1024)	-- ... and its height there (1/1024): (0, 1) -> (knee, h) -> (100, 0)
     ]

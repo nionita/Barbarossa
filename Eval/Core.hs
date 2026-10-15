@@ -47,18 +47,22 @@ initEvalState sds = EvalState {
         esEWeights = npSetParm (colParams sds :: CollectFor EvalWeights),
         esPst      = pstTable sds,
         esPstOn    = all (\(n, v) -> n /= "pst.off" || v == 0) sds,
-        esM50      = m50Table (epSc50Pow ep)
+        esM50      = m50Table (epSc50Pow ep) (epSc50Knee ep) (epSc50KneeH ep)
     }
     where ep = npSetParm (colParams sds :: CollectFor EvalParams)
 
--- The 50 moves scale of the new scaling: (1 - m50 / 100) ^ (pw / 100) in 1/1024, for m50 = 0 .. 100;
--- pw < 0: the old linear scale (128 - m50) / 128
-m50Table :: Int -> UArray Int Int
-m50Table pw
+-- The 50 moves scale of the new scaling in 1/1024, for m50 = 0 .. 100: with a knee kn > 0 two linear
+-- segments (0, 1024) -> (kn, kh) -> (100, 0); else (1 - m50 / 100) ^ (pw / 100), pw < 0: the old linear
+-- scale (128 - m50) / 128
+m50Table :: Int -> Int -> Int -> UArray Int Int
+m50Table pw kn kh
+    | kn > 0 && kn < 100 = listArray (0, 100) [ knee m | m <- [0 .. 100] ]
     | pw < 0    = listArray (0, 100) [ (128 - m) * 8 | m <- [0 .. 100] ]
     | otherwise = listArray (0, 100) [ round (1024 * (1 - fromIntegral m / 100 :: Double) ** e)
                                      | m <- [0 .. 100 :: Int] ]
     where e = fromIntegral pw / 100 :: Double
+          knee m | m <= kn   = 1024 - ((1024 - kh) * m) `div` kn
+                 | otherwise = (kh * (100 - m)) `div` (100 - kn)
 
 -- The compiled piece square table (Struct.Pst, summed incrementally in MyPos by Moves.Core) is part
 -- of the normal evaluation; a config parameter pst.off = 1 switches it off (e.g. to play the old
