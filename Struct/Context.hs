@@ -4,6 +4,7 @@ module Struct.Context (
     CtxIO,
     LogLevel(..),
     Changing(..),
+    UciData(..), UciSink(..),
     IterResult,
     levToPrf, readChanging, modifyChanging,
     beginSearch, attachSearchThread, publishSearchProgress,
@@ -21,6 +22,7 @@ import Control.Monad (when)
 import Data.Int
 import Data.Time.Clock (UTCTime(..), getCurrentTime, diffUTCTime)
 import Data.Time.Format (formatTime, defaultTimeLocale)
+import System.IO (Handle)
 
 import Struct.Struct
 import Struct.Status
@@ -48,8 +50,19 @@ data Context = Ctx {
         strttm :: UTCTime,              -- the program start time
         loglev :: LogLevel,             -- loglevel, only higher messages will be logged
         evpid  :: String,		-- identifier for the eval parameter config
-        change :: MVar Changing         -- the changing context
+        change :: MVar Changing,        -- the changing context
+        ucidata :: Maybe (MVar UciData)	-- data collection in UCI mode (option -d)
     }
+
+-- Data collection in UCI mode: the output file (opened at the first write) and the start position
+-- and the ply of the next move of the last position command
+data UciData = UciData {
+        udSink  :: UciSink,
+        udStart :: String,	-- "startpos" or the fen of the position command
+        udPly   :: !Int		-- ply of the next move from the start position, from 1
+    }
+
+data UciSink = UciSinkClosed | UciSinkOpen Handle | UciSinkFailed
 
 -- This is the variable context part (global mutable context)
 data Changing = Chg {

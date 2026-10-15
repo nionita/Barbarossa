@@ -59,6 +59,13 @@ Refactorings of the eval, the search or the position state must not change the e
   opened or written, the error goes to `Barbarossa_collected_errors.txt` and SelfPlay continues without logging.
 - Branch builds log at Info level by default (Origin lines included): for matches with fastchess or a GUI use
   `-l 5`.
+- Barbarossa (UCI) names its log `barbarossa-<version>-<branch>-<start second>-<pid>.log`, in the current
+  directory: engines started in the same second (fastchess concurrency) do not share it (before, they wrote
+  interleaved lines into one file). Log errors are collected as in SelfPlay, the engine goes on without log.
+- Training data from games against other engines: `-d` (works with `-l 5`) writes per search one line
+  `S|ply|start|root fen|root score|leaf score|leaf fen|best move` (leaf as SelfPlay `--data` takes it) and `N` at
+  every ucinewgame into `barbarossa-<version>-<branch>-<start second>-<pid>.data` in the working directory;
+  BarbarossaTuning `uci_data.py` joins it with the fastchess PGN.
 
 ## Line Endings
 
