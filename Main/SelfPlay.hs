@@ -637,7 +637,8 @@ initContext opts = do
             strttm = clktm,
             change = ctxVar,
             loglev = if debug then DebugSearch else optLogLev opts,
-            evpid  = parc
+            evpid  = parc,
+            ucidata = Nothing
          }
     return context
 

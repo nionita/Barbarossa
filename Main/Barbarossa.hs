@@ -11,13 +11,14 @@ import Control.Concurrent
 import Control.Exception
 import Data.Array.Unboxed
 -- import Data.Foldable (foldrM)
-import Data.List (intersperse)
+import Data.List (intercalate, intersperse)
 import Data.Maybe
 import Data.Time.Clock (UTCTime)
 import Data.Typeable
 import System.Console.GetOpt
 import System.Environment (getArgs)
 import System.IO
+import System.Process (getCurrentPid)
 import System.Random
 
 import Struct.Struct
@@ -29,6 +30,7 @@ import Uci.UCI
 import Uci.UciGlue
 import Moves.Core (movesInit, posFromFen, initPos)
 import Moves.Internal.Base
+import Moves.Notation (posToFen)
 import Moves.History
 import Search.CStateMonad (execCState)
 import Search.AlbetaTypes (formatStats)
@@ -39,13 +41,14 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.8.0"
-progVerSuff = "fold"
+progVerSuff = "ucidat"
 
 data Options = Options {
         optConfFile :: Maybe String,	-- config file
         optParams   :: [String],	-- list of eval parameter assignements
         optLogging  :: LogLevel,	-- logging level
         optBuildInfo :: Bool,		-- print build flavor and opposite build command
+        optData     :: Bool,		-- write the leaf of every search to a data file
         optAFenFile :: Maybe FilePath	-- annotated fen file for self analysis
     }
 
@@ -58,6 +61,7 @@ defaultOptions = Options {
         optParams   = [],
         optLogging  = logOptDefault,
         optBuildInfo = False,
+        optData     = False,
         optAFenFile = Nothing
     }
 
@@ -84,12 +88,16 @@ addAFile fi opt = opt { optAFenFile = Just fi }
 setBuildInfo :: Options -> Options
 setBuildInfo opt = opt { optBuildInfo = True }
 
+setData :: Options -> Options
+setData opt = opt { optData = True }
+
 options :: [OptDescr (Options -> Options)]
 options = [
         Option "c" ["config"]  (ReqArg setConfFile "STRING") "Configuration file",
         Option "l" ["loglev"]  (ReqArg setLogging "STRING")  "Logging level from 0 (debug) to 5 (never)",
         Option "p" ["param"]   (ReqArg addParam "STRING")    "Eval/search/time parameters: name=value,...",
         Option "B" ["build-info"] (NoArg setBuildInfo)       "Show build flavor and opposite build command",
+        Option "d" ["data"]    (NoArg setData)               "Write the leaf of every search to a data file",
         Option "a" ["analyse"] (ReqArg addAFile "STRING")    "Analysis file"
     ]
 
@@ -99,7 +107,7 @@ theOptions = do
     case getOpt Permute options args of
         (o, n, []) -> return (foldr ($) defaultOptions o, n)
         (_, _, es) -> ioError (userError (concat es ++ usageInfo header options))
-    where header = "Usage: " ++ idName ++ " [-c CONF] [-l LEV] [-p name=val[,...]] [-B] [-a AFILE]"
+    where header = "Usage: " ++ idName ++ " [-c CONF] [-l LEV] [-p name=val[,...]] [-B] [-d] [-a AFILE]"
 
 buildFlavor, otherBuildCmd :: String
 #ifdef QS_COLLECT
@@ -140,13 +148,17 @@ initContext opts = do
             totBmCh = 0, lastChDr = 0, lmvScore = Nothing
          }
     ctxVar <- newMVar chg
+    mud <- if optData opts
+              then Just <$> newMVar UciData { udSink = UciSinkClosed, udStart = "startpos", udPly = 1 }
+              else return Nothing
     let context = Ctx {
             logger = lchan,
             writer = wchan,
             strttm = clktm,
             change = ctxVar,
             loglev = llev,
-            evpid  = parc
+            evpid  = parc,
+            ucidata = mud
          }
     return context
 
@@ -166,9 +178,7 @@ main = do
 -- excludes logging level and log file name
 interMachine :: CtxIO ()
 interMachine = do
-    ctx <- ask
-    let logFileName = progLogName ++ "-" ++ show (startSecond ctx) ++ ".log"
-    startLogger logFileName
+    startLogger
     startWriter True
     beforeReadLoop
     ctxCatch theReader
@@ -181,9 +191,7 @@ analysingMachine :: FilePath -> CtxIO ()
 analysingMachine _ = return ()
 {--
 analysingMachine fi = do
-    ctx <- ask
-    let logFileName = progLogName ++ "-" ++ show (startSecond ctx) ++ ".log"
-    startLogger logFileName
+    startLogger
     startWriter False
     beforeReadLoop
     fileReader fi
@@ -193,32 +201,49 @@ analysingMachine fi = do
 
 -- The logger will be startet anyway, but will open a file
 -- only when it has to write the first message
--- When it cannot open that file, it should at least consume the messages
--- so that the channel does not get stuck
+-- When it cannot open or write that file, it records the error and goes on
+-- consuming the messages without logging, so that the channel does not grow
 data LoggerState = LoggerFile String
                  | LoggerHandle Handle
                  | LoggerError
 
-startLogger :: String -> CtxIO ()
-startLogger file = do
+-- The log file name contains the start second and the process id, so that
+-- engines started in the same second in the same directory do not share it
+startLogger :: CtxIO ()
+startLogger = do
     ctx <- ask
-    void $ liftIO $ forkIO $ catch (theLogger (logger ctx) (LoggerFile file)) collectError
+    pid <- liftIO getCurrentPid
+    let file = progLogName ++ "-" ++ show (startSecond ctx) ++ "-" ++ show pid ++ ".log"
+    void $ liftIO $ forkIO $ catch (theLogger (logger ctx) (LoggerFile file)) loggerEnd
     ctxLog LogInfo "Logger started"
+
+-- At program end the logger is blocked reading the channel, which nobody else
+-- references anymore: this is its normal end, not an error
+loggerEnd :: SomeException -> IO ()
+loggerEnd e
+    | Just BlockedIndefinitelyOnMVar <- fromException e = return ()
+    | otherwise                                         = collectError e
 
 theLogger :: Chan String -> LoggerState -> IO ()
 theLogger lchan lst = do
     s <- readChan lchan
     case lst of
         LoggerError  -> theLogger lchan lst
-        LoggerFile f -> handle collectError $ do
-            h <- openFile f AppendMode
-            hPutStrLn h s
-            hFlush h
-            theLogger lchan (LoggerHandle h)
-        LoggerHandle h -> do
-            hPutStrLn h s
-            hFlush h
-            theLogger lchan lst
+        LoggerFile f -> do
+            eh <- try $ openFile f AppendMode
+            case eh of
+                Left e  -> loggerFailed e
+                Right h -> loggerWrite h s
+        LoggerHandle h -> loggerWrite h s
+    where loggerWrite h s = do
+              ew <- try $ hPutStrLn h s >> hFlush h
+              case ew of
+                  Left e   -> loggerFailed e
+                  Right () -> theLogger lchan (LoggerHandle h)
+          loggerFailed :: IOException -> IO ()
+          loggerFailed e = do
+              collectError $ toException e
+              theLogger lchan LoggerError
 
 -- The writer just writes to standard output
 -- But it is necessary to write from a single thread, as this is a shared resource
@@ -328,6 +353,7 @@ notImplemented s = ctxLog LogWarning $ "not implemented: " ++ s
 doUciNewGame :: CtxIO ()
 doUciNewGame = do
     ctxLog LogInfo "New game"
+    writeData "N"
     modifyChanging $ \c -> c { totBmCh = 0, lastChDr = 0, lmvScore = Nothing }
 
 doPosition :: Pos -> [Move] -> CtxIO ()
@@ -345,6 +371,7 @@ doPosition fen mvs = do
                           Just x  -> if x == 1 || x == 2 then Nothing else lmvScore chg
                           Nothing -> lmvScore chg
             modifyChanging $ \c -> c { crtStatus = ns, realPly = mi, myColor = myCol, lmvScore = lsc }
+            setDataPosition fen (length mvs)
     where newState fpos ms c h es = foldM execMove (stateFromFen fpos c h es) ms
           execMove (mi, s) m = do
               let mj = ((+) 1) <$> mi	-- increment real ply
@@ -483,7 +510,7 @@ startWorking tim tpm mtg dpt rept = do
             srchStrtMs = currms,
             totBmCh = 0,
             lastChDr = 0,
-            crtStatus = posNewSearch (crtStatus c)
+            crtStatus = (posNewSearch (crtStatus c)) { lorig = Nothing }
         }
     tid <- newThread (startSearchThread tok tim tpm mtg dpt rept)
     ok <- attachSearchThread tok tid
@@ -503,7 +530,7 @@ startSearchThread tok tim tpm mtg dpt rept =
                             answer $ infos mes
                             msnap <- finishSearch tok
                             case msnap >>= forGui of
-                                Just ms -> reportBestMove (msnap >>= (Just . crtStatus)) ms
+                                Just ms -> reportBestMove (msnap >>= (Just . crtStatus)) Nothing ms
                                 Nothing -> return ()
                             ctxLog LogError mes
                             lift $ collectError $ SomeException (SearchException mes)
@@ -570,7 +597,7 @@ searchTheTree tok draft mdraft timx1 timx tim tpm mtg rept lsc lpv rmvs = do
                       ++ show justStop
                   -- Store last score for this move
                   void $ publishSearchProgress tok $ \c -> c { lmvScore = Just sc }
-                  giveBestMove tok path
+                  giveBestMove tok sc path
                   return sc
               else do
                   ctxLog LogInfo $ "searchTheTree finishes draft " ++ show draft
@@ -666,23 +693,86 @@ timeProlongation osc sc
           tpMargin = 8
           fm = fromIntegral tpMargin
 
-reportBestMove :: Maybe MyState -> [Move] -> CtxIO ()
-reportBestMove mstt mvs = do
+reportBestMove :: Maybe MyState -> Maybe Int -> [Move] -> CtxIO ()
+reportBestMove mstt msc mvs = do
     case mvs of
         []  -> answer $ infos "empty pv"
-        m:_ -> answer $ bestMove m Nothing
+        m:_ -> do
+            dataSearch mstt msc m
+            answer $ bestMove m Nothing
     case mstt of
         Just st -> do
             ctxLog LogInfo $ "Search statistics:"
             mapM_ (ctxLog LogInfo) $ formatStats $ mstats st
         Nothing -> return ()
 
-giveBestMove :: Int -> [Move] -> CtxIO ()
-giveBestMove tok mvs = do
+giveBestMove :: Int -> Int -> [Move] -> CtxIO ()
+giveBestMove tok sc mvs = do
     msnap <- finishSearch tok
     case msnap of
-        Just snap -> reportBestMove (Just $ crtStatus snap) mvs
+        Just snap -> reportBestMove (Just $ crtStatus snap) (Just sc) mvs
         Nothing   -> return ()
+
+-- Data collection in UCI mode (option -d), file <progLogName>-<start second>-<pid>.data in the
+-- current directory, one line per search (written before the bestmove):
+-- S|ply|start|root fen|root score|leaf score|leaf fen|best move
+-- start and ply: start position of the GUI's position command ("startpos" or its fen) and ply of
+-- this move counted from it (1 = first move); root score: score of the last iteration (empty after
+-- a stop); leaf: the evaluated position of the last root iteration with its static score, as
+-- SelfPlay --data writes it (empty when there is none); and a line N at every ucinewgame
+-- When the file cannot be opened or written, the error is collected and the data collection ends
+dataSearch :: Maybe MyState -> Maybe Int -> Move -> CtxIO ()
+dataSearch mstt msc m = do
+    ctx <- ask
+    case ucidata ctx of
+        Nothing -> return ()
+        Just dv -> do
+            ud <- liftIO $ readMVar dv
+            let root = maybe "" posToFen $ mstt >>= listToMaybe . stack
+                (lsc, lfen) = case mstt >>= lorig of
+                                  Just leaf -> (show (staticScore leaf), posToFen leaf)
+                                  Nothing   -> ("", "")
+            writeData $ intercalate "|"
+                ["S", show (udPly ud), udStart ud, root, maybe "" show msc, lsc, lfen, toString m]
+
+setDataPosition :: Pos -> Int -> CtxIO ()
+setDataPosition p n = do
+    ctx <- ask
+    case ucidata ctx of
+        Nothing -> return ()
+        Just dv -> liftIO $ modifyMVar_ dv $ \ud -> return ud { udStart = start, udPly = n + 1 }
+    where start = case p of
+                      StartPos -> "startpos"
+                      Pos fen  -> fen
+
+writeData :: String -> CtxIO ()
+writeData line = do
+    ctx <- ask
+    case ucidata ctx of
+        Nothing -> return ()
+        Just dv -> liftIO $ modifyMVar_ dv $ \ud -> do
+            sink <- dataWrite ctx (udSink ud) line
+            return ud { udSink = sink }
+
+dataWrite :: Context -> UciSink -> String -> IO UciSink
+dataWrite _   UciSinkFailed _ = return UciSinkFailed
+dataWrite ctx UciSinkClosed line = do
+    pid <- getCurrentPid
+    let file = progLogName ++ "-" ++ show (startSecond ctx) ++ "-" ++ show pid ++ ".data"
+    eh <- try $ openFile file AppendMode
+    case eh of
+        Left e  -> dataFailed e
+        Right h -> dataWrite ctx (UciSinkOpen h) line
+dataWrite _ sink@(UciSinkOpen h) line = do
+    ew <- try $ hPutStrLn h line >> hFlush h
+    case ew of
+        Left e   -> dataFailed e
+        Right () -> return sink
+
+dataFailed :: IOException -> IO UciSink
+dataFailed e = do
+    collectError $ toException e
+    return UciSinkFailed
 
 beforeReadLoop :: CtxIO ()
 beforeReadLoop = do
@@ -707,7 +797,7 @@ doStop = do
                 Just tid -> liftIO $ killThread tid
                 Nothing  -> return ()
             case forGui chg of
-                Just ms -> reportBestMove (Just $ crtStatus chg) ms
+                Just ms -> reportBestMove (Just $ crtStatus chg) Nothing ms
                 Nothing -> return ()
         Nothing -> return ()
 
