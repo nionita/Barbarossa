@@ -31,7 +31,7 @@ Data paths in the findings are the original ones; the raw data, openings, config
 | 34 | Round 2 of the on-policy iteration (10k nodes) | -0.39% loss, +0.3 (1000 nodes) / +6.8 (10k) | compiled (small) |
 | 35 | Futility margins: harmful cut rates, 5 direction tests at 50k nodes | all directions -14 .. -45 | defaults are a local optimum |
 | 36 | Round 3 (50k nodes data), joint fit with round 2 data | -0.2% loss | fixed point, not compiled |
-| 37 | Hidden variables: drawishness scale (bias tables, fitted scale factors, 50 moves scale) | -2.0% loss; +10.6 Elo at 10k nodes (linear 50 moves); strong 50 moves scale -4 | worked (constrained, linear 50 moves) |
+| 37 | Hidden variables: drawishness scale (bias tables, fitted scale factors, 50 moves scale) | -2.0% loss; +10.6 at 10k nodes, timed +3.7 +- 5.7 (8000 games); strong 50 moves scale -4 | worked, small (about +4 Elo) |
 
 Old plan items (2026-10-13) and what became of them: a loss that ranks the measured configs (replaced by the
 on-policy yardstick, 29); q = 0.2 on the all-phase data (obsolete: on-policy data is fitted on the result only);
@@ -335,6 +335,16 @@ valleys problem); piece value constants with variant builds (done differently: m
     (3) the strong 50 moves scale predicts the result (high counter = game already drawn) but as an eval term it
     costs about 15 Elo against the linear one: a predictor is not necessarily a good lever for move choice;
     (4) the gain shows only at depth (as all eval gains before).
+    Further tests: 50 moves scale with two segments (old slope to 20 / 40 halfmoves, then to 0 at 100): the loss
+    prefers a steep start again (best knee 30 at 0.37, like the power form), K20 +4.2, K40 0.0 at 10k nodes, so
+    the old linear scale stays; the three variants with the same tables give about +5 +- 4 together. Timed
+    (10+0.1, fastchess, same binary, config against old scaling): 2000 games -1.6 +- 11.3 with the first,
+    allocating `drawScale` (about 3% slower), 8000 games **+3.7 +- 5.7** (LOS 90%) with the optimized one (as
+    fast as `fold`). Gauntlet against 6 engines: ug-b (new) 54.8% against ug-a (old) 54.5%, +2 +- 13. Refit of
+    weights and PST under the new scaling with own and engine data (fit4, 14 sources, `scale-r4`): yardsticks
+    -2.20% (self-play), -2.12 / -1.95% (engine games) against -1.98 / -1.44 / -1.16% for scale-c-lin, but at
+    10k nodes in self-play +10.6 +- 6.4, the same as scale-c-lin: its gain, if any, is against other engines
+    (two-version gauntlet ug-c). Verdict: the drawishness scale is worth about +4 Elo.
 
 How to repeat: the commands are in `README.md` of BarbarossaTuning, section "On-policy tuning of the HCE".
 Engine changes on `hvar`: `TuneSGD -X` (export), optional PST read from the config (`pst.mid.Ne4 = 37`, 1/8 cp,

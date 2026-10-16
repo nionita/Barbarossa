@@ -55,7 +55,7 @@ BarbarossaTuning (`README.md`, section "On-policy tuning of the HCE").
   without being a good lever for move choice (the strong 50 moves scale, 37). Test eval changes at 10k nodes or
   more; keep the cp scale of the middle game unchanged (factors 1 in normal positions, 37).
 - Drawishness (pawns of the stronger side, opposite bishops, one wing, R v R, Q v Q) is a hidden variable of the
-  linear HCE: a fitted scale of the whole eval gains 2% loss and +10.6 Elo at 10k nodes (37).
+  linear HCE: a fitted scale of the whole eval gains 2% loss, +10.6 Elo at 10k nodes, +3.7 timed (37).
 
 ## Problems
 
