@@ -10,7 +10,9 @@ BarbarossaTuning (`README.md`, section "On-policy tuning of the HCE").
 
 - Engine (branch `fold`): HCE with 43 weights (`Struct/Weights.hs`) plus an antisymmetric piece square table
   (`Struct/Pst.hs`, incremental, packed mid/end sums in the position), both from on-policy fits; material and
-  the other pure piece-square terms are in the PST (33). Compiled: round 2 (`r2-both`, 34).
+  the other pure piece-square terms are in the PST (33). Compiled: round 2 (`r2-both`, 34) and the drawishness
+  scale `scale-c-lin` (branch `scale`, 37; `epScaleNew = 0` gives the old scaling, neutral config
+  `compiled-scale.cfg`).
 - Gain of the on-policy tuning: +90 Elo timed against the old eval, +78.6 against `boas` (10+0.1, 31, 32);
   round 2 added little (+7 at 10k nodes), round 3 nothing (36).
 - The iteration has converged: rounds 1, 2, 3 gave -1.85%, -0.39%, -0.22% loss on the yardstick. Neither more

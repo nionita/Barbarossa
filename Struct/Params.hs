@@ -35,26 +35,26 @@ params = [
         ("epFutil5",          384),
         ("epFutil6",          768),
         -- drawishness scale of the whole eval (Eval.Core.normalParts), instead of the heuristic rules of
-        -- scaleFactor and the linear 50 moves scale when epScaleNew = 1; factors in 1/64 (64 = 1),
-        -- fitted by hv_scale.py (BarbarossaTuning) on the round 3 self-play data; the pawn factors are
-        -- normalized (x 148 / 134, the fitted sigmoid scales old / new) so that the eval keeps its
-        -- calibration (the same k)
-        ("epScaleNew",          0),
-        ("epScP0",             36),	-- stronger side (by the sign of the eval) has 0 .. 7, 8+ pawns
-        ("epScP1",             51),
-        ("epScP2",             69),
-        ("epScP3",             76),
-        ("epScP4",             81),
-        ("epScP5",             82),
-        ("epScP6",             82),
-        ("epScP7",             77),
-        ("epScP8",             71),
-        ("epScOcbOnly",        26),	-- opposite coloured bishops, no other pieces
+        -- scaleFactor when epScaleNew = 1 (default: compiled in, scale-c-lin, TUNING-HISTORY finding 37;
+        -- epScaleNew = 0 is the old scaling); factors in 1/64 (64 = 1), fitted by hv_scale.py --constrained
+        -- (BarbarossaTuning) on the round 3 self-play data with the old linear 50 moves scale: all <= 1,
+        -- pawn factors monotone, so normal middle game positions keep factor 1
+        ("epScaleNew",          1),
+        ("epScP0",             22),	-- stronger side (by the sign of the eval) has 0 .. 7, 8+ pawns
+        ("epScP1",             36),
+        ("epScP2",             52),
+        ("epScP3",             59),
+        ("epScP4",             63),
+        ("epScP5",             64),
+        ("epScP6",             64),
+        ("epScP7",             64),
+        ("epScP8",             64),
+        ("epScOcbOnly",        23),	-- opposite coloured bishops, no other pieces
         ("epScOcbPcs",         53),	-- opposite coloured bishops and other pieces
-        ("epScOneWing",        57),	-- pawns of the stronger side on one wing only (a-d or e-h)
+        ("epScOneWing",        55),	-- pawns of the stronger side on one wing only (a-d or e-h)
         ("epScRookEnd",        59),	-- one rook each, no other pieces
-        ("epScQueenEnd",       52),	-- one queen each, no other pieces
-        ("epSc50Pow",         220),	-- 50 moves scale (1 - m50 / 100) ^ (epSc50Pow / 100), < 0: old linear
+        ("epScQueenEnd",       50),	-- one queen each, no other pieces
+        ("epSc50Pow",          -1),	-- 50 moves scale (1 - m50 / 100) ^ (epSc50Pow / 100), < 0: old linear
         ("epSc50Knee",          0),	-- > 0: 50 moves scale of two linear segments, knee at this m50
         ("epSc50KneeH",      1024)	-- ... and its height there (1/1024): (0, 1) -> (knee, h) -> (100, 0)
     ]
