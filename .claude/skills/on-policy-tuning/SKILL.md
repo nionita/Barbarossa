@@ -24,6 +24,9 @@ other engines or adjudicated results (LogScan) made the engine weaker. Tools: Ba
   Speed on MEMO: about 1 game/s per shard at 10k nodes, about 100 positions per game.
 - More nodes per move = better data but proportionally slower; the gains grew with depth.
 - Back: `Compress-Archive` of the data dir to Z:, unpack, check the game count in the last line of each `.meta`.
+- Keep the raw data in `C:\Learn\Data\raw\selfplay\<set>` (engine games: `raw\games\<set>`) and add the set to
+  `C:\Learn\Data\DATA.md` (engine, branch and commit, config, nodes or time control, openings and range, games,
+  positions); that folder is the backup set, derived data stays in the work folder.
 
 ## 2. Prep, export, fit
 

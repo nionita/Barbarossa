@@ -4,6 +4,8 @@ The record of the tuning experiments on Barbarossa's HCE (2026-02 .. 2026-10). T
 lessons and the open ideas are in `TUNING.md`; findings are cited there by their number here.
 Strength is judged by node-limited SelfPlay matches (1000 nodes per move unless noted) against the compiled
 weights; 42k games give +-3.1 Elo (95%), 20k +-4.5, 6000 +-8.
+Data paths in the findings are the original ones; the raw data, openings, configs and results are now in
+`C:\Learn\Data` (catalog: `C:\Learn\Data\DATA.md`).
 
 ## Summary
 

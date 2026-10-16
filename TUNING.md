@@ -1,6 +1,8 @@
 # Tuning the HCE evaluation - state of 2026-10-15
 
-What was tried and its results: `TUNING-HISTORY.md` (summary table and findings 1-36, cited here by number).
+What was tried and its results: `TUNING-HISTORY.md` (summary table and findings 1-37, cited here by number).
+The data (raw self-play data, engine games, openings, configs, results) and what it is: `C:\Learn\Data\DATA.md`
+(the backup set; derived data in `C:\Learn\Tune\hvar` can be regenerated from it).
 The procedure of a tuning round: skill `.claude/skills/on-policy-tuning`; commands and scripts:
 BarbarossaTuning (`README.md`, section "On-policy tuning of the HCE").
 
@@ -68,7 +70,7 @@ BarbarossaTuning (`README.md`, section "On-policy tuning of the HCE").
 ## Ideas to try
 
 1. Hidden variables at the fixed point (the weights are no longer what is wrong, the residual is the
-   features' limit), on the round 3 data (2.6M positions, `C:\Learn\Tune\hvar\sp-data4`):
+   features' limit), on the round 3 data (2.6M positions, `C:\Learn\Data\raw\selfplay\r3-gen3`):
    a) bias tables without a model: mean residual by material signature (drawish endings, opposite bishops,
       imbalances), by phase (k per phase: is the mid / end scale consistent? exchanges depend on it), by side
       to move, check, attacked pieces;
