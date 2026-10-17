@@ -344,7 +344,9 @@ valleys problem); piece value constants with variant builds (done differently: m
     weights and PST under the new scaling with own and engine data (fit4, 14 sources, `scale-r4`): yardsticks
     -2.20% (self-play), -2.12 / -1.95% (engine games) against -1.98 / -1.44 / -1.16% for scale-c-lin, but at
     10k nodes in self-play +10.6 +- 6.4, the same as scale-c-lin: its gain, if any, is against other engines
-    (two-version gauntlet ug-c). Verdict: the drawishness scale is worth about +4 Elo.
+    (two-version gauntlet ug-c: both versions against 6 engines with the same openings, 2400 games each: r4
+    48.4%, clin 48.3%, paired r4 - clin +0.6 +- 16.5 Elo, head-to-head 50.4% for r4 in 400 games: no difference,
+    r4 not compiled in). Verdict: the drawishness scale is worth about +4 Elo; compiled in (scale-c-lin, 52f0194).
 
 How to repeat: the commands are in `README.md` of BarbarossaTuning, section "On-policy tuning of the HCE".
 Engine changes on `hvar`: `TuneSGD -X` (export), optional PST read from the config (`pst.mid.Ne4 = 37`, 1/8 cp,
