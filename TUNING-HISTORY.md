@@ -32,6 +32,7 @@ Data paths in the findings are the original ones; the raw data, openings, config
 | 35 | Futility margins: harmful cut rates, 5 direction tests at 50k nodes | all directions -14 .. -45 | defaults are a local optimum |
 | 36 | Round 3 (50k nodes data), joint fit with round 2 data | -0.2% loss | fixed point, not compiled |
 | 37 | Hidden variables: drawishness scale (bias tables, fitted scale factors, 50 moves scale) | -2.0% loss; +10.6 at 10k nodes, timed +3.7 +- 5.7 (8000 games); strong 50 moves scale -4 | worked, small (about +4 Elo) |
+| 38 | Engine games (off-policy positions, on-policy labels) weighted in the refit under the new scaling | x1: 0, x5: +22.7, x15: +9.9 Elo at 10k nodes | worked (x5, branch w5), gauntlet pending |
 
 Old plan items (2026-10-13) and what became of them: a loss that ranks the measured configs (replaced by the
 on-policy yardstick, 29); q = 0.2 on the all-phase data (obsolete: on-policy data is fitted on the result only);
@@ -347,6 +348,23 @@ valleys problem); piece value constants with variant builds (done differently: m
     (two-version gauntlet ug-c: both versions against 6 engines with the same openings, 2400 games each: r4
     48.4%, clin 48.3%, paired r4 - clin +0.6 +- 16.5 Elo, head-to-head 50.4% for r4 in 400 games: no difference,
     r4 not compiled in). Verdict: the drawishness scale is worth about +4 Elo; compiled in (scale-c-lin, 52f0194).
+38. Engine games as training data (fastchess gauntlets, Barbarossa writes its search leaves with -d, joined with
+    the PGN results by `uci_data.py`): ug-a (old scaling, 4800 games against ECE-X2, Admete, Odonata, Tantabus,
+    Luna, Weiawaga), ug-b (new scaling, the same opponents), ug-c (two versions clin / r4 against ECE-X2,
+    Odonata, Tantabus, Weiawaga, Supernova, GreKo: Luna made an illegal move, Admete was the weakest). About 620k
+    training positions from 11k games, one source per opponent and run (offset and k each: k 105 .. 185, our eval
+    predicts the results against ECE-X2 worst). Refit of weights and PST under the new scaling together with
+    the own rounds 2 and 3 (9M positions), engine data weighted in the loss (`hv_fit.py --weight`, training only):
+    x1 (6% of the loss, `scale-r4`), x5 (26%, `scale-w5`), x15 (51%, `scale-w15`). Yardsticks (self-play /
+    ug-a / ug-b / ug-c held-out games, loss against the old eval): scale-c-lin -1.98 / -1.44 / -1.16 / -0.87%,
+    r4 -2.20 / -2.12 / -1.95 / -1.69%, w5 -2.24 / -2.77 / -2.13 / -2.29%, w15 -1.79 / -3.00 / -1.98 / -2.74%.
+    At 10k nodes against the compiled scale-c-lin engine (8000 games each): r4 about 0 (r4 and clin both +10.6
+    against the old engine; in the two-version gauntlet r4 - clin +0.6 +- 16.5), **w5 +22.7 +- 6.5**, w15
+    +9.9 +- 6.5. The engine games hold information the own games do not have, but the linear HCE + PST has
+    little capacity: too much weight on them costs the common knowledge (w15 worse in self-play). Weaker
+    opponents probably give worse labels (their errors decide the results) and fewer positions under pressure;
+    the stronger ones expose our blind spots. w5 compiled into branch `w5` (bf7a30e, identical eval to scale
+    with -c scale-w5.cfg); gauntlet compiled scale against w5 (ug-d) and a timed test pending.
 
 How to repeat: the commands are in `README.md` of BarbarossaTuning, section "On-policy tuning of the HCE".
 Engine changes on `hvar`: `TuneSGD -X` (export), optional PST read from the config (`pst.mid.Ne4 = 37`, 1/8 cp,
