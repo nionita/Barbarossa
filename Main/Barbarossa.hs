@@ -44,12 +44,12 @@ progVersion = "0.8.0"
 progVerSuff = "esimp"
 
 data Options = Options {
-        optConfFile :: Maybe String,	-- config file
-        optParams   :: [String],	-- list of eval parameter assignements
-        optLogging  :: LogLevel,	-- logging level
-        optBuildInfo :: Bool,		-- print build flavor and opposite build command
-        optData     :: Bool,		-- write the leaf of every search to a data file
-        optAFenFile :: Maybe FilePath	-- annotated fen file for self analysis
+        optConfFile :: Maybe String,    -- config file
+        optParams   :: [String],        -- list of eval parameter assignements
+        optLogging  :: LogLevel,        -- logging level
+        optBuildInfo :: Bool,           -- print build flavor and opposite build command
+        optData     :: Bool,            -- write the leaf of every search to a data file
+        optAFenFile :: Maybe FilePath   -- annotated fen file for self analysis
     }
 
 logOptDefault :: LogLevel
@@ -130,7 +130,7 @@ initContext opts = do
     let llev = optLogging opts
     lchan <- newChan
     wchan  <- newChan
-    ha <- newCache 1	-- it will take the minimum number of entries
+    ha <- newCache 1    -- it will take the minimum number of entries
     hi <- newHist
     let paramList
             | null $ optParams opts = []
@@ -170,8 +170,8 @@ main = do
        else do
            ctx <- initContext opts
            case optAFenFile opts of
-               Nothing -> runReaderT interMachine ctx	-- the normal (interactive) mode
-               Just fi -> runReaderT (analysingMachine fi) ctx	-- the analysis mode
+               Nothing -> runReaderT interMachine ctx   -- the normal (interactive) mode
+               Just fi -> runReaderT (analysingMachine fi) ctx  -- the analysis mode
 
 -- The logger, writer and informer will be started only once, here,
 -- so every setting about them cannot be changed later, which mainly
@@ -256,7 +256,7 @@ startWriter inter = do
 theWriter :: Bool -> Chan String -> Chan String -> Bool -> UTCTime -> IO ()
 theWriter inter wchan lchan mustlog refs = forever $ do
     s <- readChan wchan
-    when inter $ do	-- we write only in intercative mode
+    when inter $ do     -- we write only in intercative mode
         putStrLn s
         hFlush stdout
     when mustlog $ logging lchan refs "Output" s
@@ -307,8 +307,8 @@ goOn action = action >> return False
 
 doUci :: CtxIO ()
 doUci = do
-    evid <- asks evpid
-    answer $ idName ++ " " ++ evid
+    evid <- asks evpid  -- the config file, if any
+    answer $ idName ++ if null evid then "" else ' ' : evid
     answer idAuthor
     mapM_ sendOption guiUciOptions
     answer uciOk
@@ -374,7 +374,7 @@ doPosition fen mvs = do
             setDataPosition fen (length mvs)
     where newState fpos ms c h es = foldM execMove (stateFromFen fpos c h es) ms
           execMove (mi, s) m = do
-              let mj = ((+) 1) <$> mi	-- increment real ply
+              let mj = ((+) 1) <$> mi   -- increment real ply
               s' <- execCState (doRealMove m) s
               return (mj, s')
           fenColor = movingColor fen
@@ -406,14 +406,14 @@ doGo cmds = do
             else do
                 let (tim, tpm, mtg) = getUCITime cmds $ myColor chg
                     rept = countRepetitions $ crtStatus chg
-                    md   = 25	-- max search depth
+                    md   = 25   -- max search depth
                     dpt  = fromMaybe md (findDepth cmds)
                 startWorking tim tpm mtg dpt rept
 
 data Agreg = Agreg {
-         agrCumErr :: !Integer,	-- accumulated error
-         agrFenOk  :: !Int	-- number of fens analysed
-         -- agrFenNOk :: !Int	-- number of fens aborted
+         agrCumErr :: !Integer, -- accumulated error
+         agrFenOk  :: !Int      -- number of fens analysed
+         -- agrFenNOk :: !Int   -- number of fens aborted
      } deriving Show
 
 -- Comment this out as not used since a while
@@ -434,7 +434,7 @@ perFenLine :: Int -> String -> Agreg -> CtxIO Agreg
 perFenLine dpt fenLine agr = do
     let (refsc, fen') = break ((==) '\t') fenLine
         rsc = read refsc
-        fen = tail fen'	-- it has the \t in front
+        fen = tail fen' -- it has the \t in front
     ctxLog LogInfo $ "Ref.Score " ++ refsc ++ " fen " ++ fen
     doPosition (Pos fen) []
     modifyChanging $ \c -> c { working = True }
@@ -457,12 +457,12 @@ getUCITime cs c
 
 -- These parameters should be optimised (i.e.: first made options)
 remTimeFracIni, remTimeFracFin, remTimeFracDev :: Double
-remTimeFracIni = 0.15	-- fraction of remaining time which we can consume at once - initial value
-remTimeFracFin = 0.5	-- same at final (when remaining time is near zero)
+remTimeFracIni = 0.15   -- fraction of remaining time which we can consume at once - initial value
+remTimeFracFin = 0.5    -- same at final (when remaining time is near zero)
 remTimeFracDev = remTimeFracFin - remTimeFracIni
 
 timeReserved :: Int
-timeReserved = 100	-- milliseconds reserved for move communication
+timeReserved = 100      -- milliseconds reserved for move communication
 
 extendScoreMargin :: Int
 extendScoreMargin = 24
@@ -474,15 +474,15 @@ extendScoreMargin = 24
 compTime :: Int -> Int -> Int -> Int -> Int -> Maybe (Int, Int)
 compTime tim tpm fixmtg cursc rept
     | tim == 0 && tpm == 0 = Nothing
-    | tim == 0             = Just (max 1 (lim `div` 2), lim)	-- increment only
+    | tim == 0             = Just (max 1 (lim `div` 2), lim)    -- increment only
     | otherwise            = Just (max 1 (min ctm tmx), tmx)
     where mtg = if fixmtg > 0 then fixmtg else estimateMovesToGo cursc
-          mtr | rept >= 2 = 3	-- consider repetitions
+          mtr | rept >= 2 = 3   -- consider repetitions
               | mtg == 0  = 1
               | otherwise = mtg
           ctn = tpm + tim `div` mtr
           ctm = if tim < 2000 then 300 else ctn
-          frtim = fromIntegral $ max 0 $ tim - ctm	-- rest time after this move
+          frtim = fromIntegral $ max 0 $ tim - ctm      -- rest time after this move
           fctm  = fromIntegral ctm :: Double
           rtimprc = fctm / max frtim fctm
           rtimfrc = remTimeFracIni + remTimeFracDev * rtimprc
@@ -589,8 +589,8 @@ searchTheTree tok draft mdraft timx1 timx tim tpm mtg rept lsc lpv rmvs = do
                start = srchStrtMs chg
                used  = currms - start
                over  = timed && used >= mx
-               onlyone = timed && length rmvsf == 1 && draft >= 4	-- only in normal play
-               draftmax = draft >= mdraft	--  or maximal draft
+               onlyone = timed && length rmvsf == 1 && draft >= 4       -- only in normal play
+               draftmax = draft >= mdraft       --  or maximal draft
                mes = "Draft " ++ show draft ++ " Score " ++ show sc ++ " path " ++ show path
                          ++ " ms " ++ show ms ++ " used " ++ show used
            ctxLog LogInfo mes
@@ -615,7 +615,7 @@ searchTheTree tok draft mdraft timx1 timx tim tpm mtg rept lsc lpv rmvs = do
                   ctxLog LogInfo $ "searchTheTree finishes draft " ++ show draft
                   chg' <- readChanging
                   if working chg' && searchToken chg' == tok
-                      then if not timed	-- no time constraint (take original maximum)
+                      then if not timed -- no time constraint (take original maximum)
                               then searchTheTree tok (draft+1) mdraft 0 0 tim tpm mtg rept (Just sc) path rmvsf
                               else do
                                   -- absolute times, 0 would mean no limit
@@ -657,7 +657,7 @@ stopByChance red extend ms used mx draft ch totch ldCh
               mxf = fromIntegral mx
               mxr = min mx $ round $ red * (mxf + mxf * p) / 2
           if dmax > draft + 1
-             then return (False, mxr)	-- we have more than 1 draft to go
+             then return (False, mxr)   -- we have more than 1 draft to go
              else do
                  ctxLog LogInfo $ "stopByChance: d/ch/tch/ldch = "
                      ++ show draft ++ " / " ++ show ch ++ " / " ++ show totch ++ " / " ++ show ldCh
@@ -838,7 +838,7 @@ data UciGUIOptionType = UGOTRange String String
 
 guiUciOptions :: [(String, String, String, UciGUIOptionType)]
 guiUciOptions = [
-        ("Hash", "spin", "16", UGOTRange "16" "1024")	-- hash size in MB
+        ("Hash", "spin", "16", UGOTRange "16" "1024")   -- hash size in MB
     ]
 
 sendOption :: (String, String, String, UciGUIOptionType) -> CtxIO ()
