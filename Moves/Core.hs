@@ -24,12 +24,14 @@ import Moves.Internal.BitBoard
 import Moves.Internal.Pattern
 import Moves.Internal.Moves
 
+-- Piece values in cp for SEE, delta pruning in QS and the material classes of the special evals:
+-- the PST means over squares and phases (rounded, knight = bishop: the special evals need them equal)
 matPiece1 :: Piece -> Int
-matPiece1 Pawn   = 100
-matPiece1 Knight = 360
-matPiece1 Bishop = 360
-matPiece1 Rook   = 565
-matPiece1 Queen  = 1100
+matPiece1 Pawn   = 125
+matPiece1 Knight = 390
+matPiece1 Bishop = 390
+matPiece1 Rook   = 615
+matPiece1 Queen  = 1200
 matPiece1 King   = 20000
 
 fun :: Color -> Int -> Int
@@ -85,13 +87,9 @@ pstRecompute :: MyPos -> (Int, Int)
 pstRecompute p = foldl' add (0, 0) [ (c, f, sq) | sq <- [0 .. 63], Busy c f <- [tabla p sq] ]
     where add (!m, !e) (c, f, sq) = (m + pstMidPiece c f sq, e + pstEndPiece c f sq)
 
+{-# INLINE seeValue #-}
 seeValue :: Piece -> Int
-seeValue Pawn   = 1
-seeValue Knight = 3
-seeValue Bishop = 3
-seeValue Rook   = 5
-seeValue Queen  = 10
-seeValue King   = 200
+seeValue = matPiece1
 
 -- Is color c in check in position p?
 {-# INLINE isCheck #-}
