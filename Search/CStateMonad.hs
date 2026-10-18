@@ -69,9 +69,8 @@ CState $ \s0 k -> runSTPlus af s0 $ \x s1 -> runSTPlus aa s1 $ \a s2 -> k (x a) 
 -- the construct: case f a of fa -> ... is lazy, to make it strict, do
 -- case f a of !fa -> ...
 -- So we keep the simpler for for the lazy variant
+-- return is pure (the default, see the Applicative instance)
 instance Monad (CState s m) where
-    {-# INLINE return #-}
-    return a = CState $ \s k -> k a s
     {-# INLINE (>>=) #-}
     c >>= f  = CState $ \s0 k -> runSTPlus c s0 $ \a s1 -> runSTPlus (f a) s1 k
 

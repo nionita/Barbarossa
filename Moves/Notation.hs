@@ -34,7 +34,7 @@ toNiceNotation p m
               | fig == Bishop = desamb (bishops p)
               | fig == Rook   = desamb (rooks p)
               | fig == Queen  = desamb (queens p)
-              | otherwise     = ""	-- king
+              | otherwise     = ""      -- king
           dst = col dc : row dr : ""
           promo = if moveIsPromo m then pcToCh False (movePromoPiece m) else ""
           p' = doFromToMove m p
@@ -56,8 +56,8 @@ pcToCh _ Queen  = "Q"
 pcToCh _ Rook   = "R"
 pcToCh _ Bishop = "B"
 pcToCh _ Knight = "N"
-pcToCh False _  = ""	-- it remains only pawn, which sometimes
-pcToCh True  _  = "P"	-- (in fen) must be printed, sometimes not
+pcToCh False _  = ""    -- it remains only pawn, which sometimes
+pcToCh True  _  = "P"   -- (in fen) must be printed, sometimes not
 
 chToPc :: Char -> Piece
 chToPc 'K' = King
@@ -65,7 +65,7 @@ chToPc 'Q' = Queen
 chToPc 'R' = Rook
 chToPc 'B' = Bishop
 chToPc 'N' = Knight
-chToPc _   = Pawn	-- this is dummy, just to eliminate warnings
+chToPc _   = Pawn       -- this is dummy, just to eliminate warnings
 
 type MoveParser = Either String Move
 
@@ -155,7 +155,7 @@ pieceXA1 p pc f r cs
                  | pc == Rook   = me p .&. rooks p
                  | pc == Bishop = me p .&. bishops p
                  | pc == Knight = me p .&. knights p
-                 | otherwise       = 0	-- this is dummy, for warnings
+                 | otherwise       = 0  -- this is dummy, for warnings
           sqdst = colRowToSquare f r
           att = fAttacs sqdst pc (occup p)
           pbb = target .&. att
@@ -178,7 +178,7 @@ pieceAB1 p pc f0 f r cs
                  | pc == Rook   = me p .&. rooks p
                  | pc == Bishop = me p .&. bishops p
                  | pc == Knight = me p .&. knights p
-                 | otherwise       = 0	-- this is dummy, for warnings
+                 | otherwise       = 0  -- this is dummy, for warnings
           sqdst = colRowToSquare f r
           pbb = target .&. colBB f0
           sqsrc = firstOne pbb
@@ -200,7 +200,7 @@ piece1A2 p pc r0 f r cs
                  | pc == Rook   = me p .&. rooks p
                  | pc == Bishop = me p .&. bishops p
                  | pc == Knight = me p .&. knights p
-                 | otherwise       = 0	-- this is dummy, for warnings
+                 | otherwise       = 0  -- this is dummy, for warnings
           sqdst = colRowToSquare f r
           -- att = fAttacs sqdst pc (occup p)
           -- pbb = target .&. att .&. rowBB r0
@@ -228,7 +228,7 @@ pieceAXB1 p pc f0 f r cs
                  | pc == Rook   = me p .&. rooks p
                  | pc == Bishop = me p .&. bishops p
                  | pc == Knight = me p .&. knights p
-                 | otherwise       = 0	-- this is dummy, for warnings
+                 | otherwise       = 0  -- this is dummy, for warnings
           sqdst = colRowToSquare f r
           -- att = fAttacs sqdst pc (occup p)
           -- pbb = target .&. att .&. colBB f0
@@ -256,7 +256,7 @@ piece1XA2 p pc r0 f r cs
                  | pc == Rook   = me p .&. rooks p
                  | pc == Bishop = me p .&. bishops p
                  | pc == Knight = me p .&. knights p
-                 | otherwise       = 0	-- this is dummy, for warnings
+                 | otherwise       = 0  -- this is dummy, for warnings
           sqdst = colRowToSquare f r
           -- att = fAttacs sqdst pc (occup p)
           -- pbb = target .&. att .&. rowBB r0
@@ -280,7 +280,7 @@ pieceA1 p pc f r cs
                  | pc == Rook   = me p .&. rooks p
                  | pc == Bishop = me p .&. bishops p
                  | pc == Knight = me p .&. knights p
-                 | otherwise       = 0	-- this is dummy, for warnings
+                 | otherwise       = 0  -- this is dummy, for warnings
           sqdst = colRowToSquare f r
           att = fAttacs sqdst pc (occup p)
           pbb = target .&. att
@@ -301,11 +301,11 @@ pawnX _ _ cs = Left $ cs ++ ": expect file and rank"
 pawn1 :: MyPos -> Int -> Int -> String -> MoveParser
 pawn1 p f r (c:cs)
     | c == '=' = pawn1Q p f r cs
-    | c == '+' || c == '#' = pawn1 p f r []	-- simplified a bit...
+    | c == '+' || c == '#' = pawn1 p f r []     -- simplified a bit...
 pawn1 p f r []
     | Just sqsrc <- msqsrc =
           if (fcol == White && r == 7) || (fcol == Black && r == 0)
-             then Right $ makePromo Queen sqsrc sqdst	-- assume queen promotion
+             then Right $ makePromo Queen sqsrc sqdst   -- assume queen promotion
              else return $ moveAddColor fcol $ moveAddPiece Pawn $ moveFromTo sqsrc sqdst
     | otherwise = Left $ "Semantic: no pawn can move there"
     where fcol = moving p
@@ -356,11 +356,11 @@ pawn1Q _ _ _ cs = Left $ cs ++ ": expect promotion piece, then +, # or end of st
 pawnXA1 :: MyPos -> Int -> Int -> Int -> String -> MoveParser
 pawnXA1 p f0 f r (c:cs)
     | c == '=' = pawnXA1Q p f0 f r cs
-    | c == '+' || c == '#' = pawnXA1 p f0 f r []	-- simplified a bit...
+    | c == '+' || c == '#' = pawnXA1 p f0 f r []        -- simplified a bit...
 pawnXA1 p f0 f r []
     | Just sqsrc <- msqsrc =
           if (fcol == White && r == 7) || (fcol == Black && r == 0)
-             then Right $ makePromo Queen sqsrc sqdst	-- assume queen promotion
+             then Right $ makePromo Queen sqsrc sqdst   -- assume queen promotion
              else let m = moveAddColor fcol $ moveAddPiece Pawn $ moveFromTo sqsrc sqdst
                   in case tabla p sqdst of
                          Busy cc cp | cc == fcol -> Left $ "Semantic: pawn captures own piece"
@@ -429,6 +429,6 @@ posToFen pos = unwords [lns, tmv, correct cast, ep, halb, rest]
                                (r, c) = sq `divMod` 8
                            in chr (ord 'a' + c) : chr (ord '1' + r) : []
           halb = show $ (epcas pos .&. fyMask) `div` fyIncr
-          rest = "1"	-- rest not yet implemented
+          rest = "1"    -- rest not yet implemented
           correct "----" = "-"
           correct x = filter ((/=) '-') x

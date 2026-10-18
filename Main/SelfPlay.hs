@@ -9,7 +9,7 @@
 
 module Main (main) where
 import Control.Monad.Reader
-import Control.Monad (when, void, forever, foldM, forM, forM_)
+import Control.Monad (when, void, forever, foldM, forM_)
 import Control.Concurrent
 import Control.Exception
 import Data.Char (isSpace)

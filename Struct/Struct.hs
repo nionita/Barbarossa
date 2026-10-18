@@ -45,16 +45,16 @@ data TabCont = Empty
 
 data MyPos = MyPos {
     black, slide, kkrq, diag, epcas :: !BBoard, -- These fields completely represents of a position
-    zobkey :: !ZKey,	-- hash key
-    me, yo, occup, kings, pawns :: !BBoard,	-- further heavy used bitboards computed for efficiency
+    zobkey :: !ZKey,    -- hash key
+    me, yo, occup, kings, pawns :: !BBoard,     -- further heavy used bitboards computed for efficiency
     queens, rooks, bishops, knights, passed :: !BBoard,
-    pstPack :: !Int,	-- piece square table sums packed (see pstMid, pstEnd), white p.o.v., incremental
-    staticScore :: Int,	-- lazy, not always needed
-    lazyBits :: LazyBits	-- lazy of course
+    pstPack :: !Int,    -- piece square table sums packed (see pstMid, pstEnd), white p.o.v., incremental
+    staticScore :: Int, -- lazy, not always needed
+    lazyBits :: LazyBits        -- lazy of course
     }
 
 data LazyBits = LazyBits {
-    _myAttacs, _yoAttacs, _check :: !BBoard,		-- my & yours attacs, check
+    _myAttacs, _yoAttacs, _check :: !BBoard,            -- my & yours attacs, check
     _myPAttacs, _myNAttacs, _myBAttacs, _myRAttacs, _myQAttacs, _myKAttacs :: !BBoard,
     _yoPAttacs, _yoNAttacs, _yoBAttacs, _yoRAttacs, _yoQAttacs, _yoKAttacs :: !BBoard
     }
@@ -177,25 +177,25 @@ instance Show Move where
 epMask, fyMask, fyIncr, fyZero, fyMaxi, mvMask, caRiMa :: BBoard
 caRKiw, caRQuw, caRMKw, caRMQw, caRAKw, caRAQw :: BBoard
 caRKib, caRQub, caRMKb, caRMQb, caRAKb, caRAQb :: BBoard
-epMask = 0x0000FF0000FF0000	-- en passant mask
-fyMask = 0x000000000000FF00	-- mask for 50 moves rules
-fyIncr = 0x0000000000000100	-- 50 moves rule increment
-fyZero = complement fyMask	-- to reset the 50 moves count
-fyMaxi = 0x0000000000006400	-- to compare if we reaches 100 halfmoves
-mvMask = 0x0080000000000000	-- Moving mask (1 in that bit means black moves)
-caRiMa = 0x9100000000000091	-- Mask for castle rights
-caRKiw = 0x0000000000000090	-- white: king & rook position for kingside castle
-caRQuw = 0x0000000000000011	-- white: king & rook pisition for queenside castle
-caRMKw = 0x0000000000000060	-- white: empty fields for kingside castle
-caRMQw = 0x000000000000000E	-- white: empty fields for queenside castle
-caRAKw = 0x0000000000000060	-- white: not attacked fields for kingside castle
-caRAQw = 0x000000000000000C	-- white: not attacked fields for queenside castle
-caRKib = 0x9000000000000000	-- black: king & rook position for kingside castle
-caRQub = 0x1100000000000000	-- black: king & rook position for queenside castle
-caRMKb = 0x6000000000000000	-- black: empty fields for kingside castle
-caRMQb = 0x0E00000000000000	-- black: empty fields for queenside castle
-caRAKb = 0x6000000000000000	-- black: not attacked fields for kingside castle
-caRAQb = 0x0C00000000000000	-- black: not attacked fields for queenside castle
+epMask = 0x0000FF0000FF0000     -- en passant mask
+fyMask = 0x000000000000FF00     -- mask for 50 moves rules
+fyIncr = 0x0000000000000100     -- 50 moves rule increment
+fyZero = complement fyMask      -- to reset the 50 moves count
+fyMaxi = 0x0000000000006400     -- to compare if we reaches 100 halfmoves
+mvMask = 0x0080000000000000     -- Moving mask (1 in that bit means black moves)
+caRiMa = 0x9100000000000091     -- Mask for castle rights
+caRKiw = 0x0000000000000090     -- white: king & rook position for kingside castle
+caRQuw = 0x0000000000000011     -- white: king & rook pisition for queenside castle
+caRMKw = 0x0000000000000060     -- white: empty fields for kingside castle
+caRMQw = 0x000000000000000E     -- white: empty fields for queenside castle
+caRAKw = 0x0000000000000060     -- white: not attacked fields for kingside castle
+caRAQw = 0x000000000000000C     -- white: not attacked fields for queenside castle
+caRKib = 0x9000000000000000     -- black: king & rook position for kingside castle
+caRQub = 0x1100000000000000     -- black: king & rook position for queenside castle
+caRMKb = 0x6000000000000000     -- black: empty fields for kingside castle
+caRMQb = 0x0E00000000000000     -- black: empty fields for queenside castle
+caRAKb = 0x6000000000000000     -- black: not attacked fields for kingside castle
+caRAQb = 0x0C00000000000000     -- black: not attacked fields for queenside castle
 
 -- The PST sums (mid, end) are kept packed in one Int: mid * 2^32 + end. Sums of packed values are
 -- the packed sums (as long as |end| < 2^31), so the move execution needs one lookup and one addition
@@ -337,8 +337,8 @@ moveEnPasDel m
 {-# INLINE makeEnPas #-}
 makeEnPas :: Square -> Square -> Move
 makeEnPas f t
-    | f < t     = Move $ 0x6000 .|. encodeFromTo f t	-- white
-    | otherwise = Move $ 0xE000 .|. encodeFromTo f t	-- black
+    | f < t     = Move $ 0x6000 .|. encodeFromTo f t    -- white
+    | otherwise = Move $ 0xE000 .|. encodeFromTo f t    -- black
 
 -- Promotions are coded:
 -- c111 <pro><frf><tosq>
@@ -362,14 +362,14 @@ movePromoPiece (Move w)
 
 makePromo :: Piece -> Square -> Square -> Move
 makePromo p f t
-    | f < t     = Move $ 0x7000 .|. w	-- white
-    | otherwise = Move $ 0xF000 .|. w	-- black
+    | f < t     = Move $ 0x7000 .|. w   -- white
+    | otherwise = Move $ 0xF000 .|. w   -- black
     where !w = tc p .|. (encodeFromTo f t .&. 0x01FF)
           tc Queen  = tcQueen
           tc Rook   = tcRook
           tc Bishop = tcBishop
           tc Knight = tcKnight
-          tc _      = tcQueen	-- to eliminate warning
+          tc _      = tcQueen   -- to eliminate warning
 
 tcQueen, tcRook, tcBishop, tcKnight :: Word16
 tcQueen  = (fromIntegral $ fromEnum Queen ) `shiftL` 9
@@ -390,10 +390,10 @@ moveIsCastle (Move w) = s == 0x7E00 || s == 0x7000
 
 {-# INLINE makeCastleFor #-}
 makeCastleFor :: Color -> Bool -> Move
-makeCastleFor White True  = Move 0x7106	-- white, kingside
-makeCastleFor White False = Move 0x7102	-- white, queenside
-makeCastleFor Black True  = Move 0xFF3E	-- black, kingside
-makeCastleFor Black False = Move 0xFF3A	-- black, queenside
+makeCastleFor White True  = Move 0x7106 -- white, kingside
+makeCastleFor White False = Move 0x7102 -- white, queenside
+makeCastleFor Black True  = Move 0xFF3E -- black, kingside
+makeCastleFor Black False = Move 0xFF3A -- black, queenside
 
 -- General functions for move encoding / decoding
 encodeFromTo :: Square -> Square -> Word16
@@ -477,7 +477,7 @@ activatePromo b m = makePromo p f t
           chToPc 'r' = Rook
           chToPc 'b' = Bishop
           chToPc 'n' = Knight
-          chToPc _   = King	-- to eliminate warnings
+          chToPc _   = King     -- to eliminate warnings
 
 toString :: Move -> String
 toString m = col sc : row sr : col dc : row dr : promo
@@ -494,5 +494,5 @@ toString m = col sc : row sr : col dc : row dr : promo
           pcToCh Rook   = 'r'
           pcToCh Bishop = 'b'
           pcToCh Knight = 'n'
-          pcToCh Pawn   = 'p'	-- is used not only for promotion!
+          pcToCh Pawn   = 'p'   -- is used not only for promotion!
           pcToCh King   = 'k'

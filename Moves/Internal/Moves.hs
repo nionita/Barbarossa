@@ -124,4 +124,4 @@ fAttacs sq Rook   !oc = rAttacs oc sq
 fAttacs sq Queen  !oc = qAttacs oc sq
 fAttacs sq King   _   = kAttacs    sq
 fAttacs sq Knight _   = nAttacs    sq
-fAttacs _  _      _  = 0	-- this would be for pawn, which is calculated different
+fAttacs _  _      _  = 0        -- this would be for pawn, which is calculated different

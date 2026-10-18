@@ -79,20 +79,18 @@ main = do
     when debug $ putStrLn $ "Options: " ++ show aopts
     let (opts, rest) = aopts
     setCurrentDirectory $ optCwd opts
-    if length rest == 1
-       then do
-           let input = head rest
-           dex <- doesDirectoryExist input
-           if dex
-              then allFilesInDir opts input
-              else oneFile opts input
-       else if length rest == 0
-               then allFilesInDir opts "."
-               else do
-                   putStrLn $ "Analyse list of files, skip already done"
-                   cd <- getCurrentDirectory
-                   putStrLn $ "To stop: touch a file with name 'stop' under " ++ cd
-                   doFileList opts rest
+    case rest of
+        [input] -> do
+            dex <- doesDirectoryExist input
+            if dex
+               then allFilesInDir opts input
+               else oneFile opts input
+        [] -> allFilesInDir opts "."
+        _  -> do
+            putStrLn $ "Analyse list of files, skip already done"
+            cd <- getCurrentDirectory
+            putStrLn $ "To stop: touch a file with name 'stop' under " ++ cd
+            doFileList opts rest
 
 oneFile :: Options -> String -> IO ()
 oneFile opts input = do

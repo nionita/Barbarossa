@@ -69,7 +69,7 @@ def render_module(table: list[list[int]], source: str) -> str:
             row = table[t * 64 + rank * 8: t * 64 + rank * 8 + 8]
             first = t == 0 and rank == 0
             cells = ", ".join(f"({m}, {e})" for m, e in row)
-            lines.append(f"        {' ' if first else ','} {cells}\t-- {piece} rank {rank + 1}")
+            lines.append(f"        {' ' if first else ','} {cells}  -- {piece} rank {rank + 1}")
     lines.append("    ]")
     return "\n".join(lines) + "\n"
 

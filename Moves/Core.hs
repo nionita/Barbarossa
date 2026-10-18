@@ -172,7 +172,7 @@ moveChecksDirect !p !m
     | fig == Bishop = ba .&. yok /= 0
     | fig == Rook   = ra .&. yok /= 0
     | fig == Queen  = ba .&. yok /= 0 || ra .&. yok /= 0
-    | otherwise     = False	-- king can't check directly
+    | otherwise     = False     -- king can't check directly
     where !fig = movePiece m
           !t   = toSquare m
           !yok = kings p .&. yo p
@@ -211,7 +211,7 @@ fenToAssocs str = go 56 str []
               | c `elem` "PRNBQK" = go (sq+1) cs $ (sq, fcw) : acc
               | c `elem` "prnbqk" = go (sq+1) cs $ (sq, fcb) : acc
               | isDigit c = go (skip sq c) cs acc
-              | otherwise = go (nextline sq) cs acc	-- treat like /
+              | otherwise = go (nextline sq) cs acc     -- treat like /
               where fcw = (White, toPiece c)
                     fcb = (Black, toPiece $ toUpper c)
           skip f c = f + fromIntegral (ord c - ord '0')
@@ -335,7 +335,7 @@ whitePassed !wp !bp = wpa
     where !bpL = bbLeft bp
           !bpR = bbRight bp
           !wb0 = bpR .|. bpL .|. bp .|. wp
-          !sha = shadowDown wb0	-- erase
+          !sha = shadowDown wb0 -- erase
           !wpa = wp `less` sha
 
 blackPassed :: BBoard -> BBoard -> BBoard
@@ -343,7 +343,7 @@ blackPassed !wp !bp = bpa
     where !wpL = bbLeft wp
           !wpR = bbRight wp
           !wb0 = wpR .|. wpL .|. wp .|. bp
-          !sha = shadowUp wb0	-- erase
+          !sha = shadowUp wb0   -- erase
           !bpa = bp `less` sha
 
 -- Set a piece on a square of the table
@@ -390,8 +390,8 @@ findChecking !pos = concat [pChk, nChk, bChk, rChk, qbChk, qrChk]
 genMoveFCheck :: MyPos -> [Move]
 genMoveFCheck !p
     | null chklist        = []
-    | null $ tail chklist = r1 ++ kGen ++ r2	-- simple check
-    | otherwise           = kGen		-- double check, only king moves help
+    | null $ tail chklist = r1 ++ kGen ++ r2    -- simple check
+    | otherwise           = kGen                -- double check, only king moves help
     where chklist = findChecking p
           kGen = map (moveAddColor (moving p) . moveAddPiece King . uncurry moveFromTo)
                      $ srcDests (legal . kAttacs) ksq
@@ -404,7 +404,7 @@ genMoveFCheck !p
           chkAtt (NormalCheck f s) = fAttacs s f ocp1
           chkAtt (QueenCheck f s)  = fAttacs s f ocp1
           -- This head is safe becase chklist is first checked in the pattern of the function
-          (r1, r2) = case head chklist of	-- this is needed only when simple check
+          (r1, r2) = case head chklist of       -- this is needed only when simple check
                  NormalCheck Pawn   sq -> (beatAtP p (uBit sq), [])  -- cannot block pawn
                  NormalCheck Knight sq -> (beatAt  p (uBit sq), [])  -- or knight check
                  NormalCheck Bishop sq -> beatOrBlock Bishop p sq
@@ -434,8 +434,8 @@ defendAt p !bb = map (moveAddColor $ moving p) $ nGenC ++ bGenC ++ rGenC ++ qGen
 -- The bitboard represents the piece which checks (only 1 bit set)
 pawnBeatAt :: MyPos -> BBoard -> [Move]
 pawnBeatAt !p !bb
-    | bb .&. myPAttacs p == 0 = []	-- none of my pawns attack the checking piece
-    | bb .&. lastline /= 0 		-- pawn attacks on last line: generate promotions
+    | bb .&. myPAttacs p == 0 = []      -- none of my pawns attack the checking piece
+    | bb .&. lastline /= 0              -- pawn attacks on last line: generate promotions
         =  map (uncurry (makePromo Queen))  ftlist
         ++ map (uncurry (makePromo Rook))   ftlist
         ++ map (uncurry (makePromo Bishop)) ftlist
@@ -582,7 +582,7 @@ chainAccum = foldl (flip ($))
 
 {-
 changePining :: MyPos -> Square -> Square -> Bool
-changePining p src dst = kings p `testBit` src	-- king is moving
+changePining p src dst = kings p `testBit` src  -- king is moving
                       || slide p `testBit` src -- pining piece is moving
                       || slide p `testBit` dst -- pining piece is captured
 -}
@@ -590,15 +590,15 @@ changePining p src dst = kings p `testBit` src	-- king is moving
 {-# INLINE clearCast #-}
 clearCast :: BBoard -> BBoard -> (BBoard, ZKey)
 clearCast cas sd
-    | sdposs == 0 || sdcas == 0 = (0, 0)	-- most of the time
-    | otherwise = clearingCast sdcas cas	-- complicated cases
-    where !sdposs = sd .&. caRiMa	-- moving from/to king/rook position?
-          sdcas = sdposs .&. cas	-- first time touched
+    | sdposs == 0 || sdcas == 0 = (0, 0)        -- most of the time
+    | otherwise = clearingCast sdcas cas        -- complicated cases
+    where !sdposs = sd .&. caRiMa       -- moving from/to king/rook position?
+          sdcas = sdposs .&. cas        -- first time touched
 
 {-# INLINE clearingCast #-}
 clearingCast :: BBoard -> BBoard -> (BBoard, ZKey)
 clearingCast sdcas cas = (cascl, zobcl)
-    where (casw, zobw) | casrw == 0 = (0, 0)	-- cast rights & changes for white
+    where (casw, zobw) | casrw == 0 = (0, 0)    -- cast rights & changes for white
                        | casrw == wkqb = if sdcas .&. wkqb /= 0
                                             then (wkqb, zobCastQw)
                                             else (0, 0)
@@ -612,7 +612,7 @@ clearingCast sdcas cas = (cascl, zobcl)
                                                     else if sdcas .&. wkrb /= 0
                                                             then (wkrb, zobCastKw)
                                                             else (0, 0)
-          (casb, zobb) | casrb == 0 = (0, 0)	-- cast rights & changes for white
+          (casb, zobb) | casrb == 0 = (0, 0)    -- cast rights & changes for white
                        | casrb == bkqb = if sdcas .&. bkqb /= 0
                                             then (bkqb, zobCastQb)
                                             else (0, 0)
@@ -631,16 +631,16 @@ clearingCast sdcas cas = (cascl, zobcl)
           !casrb = casr .&. 0xFF00000000000000
           !cascl = casw .|. casb
           !zobcl = zobw `xor` zobb
-          wkqb = 0x11	-- king & queen rook for white
-          wkkb = 0x90	-- king & king rook for white
-          wkbb = 0x10	-- white king
-          wqrb = 0x01	-- white queen rook
-          wkrb = 0x80	-- white king rook
-          bkqb = 0x1100000000000000	-- king & queen rook for black
-          bkkb = 0x9000000000000000	-- king & king rook for black
-          bkbb = 0x1000000000000000	-- black king
-          bqrb = 0x0100000000000000	-- black queen rook
-          bkrb = 0x8000000000000000	-- black king rook
+          wkqb = 0x11   -- king & queen rook for white
+          wkkb = 0x90   -- king & king rook for white
+          wkbb = 0x10   -- white king
+          wqrb = 0x01   -- white queen rook
+          wkrb = 0x80   -- white king rook
+          bkqb = 0x1100000000000000     -- king & queen rook for black
+          bkkb = 0x9000000000000000     -- king & king rook for black
+          bkbb = 0x1000000000000000     -- black king
+          bqrb = 0x0100000000000000     -- black queen rook
+          bkrb = 0x8000000000000000     -- black king rook
 
 -- Just for a dumb debug: a quick check if two consecutive moves
 -- can be part of a move sequence
@@ -648,7 +648,7 @@ alternateMoves :: MyPos -> Move -> Move -> Bool
 alternateMoves p m1 m2
     | Busy c1 _ <- tabla p src1,
       Busy c2 _ <- tabla p src2 = c1 /= c2
-    | otherwise = True	-- means: we cannot say...
+    | otherwise = True  -- means: we cannot say...
     where src1 = fromSquare m1
           src2 = fromSquare m2
 
@@ -703,7 +703,7 @@ moveAndClearEp bb = bb `xor` (bb .&. epMask) `xor` mvMask
 epClrZob :: BBoard -> BBoard
 epClrZob bb
     | epLastBB == 0 = 0
-    | otherwise     = epSetZob $ head $ bbToSquares epLastBB	-- safe because epLastBB /= 0
+    | otherwise     = epSetZob $ head $ bbToSquares epLastBB    -- safe because epLastBB /= 0
     where epLastBB  = bb .&. epMask
 
 {-# INLINE epSetZob #-}
@@ -725,8 +725,8 @@ doFromToMove m !p | moveIsNormal m
           tdiag  = mvBit src dst $ diag p
           !srcbb = uBit src
           !dstbb = uBit dst
-          !pawnmoving = pawns p .&. srcbb /= 0	-- the correct color is
-          !iscapture  = occup p .&. dstbb /= 0	-- checked somewhere else
+          !pawnmoving = pawns p .&. srcbb /= 0  -- the correct color is
+          !iscapture  = occup p .&. dstbb /= 0  -- checked somewhere else
           (clearcast, zobcast) = clearCast (epcas p) (srcbb .|. dstbb)
           !irevers = pawnmoving || iscapture || clearcast /= 0
           !tepcas' = moveAndClearEp $ epcas p `less` clearcast
@@ -740,7 +740,7 @@ doFromToMove m !p | moveIsNormal m
                     in ((.|.) epBit, epSetZob epFld)
               | otherwise = (id, 0)
           !zob = zobkey p `xor` epcl `xor` epst `xor` zobcast
-          CA tzobkey tpp = case tabla p src of	-- identify the moving piece
+          CA tzobkey tpp = case tabla p src of  -- identify the moving piece
                Busy col fig -> chainAccum (CA zob (pstPack p)) [
                                    accumClearSq src p,
                                    accumSetPiece dst col fig p,
@@ -769,7 +769,7 @@ doFromToMove m !p | moveIsEnPas m
           !epcl = epClrZob $ epcas p
           !zk = zobkey p `xor` epcl
           CA tzobkey tpp
-              | Busy col fig <- tabla p src	-- identify the moving piece
+              | Busy col fig <- tabla p src     -- identify the moving piece
                 = chainAccum (CA zk (pstPack p)) [
                                 accumClearSq src p,
                                 accumClearSq del p,
@@ -799,14 +799,14 @@ doFromToMove m !p | moveIsCastle m
           tslide = mvBit csr cds $ mvBit src dst $ slide p
           tkkrq  = mvBit csr cds $ mvBit src dst $ kkrq p
           tdiag  = mvBit csr cds $ mvBit src dst $ diag p
-          !srcbb = uBit src	-- source clears cast rights
+          !srcbb = uBit src     -- source clears cast rights
           (clearcast, zobcast) = clearCast (epcas p) srcbb
           tepcas = reset50Moves $ moveAndClearEp $ epcas p `less` clearcast
           !epcl = epClrZob $ epcas p
           !zob = zobkey p `xor` epcl `xor` zobcast
           CA tzobkey tpp
-              | Busy col King <- tabla p src,	-- identify the moving piece (king)
-                Busy co1 Rook <- tabla p csr	-- identify the moving rook
+              | Busy col King <- tabla p src,   -- identify the moving piece (king)
+                Busy co1 Rook <- tabla p csr    -- identify the moving rook
                 = chainAccum (CA zob (pstPack p)) [
                                 accumClearSq src p,
                                 accumSetPiece dst col King p,
@@ -821,9 +821,9 @@ doFromToMove m !p | moveIsPromo m
           black = tblack, slide = tslide, kkrq = tkkrq, diag = tdiag,
           epcas = tepcas, zobkey = tzobkey, pstPack = tpp
       }
-    where col = moving p	-- the new coding does not have correct fromSquare in promotion
+    where col = moving p        -- the new coding does not have correct fromSquare in promotion
           srank = if col == White then 6 else 1
-          sfile = fromSquare m .&. 0x7	-- see new coding!
+          sfile = fromSquare m .&. 0x7  -- see new coding!
           src = srank `unsafeShiftL` 3 .|. sfile
           dst = toSquare m
           !pie = movePromoPiece m
@@ -832,7 +832,7 @@ doFromToMove m !p | moveIsPromo m
           tslide = mvBit src dst $ slide p0
           tkkrq  = mvBit src dst $ kkrq p0
           tdiag  = mvBit src dst $ diag p0
-          !dstbb = uBit dst	-- destination could clear cast rights!
+          !dstbb = uBit dst     -- destination could clear cast rights!
           (clearcast, zobcast) = clearCast (epcas p) dstbb
           tepcas = reset50Moves $ moveAndClearEp $ epcas p `less` clearcast
           !epcl = epClrZob $ epcas p0
@@ -869,7 +869,7 @@ findLKA0 :: Piece -> Square -> Int -> BBoard
 findLKA0 pt ksq psq
     | pt == Bishop = go bAttacs
     | pt == Rook   = go rAttacs
-    | otherwise    = 0	-- it will not be called with other pieces
+    | otherwise    = 0  -- it will not be called with other pieces
     where go f = bb
               where !kp = f (uBit psq) ksq
                     !pk = f (uBit ksq) psq
@@ -1025,7 +1025,7 @@ moveToLMove attacker victim
                 .|. (attval `unsafeShiftL` 16)
                 .|. fromIntegral w
     where kingval  = fromEnum King
-          !vicval  = fromIntegral $ kingval - fromEnum victim	-- pseudo negate
+          !vicval  = fromIntegral $ kingval - fromEnum victim   -- pseudo negate
           !attval  = fromIntegral $ fromEnum attacker
 
 {-# INLINE lmoveToMove #-}
@@ -1037,7 +1037,7 @@ genEPCapts !pos
     | epBB == 0 = []
     | otherwise = map (\s -> makeEnPas s dst) $ bbToSquares srcBB
     where !epBB = epcas pos .&. epMask
-          dst   = head $ bbToSquares epBB	-- safe because epBB /= 0
+          dst   = head $ bbToSquares epBB       -- safe because epBB /= 0
           srcBB = pAttacs (other $ moving pos) dst .&. me pos .&. pawns pos
 
 perCaptFieldWL :: MyPos -> BBoard -> BBoard -> Square -> ([LMove], [LMove]) -> ([LMove], [LMove])
@@ -1048,9 +1048,9 @@ perCaptFieldWL pos mypc advdefence sq mvlst
                       mvlst1 = foldr (perCaptWL pos myAttRec False pcto valto sq) mvlst  reAgrsqs
                   in           foldr (perCaptWL pos myAttRec True  pcto valto sq) mvlst1 prAgrsqs
              else let mvlst1 = foldr (addHanging  pos pcto sq) mvlst  reAgrsqs
-                  in           foldr (addHangingP     pcto sq) mvlst1 prAgrsqs	-- for promotions
+                  in           foldr (addHangingP     pcto sq) mvlst1 prAgrsqs  -- for promotions
     | otherwise = error "perCaptFieldWL pattern"
-    where !myAttRec = theAttacs pos sq	-- is this strictnes necessary?
+    where !myAttRec = theAttacs pos sq  -- is this strictnes necessary?
           myattacs = mypc .&. atAtt myAttRec
           defended = advdefence `testBit` sq
           prAgrsqs = bbToSquares prPawns
@@ -1067,7 +1067,7 @@ perCaptFieldWL pos mypc advdefence sq mvlst
               | otherwise = (0, myattacs)
 
 approximateEasyCapts :: Bool
-approximateEasyCapts = True	-- when capturing an equal or better piece: no SEE, it is always "winning"
+approximateEasyCapts = True     -- when capturing an equal or better piece: no SEE, it is always "winning"
 
 perCaptWL :: MyPos -> Attacks -> Bool -> Piece -> Int -> Square -> Square
           -> ([LMove], [LMove]) -> ([LMove], [LMove])
@@ -1078,8 +1078,8 @@ perCaptWL !pos !attacks promo vict !gain0 !sq !sqfa (wsqs, lsqs)
               ss  = moveToLMove attc vict $ moveAddPiece attc $ moveFromTo sqfa sq
               adv = seeMoveValue pos attacks sqfa sq v0
               approx = approximateEasyCapts && gain0 >= v0
-          -- in if approx || adv <= gain0	-- was here the problem?
-          in if approx || adv < gain0	-- was here the problem?
+          -- in if approx || adv <= gain0       -- was here the problem?
+          in if approx || adv < gain0   -- was here the problem?
                 then (ss:wsqs, lsqs)
                 else (wsqs, ss:lsqs)
     | otherwise = error "perCaptWL pattern"
