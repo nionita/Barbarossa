@@ -15,7 +15,7 @@ BarbarossaTuning (`README.md`, section "On-policy tuning of the HCE").
   `compiled-scale.cfg`).
 - Candidate (branch `w5`): weights and PST refitted under the new scaling with the own games and the engine
   games weighted x5 (38): +22.7 +- 6.5 at 10k nodes and +27.3 +- 6.0 timed (8000 games) against `scale`;
-  a gauntlet against other engines pending.
+  against 6 other engines +25.5 +- 16.4 (paired, gauntlet ug-d), better against each of them.
 - Gain of the on-policy tuning: +90 Elo timed against the old eval, +78.6 against `boas` (10+0.1, 31, 32);
   round 2 added little (+7 at 10k nodes), round 3 nothing (36).
 - The self-play iteration has converged: rounds 1, 2, 3 gave -1.85%, -0.39%, -0.22% loss on the yardstick
@@ -88,8 +88,8 @@ BarbarossaTuning (`README.md`, section "On-policy tuning of the HCE").
 
 ## Ideas to try
 
-1. w5 (timed +27.3 against `scale`): gauntlet with w5 and `scale` against stronger opponents (GreKo,
-   Supernova, Zevra, Tantabus, ECE-X2, Weiawaga) for the transfer and new data, then the next refit.
+1. Eval simplification (branch `esimp` from `w5`): terms that are piece-square only go into the PST; then
+   the next refit with the engine data of ug-d (w5 and scale against the stronger opponents).
 2. More and better engine data: gauntlets against stronger opponents, a weight per opponent by strength in the
    fit (`hv_fit.py --weight 'GreKo|Supernova=10;...'`), enough games of each strong opponent before giving it
    a high weight.

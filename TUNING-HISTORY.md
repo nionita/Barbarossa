@@ -365,7 +365,10 @@ valleys problem); piece value constants with variant builds (done differently: m
     opponents probably give worse labels (their errors decide the results) and fewer positions under pressure;
     the stronger ones expose our blind spots. w5 compiled into branch `w5` (bf7a30e, identical eval to scale
     with -c scale-w5.cfg). Timed (10+0.1, 8000 games, w5 against scale, both compiled): **+27.3 +- 6.0**
-    (LOS 100%), the largest gain since round 1.
+    (LOS 100%), the largest gain since round 1. Against other engines (two-version gauntlet ug-d: w5 and scale
+    against GreKo, Zevra, Supernova, Tantabus, ECE-X2, Weiawaga with the same openings, 2400 games each): w5
+    48.2%, scale 44.5%, better against every one of the 6 opponents; paired w5 - scale +25.5 +- 16.4 Elo,
+    head-to-head 55.6% for w5 (400 games): the gain transfers to games against other engines.
 
 How to repeat: the commands are in `README.md` of BarbarossaTuning, section "On-policy tuning of the HCE".
 Engine changes on `hvar`: `TuneSGD -X` (export), optional PST read from the config (`pst.mid.Ne4 = 37`, 1/8 cp,
