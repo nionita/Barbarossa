@@ -33,6 +33,7 @@ Data paths in the findings are the original ones; the raw data, openings, config
 | 36 | Round 3 (50k nodes data), joint fit with round 2 data | -0.2% loss | fixed point, not compiled |
 | 37 | Hidden variables: drawishness scale (bias tables, fitted scale factors, 50 moves scale) | -2.0% loss; +10.6 at 10k nodes, timed +3.7 +- 5.7 (8000 games); strong 50 moves scale -4 | worked, small (about +4 Elo) |
 | 38 | Engine games (off-policy positions, on-policy labels) weighted in the refit under the new scaling | x1: 0, x5: +22.7 at 10k nodes, timed +27.3 +- 6.0; x15: +9.9 | worked (x5, branch w5) |
+| 39 | Eval simplification: centre attacks of pawns, knights, king into the PST (branch esimp) | +0.006% loss, +6.6 +- 6.4 Elo at 10k nodes against w5; ewKingPlaceCent +0.073% (kept) | done (40 weights) |
 
 Old plan items (2026-10-13) and what became of them: a loss that ranks the measured configs (replaced by the
 on-policy yardstick, 29); q = 0.2 on the all-phase data (obsolete: on-policy data is fitted on the result only);
@@ -369,6 +370,17 @@ valleys problem); piece value constants with variant builds (done differently: m
     against GreKo, Zevra, Supernova, Tantabus, ECE-X2, Weiawaga with the same openings, 2400 games each): w5
     48.2%, scale 44.5%, better against every one of the 6 opponents; paired w5 - scale +25.5 +- 16.4 Elo,
     head-to-head 55.6% for w5 (400 games): the gain transfers to games against other engines.
+39. Eval simplification (branch `esimp` from `w5`): terms whose value depends only on the squares of the pieces
+    go into the PST. Drop tests (`hv_fit.py --drop`: the feature's contribution with its compiled weights is
+    removed from the eval, then weights and PST are refitted; data of 38 exported with the w5 build, engine
+    games x5, tau 40), test loss against the full refit: `ewCenterKAtts` (king attacks on c3-f6, exactly PST)
+    +0.000%, with `ewCenterNAtts` +0.008%, with `ewCenterPAtts` too +0.006% (knight and pawn attacks: PST up to
+    the overlaps of attacked squares); `ewKingPlaceCent` alone +0.073% (king near the corner x shelter pawns x
+    opponent material: an interaction, kept; a simpler shelter feature plus PST is an idea for later). The three
+    centre terms are removed (40 weights), the weights and PST of the refit without them compiled in; eval
+    identical to w5 with -c esimp-knp.cfg (504k positions), perft passes. At 10k nodes against w5: +6.6 +- 6.4
+    (8000 games). Speed (perf builds with the same eval, same tree, MEMO): the build without the terms was 2.2%
+    slower than the one with them at weight 0, a code generation / layout effect of GHC, not a cost of the terms.
 
 How to repeat: the commands are in `README.md` of BarbarossaTuning, section "On-policy tuning of the HCE".
 Engine changes on `hvar`: `TuneSGD -X` (export), optional PST read from the config (`pst.mid.Ne4 = 37`, 1/8 cp,

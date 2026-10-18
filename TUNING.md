@@ -1,6 +1,6 @@
 # Tuning the HCE evaluation - state of 2026-10-17
 
-What was tried and its results: `TUNING-HISTORY.md` (summary table and findings 1-38, cited here by number).
+What was tried and its results: `TUNING-HISTORY.md` (summary table and findings 1-39, cited here by number).
 The data (raw self-play data, engine games, openings, configs, results) and what it is: `C:\Learn\Data\DATA.md`
 (the backup set; derived data in `C:\Learn\Tune\hvar` can be regenerated from it).
 The procedure of a tuning round: skill `.claude/skills/on-policy-tuning`; commands and scripts:
@@ -88,8 +88,9 @@ BarbarossaTuning (`README.md`, section "On-policy tuning of the HCE").
 
 ## Ideas to try
 
-1. Eval simplification (branch `esimp` from `w5`): terms that are piece-square only go into the PST; then
-   the next refit with the engine data of ug-d (w5 and scale against the stronger opponents).
+1. Eval simplification (branch `esimp`, 39): the centre attacks of pawns, knights and king are in the PST
+   (40 weights, +6.6 at 10k nodes against w5); `ewKingPlaceCent` could become a simpler shelter feature plus
+   PST. Then the next refit with the engine data of ug-d (w5 and scale against the stronger opponents).
 2. More and better engine data: gauntlets against stronger opponents, a weight per opponent by strength in the
    fit (`hv_fit.py --weight 'GreKo|Supernova=10;...'`), enough games of each strong opponent before giving it
    a high weight.
