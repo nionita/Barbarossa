@@ -32,7 +32,7 @@ Data paths in the findings are the original ones; the raw data, openings, config
 | 35 | Futility margins: harmful cut rates, 5 direction tests at 50k nodes | all directions -14 .. -45 | defaults are a local optimum |
 | 36 | Round 3 (50k nodes data), joint fit with round 2 data | -0.2% loss | fixed point, not compiled |
 | 37 | Hidden variables: drawishness scale (bias tables, fitted scale factors, 50 moves scale) | -2.0% loss; +10.6 at 10k nodes, timed +3.7 +- 5.7 (8000 games); strong 50 moves scale -4 | worked, small (about +4 Elo) |
-| 38 | Engine games (off-policy positions, on-policy labels) weighted in the refit under the new scaling | x1: 0, x5: +22.7, x15: +9.9 Elo at 10k nodes | worked (x5, branch w5), gauntlet pending |
+| 38 | Engine games (off-policy positions, on-policy labels) weighted in the refit under the new scaling | x1: 0, x5: +22.7 at 10k nodes, timed +27.3 +- 6.0; x15: +9.9 | worked (x5, branch w5) |
 
 Old plan items (2026-10-13) and what became of them: a loss that ranks the measured configs (replaced by the
 on-policy yardstick, 29); q = 0.2 on the all-phase data (obsolete: on-policy data is fitted on the result only);
@@ -364,7 +364,8 @@ valleys problem); piece value constants with variant builds (done differently: m
     little capacity: too much weight on them costs the common knowledge (w15 worse in self-play). Weaker
     opponents probably give worse labels (their errors decide the results) and fewer positions under pressure;
     the stronger ones expose our blind spots. w5 compiled into branch `w5` (bf7a30e, identical eval to scale
-    with -c scale-w5.cfg); gauntlet compiled scale against w5 (ug-d) and a timed test pending.
+    with -c scale-w5.cfg). Timed (10+0.1, 8000 games, w5 against scale, both compiled): **+27.3 +- 6.0**
+    (LOS 100%), the largest gain since round 1.
 
 How to repeat: the commands are in `README.md` of BarbarossaTuning, section "On-policy tuning of the HCE".
 Engine changes on `hvar`: `TuneSGD -X` (export), optional PST read from the config (`pst.mid.Ne4 = 37`, 1/8 cp,

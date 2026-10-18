@@ -14,8 +14,8 @@ BarbarossaTuning (`README.md`, section "On-policy tuning of the HCE").
   scale `scale-c-lin` (37, about +4 Elo; `epScaleNew = 0` gives the old scaling, neutral config
   `compiled-scale.cfg`).
 - Candidate (branch `w5`): weights and PST refitted under the new scaling with the own games and the engine
-  games weighted x5 (38): +22.7 +- 6.5 at 10k nodes against `scale`; timed test (8000 games) and a gauntlet
-  against other engines pending.
+  games weighted x5 (38): +22.7 +- 6.5 at 10k nodes and +27.3 +- 6.0 timed (8000 games) against `scale`;
+  a gauntlet against other engines pending.
 - Gain of the on-policy tuning: +90 Elo timed against the old eval, +78.6 against `boas` (10+0.1, 31, 32);
   round 2 added little (+7 at 10k nodes), round 3 nothing (36).
 - The self-play iteration has converged: rounds 1, 2, 3 gave -1.85%, -0.39%, -0.22% loss on the yardstick
@@ -55,7 +55,7 @@ BarbarossaTuning (`README.md`, section "On-policy tuning of the HCE").
 - Drawishness (pawns of the stronger side, opposite bishops, one wing, R v R, Q v Q) is a hidden variable of the
   linear HCE: a fitted scale of the whole eval gains 2% loss, +10.6 Elo at 10k nodes, +3.7 timed (37).
 - Capacity: the linear HCE + PST (about 820 parameters) can only learn an average; weighting the engine games
-  x5 (26% of the loss) gave +22.7, x15 (51%) only +9.9, x1 (6%) nothing (38). Richer knowledge needs new terms.
+  x5 (26% of the loss) gave +22.7 (timed +27.3), x15 (51%) only +9.9, x1 (6%) nothing (38). Richer knowledge needs new terms.
 - Weaker opponents give less informative data (their errors decide the results, few positions under
   pressure); stronger ones expose our blind spots (38).
 - The compiled weights are not in a flat region: random changes of +-1 or 10% cost 10-16 Elo (20). Sensitive
@@ -88,8 +88,8 @@ BarbarossaTuning (`README.md`, section "On-policy tuning of the HCE").
 
 ## Ideas to try
 
-1. Verify w5: timed match against `scale` (running on MEMO), gauntlet with w5 and `scale` against stronger
-   opponents (GreKo, Supernova, Zevra, Tantabus, ECE-X2, Weiawaga), then compile in.
+1. w5 (timed +27.3 against `scale`): gauntlet with w5 and `scale` against stronger opponents (GreKo,
+   Supernova, Zevra, Tantabus, ECE-X2, Weiawaga) for the transfer and new data, then the next refit.
 2. More and better engine data: gauntlets against stronger opponents, a weight per opponent by strength in the
    fit (`hv_fit.py --weight 'GreKo|Supernova=10;...'`), enough games of each strong opponent before giving it
    a high weight.
