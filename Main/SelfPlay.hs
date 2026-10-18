@@ -60,47 +60,47 @@ import Moves.History
 import Search.CStateMonad (CState, runCState, execCState)
 import Eval.FileParams (makeEvalState)
 import Eval.Core (initEvalState)
--- import Eval.Eval	-- not yet needed
+-- import Eval.Eval     -- not yet needed
 import Uci.UciGlue
 
 debug :: Bool
 debug = False
 
 data Options = Options {
-        optPlayer1  :: Maybe String,	-- player 1 config file
-        optPlayer2  :: Maybe String,	-- player 2 config file
-        optBaseCurrent :: Bool,	-- player 2 uses compiled-in current weights
-        optConfFile :: Maybe String,	-- config file
-        optParams   :: [String],	-- list of eval parameter assignements
-        -- optNThreads :: Int,		-- number of threads - not used for self play now
-        optDepth    :: Int,		-- search depth for self play
-        optLogLev   :: LogLevel,		-- log level: 0 (debug) to 5 (never)
-        optNodes    :: Maybe Int,	-- search nodes per move for self play
-        optNodeMargin :: Int,	-- percentual safety margin for nodes passed to search
-        optNSkip    :: Maybe Int,	-- number of fens to skip (Nothing = none)
-        optNFens    :: Maybe Int,	-- number of fens (Nothing = all)
-        optMatch    :: Maybe String,	-- match between configs in the given directory
-        optSprtDir  :: Maybe String,	-- SPRT match between configs in the given directory
-        optPerfTest :: Bool,		-- perf test on input fen file
-        optPerfScores :: Maybe FilePath,	-- perf test: write static eval and score per depth
-        optPerfQuiet :: Maybe FilePath,	-- perf test: write static eval and best quiet move value per depth
-        optPerft    :: Bool,		-- perft on a single FEN
-        optBuildInfo :: Bool,		-- print build flavor and opposite build command
-        optSprtAlpha :: Maybe Double,	-- SPRT alpha
-        optSprtBeta  :: Maybe Double,	-- SPRT beta
-        optSprtElo0  :: Maybe Double,	-- SPRT elo0
+        optPlayer1  :: Maybe String,    -- player 1 config file
+        optPlayer2  :: Maybe String,    -- player 2 config file
+        optBaseCurrent :: Bool, -- player 2 uses compiled-in current weights
+        optConfFile :: Maybe String,    -- config file
+        optParams   :: [String],        -- list of eval parameter assignements
+        -- optNThreads :: Int,          -- number of threads - not used for self play now
+        optDepth    :: Int,             -- search depth for self play
+        optLogLev   :: LogLevel,                -- log level: 0 (debug) to 5 (never)
+        optNodes    :: Maybe Int,       -- search nodes per move for self play
+        optNodeMargin :: Int,   -- percentual safety margin for nodes passed to search
+        optNSkip    :: Maybe Int,       -- number of fens to skip (Nothing = none)
+        optNFens    :: Maybe Int,       -- number of fens (Nothing = all)
+        optMatch    :: Maybe String,    -- match between configs in the given directory
+        optSprtDir  :: Maybe String,    -- SPRT match between configs in the given directory
+        optPerfTest :: Bool,            -- perf test on input fen file
+        optPerfScores :: Maybe FilePath,        -- perf test: write static eval and score per depth
+        optPerfQuiet :: Maybe FilePath, -- perf test: write static eval and best quiet move value per depth
+        optPerft    :: Bool,            -- perft on a single FEN
+        optBuildInfo :: Bool,           -- print build flavor and opposite build command
+        optSprtAlpha :: Maybe Double,   -- SPRT alpha
+        optSprtBeta  :: Maybe Double,   -- SPRT beta
+        optSprtElo0  :: Maybe Double,   -- SPRT elo0
         optSprtElo1  :: Maybe Double,
         -- SPRT elo1
-        optSprtSaveMinutes :: Maybe Int,	-- SPRT save interval in minutes
-        optSprtLoad :: Maybe FilePath,	-- explicit SPRT save file to load
+        optSprtSaveMinutes :: Maybe Int,        -- SPRT save interval in minutes
+        optSprtLoad :: Maybe FilePath,  -- explicit SPRT save file to load
         optStatsEvery :: Int,
         -- print match stats every Nth input fen
         optFenPrintEvery :: Int,
         -- print every Nth input fen
-        optFen      :: Maybe String,	-- single fen for perft
-        optAFenFile :: FilePath,	-- fen file with start positions
-        optFOutFile :: FilePath,	-- output file for filter option
-        optDataFile :: Maybe FilePath	-- match: write leaf positions with game result (and .meta)
+        optFen      :: Maybe String,    -- single fen for perft
+        optAFenFile :: FilePath,        -- fen file with start positions
+        optFOutFile :: FilePath,        -- output file for filter option
+        optDataFile :: Maybe FilePath   -- match: write leaf positions with game result (and .meta)
     }
 
 defaultOptions :: Options
@@ -112,7 +112,7 @@ defaultOptions = Options {
         optParams   = [],
         -- optNThreads = 1,
         optDepth    = 1,
-        optLogLev   = LogNever,		-- default: never log
+        optLogLev   = LogNever,         -- default: never log
         optNodes    = Nothing,
         optNodeMargin = 50,
         optNSkip    = Nothing,
@@ -613,7 +613,7 @@ initContext opts = do
     clktm <- getMyTime
     lchan <- newChan
     wchan <- newChan
-    ha <- newCache 1	-- it will take the minimum number of entries
+    ha <- newCache 1    -- it will take the minimum number of entries
     hi <- newHist
     let paramList
             | null $ optParams opts = []
@@ -988,7 +988,7 @@ balancedPos hi ho mn k () = do
            return (True, ())
 
 oracleAndFeats :: Int -> Handle -> Handle -> Maybe Int -> Int -> () -> CtxIO (Bool, ())
-oracleAndFeats depth hi _ho mn k () = do	-- not functional yet
+oracleAndFeats depth hi _ho mn k () = do        -- not functional yet
     end <- case mn of
                Nothing -> lift $ hIsEOF hi
                Just n  -> if k <= n then lift $ hIsEOF hi else return True
@@ -1016,7 +1016,7 @@ oracleAndFeats depth hi _ho mn k () = do	-- not functional yet
            case msc of
                Just sc' -> do
                     let (ph, fts) = featsEval pos
-                        sc | moving pos == White =  sc'	-- score autoPlayToEnd is from White p.o.v.
+                        sc | moving pos == White =  sc' -- score autoPlayToEnd is from White p.o.v.
                            | otherwise           = -sc'
                     lift $ hPutStrLn ho $ show ph ++ " " ++ show sc ++ " " ++ show fts
                Nothing -> return ()
@@ -1367,7 +1367,7 @@ autoPlayToEnd d pos = do
               case path of
                  []  -> do
                      when (i>0) $ ctxLog LogError $ "Empty path when playing"
-                     return Nothing	-- should not happen when i > 0
+                     return Nothing     -- should not happen when i > 0
                  m:_ -> do
                      let j = i+1
                      ctxLog LogInfo $ "Real move " ++ show j ++ ": " ++ show m
@@ -1377,7 +1377,7 @@ autoPlayToEnd d pos = do
                          []  -> do
                              ctxLog LogError $ "Empty path when playing"
                              return Nothing
-                         p:_ -> if sc == 19999	-- mate in 1
+                         p:_ -> if sc == 19999  -- mate in 1
                                    then if tacticalPos p
                                            then do
                                                let r = if moving p == White then -1 else 1
@@ -1481,7 +1481,7 @@ playGame d maybeNodes nodeMarginPc mdo pos (ide1, eval1) (ide2, eval2) = do
                       ctxLog LogInfo $ "Real ply " ++ show j ++ " returns " ++ show sc ++ " / " ++ show path
                           ++ " / " ++ show nodes
                       case path of
-                        [] -> if sc == 0 && nodes == 0	-- can't make move: mated or stale mated
+                        [] -> if sc == 0 && nodes == 0  -- can't make move: mated or stale mated
                                  then if tacticalPos p0
                                          then do
                                              ctxLog LogWarning $ "Mated (" ++ plName player2 ++ " wins)"
@@ -1514,7 +1514,7 @@ playGame d maybeNodes nodeMarginPc mdo pos (ide1, eval1) (ide2, eval2) = do
                                p:_ -> do
                                  -- Using length path here could be a problem
                                  -- in case of a TT cut which is on path
-                                 if | sc == mateScore && length path == 1	-- mate in 1
+                                 if | sc == mateScore && length path == 1       -- mate in 1
                                       -> if tacticalPos p
                                             then do
                                                 ctxLog LogWarning $ "Mate (" ++ plName player1 ++ " wins)"
@@ -1585,7 +1585,7 @@ quietScores depth sini = do
                       (q, _) <- runCState qsValue schild
                       (scs, n) <- if depth > 1 then depthScores (depth - 1) schild else return ([], 0)
                       let vs  = q : scs
-                          vsf = take depth $ vs ++ repeat (last vs)	-- the search may end early (mate)
+                          vsf = take depth $ vs ++ repeat (last vs)     -- the search may end early (mate)
                       return $ Just (map negate vsf, n)
 
 -- Value of "no such move" in the margin measurement
@@ -1639,11 +1639,11 @@ data DataOut = DataOut {
 
 -- One move of a game for the data collection
 data PlyRec = PlyRec {
-        prPly        :: !Int,	-- real ply
-        prMover      :: String,	-- name of the player who moved
-        prMoverWhite :: !Bool,	-- mover is white
-        prRoot       :: !Int,	-- root search score, mover p.o.v.
-        prLeaf       :: Maybe MyPos	-- leaf of the last root iteration
+        prPly        :: !Int,   -- real ply
+        prMover      :: String, -- name of the player who moved
+        prMoverWhite :: !Bool,  -- mover is white
+        prRoot       :: !Int,   -- root search score, mover p.o.v.
+        prLeaf       :: Maybe MyPos     -- leaf of the last root iteration
     }
 
 openDataOut :: FilePath -> IO DataOut
@@ -1718,7 +1718,7 @@ remis3Repetitions p ps
 
 noMatingMaterial :: MyPos -> Bool
 noMatingMaterial p
-    | occup p == kings p .|. knights p = True	-- one side should have only king
+    | occup p == kings p .|. knights p = True   -- one side should have only king
     | occup p == kings p .|. bishops p
         && popCount (occup p) == 3     = True
     | otherwise                        = False
