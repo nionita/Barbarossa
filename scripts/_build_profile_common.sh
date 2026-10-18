@@ -53,9 +53,18 @@ check_build_identity() {
       "${REPO_ROOT}/Main/Barbarossa.hs" | head -n 1
   )"
 
-  if [[ -z "${suffix}" ]]; then
+  if ! grep -qE '^progVerSuff[[:space:]]*=' "${REPO_ROOT}/Main/Barbarossa.hs"; then
     echo "Could not read progVerSuff from Main/Barbarossa.hs." >&2
     exit 1
+  fi
+
+  # A release (empty suffix: the version alone) is built only on master
+  if [[ -z "${suffix}" ]]; then
+    if [[ "${branch}" != "master" ]]; then
+      echo "Release identity (empty progVerSuff) only on master, branch is '${branch}'." >&2
+      exit 1
+    fi
+    return 0
   fi
 
   if [[ "${suffix}" != "${branch}" ]]; then

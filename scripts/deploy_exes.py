@@ -37,6 +37,15 @@ def read_version(cabal_path: Path) -> str:
     return m.group(1)
 
 
+def read_suffix(main_path: Path) -> str:
+    """progVerSuff of Main/Barbarossa.hs: empty for a release."""
+    text = main_path.read_text(encoding="utf-8")
+    m = re.search(r'^progVerSuff\s*=\s*"([^"]*)"', text, flags=re.MULTILINE)
+    if not m:
+        raise RuntimeError(f"Could not parse progVerSuff from {main_path}")
+    return m.group(1)
+
+
 def sanitize_branch(branch: str) -> str:
     branch = branch.strip()
     if not branch:
@@ -90,7 +99,10 @@ def main() -> int:
     src_selfplay = bin_dir / "SelfPlay.exe"
     src_tunesgd = bin_dir / "TuneSGD.exe"
 
-    dst_barbarossa = BARBAROSSA_DEST_DIR / f"Barbarossa-{version}-{branch}.exe"
+    # a release (empty progVerSuff) is named by the version alone
+    release = read_suffix(repo_root / "Main" / "Barbarossa.hs") == ""
+    eng_name = f"Barbarossa-{version}.exe" if release else f"Barbarossa-{version}-{branch}.exe"
+    dst_barbarossa = BARBAROSSA_DEST_DIR / eng_name
     dst_selfplay = SELFPLAY_DEST_DIR / f"SelfPlay-{branch}.exe"
     dst_tunesgd = TUNESGD_DEST_DIR / f"TuneSGD-{branch}.exe"
 

@@ -67,6 +67,28 @@ Refactorings of the eval, the search or the position state must not change the e
   every ucinewgame into `barbarossa-<version>-<branch>-<start second>-<pid>.data` in the working directory;
   BarbarossaTuning `uci_data.py` joins it with the fastchess PGN.
 
+## Cutting a Release
+
+A release is made on `master`; the development branch keeps its identity and logging.
+
+1. On the development branch: everything committed and pushed, no compiler warnings, the checks of
+   "Verification of Changes" passed, the final strength measurement done.
+2. Fast forward `master` to the development branch: `git checkout master`, `git merge --ff-only <branch>`.
+3. On `master`, the release identity: `progVerSuff = ""` in `Main/Barbarossa.hs` (the version alone, e.g.
+   `0.8.0`, no suffix). With an empty suffix the default logging is `LogNever` (`logOptDefault`): no log file
+   without `-l`.
+4. `CHANGELOG.md`: a section for the new version with the changes since the last release only: hints at
+   what changed and its benefit (if not self-explaining), no technical details, nothing that was tried and
+   taken back.
+5. `README.md` and `BUILDING.md`: the last released version, strength statements, build hints still true.
+6. Release build (speed flavour, without the QS collect payload): `bash scripts/build-prod.sh --deploy`
+   (`stack build --flag Barbarossa:-qscollect Barbarossa:exe:Barbarossa`). The identity check accepts the
+   empty suffix only on `master`; the engine is deployed as `Barbarossa-<version>.exe`. Check the UCI
+   `id name` (`Barbarossa <version>`) and that no log file is written.
+7. Commit on `master`, tag with the version (e.g. `0.8.0`, like `0.7.0`), push `master` and the tag.
+8. The next development starts on a new branch from `master`: raise `progVersion` (and the version in
+   `Barbarossa.cabal`) and set a suffix: all unreleased versions have one (e.g. `boas`).
+
 ## Line Endings
 
 Before any build, check these line ending rules for all changes source files:
