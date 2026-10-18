@@ -45,13 +45,16 @@ parse_deploy_arg() {
   fi
 }
 
+# progVerSuff of Main/Barbarossa.hs (empty for a release)
+read_build_suffix() {
+  sed -nE 's/^progVerSuff[[:space:]]*=[[:space:]]*"([^"]*)".*$/\1/p' \
+    "${REPO_ROOT}/Main/Barbarossa.hs" | head -n 1
+}
+
 check_build_identity() {
   local branch suffix
   branch="$(git -C "${REPO_ROOT}" rev-parse --abbrev-ref HEAD)"
-  suffix="$(
-    sed -nE 's/^progVerSuff[[:space:]]*=[[:space:]]*"([^"]*)".*$/\1/p' \
-      "${REPO_ROOT}/Main/Barbarossa.hs" | head -n 1
-  )"
+  suffix="$(read_build_suffix)"
 
   if ! grep -qE '^progVerSuff[[:space:]]*=' "${REPO_ROOT}/Main/Barbarossa.hs"; then
     echo "Could not read progVerSuff from Main/Barbarossa.hs." >&2

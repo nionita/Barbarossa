@@ -81,10 +81,12 @@ A release is made on `master`; the development branch keeps its identity and log
    what changed and its benefit (if not self-explaining), no technical details, nothing that was tried and
    taken back.
 5. `README.md` and `BUILDING.md`: the last released version, strength statements, build hints still true.
-6. Release build (speed flavour, without the QS collect payload): `bash scripts/build-prod.sh --deploy`
-   (`stack build --flag Barbarossa:-qscollect Barbarossa:exe:Barbarossa`). The identity check accepts the
-   empty suffix only on `master`; the engine is deployed as `Barbarossa-<version>.exe`. Check the UCI
-   `id name` (`Barbarossa <version>`) and that no log file is written.
+6. Release build (speed flavour, without the QS collect payload), on Windows and on Linux:
+   `bash scripts/build-prod.sh` (`stack build --flag Barbarossa:-qscollect Barbarossa:exe:Barbarossa`). The
+   identity check accepts the empty suffix only on `master`; the release engine is then copied to
+   `dist/Barbarossa-<version>.exe` (Windows) or `dist/Barbarossa-<version>` (Linux): these are the files for
+   the GitHub release. `--deploy` additionally runs `scripts/deploy_exes.py` (needs `python` on the PATH, local
+   Windows folders only). Check the UCI `id name` (`Barbarossa <version>`) and that no log file is written.
 7. Commit on `master`, tag with the version (e.g. `0.8.0`, like `0.7.0`), push `master` and the tag.
 8. The next development starts on a new branch from `master`: raise `progVersion` (and the version in
    `Barbarossa.cabal`) and set a suffix: all unreleased versions have one (e.g. `boas`).
