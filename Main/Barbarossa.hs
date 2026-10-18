@@ -467,25 +467,35 @@ timeReserved = 100	-- milliseconds reserved for move communication
 extendScoreMargin :: Int
 extendScoreMargin = 24
 
--- This function calculates the normal time for the next search loop,
--- the maximum of that (which cannot be exceeded)
--- and if we are in time troubles or not
-compTime :: Int -> Int -> Int -> Int -> Int -> (Int, Int)
+-- This function calculates the normal time for the next search loop and
+-- the maximum of that (which cannot be exceeded), in milliseconds; Nothing when there is no time control
+-- With a time control both are at least 1 ms: a maximum of 0 would mean "no time limit" in the search
+-- (an unlimited iteration and a loss on time when little time is left, or with an increment only)
+compTime :: Int -> Int -> Int -> Int -> Int -> Maybe (Int, Int)
 compTime tim tpm fixmtg cursc rept
-    | tim == 0 && tpm == 0 = (  0,   0)
-    | otherwise            = (ctm, tmx)
+    | tim == 0 && tpm == 0 = Nothing
+    | tim == 0             = Just (max 1 (lim `div` 2), lim)	-- increment only
+    | otherwise            = Just (max 1 (min ctm tmx), tmx)
     where mtg = if fixmtg > 0 then fixmtg else estimateMovesToGo cursc
           mtr | rept >= 2 = 3	-- consider repetitions
               | mtg == 0  = 1
               | otherwise = mtg
           ctn = tpm + tim `div` mtr
-          ctm = if tim > 0 && tim < 2000 || tim == 0 && tpm < 700 then 300 else ctn
+          ctm = if tim < 2000 then 300 else ctn
           frtim = fromIntegral $ max 0 $ tim - ctm	-- rest time after this move
           fctm  = fromIntegral ctm :: Double
           rtimprc = fctm / max frtim fctm
           rtimfrc = remTimeFracIni + remTimeFracDev * rtimprc
           tmxt = round $ fctm + rtimfrc * frtim
-          tmx  = min tmxt $ max 0 $ tim - timeReserved
+          tmx  = max 1 $ min tmxt $ safeTime tim
+          lim  = max 1 $ safeTime tpm
+
+-- The part of a time we may use: all but the reserve for the communication, but at most half when the
+-- time is small
+safeTime :: Int -> Int
+safeTime t
+    | t > 2 * timeReserved = t - timeReserved
+    | otherwise            = t `div` 2
 
 estMvsToGo :: Array Int Int
 estMvsToGo = listArray (0, 8) [50, 36, 24, 15, 10, 7, 5, 3, 2]
@@ -564,7 +574,9 @@ searchTheTree tok draft mdraft timx1 timx tim tpm mtg rept lsc lpv rmvs = do
        then return sc
        else do
            currms <- lift $ currMilli (strttm ctx)
-           let (ms, mx) = compTime tim tpm mtg sc rept
+           let mbtime = compTime tim tpm mtg sc rept
+               timed = isJust mbtime
+               (ms, mx) = fromMaybe (0, 0) mbtime
                exte = maybe False id $ do
                          los <- lsc
                          gls <- lmvScore chg
@@ -576,14 +588,14 @@ searchTheTree tok draft mdraft timx1 timx tim tpm mtg rept lsc lpv rmvs = do
                redp  = reduceBegin $ realPly chg
                start = srchStrtMs chg
                used  = currms - start
-               over  = mx > 0 && used >= mx
-               onlyone = ms > 0 && length rmvsf == 1 && draft >= 4	-- only in normal play
+               over  = timed && used >= mx
+               onlyone = timed && length rmvsf == 1 && draft >= 4	-- only in normal play
                draftmax = draft >= mdraft	--  or maximal draft
                mes = "Draft " ++ show draft ++ " Score " ++ show sc ++ " path " ++ show path
                          ++ " ms " ++ show ms ++ " used " ++ show used
            ctxLog LogInfo mes
            ctxLog LogInfo $ "Time factors (reds/redp): " ++ show reds ++ " / " ++ show redp
-           (justStop, mxr) <- if mx > 0
+           (justStop, mxr) <- if timed
                                  then stopByChance (reds * redp) exte ms used mx draft ch totch ldCh
                                  else return (False, 0)
            ctxLog LogInfo $ "compTime (ms/mx/mxr): " ++ show ms ++ " / " ++ show mx ++ " / " ++ show mxr
@@ -603,11 +615,12 @@ searchTheTree tok draft mdraft timx1 timx tim tpm mtg rept lsc lpv rmvs = do
                   ctxLog LogInfo $ "searchTheTree finishes draft " ++ show draft
                   chg' <- readChanging
                   if working chg' && searchToken chg' == tok
-                      then if mx == 0	-- no time constraint (take original maximum)
+                      then if not timed	-- no time constraint (take original maximum)
                               then searchTheTree tok (draft+1) mdraft 0 0 tim tpm mtg rept (Just sc) path rmvsf
                               else do
-                                  let mxt  = start + mxr
-                                      mxt1 = start + mxr `div` firstMoveTimeReductionFactor
+                                  -- absolute times, 0 would mean no limit
+                                  let mxt  = max 1 $ start + mxr
+                                      mxt1 = max 1 $ start + mxr `div` firstMoveTimeReductionFactor
                                   searchTheTree tok (draft+1) mdraft mxt1 mxt tim tpm mtg rept (Just sc) path rmvsf
                       else do
                           ctxLog DebugUci "in searchTheTree: not working"

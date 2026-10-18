@@ -1090,7 +1090,7 @@ timeToAbort a act = do
                                           !abrt <- lift $ isTimeout $ if rmn > 1 then ti else t1
                                           if abrt
                                              then do
-                                                 let msg = if rmn > 1 then "Time abort in move 1" else "Time abort"
+                                                 let msg = if rmn > 1 then "Time abort" else "Time abort in move 1"
                                                  lift $ informStr msg
                                                  put s { abort = True }
                                                  return a
