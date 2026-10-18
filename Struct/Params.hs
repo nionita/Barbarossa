@@ -34,6 +34,10 @@ params = [
         ("epFutil4",          192),
         ("epFutil5",          384),
         ("epFutil6",          768),
+        -- history init of a new search (Moves.History.initHist): 1 = from the compiled PST in the phase of
+        -- the root position, shifted by epHistPstSh (left, or right when negative); 0 = zero
+        ("epHistPst",           0),
+        ("epHistPstSh",        -4),
         -- drawishness scale of the whole eval (Eval.Core.normalParts), instead of the heuristic rules of
         -- scaleFactor when epScaleNew = 1 (default: compiled in, scale-c-lin, TUNING-HISTORY finding 37;
         -- epScaleNew = 0 is the old scaling); factors in 1/64 (64 = 1), fitted by hv_scale.py --constrained

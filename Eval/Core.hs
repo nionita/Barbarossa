@@ -294,14 +294,6 @@ evalPstSum p
 evalEndScale :: MyPos -> Int -> Int
 evalEndScale p eg = scaleFactor p eg NotMatched
 
-gamePhase :: MyPos -> Int
-gamePhase p = g
-    where qs = popCount $ queens p
-          rs = popCount $ rooks p
-          bs = popCount $ bishops p
-          ns = popCount $ knights p
-          !g = qs * 39 + rs * 20 + (bs + ns) * 12	-- opening: 254, end: 0
-
 -- For specific material configurations which reduce the chance of winning
 -- Not reduced: 64
 scaleFactor :: MyPos -> Int -> SpecialResult -> Int
