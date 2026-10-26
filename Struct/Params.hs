@@ -34,6 +34,10 @@ params = [
         ("epFutil4",          192),
         ("epFutil5",          384),
         ("epFutil6",          768),
+        -- sort of the quiet moves (Moves.Internal.Base.quietSort), bits: 1 = moves of a piece to a square
+        -- attacked by a cheaper enemy piece last, 2 = moves of a piece away from such a square first;
+        -- 0 = by history only
+        ("epQThr",              2),
         -- drawishness scale of the whole eval (Eval.Core.normalParts), instead of the heuristic rules of
         -- scaleFactor when epScaleNew = 1 (default: compiled in, scale-c-lin, TUNING-HISTORY finding 37;
         -- epScaleNew = 0 is the old scaling); factors in 1/64 (64 = 1), fitted by hv_scale.py --constrained

@@ -82,18 +82,41 @@ genMoves :: Int -> Game ([Move], [Move])
 genMoves d = do
     p <- getPos
     h <- gets hist
+    qm <- gets (epQThr . esEParams . evalst)
     if inCheck p
        then do
             let escs = genMoveFCheck p
                 (escc, escq) = partition (moveIsCapture p) escs
-            return (escc, histSortMoves d h escq)
+            return (escc, quietSort qm d h p escq)
        else do
             let l0 = genMoveCast p
                 (l1q, l1r) = genMovePromo p
                 (l2w, l2l) = genMoveCaptWL p
-                l3 = histSortMoves d h $ genMoveNCapt p
+                l3 = quietSort qm d h p $ genMoveNCapt p
             -- Loosing captures after non-captures
             return (l1q ++ l2w, l1r ++ l0 ++ l3 ++ l2l)
+
+-- Sort of the quiet moves by history; with the mode bits (epQThr) in up to 3 groups, each sorted by
+-- history: moves of a piece away from a square attacked by a cheaper enemy piece first (2), moves of
+-- a piece to such a square last (1, it has priority); knights and bishops are threatened by pawns,
+-- rooks also by knights and bishops, queens also by rooks
+quietSort :: Int -> Int -> History -> MyPos -> [Move] -> [Move]
+quietSort qm d h p ms
+    | qm == 0   = histSortMoves d h ms
+    | otherwise = histSortMoves d h good ++ histSortMoves d h norm ++ histSortMoves d h bad
+    where (bad, rest) | qm .&. 1 /= 0 = partition (\m -> threat m `uTestBit` toSquare m) ms
+                      | otherwise     = ([], ms)
+          (good, norm) | qm .&. 2 /= 0 = partition (\m -> threat m `uTestBit` fromSquare m) rest
+                       | otherwise     = ([], rest)
+          thrMinor = yoPAttacs p
+          thrRook  = thrMinor .|. yoNAttacs p .|. yoBAttacs p
+          thrQueen = thrRook  .|. yoRAttacs p
+          threat m = case moveHisAdr m of
+                         1 -> thrMinor
+                         2 -> thrMinor
+                         3 -> thrRook
+                         4 -> thrQueen
+                         _ -> 0
 
 -- Generate only tactical moves, i.e. promotions & captures
 -- Needed only in QS, when we know we are not in check
