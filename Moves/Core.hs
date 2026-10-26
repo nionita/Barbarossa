@@ -88,6 +88,7 @@ pstRecompute p = foldl' add (0, 0) [ (c, f, sq) | sq <- [0 .. 63], Busy c f <- [
     where add (!m, !e) (c, f, sq) = (m + pstMidPiece c f sq, e + pstEndPiece c f sq)
 
 -- The game phase for the mix of mid and end game values (eval, history init)
+{-# INLINE gamePhase #-}
 gamePhase :: MyPos -> Int
 gamePhase p = g
     where qs = popCount $ queens p

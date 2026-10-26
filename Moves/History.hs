@@ -79,32 +79,44 @@ newHist = do
     U.thaw $ U.fromList $ map fromIntegral $ take vsize $ smallVals g
 #endif
 
--- Initialize the history for a new search from the compiled PST in the phase of the root position:
--- per piece the value of the to square minus the mean of that piece over the squares (so that only
--- the square counts, not the material), negated (smaller is better), shifted by the given shift (left,
--- or right when negative; Nothing: no PST, zero as before); castles get the king value of the to square
+-- Initialize the history for a new search, mode (bits, 0 = zero as before):
+-- 1: from the compiled PST in the phase of the root position: per piece the value of the to square
+--    minus the mean of that piece over the squares (so that only the square counts, not the material),
+--    negated (smaller is better), shifted by the given shift (left, or right when negative)
+-- 2: piece order of the move generation (knight, bishop, rook, queen, pawn, king), histOrderStep per
+--    step: with mode 3 the PST orders only within a piece (the step grows with the shift, so that the
+--    shifted PST values, at most about 2500 >> 4 with shift -4, stay below it)
+-- Castles get the king values of the to square
 -- Without REPRO_HIST the small random values are added
-initHist :: Maybe Int -> MyPos -> History -> IO ()
-initHist msh p h = do
+initHist :: Int -> Int -> MyPos -> History -> IO ()
+initHist mode sh p h = do
 #ifdef REPRO_HIST
-    let vs = pstHistVals msh p
+    let vs = pstHistVals mode sh p
 #else
     g <- newStdGen
-    let vs = U.zipWith (+) (pstHistVals msh p) $ U.fromListN vsize $ map fromIntegral $ smallVals g
+    let vs = U.zipWith (+) (pstHistVals mode sh p) $ U.fromListN vsize $ map fromIntegral $ smallVals g
 #endif
     U.copy h vs
 
-pstHistVals :: Maybe Int -> MyPos -> U.Vector Int32
-pstHistVals msh p = case msh of
-    Nothing -> U.replicate vsize 0
-    Just sh -> U.generate vsize (val sh)
+histOrderStep :: Int -> Int32
+histOrderStep sh = 1024 `unsafeShiftL` max 0 (sh + 4)
+
+pstHistVals :: Int -> Int -> MyPos -> U.Vector Int32
+pstHistVals mode sh p
+    | mode == 0 = U.replicate vsize 0
+    | otherwise = U.generate vsize val
     where !gph = gamePhase p
-          val sh i
-              | pc <= 5                    = pstHist sh gph c pc sq
-              | pc == 7 && castleTo c sq   = pstHist sh gph c 5 sq
-              | otherwise                  = 0
+          val i
+              | pc <= 5                  = pieceVal pc
+              | pc == 7 && castleTo c sq = pieceVal 5
+              | otherwise                = 0
               where (c, r)   = i `divMod` bloff
                     (pc, sq) = r `divMod` squares
+                    pieceVal f = ordVal f + pstVal f
+                    pstVal f | mode .&. 1 /= 0 = pstHist sh gph c f sq
+                             | otherwise       = 0
+          ordVal f | mode .&. 2 /= 0 = histOrderStep sh * (pieceOrder `unsafeAt` f)
+                   | otherwise       = 0
           castleTo 0 sq = sq == 2  || sq == 6
           castleTo _ sq = sq == 58 || sq == 62
 
@@ -116,6 +128,10 @@ pstHist sh gph c pc sq = fromIntegral $ negate $ if sh >= 0 then v `unsafeShiftL
           !dm = pstHMid `unsafeAt` i - pstHMean `unsafeAt` (2 * pc)
           !de = pstHEnd `unsafeAt` i - pstHMean `unsafeAt` (2 * pc + 1)
           !v  = (dm * gph + de * (256 - gph)) `unsafeShiftR` 8
+
+-- Rank of the pieces (pawn .. king) in the move generation order (genMoveNCapt, moveGenAscendent)
+pieceOrder :: UArray Int Int32
+pieceOrder = listArray (0, 5) [4, 0, 1, 2, 3, 5]
 
 pstHMid, pstHEnd, pstHMean :: UArray Int Int
 pstHMid = listArray (0, 383) $ map fst pstValues

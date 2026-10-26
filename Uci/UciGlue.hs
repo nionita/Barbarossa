@@ -27,7 +27,7 @@ aspirWindow   = 24	-- initial aspiration window
 bestMoveCont :: Bool -> Maybe Int -> Int -> Int -> Int -> MyState -> Maybe Int -> [Move] -> [Move] -> CtxIO IterResult
 bestMoveCont tune mbNodes draft sttime1 sttime stati lastsc lpv rmvs = do
     case stack stati of
-        p:_ -> when (draft == 1) $ liftIO $ initHist histShift p (hist stati)
+        p:_ -> when (draft == 1) $ liftIO $ initHist (epHistPst ep) (epHistPstSh ep) p (hist stati)
         []  -> return ()
     informGuiDraft draft
     ctxLog LogInfo $ "start search for depth " ++ show draft
@@ -48,5 +48,3 @@ bestMoveCont tune mbNodes draft sttime1 sttime stati lastsc lpv rmvs = do
     ctxLog LogInfo $ "seldepth " ++ show seldepth ++ " score " ++ show sc ++ " path " ++ show path
     return (path, sc, rmvsf, timint, statf, ch)
     where ep = esEParams $ evalst stati
-          histShift | epHistPst ep /= 0 = Just $ epHistPstSh ep
-                    | otherwise         = Nothing
