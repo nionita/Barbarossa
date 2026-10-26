@@ -52,7 +52,7 @@ import Struct.Status
 import Struct.Context
 import Struct.Config
 import Hash.TransTab
-import Search.AlbetaTypes (DoResult(..), SStats(..), ssts0)
+import Search.AlbetaTypes (DoResult(..), SStats(..), ssts0, addStats)
 import Moves.Core
 import Moves.Internal.Base
 import Moves.Notation
@@ -683,7 +683,8 @@ filterFile opts = do
 data PerfAcc = PerfAcc {
         perfValid   :: !Int,
         perfInvalid :: !Int,
-        perfNodes   :: !Int
+        perfNodes   :: !Int,
+        perfStats   :: !SStats      -- search statistics (only the plain perf test, without -o / -q)
     }
 
 perftCommand :: Options -> CtxIO ()
@@ -767,7 +768,7 @@ perfTestFile opts = do
     mho <- liftIO $ traverse (\fn -> openFile fn WriteMode) (optPerfScores opts)
     mhq <- liftIO $ traverse (\fn -> openFile fn WriteMode) (optPerfQuiet opts)
     startMs <- liftIO $ currMilli (strttm ctx)
-    acc <- loopCount (perfLoop hi mho mhq (optDepth opts)) (PerfAcc 0 0 0)
+    acc <- loopCount (perfLoop hi mho mhq (optDepth opts)) (PerfAcc 0 0 0 ssts0)
     endMs <- liftIO $ currMilli (strttm ctx)
     liftIO $ mapM_ hClose mho
     liftIO $ mapM_ hClose mhq
@@ -779,6 +780,11 @@ perfTestFile opts = do
         putStrLn $ "Total nodes:        " ++ show (perfNodes acc)
         putStrLn $ "Total time (ms):    " ++ show elapsedMs
         putStrLn $ "Nodes/second:       " ++ show nps
+        let st = perfStats acc
+            pc x = printf "%.2f%%" (100 * fromIntegral x / fromIntegral (max 1 (sBeta st)) :: Double) :: String
+        when (sBeta st > 0) $
+            putStrLn $ "Beta cuts:          " ++ show (sBeta st) ++ " at move 1: " ++ pc (sBM1 st)
+                ++ ", 2: " ++ pc (sBM2 st) ++ ", 3: " ++ pc (sBM3 st) ++ ", 4+: " ++ pc (sBM4p st)
         hClose hi
 
 perfLoop :: Handle -> Maybe Handle -> Maybe Handle -> Int -> Int -> PerfAcc -> CtxIO (Bool, PerfAcc)
@@ -802,28 +808,29 @@ perfLoop hi mho mhq depth _k acc = do
                           let stsc0 = case stack sini of
                                           p0:_ -> staticScore p0
                                           []   -> 0
-                          nodes <- case (mho, mhq) of
+                          (nodes, sts) <- case (mho, mhq) of
                               (Nothing, Just hq) -> do
                                   (mvs, nodes) <- quietScores depth sini
                                   case mvs of
                                       Just (qs, rs) -> liftIO $ hPutStrLn hq $ intercalate "," $
                                                            fen : show stsc0 : map show (qs ++ rs)
                                       Nothing -> return ()
-                                  return nodes
+                                  return (nodes, ssts0)
                               (Nothing, Nothing) -> do
-                                  (_, _, nodes, _) <- iterativeDeepening depth Nothing
-                                  return nodes
+                                  (_, _, sts, _) <- iterativeDeepeningStats depth Nothing
+                                  return (fromIntegral $ sNodes sts, sts)
                               (Just ho, _) -> do
                                   (scs, nodes) <- depthScores depth sini
                                   let stsc = case stack sini of
                                                  p0:_ -> staticScore p0
                                                  []   -> 0
                                   liftIO $ hPutStrLn ho $ intercalate "," $ fen : show stsc : map show scs
-                                  return nodes
+                                  return (nodes, ssts0)
                           let acc' = PerfAcc {
                                   perfValid = perfValid acc + 1,
                                   perfInvalid = perfInvalid acc,
-                                  perfNodes = perfNodes acc + nodes
+                                  perfNodes = perfNodes acc + nodes,
+                                  perfStats = addStats (perfStats acc) sts
                               }
                           return (True, acc')
 
@@ -1606,6 +1613,12 @@ depthScores depth sini0 = go 1 sini0 Nothing [] [] []
 
 iterativeDeepening :: Int -> Maybe Int -> CtxIO (Int, [Move], Int, Maybe MyPos)
 iterativeDeepening depth maybeMaxNodes = do
+    (sc, path, sts, mleaf) <- iterativeDeepeningStats depth maybeMaxNodes
+    return (sc, path, fromIntegral $ sNodes sts, mleaf)
+
+-- The same, with the search statistics of the whole search (instead of the nodes)
+iterativeDeepeningStats :: Int -> Maybe Int -> CtxIO (Int, [Move], SStats, Maybe MyPos)
+iterativeDeepeningStats depth maybeMaxNodes = do
     --when debug $ lift $ do
     --    putStrLn $ "In iter deep: " ++ show depth
     --    hFlush stdout
@@ -1620,7 +1633,7 @@ iterativeDeepening depth maybeMaxNodes = do
               -- We don't want to search less than depth 2, because depth 1 delivers
               -- erroneus moves by currently not updating the best score
               if d > 1 && (null path || d >= depth || stopNodes maybeMaxNodes nodes)
-                 then return (sc, path, nodes, lorig sfin)
+                 then return (sc, path, mstats sfin, lorig sfin)
                  else go (d+1) sfin (Just sc) path rmvsf
 
 -- Data collection during a match (--data FILE): for every move the leaf position of the last
