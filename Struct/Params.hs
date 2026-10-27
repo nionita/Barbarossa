@@ -34,6 +34,11 @@ params = [
         ("epFutil4",          192),
         ("epFutil5",          384),
         ("epFutil6",          768),
+        -- history init of a new search (Moves.History.initHist), bits: 1 = from the compiled PST in the phase
+        -- of the root position, shifted by epHistPstSh (left, or right when negative), 2 = piece order of
+        -- the move generation; 0 = zero
+        ("epHistPst",           3),
+        ("epHistPstSh",        -4),
         -- sort of the quiet moves (Moves.Internal.Base.quietSort), bits: 1 = moves of a piece to a square
         -- attacked by a cheaper enemy piece last, 2 = moves of a piece away from such a square first;
         -- 0 = by history only

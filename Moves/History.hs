@@ -2,12 +2,14 @@
 {-# LANGUAGE BangPatterns #-}
 
 module Moves.History (
-        History, newHist, toHist, histSortMoves
+        History, newHist, initHist, toHist, histSortMoves
     ) where
 
 import Control.Monad.ST.Unsafe (unsafeIOToST)
 import Control.Monad.ST
 import Control.Monad (forM_)
+import Data.Array.Base (unsafeAt)
+import Data.Array.Unboxed (UArray, listArray)
 import Data.Bits
 #ifndef REPRO_HIST
 import Data.List (unfoldr)
@@ -23,6 +25,8 @@ import System.Random
 #endif
 
 import Struct.Struct
+import Struct.Pst (pstValues)
+import Moves.Core (gamePhase)
 
 -- Int32 should be enough for now with max depth 20
 type History = V.IOVector Int32
@@ -74,6 +78,70 @@ newHist = do
     g <- newStdGen
     U.thaw $ U.fromList $ map fromIntegral $ take vsize $ smallVals g
 #endif
+
+-- Initialize the history for a new search, mode (bits, 0 = zero as before):
+-- 1: from the compiled PST in the phase of the root position: per piece the value of the to square
+--    minus the mean of that piece over the squares (so that only the square counts, not the material),
+--    negated (smaller is better), shifted by the given shift (left, or right when negative)
+-- 2: piece order of the move generation (knight, bishop, rook, queen, pawn, king), histOrderStep per
+--    step: with mode 3 the PST orders only within a piece (the step grows with the shift, so that the
+--    shifted PST values, at most about 2500 >> 4 with shift -4, stay below it)
+-- Castles get the king values of the to square
+-- Without REPRO_HIST the small random values are added
+initHist :: Int -> Int -> MyPos -> History -> IO ()
+initHist mode sh p h = do
+#ifdef REPRO_HIST
+    let vs = pstHistVals mode sh p
+#else
+    g <- newStdGen
+    let vs = U.zipWith (+) (pstHistVals mode sh p) $ U.fromListN vsize $ map fromIntegral $ smallVals g
+#endif
+    U.copy h vs
+
+histOrderStep :: Int -> Int32
+histOrderStep sh = 1024 `unsafeShiftL` max 0 (sh + 4)
+
+pstHistVals :: Int -> Int -> MyPos -> U.Vector Int32
+pstHistVals mode sh p
+    | mode == 0 = U.replicate vsize 0
+    | otherwise = U.generate vsize val
+    where !gph = gamePhase p
+          val i
+              | pc <= 5                  = pieceVal pc
+              | pc == 7 && castleTo c sq = pieceVal 5
+              | otherwise                = 0
+              where (c, r)   = i `divMod` bloff
+                    (pc, sq) = r `divMod` squares
+                    pieceVal f = ordVal f + pstVal f
+                    pstVal f | mode .&. 1 /= 0 = pstHist sh gph c f sq
+                             | otherwise       = 0
+          ordVal f | mode .&. 2 /= 0 = histOrderStep sh * (pieceOrder `unsafeAt` f)
+                   | otherwise       = 0
+          castleTo 0 sq = sq == 2  || sq == 6
+          castleTo _ sq = sq == 58 || sq == 62
+
+-- The history init value of a piece (0 to 5) of color c (0 white, 1 black) on square sq,
+-- black from the vertically mirrored square, as in the PST
+pstHist :: Int -> Int -> Int -> Int -> Int -> Int32
+pstHist sh gph c pc sq = fromIntegral $ negate $ if sh >= 0 then v `unsafeShiftL` sh else v `shiftR` negate sh
+    where !i  = pc * squares + (if c == 0 then sq else sq `xor` 56)
+          !dm = pstHMid `unsafeAt` i - pstHMean `unsafeAt` (2 * pc)
+          !de = pstHEnd `unsafeAt` i - pstHMean `unsafeAt` (2 * pc + 1)
+          !v  = (dm * gph + de * (256 - gph)) `unsafeShiftR` 8
+
+-- Rank of the pieces (pawn .. king) in the move generation order (genMoveNCapt, moveGenAscendent)
+pieceOrder :: UArray Int Int32
+pieceOrder = listArray (0, 5) [4, 0, 1, 2, 3, 5]
+
+pstHMid, pstHEnd, pstHMean :: UArray Int Int
+pstHMid = listArray (0, 383) $ map fst pstValues
+pstHEnd = listArray (0, 383) $ map snd pstValues
+-- Means (mid, end) per piece over the squares (pawns: only ranks 2 to 7)
+pstHMean = listArray (0, 11) $ concatMap mean [0 .. 5]
+    where mean pc = [sum (map fst vs) `div` length vs, sum (map snd vs) `div` length vs]
+              where vs | pc == 0   = take 48 $ drop 8 $ pcs pc
+                       | otherwise = pcs pc
+          pcs pc = take squares $ drop (pc * squares) pstValues
 
 -- History value: exponential
 -- d is absolute depth, root = 1, so that cuts near root count more

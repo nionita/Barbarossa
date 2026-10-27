@@ -87,6 +87,16 @@ pstRecompute :: MyPos -> (Int, Int)
 pstRecompute p = foldl' add (0, 0) [ (c, f, sq) | sq <- [0 .. 63], Busy c f <- [tabla p sq] ]
     where add (!m, !e) (c, f, sq) = (m + pstMidPiece c f sq, e + pstEndPiece c f sq)
 
+-- The game phase for the mix of mid and end game values (eval, history init)
+{-# INLINE gamePhase #-}
+gamePhase :: MyPos -> Int
+gamePhase p = g
+    where qs = popCount $ queens p
+          rs = popCount $ rooks p
+          bs = popCount $ bishops p
+          ns = popCount $ knights p
+          !g = qs * 39 + rs * 20 + (bs + ns) * 12       -- opening: 254, end: 0
+
 {-# INLINE seeValue #-}
 seeValue :: Piece -> Int
 seeValue = matPiece1
