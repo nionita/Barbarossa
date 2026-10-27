@@ -102,12 +102,15 @@ genMoves d = do
 -- rooks also by knights and bishops, queens also by rooks
 quietSort :: Int -> Int -> History -> MyPos -> [Move] -> [Move]
 quietSort qm d h p ms
-    | qm == 0   = histSortMoves d h ms
+    | qm == 0 || qm == 2 && thrd == 0 = histSortMoves d h ms
     | otherwise = histSortMoves d h good ++ histSortMoves d h norm ++ histSortMoves d h bad
     where (bad, rest) | qm .&. 1 /= 0 = partition (\m -> threat m `uTestBit` toSquare m) ms
                       | otherwise     = ([], ms)
-          (good, norm) | qm .&. 2 /= 0 = partition (\m -> threat m `uTestBit` fromSquare m) rest
+          (good, norm) | qm .&. 2 /= 0 = partition (\m -> thrd `uTestBit` fromSquare m) rest
                        | otherwise     = ([], rest)
+          -- my threatened pieces: without them (the usual case) mode 2 is the plain history sort
+          thrd = me p .&. ((knights p .|. bishops p) .&. thrMinor .|. rooks p .&. thrRook
+                                                                 .|. queens p .&. thrQueen)
           thrMinor = yoPAttacs p
           thrRook  = thrMinor .|. yoNAttacs p .|. yoBAttacs p
           thrQueen = thrRook  .|. yoRAttacs p
