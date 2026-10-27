@@ -34,6 +34,10 @@ params = [
         ("epFutil4",          192),
         ("epFutil5",          384),
         ("epFutil6",          768),
+        -- reverse futility pruning (Search.Core.isRevFutil): zero window nodes of a remaining depth up to
+        -- epRFutD (0 = off) fail high when the static score is over beta by epRFutM (cp) * depth
+        ("epRFutD",             0),
+        ("epRFutM",           100),
         -- drawishness scale of the whole eval (Eval.Core.normalParts), instead of the heuristic rules of
         -- scaleFactor when epScaleNew = 1 (default: compiled in, scale-c-lin, TUNING-HISTORY finding 37;
         -- epScaleNew = 0 is the old scaling); factors in 1/64 (64 = 1), fitted by hv_scale.py --constrained
