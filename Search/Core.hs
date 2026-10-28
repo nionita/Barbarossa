@@ -135,7 +135,9 @@ data PVStRO
           draft  :: !Int,	-- root search depth
           tuning :: !Bool,	-- in tuning we do not prune nor reduce (self play)
           abpol  :: !AbortPolicy,	-- search abort policy (time, nodes or none)
-          futmar :: !(UArray Int Int)	-- futility margins of the depths 1 .. maxFutilDepth (index d - 1)
+          futmar :: !(UArray Int Int),	-- futility margins of the depths 1 .. maxFutilDepth (index d - 1)
+          rfutd  :: !Int,	-- reverse futility pruning: maximum depth (0 = off)
+          rfutm  :: !Int	-- reverse futility pruning: margin per depth (cp)
     } deriving Show
 
 data PVState
@@ -255,7 +257,8 @@ resetNSt :: Path -> Killer -> NodeState -> NodeState
 resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, rbmch = 0 }
 
 pvro00 :: PVStRO
-pvro00 = PVStRO { draft = 0, tuning = False, abpol = NoAbort, futmar = defaultFutMargins }
+pvro00 = PVStRO { draft = 0, tuning = False, abpol = NoAbort, futmar = defaultFutMargins,
+                  rfutd = 0, rfutm = 0 }
 
 alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int, Int)
 alphaBeta abc = do
@@ -267,7 +270,8 @@ alphaBeta abc = do
         searchFull    lp  = pvRootSearch alpha0 beta0 d lp  rmvs False
     est <- gets evalst
     let pvro = PVStRO { draft = d, tuning = intuning abc,
-                            abpol = abortPolicy abc, futmar = futMarginsOf (esEParams est) }
+                            abpol = abortPolicy abc, futmar = futMarginsOf (esEParams est),
+                            rfutd = epRFutD (esEParams est), rfutm = epRFutM (esEParams est) }
         pvs0 = pvsInit { ronly = pvro }	-- :: PVState
     -- We will get a result and a final state:
     (r, s) <- if useAspirWin
@@ -565,7 +569,10 @@ pvZeroW !nst !b !d = do
        else do
            when (hdeep < 0) reFail
            pos <- lift getPos
-           !nmhigh <- nullMoveFailsHigh pos nst b d
+           ro <- gets ronly
+           !nmhigh <- if useFutility && isRevFutil ro pos b d
+                         then return NullMoveHigh	-- fails high like after a null move
+                         else nullMoveFailsHigh pos nst b d
            whenAbort (pathFromScore b) $ do
                case nmhigh of
                  NullMoveHigh -> return $ pathFromScore b
@@ -876,6 +883,14 @@ isPruneFutil fm pv d a v
     | d >  maxFutilDepth       = False
     | d >= maxFutilDepth && pv = False	-- for PV nodes: less prune
     | otherwise                = v + fm `unsafeAt` (d - 1) <= a
+
+-- Reverse futility pruning (beta side): in a zero window node of remaining depth d <= rfutd the node fails
+-- high without search when the static score is over beta by a margin linear in the depth; not in check,
+-- not near mate and not with only king and pawns (zugzwang, as for the null move)
+isRevFutil :: PVStRO -> MyPos -> Int -> Int -> Bool
+isRevFutil ro pos b d
+    | d > rfutd ro || nearmate b || tacticalPos pos || zugZwang pos = False
+    | otherwise = staticScore pos - rfutm ro * d >= b
 
 failHardNoValidMove :: Int -> Int -> MyPos -> Path
 failHardNoValidMove !a !b pos = trimaxPath a b $! if tacticalPos pos then matedPath else drawPath
