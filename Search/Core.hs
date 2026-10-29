@@ -137,6 +137,7 @@ data PVStRO
           abpol  :: !AbortPolicy,	-- search abort policy (time, nodes or none)
           futmar :: !(UArray Int Int),	-- futility margins of the depths 1 .. maxFutilDepth (index d - 1)
           rfutd  :: !Int,	-- reverse futility pruning: maximum depth (0 = off)
+          rfuta  :: !Int,	-- reverse futility pruning: constant margin (cp)
           rfutm  :: !Int,	-- reverse futility pruning: margin per depth (cp)
           rfutt  :: !Int	-- reverse futility pruning: extra margin with own pieces hanging (cp, 0 = off)
     } deriving Show
@@ -259,7 +260,7 @@ resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, r
 
 pvro00 :: PVStRO
 pvro00 = PVStRO { draft = 0, tuning = False, abpol = NoAbort, futmar = defaultFutMargins,
-                  rfutd = 0, rfutm = 0, rfutt = 0 }
+                  rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
 
 alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int, Int)
 alphaBeta abc = do
@@ -272,7 +273,8 @@ alphaBeta abc = do
     est <- gets evalst
     let pvro = PVStRO { draft = d, tuning = intuning abc,
                             abpol = abortPolicy abc, futmar = futMarginsOf (esEParams est),
-                            rfutd = epRFutD (esEParams est), rfutm = epRFutM (esEParams est),
+                            rfutd = epRFutD (esEParams est), rfuta = epRFutA (esEParams est),
+                            rfutm = epRFutM (esEParams est),
                             rfutt = epRFutT (esEParams est) }
         pvs0 = pvsInit { ronly = pvro }	-- :: PVState
     -- We will get a result and a final state:
@@ -887,14 +889,14 @@ isPruneFutil fm pv d a v
     | otherwise                = v + fm `unsafeAt` (d - 1) <= a
 
 -- Reverse futility pruning (beta side): in a zero window node of remaining depth d <= rfutd the node fails
--- high without search when the static score is over beta by a margin linear in the depth, plus rfutt when
+-- high without search when the static score is over beta by a margin rfuta + rfutm * depth, plus rfutt when
 -- own pieces hang (the static score does not see the threat); not in check, not near mate and not with only
 -- king and pawns (zugzwang, as for the null move)
 isRevFutil :: PVStRO -> MyPos -> Int -> Int -> Bool
 isRevFutil ro pos b d
     | d > rfutd ro || nearmate b || tacticalPos pos || zugZwang pos = False
     | otherwise = v >= b && (rfutt ro == 0 || v - rfutt ro >= b || ownHanging pos == 0)
-    where v = staticScore pos - rfutm ro * d
+    where v = staticScore pos - rfuta ro - rfutm ro * d
 
 -- Own pieces (no king) attacked by a cheaper enemy piece (as in the quiet sort by threats) or attacked and
 -- not defended

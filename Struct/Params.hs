@@ -44,9 +44,10 @@ params = [
         -- 0 = by history only
         ("epQThr",              2),
         -- reverse futility pruning (Search.Core.isRevFutil): zero window nodes of a remaining depth up to
-        -- epRFutD (0 = off) fail high when the static score is over beta by epRFutM (cp) * depth, plus
-        -- epRFutT (cp, 0 = off) when own pieces hang (Search.Core.ownHanging)
+        -- epRFutD (0 = off) fail high when the static score is over beta by epRFutA + epRFutM * depth (cp),
+        -- plus epRFutT (cp, 0 = off) when own pieces hang (Search.Core.ownHanging)
         ("epRFutD",             6),
+        ("epRFutA",             0),
         ("epRFutM",            50),
         ("epRFutT",             0),
         -- drawishness scale of the whole eval (Eval.Core.normalParts), instead of the heuristic rules of
