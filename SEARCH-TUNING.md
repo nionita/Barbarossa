@@ -28,7 +28,6 @@ are kept.
 
 Open:
 - Node scan and shadow diagnostic on 2000 root positions of real games (S13): running.
-- Match rfth T10000 against T0 at 10k nodes (S12): running.
 - Merge decisions for dev090 (hprf); the UCI engine ignores `go movetime` and `go nodes` (to implement in 0.9.0).
 - HCE: threat features (S14); LMR with the node-count method (S10).
 
@@ -45,7 +44,7 @@ Open:
 | S9 | hpqt + RFP (hprf) | | best so far |
 | S10 | Pruning parameter by the minimum of the total nodes at fixed depth | M ~38 on 400 openings, agrees with the Elo | method plausible |
 | S11 | RFP shadow diagnostic: wrong cuts by margin, depth, node features | own hanging pieces 5x, linear margin over-protects deep nodes | knowledge |
-| S12 | RFP threat margin | node counts: noise; fewer cuts | open (match) |
+| S12 | RFP threat margin | node counts: noise; no RFP with own pieces hanging -12.5 at 10k nodes | skipping failed; T100 open |
 | S13 | Node scan and shadow on real-game roots | | running |
 | S14 | HCE: the en-prise term and what RFP shows about it | | idea |
 
@@ -141,8 +140,10 @@ a control sample. The search does not change, so one run with M10 gives the stat
 node scan as S10, against M50 (T0): T25 +14%, T50 +6%, T100 -3%, T200 +6%, T10000 (no RFP then) +14%,
 bootstrap 90% ranges about +-17%: noise. The typical saving against off drops from -26.6% (T0) to about
 -23% (T25 .. T100), -16% (T200), -13% (T10000); the blow-ups' share falls from 32% to about 24%.
-Fewer cuts against fewer expensive mistakes: games decide (match T10000 against T0 at 10k nodes
-running). 977360a adds `epRFutA`, the constant part of the margin (compiled 0).
+Fewer cuts against fewer expensive mistakes: match T10000 (no RFP when own pieces hang) against T0 at 10k
+nodes, 8000 games: -12.5 +- 6.3 (shards 1304/1242/1454, 1291/1280/1429). Giving up the cuts costs more
+than the avoided wrong cuts gain: skipping is wrong; a moderate threat margin (T100) is untested in games.
+977360a adds `epRFutA`, the constant part of the margin (compiled 0).
 
 **S13.** Real-game roots (running, 2026-10-29): 2000 root positions sampled uniformly from 1.32M searches of
 Barbarossa's engine games (data `-d` of the sets ug-a .. ug-d, mate scores excluded: decided, and their
