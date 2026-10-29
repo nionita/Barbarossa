@@ -570,10 +570,12 @@ pvZeroW !nst !b !d = do
            when (hdeep < 0) reFail
            pos <- lift getPos
            ro <- gets ronly
-           !nmhigh <- if useFutility && isRevFutil ro pos b d
+           let !rfut = useFutility && isRevFutil ro pos b d
+               !rfsh = rfut && rfutd ro < 0	-- shadow mode: decide, but search
+           !nmhigh <- if rfut && not rfsh
                          then return NullMoveHigh	-- fails high like after a null move
                          else nullMoveFailsHigh pos nst b d
-           whenAbort (pathFromScore b) $ do
+           !res <- whenAbort (pathFromScore b) $ do
                case nmhigh of
                  NullMoveHigh -> return $ pathFromScore b
                  _ -> do
@@ -610,6 +612,8 @@ pvZeroW !nst !b !d = do
                                                      pv:_ -> pv
                                        ttStore d (rbmch nstf) (pathScore s) mv deltan
                                    return s
+           when rfsh $ rfutShadow pos b d res
+           return res
     where !bGrain = b - scoreGrain
 
 data NullMoveResult = NoNullMove | NullMoveHigh | NullMoveLow | NullMoveThreat Path
@@ -889,8 +893,16 @@ isPruneFutil fm pv d a v
 -- not near mate and not with only king and pawns (zugzwang, as for the null move)
 isRevFutil :: PVStRO -> MyPos -> Int -> Int -> Bool
 isRevFutil ro pos b d
-    | d > rfutd ro || nearmate b || tacticalPos pos || zugZwang pos = False
+    | d > abs (rfutd ro) || nearmate b || tacticalPos pos || zugZwang pos = False
     | otherwise = staticScore pos - rfutm ro * d >= b
+
+-- Shadow mode of reverse futility pruning (diagnostic, rfutd < 0): the node is searched, the decision is
+-- counted by depth and static score - beta (countRFut) and, when wrong (the search failed low), kept with
+-- the position, the depth, beta and the static score; as the search does not change, one run with a small
+-- margin gives the statistics of all larger margins
+rfutShadow :: MyPos -> Int -> Int -> Path -> Search ()
+rfutShadow pos b d res = modStat $ countRFut (pathScore res < b) d (staticScore pos - b) line
+    where line = "RFPW|" ++ posToFen pos ++ "|" ++ show d ++ "|" ++ show b ++ "|" ++ show (staticScore pos)
 
 failHardNoValidMove :: Int -> Int -> MyPos -> Path
 failHardNoValidMove !a !b pos = trimaxPath a b $! if tacticalPos pos then matedPath else drawPath

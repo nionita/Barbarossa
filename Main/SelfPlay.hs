@@ -52,7 +52,7 @@ import Struct.Status
 import Struct.Context
 import Struct.Config
 import Hash.TransTab
-import Search.AlbetaTypes (DoResult(..), SStats(..), ssts0, addStats)
+import Search.AlbetaTypes (DoResult(..), SStats(..), ssts0, addStats, formatRFutH)
 import Moves.Core
 import Moves.Internal.Base
 import Moves.Notation
@@ -785,6 +785,11 @@ perfTestFile opts = do
         when (sBeta st > 0) $
             putStrLn $ "Beta cuts:          " ++ show (sBeta st) ++ " at move 1: " ++ pc (sBM1 st)
                 ++ ", 2: " ++ pc (sBM2 st) ++ ", 3: " ++ pc (sBM3 st) ++ ", 4+: " ++ pc (sBM4p st)
+        when (sRFut st > 0) $ do
+            printf "RFP shadow:         %d decisions, %d wrong (%.2f%%)\n" (sRFut st) (sRFutW st)
+                (100 * fromIntegral (sRFutW st) / fromIntegral (sRFut st) :: Double)
+            mapM_ putStrLn $ formatRFutH st
+            mapM_ putStrLn $ reverse $ sRFutL st
         hClose hi
 
 perfLoop :: Handle -> Maybe Handle -> Maybe Handle -> Int -> Int -> PerfAcc -> CtxIO (Bool, PerfAcc)
