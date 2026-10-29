@@ -897,12 +897,13 @@ isRevFutil ro pos b d
     | otherwise = staticScore pos - rfutm ro * d >= b
 
 -- Shadow mode of reverse futility pruning (diagnostic, rfutd < 0): the node is searched, the decision is
--- counted by depth and static score - beta (countRFut) and, when wrong (the search failed low), kept with
--- the position, the depth, beta and the static score; as the search does not change, one run with a small
--- margin gives the statistics of all larger margins
+-- counted by depth and static score - beta (countRFut) and, when wrong (the search failed low) or sampled
+-- (by the hash key: 1 of 256 positions), kept with the position, the depth, beta and the static score; as the
+-- search does not change, one run with a small margin gives the statistics of all larger margins
 rfutShadow :: MyPos -> Int -> Int -> Path -> Search ()
-rfutShadow pos b d res = modStat $ countRFut (pathScore res < b) d (staticScore pos - b) line
-    where line = "RFPW|" ++ posToFen pos ++ "|" ++ show d ++ "|" ++ show b ++ "|" ++ show (staticScore pos)
+rfutShadow pos b d res = modStat $ countRFut (pathScore res < b) sample d (staticScore pos - b) line
+    where sample = zobkey pos .&. 255 == 0
+          line = posToFen pos ++ "|" ++ show d ++ "|" ++ show b ++ "|" ++ show (staticScore pos)
 
 failHardNoValidMove :: Int -> Int -> MyPos -> Path
 failHardNoValidMove !a !b pos = trimaxPath a b $! if tacticalPos pos then matedPath else drawPath

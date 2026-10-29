@@ -75,11 +75,12 @@ addStats a b = SStats {
     }
 
 -- Count a shadow reverse futility decision: wrong or not, depth, excess = static score - beta, and a
--- description line kept when wrong; histogram key: wrong * 100000 + depth * 1000 + excess per depth
--- (cp, 0 .. 999)
-countRFut :: Bool -> Int -> Int -> String -> SStats -> SStats
-countRFut wrong d excess line s
-    | wrong     = s' { sRFutW = sRFutW s + 1, sRFutL = line : sRFutL s }
+-- description line kept as "RFPW|line" when wrong, as "RFPC|line" when sampled (control sample of the correct
+-- ones); histogram key: wrong * 100000 + depth * 1000 + excess per depth (cp, 0 .. 999)
+countRFut :: Bool -> Bool -> Int -> Int -> String -> SStats -> SStats
+countRFut wrong sample d excess line s
+    | wrong     = s' { sRFutW = sRFutW s + 1, sRFutL = ("RFPW|" ++ line) : sRFutL s }
+    | sample    = s' { sRFutL = ("RFPC|" ++ line) : sRFutL s }
     | otherwise = s'
     where s' = s { sRFut = sRFut s + 1, sRFutH = IM.insertWith (+) key 1 (sRFutH s) }
           key = (if wrong then 100000 else 0) + d * 1000 + min 999 (max 0 (excess `div` d))
