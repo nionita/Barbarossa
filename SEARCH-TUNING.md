@@ -23,16 +23,17 @@ Elo values are from the candidate's side, with 95% error bars.
 | `rfpdiag` | hprf | RFP shadow diagnostic (S11) | measurement only, not for merging |
 | `rfth` | hprf | RFP margin parameters: threat margin, constant part (S12) | experiment, compiled = hprf |
 | `nmlm` | rfth | LMR without the near-mate guard (S13) | SPRT +13.0 vs hprf, the best version so far |
+| `lmfx` | nmlm | LMR level fixed by parameter `epLmrFix` (S13) | experiment, compiled = nmlm |
 
 Only `hpqt` is pushed; the other branches are local, and the commits cited here exist only while the branches
 are kept.
 
 Open:
 - LMR near-mate guard (S13): removal accepted by SPRT; mate finding not measured.
-- LMR with the node-count method, now that the guard no longer swamps the totals (S13, S10).
+- LMR: no node minimum for a fixed level up to 15 (S13); fixed levels against the adaptive one need games.
 - RFP: no cut with an opponent passer on rank 6/7 (S13): game test.
 - Merge decisions for dev090 (hprf); the UCI engine ignores `go movetime` and `go nodes` (to implement in 0.9.0).
-- HCE: threat features (S14); LMR with the node-count method (S10).
+- HCE: threat features (S14).
 
 ## Summary
 
@@ -236,6 +237,25 @@ The geomean falls steadily down to M10, no minimum; the totals do not resolve th
 no order). Chaotic roots remain, but much smaller: 0.1M to 25M at one margin and 0.7M at the next, and at no
 fixed margin. RFP has no re-search to bring the nodes back, so a node minimum need not exist for it: nodes
 give its cost, not what the cuts lose (M25 did not beat M50 at 10k nodes). The M38 of S10 was a blow-up effect.
+
+LMR with a fixed level instead of the adaptive one (lmfx 32c4bb8, `epLmrFix`, compiled off; this PC, depth 12, 2000
+roots, 4 shards, 120 s limit, a root over it is skipped for later configs; 1957 roots done by all):
+
+| Level | Total vs adaptive | 90% range | Geomean vs adaptive | Median | p90 | Max | New timeouts |
+|---|---|---|---|---|---|---|---|
+| adaptive | 0 | | 0 | 0.259M | 0.84M | 19.9M | 1 |
+| 2 | +261.8% | +222..+306 | +147.1% | 0.625M | 4.64M | 53.6M | 27 |
+| 5 | +166.2% | +139..+197 | +106.1% | 0.533M | 3.51M | 30.6M | 10 |
+| 8 | +87.8% | +68..+109 | +59.9% | 0.416M | 2.40M | 30.2M | 0 |
+| 11 | +17.7% | +6..+30 | +13.1% | 0.297M | 1.54M | 23.8M | 1 |
+| 14 | -6.0% | -18..+6 | -35.0% | 0.155M | 0.89M | 38.0M | 1 |
+| 15 | -24.0% | -34..-13 | -51.5% | 0.114M | 0.71M | 26.8M | 3 |
+
+No minimum: the nodes fall up to level 15, the end of the table, in spite of the re-searches. So the node count does
+not give the level either, it needs games, and no finer scan was run. The adaptive level works: its median is
+that of a level near 11, its p90 that of level 14, with the lowest maximum, so it reduces most where the tree is large.
+From level 14 the top 20 roots hold 30% of the nodes (15% at 5 to 11). The adaptive scheme does have parameters:
+the node count `lmrInitLim` for raising the level and the weight 2^d of a re-search.
 
 **S14.** HCE and hanging pieces. The en-prise term (`enPrise`, Eval/Core.hs) counts only the side to move's pieces,
 linear in the hanging material; its tuned middle game weight is about 0 (`ewEnpHanging` -3 / -59): with
