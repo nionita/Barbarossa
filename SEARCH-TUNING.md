@@ -22,13 +22,13 @@ Elo values are from the candidate's side, with 95% error bars.
 | `hprf` | hpqt + rfut | the best version so far (S9) | not merged; no SPRT vs hpqt (user: no interference expected) |
 | `rfpdiag` | hprf | RFP shadow diagnostic (S11) | measurement only, not for merging |
 | `rfth` | hprf | RFP margin parameters: threat margin, constant part (S12) | experiment, compiled = hprf |
-| `nmlm` | rfth | LMR without the near-mate guard (S13) | 400 games -13.9 +- 26 vs hprf, no anomaly; no SPRT yet |
+| `nmlm` | rfth | LMR without the near-mate guard (S13) | SPRT +13.0 vs hprf, the best version so far |
 
 Only `hpqt` is pushed; the other branches are local, and the commits cited here exist only while the branches
 are kept.
 
 Open:
-- LMR near-mate guard (S13): SPRT of nmlm against hprf running on MEMO; mate finding.
+- LMR near-mate guard (S13): removal accepted by SPRT; mate finding not measured.
 - LMR with the node-count method, now that the guard no longer swamps the totals (S13, S10).
 - RFP: no cut with an opponent passer on rank 6/7 (S13): game test.
 - Merge decisions for dev090 (hprf); the UCI engine ignores `go movetime` and `go nodes` (to implement in 0.9.0).
@@ -48,7 +48,7 @@ Open:
 | S10 | Pruning parameter by the minimum of the total nodes at fixed depth | M ~38 on 400 openings, agrees with the Elo | method plausible |
 | S11 | RFP shadow diagnostic: wrong cuts by margin, depth, node features | own hanging pieces 5x, linear margin over-protects deep nodes | knowledge |
 | S12 | RFP threat margin | node counts: noise; no RFP with own pieces hanging -12.5 at 10k nodes | skipping failed; T100 open |
-| S13 | Node scan and shadow on real-game roots | shadow: endgame wrong cuts come from opponent passers on 6/7 (10x), own hanging 2.7x; node totals are ruled by the LMR near-mate guard, without it the 20 worst roots cost 344x less; without it no node minimum down to M10 | guard removal in test; passer filter open |
+| S13 | Node scan and shadow on real-game roots | shadow: endgame wrong cuts come from opponent passers on 6/7 (10x), own hanging 2.7x; node totals are ruled by the LMR near-mate guard, without it the 20 worst roots cost 344x less; without it no node minimum down to M10; removal SPRT +13.0 | guard removal accepted; passer filter open |
 | S14 | HCE: the en-prise term and what RFP shows about it | | idea |
 
 ## Findings
@@ -197,7 +197,7 @@ them: |score| < 500 still gives M38 +300%. Without the blow-ups no minimum over 
 nodes the lower the margin, down to M25, the end of the range (the M38 of S10 was set by blow-ups). The
 sublinear margins and the threat margin show no gain against the linear margin of the same typical saving.
 
-Cause: the near-mate guard of LMR (`reduceLmr`, `nearmate b`, since at least 2017), nmlm 5795f3f removes it. The 20
+Cause: the near-mate guard of LMR (`reduceLmr`, `nearmate b`), nmlm 5795f3f removes it. The 20
 worst roots at depth 12 with M50: 15.29G nodes with the guard, 44.4M without (factor 344); the highest
 17.7M, one root up by 9x (0.76M to 7.1M). 50 evenly spaced roots at depth 10: total -79%, geomean -17%. Neither of the
 two checked blow-up roots has a mate score up to depth 13-15, so a stop on a mate at the root does not help.
@@ -210,6 +210,14 @@ LMR does not create false mates: a mate score still comes from a real mate line.
 winner had reported a mate score, and no engine that reported one failed to win (nmlm 113 of 113, hprf 129 of
 129); median depth per move 9 for both. So no weird effect, but too few games for the strength; rare missed
 mates are not measured.
+
+SPRT nmlm vs hprf (MEMO, 10+0.1, 16 MB, [0, 5]): H1 accepted after 3738 games, +13.0 +- 8.2, nElo +17.6 +- 11.1, LOS
+99.9%, draws 36.65%, pentanomial [112, 442, 685, 454, 176]. The 400 games above were within the noise.
+
+Origin of the guard: already in the first commit that compiles (2890d3e, 2013), no reason recorded; chessprogramming.org
+has no such LMR condition. The same code guards futility, where the condition is usual, so it may have been carried
+over from there (not provable). In 2013 PV nodes tested alpha, but had no LMR anyway. b478f31 (2018, LMR at PV
+nodes) reused the zero-window form with beta, probably by mistake: since then a full-window search has no LMR.
 
 Node scan without the guard (nmlm, this PC, depth 12, 500 roots = every 4th, 18 min on 4 shards, no search hit
 the 300 s limit). On the same roots the guard build needed 26 to 40x the nodes (largest root 3.2G, now at most
