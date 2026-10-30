@@ -22,7 +22,7 @@ Elo values are from the candidate's side, with 95% error bars.
 | `hprf` | hpqt + rfut | the best version so far (S9) | not merged; no SPRT vs hpqt (user: no interference expected) |
 | `rfpdiag` | hprf | RFP shadow diagnostic (S11) | measurement only, not for merging |
 | `rfth` | hprf | RFP margin parameters: threat margin, constant part (S12) | experiment, compiled = hprf |
-| `nmlm` | rfth | LMR without the near-mate guard (S13) | game test running |
+| `nmlm` | rfth | LMR without the near-mate guard (S13) | 400 games -13.9 +- 26 vs hprf, no anomaly; no SPRT yet |
 
 Only `hpqt` is pushed; the other branches are local, and the commits cited here exist only while the branches
 are kept.
@@ -204,8 +204,11 @@ Two effects: at PV nodes the guard tests beta, near mate in every full-window se
 fail) without any mate; with `nearmate a` there 48 of the 50 roots have exactly the nodes of no guard (geomean -8%
 vs guard). The other 2 still blow up: real near-mate windows, probably from a PV node of the defender whose
 first move gets mated (not confirmed). Node scans before this change measure the guard as much as the margin.
-Mate finding and strength without the guard: to test. LMR does not create false mates: a mate score still
-comes from a real mate line.
+LMR does not create false mates: a mate score still comes from a real mate line. Games of nmlm against hprf
+(this PC, 10+0.1, 400 games): -13.9 +- 26, no crash, illegal move or log warning. In all 242 decided games the
+winner had reported a mate score, and no engine that reported one failed to win (nmlm 113 of 113, hprf 129 of
+129); median depth per move 9 for both. So no weird effect, but too few games for the strength; rare missed
+mates are not measured.
 
 **S14.** HCE and hanging pieces. The en-prise term (`enPrise`, Eval/Core.hs) counts only the side to move's pieces,
 linear in the hanging material; its tuned middle game weight is about 0 (`ewEnpHanging` -3 / -59): with
