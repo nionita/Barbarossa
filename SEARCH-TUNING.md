@@ -23,7 +23,7 @@ Elo values are from the candidate's side, with 95% error bars.
 | `rfpdiag` | hprf | RFP shadow diagnostic (S11) | measurement only, not for merging |
 | `rfth` | hprf | RFP margin parameters: threat margin, constant part (S12) | experiment, compiled = hprf |
 | `nmlm` | rfth | LMR without the near-mate guard (S13) | SPRT +13.0 vs hprf, the best version so far |
-| `lmfx` | nmlm | LMR level fixed by parameter `epLmrFix` (S13) | experiment, compiled = nmlm |
+| `lmfx` | nmlm | LMR level fixed by parameter `epLmrFix` (S13) | experiment, compiled = nmlm; level 14 SPRT -36.4 vs adaptive, level 11 running |
 
 Only `hpqt` is pushed; the other branches are local, and the commits cited here exist only while the branches
 are kept.
@@ -267,6 +267,9 @@ margins; it prefers M100 where the 10k-node matches had M50 (S8; those ran with 
 Prediction, recorded before the end of the SPRTs: the worst 1% says level 11 > adaptive > 14; total and geomean say 14
 > adaptive > 11. The top 1% roots of two settings overlap by 9-12% without the guard, by 79% with it: a high overlap
 marks a systematic anomaly, as the guard was.
+
+SPRT level 14 vs adaptive (MEMO, same binary, 10+0.1, [0, 5]): H0 after 1024 games, -36.4 +- 15.7. So 35% fewer nodes
+per position cost clearly: total and geomean are refuted as a guide; level 11 still open.
 
 **S14.** HCE and hanging pieces. The en-prise term (`enPrise`, Eval/Core.hs) counts only the side to move's pieces,
 linear in the hanging material; its tuned middle game weight is about 0 (`ewEnpHanging` -3 / -59): with
