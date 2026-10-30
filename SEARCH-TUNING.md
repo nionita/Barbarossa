@@ -10,7 +10,7 @@ Data of the measurements: `C:\Learn\Data\measurements\search` (see `C:\Learn\Dat
 BarbarossaTuning (`sample_roots.py`, `node_scan.ps1`, `node_scan_report.py`, `rfp_shadow_report.py`).
 Elo values are from the candidate's side, with 95% error bars.
 
-## State (2026-10-29)
+## State (2026-10-30)
 
 | Branch | From | What | Status |
 |---|---|---|---|
@@ -27,7 +27,9 @@ Only `hpqt` is pushed; the other branches are local, and the commits cited here 
 are kept.
 
 Open:
-- Node scan and shadow diagnostic on 2000 root positions of real games (S13): running.
+- Node scan on 2000 root positions of real games (S13): running on MEMO.
+- Depth-12 blow-ups in won endgames (S13): cause, and whether they waste time in real games.
+- RFP: no cut with an opponent passer on rank 6/7 (S13): game test.
 - Merge decisions for dev090 (hprf); the UCI engine ignores `go movetime` and `go nodes` (to implement in 0.9.0).
 - HCE: threat features (S14); LMR with the node-count method (S10).
 
@@ -45,7 +47,7 @@ Open:
 | S10 | Pruning parameter by the minimum of the total nodes at fixed depth | M ~38 on 400 openings, agrees with the Elo | method plausible |
 | S11 | RFP shadow diagnostic: wrong cuts by margin, depth, node features | own hanging pieces 5x, linear margin over-protects deep nodes | knowledge |
 | S12 | RFP threat margin | node counts: noise; no RFP with own pieces hanging -12.5 at 10k nodes | skipping failed; T100 open |
-| S13 | Node scan and shadow on real-game roots | | running |
+| S13 | Node scan and shadow on real-game roots | shadow: endgame wrong cuts come from opponent passers on 6/7 (10x), own hanging 2.7x; node scan running | knowledge; passer filter open |
 | S14 | HCE: the en-prise term and what RFP shows about it | | idea |
 
 ## Findings
@@ -151,6 +153,35 @@ depth-12 searches can be very expensive), `sample_roots.py`. Non pawn material q
 (start 62), 31% endgames: very different from the 400 openings. Node scan on MEMO (10 settings: off,
 M25/38/50/100, M50 with T100 and T10000, 20 + 30 d, 40 + 30 d, 60 + 20 d) and the shadow diagnostic
 (by game phase) on the same roots.
+
+Shadow diagnostic on the first 1000 roots (rfpdiag, one process at depth 12, 31.0G nodes, 15.4 h; the second
+1000 were stopped, see below). Wrong rate at M50 0.18% (openings 0.11%), by depth d2 0.29% .. d6 0.19%; by
+phase npm >= 30 0.13%, 14-29 0.24%, <= 13 0.39%.
+
+| Feature at M50 (wrong rate with / without) | all | npm >= 30 | 14-29 | <= 13 |
+|---|---|---|---|---|
+| own hanging >= 1 | 2.7 | 3.5 | 2.7 | 2.4 |
+| opponent fork | 3.3 | 4.4 | 3.1 | 1.9 |
+| own pinned piece | 2.3 | 2.3 | 3.0 | 4.1 |
+| opponent passer on rank 6/7 | 5.3 | 3.0 | 4.4 | 10.4 |
+| opponent hanging >= 1 | 0.3 | 0.3 | 0.4 | 0.5 |
+
+Against the openings (S11): own hanging falls from 5.0x to 2.7x, still in 62% of the wrong cuts; the opponent
+passer on 6/7 rises from 3.3x to 5.3x. In endgames it is in 75% of the wrong cuts and 22% of the decisions
+(wrong rate 1.28% with it, 0.12% without): the static score overrates the side to move there, and QS does not
+see quiet pushes. As a filter it is sharper than own hanging: no RFP with such a passer gives up 10% of the
+decisions and removes 38% of the wrong ones (endgames only: 2% and 13.5%); own hanging gives up 37% for 62%,
+and that lost 12.5 Elo (S12). Not tested in games; wrong cuts can be cheap.
+
+Blow-ups: root 1310 (`6Q1/8/3k3K/8/1p5P/8/1PB2P2/8 w - - 1 1`, root score +2444, npm 12) takes 0.75M nodes at
+depth 9, and depth 10 did not finish in 150 s, with RFP on or off. It stopped the shadow run of the second
+1000 roots (very probably, no output before the end) and shard 6 of the MEMO scan. Possible cause, not
+confirmed: near-mate windows switch off LMR and RFP; `--max-score 10000` does not catch this root. A sample of
+about 30 positions per group at depth 10 (off): median nodes openings 0.27M, npm >= 45 0.28M, 30-44 0.23M,
+14-29 0.10M, <= 13 0.04M, but the mean of the last group is 1.12M, with 97% of its nodes in 3 positions. So
+real roots do not cost more in general; a few endgames dominate the totals (not checked at depth 12). Only 0.29%
+of the nodes of the shadow run reach an RFP decision (openings 6.9%). Node scans on real roots: read the
+geometric mean and the phases, not the totals.
 
 **S14.** HCE and hanging pieces. The en-prise term (`enPrise`, Eval/Core.hs) counts only the side to move's pieces,
 linear in the hanging material; its tuned middle game weight is about 0 (`ewEnpHanging` -3 / -59): with
