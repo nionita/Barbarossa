@@ -22,13 +22,13 @@ Elo values are from the candidate's side, with 95% error bars.
 | `hprf` | hpqt + rfut | the best version so far (S9) | not merged; no SPRT vs hpqt (user: no interference expected) |
 | `rfpdiag` | hprf | RFP shadow diagnostic (S11) | measurement only, not for merging |
 | `rfth` | hprf | RFP margin parameters: threat margin, constant part (S12) | experiment, compiled = hprf |
+| `nmlm` | rfth | LMR without the near-mate guard (S13) | game test running |
 
 Only `hpqt` is pushed; the other branches are local, and the commits cited here exist only while the branches
 are kept.
 
 Open:
-- Node scan on 2000 root positions of real games (S13): running on MEMO.
-- Depth-12 blow-ups in won endgames (S13): cause, and whether they waste time in real games.
+- LMR near-mate guard (S13): games of nmlm, mate finding; then repeat the node scan without blow-ups.
 - RFP: no cut with an opponent passer on rank 6/7 (S13): game test.
 - Merge decisions for dev090 (hprf); the UCI engine ignores `go movetime` and `go nodes` (to implement in 0.9.0).
 - HCE: threat features (S14); LMR with the node-count method (S10).
@@ -47,7 +47,7 @@ Open:
 | S10 | Pruning parameter by the minimum of the total nodes at fixed depth | M ~38 on 400 openings, agrees with the Elo | method plausible |
 | S11 | RFP shadow diagnostic: wrong cuts by margin, depth, node features | own hanging pieces 5x, linear margin over-protects deep nodes | knowledge |
 | S12 | RFP threat margin | node counts: noise; no RFP with own pieces hanging -12.5 at 10k nodes | skipping failed; T100 open |
-| S13 | Node scan and shadow on real-game roots | shadow: endgame wrong cuts come from opponent passers on 6/7 (10x), own hanging 2.7x; node scan running | knowledge; passer filter open |
+| S13 | Node scan and shadow on real-game roots | shadow: endgame wrong cuts come from opponent passers on 6/7 (10x), own hanging 2.7x; node totals are ruled by the LMR near-mate guard, without it the 20 worst roots cost 344x less | guard removal in test; passer filter open |
 | S14 | HCE: the en-prise term and what RFP shows about it | | idea |
 
 ## Findings
@@ -173,15 +173,39 @@ see quiet pushes. As a filter it is sharper than own hanging: no RFP with such a
 decisions and removes 38% of the wrong ones (endgames only: 2% and 13.5%); own hanging gives up 37% for 62%,
 and that lost 12.5 Elo (S12). Not tested in games; wrong cuts can be cheap.
 
-Blow-ups: root 1310 (`6Q1/8/3k3K/8/1p5P/8/1PB2P2/8 w - - 1 1`, root score +2444, npm 12) takes 0.75M nodes at
-depth 9, and depth 10 did not finish in 150 s, with RFP on or off. It stopped the shadow run of the second
-1000 roots (very probably, no output before the end) and shard 6 of the MEMO scan. Possible cause, not
-confirmed: near-mate windows switch off LMR and RFP; `--max-score 10000` does not catch this root. A sample of
-about 30 positions per group at depth 10 (off): median nodes openings 0.27M, npm >= 45 0.28M, 30-44 0.23M,
-14-29 0.10M, <= 13 0.04M, but the mean of the last group is 1.12M, with 97% of its nodes in 3 positions. So
-real roots do not cost more in general; a few endgames dominate the totals (not checked at depth 12). Only 0.29%
-of the nodes of the shadow run reach an RFP decision (openings 6.9%). Node scans on real roots: read the
-geometric mean and the phases, not the totals.
+Node scan on MEMO (build rfth, near-mate guard in LMR, depth 12, stopped early): 1500 roots done by all 10
+settings (shards 2 and 6 left out: positions 250-499 and 1250-1499, hanging on a blow-up, e.g. root 1310
+`6Q1/8/3k3K/8/1p5P/8/1PB2P2/8 w - - 1 1`, depth 9 in 0.75M nodes, depth 10 not finished in a day).
+
+| Setting | Total vs off, all | Geomean vs off, all | Total vs off, without 48 blow-ups (max over settings >= 50M) |
+|---|---|---|---|
+| M25 | -9.4% | -26.8% | -22.7% |
+| M38 | +7.1% | -23.3% | -19.2% |
+| 20 + 30 d | -0.8% | -19.9% | -8.9% |
+| M50 | -8.7% | -17.7% | -4.7% |
+| 40 + 30 d | -4.2% | -16.6% | -10.6% |
+| M50 T100 | -13.4% | -15.4% | -7.5% |
+| 60 + 20 d | -7.0% | -15.1% | -4.3% |
+| M50 T10000 | -6.2% | -9.8% | +2.0% |
+| M100 | -4.9% | -9.1% | +3.5% |
+
+The 48 blow-ups (3.2% of the roots) hold 93.5% of the nodes of off. Two kinds: stable (all settings similar,
+decided endgames: |score| >= 2000 has median 44M, all roots 0.4M) and chaotic (max / min over the settings up
+to 4000, also at normal scores: -416 at npm 48, +208 at npm 46). So a rule by root score does not separate
+them: |score| < 500 still gives M38 +300%. Without the blow-ups no minimum over the margin shows: the fewer
+nodes the lower the margin, down to M25, the end of the range (the M38 of S10 was set by blow-ups). The
+sublinear margins and the threat margin show no gain against the linear margin of the same typical saving.
+
+Cause: the near-mate guard of LMR (`reduceLmr`, `nearmate b`, since at least 2017), nmlm 5795f3f removes it. The 20
+worst roots at depth 12 with M50: 15.29G nodes with the guard, 44.4M without (factor 344); the highest
+17.7M, one root up by 9x (0.76M to 7.1M). 50 evenly spaced roots at depth 10: total -79%, geomean -17%. Neither of the
+two checked blow-up roots has a mate score up to depth 13-15, so a stop on a mate at the root does not help.
+Two effects: at PV nodes the guard tests beta, near mate in every full-window search (after an aspiration
+fail) without any mate; with `nearmate a` there 48 of the 50 roots have exactly the nodes of no guard (geomean -8%
+vs guard). The other 2 still blow up: real near-mate windows, probably from a PV node of the defender whose
+first move gets mated (not confirmed). Node scans before this change measure the guard as much as the margin.
+Mate finding and strength without the guard: to test. LMR does not create false mates: a mate score still
+comes from a real mate line.
 
 **S14.** HCE and hanging pieces. The en-prise term (`enPrise`, Eval/Core.hs) counts only the side to move's pieces,
 linear in the hanging material; its tuned middle game weight is about 0 (`ewEnpHanging` -3 / -59): with
