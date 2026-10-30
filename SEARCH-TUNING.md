@@ -24,6 +24,7 @@ Elo values are from the candidate's side, with 95% error bars.
 | `rfth` | hprf | RFP margin parameters: threat margin, constant part (S12) | experiment, compiled = hprf |
 | `nmlm` | rfth | LMR without the near-mate guard (S13) | SPRT +13.0 vs hprf, the best version so far |
 | `lmfx` | nmlm | LMR level fixed by parameter `epLmrFix` (S13) | experiment, compiled = nmlm; level 14 SPRT -36.4 vs adaptive, level 11 running |
+| `lmpr` | nmlm | late move pruning by parameters (S15) | compiled off; no games yet |
 
 Only `hpqt` is pushed; the other branches are local, and the commits cited here exist only while the branches
 are kept.
@@ -34,7 +35,7 @@ Open:
 - RFP: SPRT of the threat margin T100 against adaptive base running on MEMO, with the level 11 one; they come first.
 - RFP: no cut with an opponent passer on rank 6/7 (S13): game test. Cutting more when an opponent piece hangs: only
   after these (user).
-- Search ideas next, before going back to the eval (user): not in Search/Core.hs are late move pruning, `improving`,
+- Search ideas next, before going back to the eval (user): not in Search/Core.hs are `improving`,
   history in the LMR, singular extensions; aspiration windows are there but off.
 - Merge decisions for dev090 (hprf); the UCI engine ignores `go movetime` and `go nodes` (to implement in 0.9.0).
 - HCE: threat features (S14), after the search work (user).
@@ -55,6 +56,7 @@ Open:
 | S12 | RFP threat margin | node counts: noise; no RFP with own pieces hanging -12.5 at 10k nodes | skipping failed; T100 open |
 | S13 | Node scan and shadow on real-game roots | shadow: endgame wrong cuts come from opponent passers on 6/7 (10x), own hanging 2.7x; node totals are ruled by the LMR near-mate guard, without it the 20 worst roots cost 344x less; without it no node minimum down to M10; removal SPRT +13.0 | guard removal accepted; passer filter open |
 | S14 | HCE: the en-prise term and what RFP shows about it | | idea |
+| S15 | Late move pruning | off = nmlm; typical saving at most -19% on 50 roots | no games yet |
 
 ## Findings
 
@@ -285,3 +287,20 @@ opponent piece); cheap, the bitboards are computed already. Problems: the traini
 where capturable opponent pieces hardly occur (the feature cannot be fitted from them, user: but those
 evals then stay unchanged, only interior nodes change); the eval is also the QS stand pat, which would
 cut before the capture is searched.
+
+**S15.** Late move pruning (lmpr 484b2e6, from nmlm, compiled off): in zero window nodes of depth up to `epLmpD`, not in
+check and not near mate, the moves `canPruneMove` accepts (no capture, check or passer move) are not searched from
+`epLmpA` + `epLmpM` * d * d / 2 moves after the last capture (the count of the LMR). Off is identical to nmlm: 9919183
+nodes on tests.fen at depth 10 with both perf builds. Nodes on 50 roots at depth 12 against off, A = 3:
+
+| Setting | Total | Geomean |
+|---|---|---|
+| D3 M1 | -29.3% | -15.4% |
+| D5 M1 | -20.0% | -19.2% |
+| D7 M1 | +55.8% | -11.3% |
+| D3 M2 | +14.6% | -5.1% |
+| D5 M2 | +53.3% | -1.3% |
+| D7 M2 | +3.4% | -3.3% |
+
+50 roots only (total 90% ranges about +-40% and more), and nodes give the cost, not the loss (S13). The saving is small
+at M2: the LMR already reduces these moves. For games: D3 M1 and D5 M1 against off, no result yet.
