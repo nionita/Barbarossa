@@ -257,6 +257,17 @@ that of a level near 11, its p90 that of level 14, with the lowest maximum, so i
 From level 14 the top 20 roots hold 30% of the nodes (15% at 5 to 11). The adaptive scheme does have parameters:
 the node count `lmrInitLim` for raising the level and the weight 2^d of a re-search.
 
+Tail measures instead of the total (`roots-2000\tail_metrics.py`, same data). The maximum is useless: one root, a
+different one at nearly every setting, split halves of the roots agree on the winner in 0-2% of the splits. The
+"lowest maximum" of adaptive above is no finding (bootstrap: adaptive 38%, level 11 36%). The mean of the worst 1% of the
+roots is more stable for LMR, with a minimum inside the range: level 2 34.8M, 5 22.5M, 8 16.7M, 11 9.7M, adaptive
+13.0M, 14 16.1M, 15 13.2M; level 11 wins 89% of the bootstraps, split halves agree in 83%. p99 points the same way
+(level 11 6.3M, adaptive 7.1M, 14 8.9M; 67%, 46%). For RFP (500 roots, top 1% = 5 roots) it does not resolve the
+margins; it prefers M100 where the 10k-node matches had M50 (S8; those ran with the guard). So it is a hypothesis only.
+Prediction, recorded before the end of the SPRTs: the worst 1% says level 11 > adaptive > 14; total and geomean say 14
+> adaptive > 11. The top 1% roots of two settings overlap by 9-12% without the guard, by 79% with it: a high overlap
+marks a systematic anomaly, as the guard was.
+
 **S14.** HCE and hanging pieces. The en-prise term (`enPrise`, Eval/Core.hs) counts only the side to move's pieces,
 linear in the hanging material; its tuned middle game weight is about 0 (`ewEnpHanging` -3 / -59): with
 the move, one hanging piece is usually saved, so the linear sum predicts little. The real effect is not
