@@ -137,6 +137,7 @@ data PVStRO
           abpol  :: !AbortPolicy,	-- search abort policy (time, nodes or none)
           futmar :: !(UArray Int Int),	-- futility margins of the depths 1 .. maxFutilDepth (index d - 1)
           rfutd  :: !Int,	-- reverse futility pruning: maximum depth (0 = off)
+          lmrfx  :: !Int,	-- late move reduction: fixed level, < 0 = adaptive
           rfuta  :: !Int,	-- reverse futility pruning: constant margin (cp)
           rfutm  :: !Int,	-- reverse futility pruning: margin per depth (cp)
           rfutt  :: !Int	-- reverse futility pruning: extra margin with own pieces hanging (cp, 0 = off)
@@ -260,7 +261,7 @@ resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, r
 
 pvro00 :: PVStRO
 pvro00 = PVStRO { draft = 0, tuning = False, abpol = NoAbort, futmar = defaultFutMargins,
-                  rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
+                  lmrfx = -1, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
 
 alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int, Int)
 alphaBeta abc = do
@@ -273,10 +274,11 @@ alphaBeta abc = do
     est <- gets evalst
     let pvro = PVStRO { draft = d, tuning = intuning abc,
                             abpol = abortPolicy abc, futmar = futMarginsOf (esEParams est),
+                            lmrfx = epLmrFix (esEParams est),
                             rfutd = epRFutD (esEParams est), rfuta = epRFutA (esEParams est),
                             rfutm = epRFutM (esEParams est),
                             rfutt = epRFutT (esEParams est) }
-        pvs0 = pvsInit { ronly = pvro }	-- :: PVState
+        pvs0 = pvsInit { ronly = pvro, lmrlv = if lmrfx pvro >= 0 then lmrfx pvro else lmrInitLv }	-- :: PVState
     -- We will get a result and a final state:
     (r, s) <- if useAspirWin
                  then case lastscore abc of
@@ -859,7 +861,8 @@ moreLMR more !d = do
     let !i  | more      = 1
             | otherwise = - (1 `unsafeShiftL` d)
         !i1 = lmrrs s + i
-    if i1 < 0
+    if lmrfx (ronly s) >= 0 then return () else
+     if i1 < 0
        then if lmrlv s <= lmrLevMin
                then put s { lmrhi = findir (lmrhi s), lmrrs = 0 }
                else put s { lmrlv = lmrlv s - 1, lmrrs = 0 }
