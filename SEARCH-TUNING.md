@@ -28,7 +28,8 @@ Only `hpqt` is pushed; the other branches are local, and the commits cited here 
 are kept.
 
 Open:
-- LMR near-mate guard (S13): games of nmlm, mate finding; then repeat the node scan without blow-ups.
+- LMR near-mate guard (S13): SPRT of nmlm against hprf running on MEMO; mate finding.
+- LMR with the node-count method, now that the guard no longer swamps the totals (S13, S10).
 - RFP: no cut with an opponent passer on rank 6/7 (S13): game test.
 - Merge decisions for dev090 (hprf); the UCI engine ignores `go movetime` and `go nodes` (to implement in 0.9.0).
 - HCE: threat features (S14); LMR with the node-count method (S10).
@@ -47,7 +48,7 @@ Open:
 | S10 | Pruning parameter by the minimum of the total nodes at fixed depth | M ~38 on 400 openings, agrees with the Elo | method plausible |
 | S11 | RFP shadow diagnostic: wrong cuts by margin, depth, node features | own hanging pieces 5x, linear margin over-protects deep nodes | knowledge |
 | S12 | RFP threat margin | node counts: noise; no RFP with own pieces hanging -12.5 at 10k nodes | skipping failed; T100 open |
-| S13 | Node scan and shadow on real-game roots | shadow: endgame wrong cuts come from opponent passers on 6/7 (10x), own hanging 2.7x; node totals are ruled by the LMR near-mate guard, without it the 20 worst roots cost 344x less | guard removal in test; passer filter open |
+| S13 | Node scan and shadow on real-game roots | shadow: endgame wrong cuts come from opponent passers on 6/7 (10x), own hanging 2.7x; node totals are ruled by the LMR near-mate guard, without it the 20 worst roots cost 344x less; without it no node minimum down to M10 | guard removal in test; passer filter open |
 | S14 | HCE: the en-prise term and what RFP shows about it | | idea |
 
 ## Findings
@@ -209,6 +210,24 @@ LMR does not create false mates: a mate score still comes from a real mate line.
 winner had reported a mate score, and no engine that reported one failed to win (nmlm 113 of 113, hprf 129 of
 129); median depth per move 9 for both. So no weird effect, but too few games for the strength; rare missed
 mates are not measured.
+
+Node scan without the guard (nmlm, this PC, depth 12, 500 roots = every 4th, 18 min on 4 shards, no search hit
+the 300 s limit). On the same roots the guard build needed 26 to 40x the nodes (largest root 3.2G, now at most
+26M; the guard scan lacks its worst roots, so the factor is too low).
+
+| Margin | Total vs off | Geomean vs off |
+|---|---|---|
+| M100 | -15.5% | -9.3% |
+| M50 | -4.1% | -12.4% |
+| M38 | -15.9% | -16.5% |
+| M25 | -3.9% | -22.7% |
+| M15 | -4.9% | -26.3% |
+| M10 | -18.2% | -29.2% |
+
+The geomean falls steadily down to M10, no minimum; the totals do not resolve the margins (bootstrap about +-25%,
+no order). Chaotic roots remain, but much smaller: 0.1M to 25M at one margin and 0.7M at the next, and at no
+fixed margin. RFP has no re-search to bring the nodes back, so a node minimum need not exist for it: nodes
+give its cost, not what the cuts lose (M25 did not beat M50 at 10k nodes). The M38 of S10 was a blow-up effect.
 
 **S14.** HCE and hanging pieces. The en-prise term (`enPrise`, Eval/Core.hs) counts only the side to move's pieces,
 linear in the hanging material; its tuned middle game weight is about 0 (`ewEnpHanging` -3 / -59): with
