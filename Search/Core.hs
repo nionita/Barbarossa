@@ -733,7 +733,7 @@ pvInnerLoopExten b d spec !exd nst = do
            -- Here we must be in a Cut node (will fail low)
            -- and we should have: crtnt = CutNode, nxtnt = AllNode
            old <- get
-           let d' = reduceLmr (nearmate b) spec d1 (lmrlv old) (movno nst - spcno nst)
+           let d' = reduceLmr spec d1 (lmrlv old) (movno nst - spcno nst)
            !s1 <- zeroWithLMR d' d1 (-a) (a+scoreGrain) nst
            whenAbort s1 $
                if pathScore s1 <= a
@@ -749,7 +749,7 @@ pvInnerLoopExtenZ b d spec !exd nst = do
     old  <- get
     -- late move reduction
     let !d1 = d + exd - 1	-- this is the normal (unreduced) depth for next search
-        d' = reduceLmr (nearmate b) spec d1 (lmrlv old) (movno nst - spcno nst)
+        d' = reduceLmr spec d1 (lmrlv old) (movno nst - spcno nst)
         !onemB = scoreGrain - b
     zeroWithLMR d' d1 onemB b nst
 
@@ -847,10 +847,10 @@ genAndPick !nst mttmv !a !b !d = do
 -- With a variable lmrlev the reduction should stay in a region
 -- where the number of researches has an acceptable level
 {-# INLINE reduceLmr #-}
-reduceLmr :: Bool -> Bool -> Int -> Int -> Int -> Int
-reduceLmr nearmatea spec d lmrlev w
-    | spec || d <= lmrNoDepth || nearmatea = d
-    | otherwise                            = max 1 $ d - lmrArr!(lmrlev, w)
+reduceLmr :: Bool -> Int -> Int -> Int -> Int
+reduceLmr spec d lmrlev w
+    | spec || d <= lmrNoDepth = d
+    | otherwise               = max 1 $ d - lmrArr!(lmrlev, w)
 
 -- Adjust the LMR related parameters in the state
 moreLMR :: Bool -> Int -> Search ()
