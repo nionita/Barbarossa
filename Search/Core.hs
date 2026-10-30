@@ -136,6 +136,9 @@ data PVStRO
           tuning :: !Bool,	-- in tuning we do not prune nor reduce (self play)
           abpol  :: !AbortPolicy,	-- search abort policy (time, nodes or none)
           futmar :: !(UArray Int Int),	-- futility margins of the depths 1 .. maxFutilDepth (index d - 1)
+          lmpd   :: !Int,	-- late move pruning: maximum depth (0 = off)
+          lmpa   :: !Int,	-- late move pruning: constant part of the move limit
+          lmpm   :: !Int,	-- late move pruning: factor of depth * depth / 2 in the move limit
           rfutd  :: !Int,	-- reverse futility pruning: maximum depth (0 = off)
           rfuta  :: !Int,	-- reverse futility pruning: constant margin (cp)
           rfutm  :: !Int,	-- reverse futility pruning: margin per depth (cp)
@@ -161,6 +164,7 @@ data NodeState
           nxtnt  :: !NodeType,	-- expected child node type
           movno  :: !Int,	-- current move number
           spcno  :: !Int,	-- last move number of a special move
+          lmpli  :: !Int,	-- late move pruning: move limit of a zero window node
           albe   :: !Bool,	-- in alpha/beta search (for small depths)
           rbmch  :: !Int,	-- number of changes in root best move / score type otherwise
           killer :: !Killer,	-- the current killer moves
@@ -251,7 +255,7 @@ pvsInit = PVState { ronly = pvro00, stats = ssts0, absdp = 0, maxdp = 0, abort =
                     lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
 nst0 :: NodeState
 nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore 0, rbmch = -1,
-             movno = 1, spcno = 1, killer = Killer [], albe = False, cpos = initPos, pvsl = [] }
+             movno = 1, spcno = 1, lmpli = maxBound, killer = Killer [], albe = False, cpos = initPos, pvsl = [] }
              -- we start with spcno = 1 as we consider the first move as special
              -- to avoid in any way reducing the tt move
 
@@ -260,7 +264,7 @@ resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, r
 
 pvro00 :: PVStRO
 pvro00 = PVStRO { draft = 0, tuning = False, abpol = NoAbort, futmar = defaultFutMargins,
-                  rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
+                  lmpd = 0, lmpa = 0, lmpm = 0, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
 
 alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int, Int)
 alphaBeta abc = do
@@ -273,6 +277,8 @@ alphaBeta abc = do
     est <- gets evalst
     let pvro = PVStRO { draft = d, tuning = intuning abc,
                             abpol = abortPolicy abc, futmar = futMarginsOf (esEParams est),
+                            lmpd = epLmpD (esEParams est), lmpa = epLmpA (esEParams est),
+                            lmpm = epLmpM (esEParams est),
                             rfutd = epRFutD (esEParams est), rfuta = epRFutA (esEParams est),
                             rfutm = epRFutM (esEParams est),
                             rfutt = epRFutT (esEParams est) }
@@ -597,7 +603,7 @@ pvZeroW !nst !b !d = do
                         let kill1 = case nmhigh of
                                         NullMoveThreat s -> newTKiller pos d s
                                         _                -> Killer []
-                            !nsti = resetNSt (pathFromScore bGrain) kill1 nst'
+                            !nsti = (resetNSt (pathFromScore bGrain) kill1 nst') { lmpli = lmpLimit ro pos b d }
                         !nstf <- pvSLoop b d True prune nsti edges
                         let s = cursc nstf
                         whenAbort s $
@@ -686,7 +692,7 @@ pvInnerLoop :: Int 	-- current beta
             -> Move	-- move to search
             -> Search NodeState
 pvInnerLoop b d zw prune nst e = timeToAbort nst $
-    if prune && (zw || movno nst > 1) && canPruneMove (cpos nst) e
+    if (prune && (zw || movno nst > 1) || zw && movno nst - spcno nst >= lmpli nst) && canPruneMove (cpos nst) e
        then return $! nst { movno = movno nst + 1 }
        else do
            !exd <- lift $ doMove e	-- do the move
@@ -897,6 +903,13 @@ isRevFutil ro pos b d
     | d > rfutd ro || nearmate b || tacticalPos pos || zugZwang pos = False
     | otherwise = v >= b && (rfutt ro == 0 || v - rfutt ro >= b || ownHanging pos == 0)
     where v = staticScore pos - rfuta ro - rfutm ro * d
+
+-- Late move pruning: the move limit of a zero window node, counted as the LMR from the last capture; not in
+-- check and not near mate
+lmpLimit :: PVStRO -> MyPos -> Int -> Int -> Int
+lmpLimit ro pos b d
+    | d > lmpd ro || nearmate b || tacticalPos pos = maxBound
+    | otherwise = lmpa ro + (lmpm ro * d * d) `unsafeShiftR` 1
 
 -- Own pieces (no king) attacked by a cheaper enemy piece (as in the quiet sort by threats) or attacked and
 -- not defended

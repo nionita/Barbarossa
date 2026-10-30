@@ -50,6 +50,11 @@ params = [
         ("epRFutA",             0),
         ("epRFutM",            50),
         ("epRFutT",             0),
+        -- late move pruning: in zero window nodes of depth up to epLmpD (0 = off) quiet moves are not searched
+        -- from epLmpA + epLmpM * depth * depth / 2 moves after the last capture
+        ("epLmpD",              0),
+        ("epLmpA",              3),
+        ("epLmpM",              2),
         -- drawishness scale of the whole eval (Eval.Core.normalParts), instead of the heuristic rules of
         -- scaleFactor when epScaleNew = 1 (default: compiled in, scale-c-lin, TUNING-HISTORY finding 37;
         -- epScaleNew = 0 is the old scaling); factors in 1/64 (64 = 1), fitted by hv_scale.py --constrained
