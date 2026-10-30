@@ -31,9 +31,13 @@ are kept.
 Open:
 - LMR near-mate guard (S13): removal accepted by SPRT; mate finding not measured.
 - LMR: no node minimum for a fixed level up to 15 (S13); fixed levels against the adaptive one need games.
-- RFP: no cut with an opponent passer on rank 6/7 (S13): game test.
+- RFP: SPRT of the threat margin T100 against adaptive base running on MEMO, with the level 11 one; they come first.
+- RFP: no cut with an opponent passer on rank 6/7 (S13): game test. Cutting more when an opponent piece hangs: only
+  after these (user).
+- Search ideas next, before going back to the eval (user): not in Search/Core.hs are late move pruning, `improving`,
+  history in the LMR, singular extensions; aspiration windows are there but off.
 - Merge decisions for dev090 (hprf); the UCI engine ignores `go movetime` and `go nodes` (to implement in 0.9.0).
-- HCE: threat features (S14).
+- HCE: threat features (S14), after the search work (user).
 
 ## Summary
 
@@ -202,8 +206,8 @@ Cause: the near-mate guard of LMR (`reduceLmr`, `nearmate b`), nmlm 5795f3f remo
 worst roots at depth 12 with M50: 15.29G nodes with the guard, 44.4M without (factor 344); the highest
 17.7M, one root up by 9x (0.76M to 7.1M). 50 evenly spaced roots at depth 10: total -79%, geomean -17%. Neither of the
 two checked blow-up roots has a mate score up to depth 13-15, so a stop on a mate at the root does not help.
-Two effects: at PV nodes the guard tests beta, near mate in every full-window search (after an aspiration
-fail) without any mate; with `nearmate a` there 48 of the 50 roots have exactly the nodes of no guard (geomean -8%
+Two effects: at PV nodes the guard tests beta, near mate in every full-window search (aspiration windows are
+off, `useAspirWin`) without any mate; with `nearmate a` there 48 of the 50 roots have exactly the nodes of no guard (geomean -8%
 vs guard). The other 2 still blow up: real near-mate windows, probably from a PV node of the defender whose
 first move gets mated (not confirmed). Node scans before this change measure the guard as much as the margin.
 LMR does not create false mates: a mate score still comes from a real mate line. Games of nmlm against hprf
