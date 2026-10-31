@@ -57,6 +57,7 @@ Open:
 | S13 | Node scan and shadow on real-game roots | shadow: endgame wrong cuts come from opponent passers on 6/7 (10x), own hanging 2.7x; node totals are ruled by the LMR near-mate guard, without it the 20 worst roots cost 344x less; without it no node minimum down to M10; removal SPRT +13.0; fixed LMR level against adaptive: 14 -36.4, 11 -8.6 | guard removal accepted; adaptive LMR stays; passer filter open |
 | S14 | HCE: the en-prise term and what RFP shows about it | | idea |
 | S15 | Late move pruning | off = nmlm; typical saving at most -19% on 50 roots; SPRT D3 M1 -9.4; it lowers the adaptive LMR level | D3 M1 rejected |
+| S16 | Speed: module interfaces | no speed from more unfoldings or an explicit Moves.Core export list | structure does not limit the speed |
 
 ## Findings
 
@@ -335,3 +336,10 @@ counter. Same measurement, depth 11, off 14.28 and 26486056 nodes (`roots-2000\l
 So the missing count does lower the level: C1 brings most of it back, more goes above off. The nodes do not follow the
 credit in order: the total of 50 positions is ruled by a few of them, and each change moves the tree. C1 is the setting
 that counts a pruned move as a move that failed low; for games D3 C1 against off, no result yet.
+
+**S16.** Speed and the module structure (perf build of lmpc, tests.fen depth 10, 9919183 nodes in all builds, alternating
+runs on this PC, spread about +-3%). `-fexpose-all-unfoldings -fspecialise-aggressively`: no gain (about 590k nodes/s
+both). Explicit export list of Moves.Core (27 of its 94 functions): no gain (567k against 559k, noise). In the optimized
+Core of Search.Core no monad dictionaries are left and few calls into other modules (betaCut, doNullMove, qsDelta,
+legalMove, moveChecks, retrieveEntry, writeCache). Merging modules was not built; these results give it little chance.
+Allocation: 70 GB for 9.9M nodes, about 7 KB per node, GC only 2% of the time: a start for the profile.
