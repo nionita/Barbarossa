@@ -25,7 +25,7 @@ Elo values are from the candidate's side, with 95% error bars.
 | `nmlm` | rfth | LMR without the near-mate guard (S13) | SPRT +13.0 vs hprf, the best version so far |
 | `lmfx` | nmlm | LMR level fixed by parameter `epLmrFix` (S13) | closed, compiled = nmlm; SPRT vs adaptive: level 14 -36.4, level 11 -8.6 |
 | `hmal` | expo | history malus, gravity, root bug by parameters (S17) | compiled off; no games yet |
-| `hrem` | expo | history bonus by remaining depth, `epHRem` (S18) | compiled off; s = 20: +18.8 +- 17.4 at 10k nodes |
+| `hrem` | expo | history bonus by remaining depth, `epHRem` (S18) | compiled off; no effect at 10k nodes (5000 games) |
 | `lmpr` | nmlm | late move pruning by parameters (S15) | compiled off; SPRT vs off: D3 M1 -9.4, D5 M1 -25.4 |
 | `lmpc` | lmpr | a pruned move counts for the adaptive LMR, `epLmpC` (S15) | compiled off; no games yet |
 
@@ -61,7 +61,7 @@ Open:
 | S15 | Late move pruning | off = nmlm; typical saving at most -19% on 50 roots; SPRT D3 M1 -9.4, D5 M1 -25.4; it lowers the adaptive LMR level | rejected in this form |
 | S16 | Speed: module interfaces | no speed from more unfoldings or an explicit Moves.Core export list ; direct timers: eval 29%, quiet sort 7%, update of the position 4%, no large hot spot | structure does not limit the speed |
 | S17 | History: overflow at the root, malus | late cuts -0.42 +- 0.25 with malus 1/8, nodes +5% | no games yet |
-| S18 | History bonus by remaining depth | late cuts -0.48 +- 0.27, nodes +9%; +18.8 +- 17.4 at 10k nodes, 1000 games | promising |
+| S18 | History bonus by remaining depth | late cuts -0.48 +- 0.27, nodes +9%; 10k nodes: 5000 games over 4 settings 50.0% | no effect at this depth |
 
 ## Findings
 
@@ -409,4 +409,19 @@ d = 1 gets 2^21, over the prior (piece step 1024). User: negative history and sq
 Same scan as S17: late cuts -0.482 +- 0.272, move 4+ -0.064 +- 0.075, nodes (geomean) +9.0% +- 3.7. Games against off (same
 binary, normal flavour, compiled eval, 10k nodes per move, 4 shards of 125 pairs, 6.5 minutes each here): 1000 games, W 353
 D 348 L 299, +18.8 +- 17.4; shards +37.7, +8.3, +6.9, +22.3. The games are node limited, so the extra nodes per depth are
-already paid. Only s = 20 was played; no timed games yet.
+already paid.
+
+More games at 10k nodes, against off, 1000 each (half slope: `epHRem` = -14, bonus `1 << (14 + (d + 2) / 2)`, no cap at
+reachable depths, proposal of the user):
+
+| Setting | Openings | W / D / L | Elo |
+|---|---|---|---|
+| s = 20 | 0-499 | 353 / 348 / 299 | +18.8 +- 17.4 |
+| s = 20 | 500-999 | 327 / 328 / 345 | -6.3 +- 17.7 |
+| s = 24 | 0-499 | 347 / 320 / 333 | +4.9 +- 17.8 |
+| s = 16 | 0-499 | 317 / 325 / 358 | -14.3 +- 17.7 |
+| half slope, 14 | 0-499 | 328 / 335 / 337 | -3.1 +- 17.6 |
+
+All 5000 games together: 1672 / 1656 / 1672, exactly 50.0% (mixed settings). The first +18.8 was noise. The better late cuts did
+not become Elo at 10k nodes. These games are shallow: the cap, the rescale, the aging and the weight of reduced lines
+act more in deeper search (user), so a deeper result can differ. No timed games.
