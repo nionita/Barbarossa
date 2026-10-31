@@ -14,7 +14,7 @@ are not reviewed here. The user's experience: negative history and squared bonus
 
 - Best version by games: `nmlm` (+13.0 vs `hprf`, which has both orderings and RFP). `expo` = `nmlm` with cleanups, same search.
 - Running on MEMO: filter before the quiet sort (`fsrt-expo-tc10`), RFP threat margin T100 (`t100-ada-tc10`).
-- Next for games: counter moves. Next to measure: continuation history.
+- Next for games: counter moves. Continuation history: decision open (user).
 
 ## Methods
 
@@ -22,7 +22,7 @@ Readings rest on the method of their time; when a method falls, the readings res
 
 | Method | For | Status | Why | Ref |
 |---|---|---|---|---|
-| Move 4+ cuts at fixed LMR level 11, two position sets, against a placebo floor | ordering | current | a proven change shows clearly | S20 |
+| Move 4+ cuts at fixed LMR level 11, two position sets, against a placebo floor | ordering | current | a proven change shows clearly; floor +-0.03 openings, +-0.065 real | S20, S21 |
 | Cuts under the adaptive LMR | ordering | blurred | removing the threat sort hardly shows (+0.012, +0.056); on the older base it was -0.174 (S5), the difference is not explained | S20 |
 | Late cuts | ordering | weak | placebo up to +-0.18, one at 2 sigma | S20 |
 | Node totals at fixed depth | search quality | identity check only | one perf run is a single sample; placebo spread 3-5%; 50 positions: +29% was noise | S2, S18, S20 |
@@ -35,7 +35,7 @@ Readings rest on the method of their time; when a method falls, the readings res
 | GHC profiler | time shares | counts only | 3x slower, sort 30% against 7% | S16, `PROFILING.md` |
 | Direct timers in the optimized build | time, allocation | current | | `PROFILING.md` |
 
-To review under the current method: the cut numbers of S4 to S7, S17 (malus), all measured under the adaptive LMR.
+To review under the current method: the cut numbers of S4 to S7, measured under the adaptive LMR.
 
 ## Move ordering
 
@@ -80,16 +80,17 @@ Interpretation history: 10-31: "no Elo" withdrawn, the test cannot see ordering 
 Review when: continuation history is in; LMR retune.
 Next: SPRT at 10+0.1, [0, 5], when MEMO is free.
 
-### History malus (status: open)
-Now: unclear. Earlier readings used the old method. The user's earlier tries lost Elo. Low priority. 2026-10-31.
+### History malus (status: parked)
+Now: no gain in any size under the current method; the earlier late-cut gain did not repeat. Fits the user's earlier experience. 2026-10-31.
 Forms: `hmal` f10edb1, `epHMal=n`: quiet moves failing low before a cut get the bonus shifted right by n - 1.
 Evidence:
 | Date | Form | Test | Result | Ref | Reading then |
 |---|---|---|---|---|---|
 | 10-31 | 1/2, 1/4, 1/8, no root update | late cuts, adaptive, openings | -0.31, -0.35, -0.42, about +-0.2 | S17 | direction good |
 | 10-31 | 1/8, no root update | 16 games | noise | | no crash |
-Interpretation history: 10-31: the 2 sigma above is within what the placebo showed (S20).
-Next: move 4+ at level 11 on both sets, before any games.
+| 10-31 | 1/2, 1/4, 1/8, no root update | move 4+, level 11: openings; real | -0.005, -0.049, +0.036; -0.059, +0.016, -0.054 | S21 | at the floor |
+Interpretation history: 10-31: the 2 sigma above is within what the placebo showed (S20); then not repeated (S21).
+Review when: another bonus scale; continuation history, where a malus may act differently. No games so far.
 
 ### History bonus by remaining depth (status: parked)
 Now: no gain in cuts under the current method, worse on real positions; no effect in games at 10k and 50k nodes. Deep play not tested. 2026-10-31.
@@ -113,12 +114,13 @@ Review when: timed games at depth are cheap; a better history; separating aging 
 ### Overflow of the history bonus at the root (status: open)
 Now: a real bug (at absolute depth 0 the Int32 overflows and makes the move the worst), removing it shows no clear gain. Clean up when the code is touched. 2026-10-31.
 Forms: `hmal` f10edb1: `epHGrav=0` as before, `2` root as depth 1 (still 2^30), `3` no root update.
-Evidence: no root update, move 4+ -0.043 under the adaptive LMR on openings (S17). No games, not at level 11.
+Evidence: no root update, move 4+ -0.043 under the adaptive LMR on openings (S17); at level 11 -0.046, +0.031, at the floor (S21). No games.
 Review when: the bonus is changed for another reason.
 
-### History gravity (status: open)
-Now: little evidence. In one shared-TT run without error bars it looked worse alone. Waits for the malus. 2026-10-31.
+### History gravity (status: rejected in this form)
+Now: clearly worse alone, no gain with a malus. It pulls good values back without a malus to balance them. 2026-10-31.
 Forms: `hmal` f10edb1, `epHGrav=1`.
+Evidence: move 4+ at level 11: alone +0.570, +0.733; with malus 1/8 -0.054, +0.138 (S21). No games.
 
 ### Continuation history (status: open)
 Now: not built. Expected to cost speed (more table reads per move), so it needs timed games. 2026-10-31.

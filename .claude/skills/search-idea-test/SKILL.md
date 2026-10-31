@@ -36,10 +36,10 @@ parameters, deterministic perf build. Sets: `C:\Learn\Data\measurements\search\r
 from `lmfx`). The adaptive LMR blurs the cuts: removing the proven threat sort shows at level 11 (+0.115, +0.121), hardly under the adaptive
 one (+0.012, +0.056).
 
-Noise floor, same engine with other random seeds (normal flavour): move 4+ about +-0.04, late cuts about +-0.18, node totals a spread of
-3-5%. The standard errors over chunks do not cover the shared base run: one perf run is a single sample of a chaotic tree, and all variants
+Noise floor at level 11, same engine with other random seeds (normal flavour, S21): move 4+ +-0.03 on the openings, +-0.065 on the real positions, late
+cuts +-0.10 and +-0.17, node totals a spread of about 6%. The standard errors over chunks do not cover the shared base run: one perf run is a single sample of a chaotic tree, and all variants
 are compared with it. So a pattern over all variants can be the base (S20: all up on openings, all down on real positions). Rerun the
-placebo when the method changes. Controls with known outcome: `epQThr=0` (threat sort removed, must look worse), counter moves (`epCMov=1`).
+placebo when the method changes. Controls with known outcome: `epQThr=0` (threat sort removed, must look worse: +0.115, +0.121), counter moves (`epCMov=1`: -0.234, -0.217).
 
 ### Games
 

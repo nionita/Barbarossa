@@ -29,6 +29,7 @@ This file is the log: facts, later corrections as notes. The current reading of 
 | `hmal` | expo | history malus, gravity, root bug by parameters (S17) | compiled off; no games yet |
 | `hrem` | expo | history bonus by remaining depth, `epHRem` (S18) | parked, compiled off; no effect at 10k and 50k nodes |
 | `cmov` | expo | counter move after the killers, `epCMov` (S19) | compiled off; no Elo at 10k nodes |
+| `lfmal` | hmal | experiment: fixed LMR level + history malus (S21) | for measuring only |
 | `lfix` | cmov | experiment: fixed LMR level + counter moves + remaining depth bonus (S20) | for measuring only |
 | `lmpr` | nmlm | late move pruning by parameters (S15) | compiled off; SPRT vs off: D3 M1 -9.4, D5 M1 -25.4 |
 | `lmpc` | lmpr | a pruned move counts for the adaptive LMR, `epLmpC` (S15) | compiled off; no games yet |
@@ -68,6 +69,7 @@ Open:
 | S18 | History bonus by remaining depth | late cuts -0.48 +- 0.27, nodes +9%; 10k nodes: 5000 games over 4 settings 50.0%; 50k nodes: s = 20 +3.5 +- 17.1 | parked |
 | S19 | Counter moves | late cuts -0.48 +- 0.14, move 4+ -0.25 +- 0.03, nodes +4%; 10k nodes: about -1 +- 12, 2000 games | ordering better, no Elo seen |
 | S20 | Why ordering changes seemed to raise the nodes | the one perf base run is a single sample, placebo spread; move 4+ at fixed level 11 on two sets is the reliable measure | method; counter moves real |
+| S21 | Malus, gravity under the current method | malus, no root update: at the floor; gravity alone clearly worse (+0.57, +0.73); floor at level 11: +-0.03 openings, +-0.065 real | malus parked |
 
 ## Findings
 
@@ -479,3 +481,24 @@ not cover the shared base run. Move 4+:
 
 Method for ordering changes from now on: move 4+ at fixed level 11 on both sets, against the noise floor; several seeds where it is close; nodes only when
 far outside the placebo spread. Files in `C:\Learn\Data\measurements\search\lfix`.
+
+**S21.** History malus and gravity under the method of S20 (lfmal 581ea3c = hmal + `epLmrFix`, off identical: 9919183 nodes, level 11 base as in lfix:
+81589698). Depth 10, perf build, 16 chunks of the openings, 20 of the real positions, against level 11:
+
+| Setting | Move 4+ openings | Move 4+ real | Late openings | Late real |
+|---|---|---|---|---|
+| No root update | -0.046 | +0.031 | -0.026 | +0.230 |
+| No root update, malus 1/2 | -0.005 | -0.059 | +0.138 | -0.018 |
+| No root update, malus 1/4 | -0.049 | +0.016 | -0.092 | +0.228 |
+| No root update, malus 1/8 | +0.036 | -0.054 | +0.149 | +0.182 |
+| Gravity alone | +0.570 | +0.733 | +0.726 | +1.032 |
+| Gravity, malus 1/8 | -0.054 | +0.138 | -0.328 | +0.254 |
+| Threat sort removed (control) | +0.115 | +0.121 | -0.125 | +0.272 |
+
+Placebo at level 11 (normal flavour, 4 seeds, against the first): move 4+ up to +-0.03 on the openings, +-0.065 on the real positions; late cuts up to
++-0.10 and +-0.17; node totals 80.2 - 84.8M and 83.1 - 88.4M, a spread of about 6%. So the real positions are noisier than S20 gave.
+
+Against this floor the malus shows nothing, in no size, and the signs change between the sets; the late-cut gains of S17 do not repeat. Removing the root update
+neither. Gravity alone is clearly worse, in both sets: it pulls the good values back without any malus to balance them. The control stays visible, on the real positions
+at about 2 times the floor. Counter moves (-0.234, -0.217) are 3 to 8 times the floor. The malus is parked in this form: bonus and malus on the scale
+`1 << (31 - absolute depth)`. No games.
