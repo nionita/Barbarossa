@@ -147,11 +147,30 @@ help more than that. Not tested: other sizes near 4m, and the other PC (other ca
 The counters the search does not read (`reTrieve`, `reFail`, `incBeta`, `incRedu`, `incReSe`, `incReBe`, `incReMi`)
 as no-ops; `sNodes`, `sNodesQS`, `sRSuc` stay. 4 alternating runs: same nodes, allocation -4.6% (67.07 to 64.00 GB), time
 -2.2% (16.73 to 16.37 s). The statistics are needed by `SelfPlay -P` (beta cut rates for search comparisons), so a build
-flag would be the way, off for the engine. Not done yet.
+flag would be the way, off for the engine. Done (expo): `-DNO_SEARCH_STATS` in the stanza of the engine, SelfPlay keeps them.
+
+## Generated against consumed quiet moves
+
+Counted in the interior nodes (`patch_gencount.py`; expected node type, not the real one). Of 2.01M move loops 498k (25%)
+generate the quiet moves: the staged laziness works, captures, TT move and killers cut before. Once generated, the sort
+forces all of them, on average 32.5.
+
+| Loops with generated quiet moves | Generations | Moves | Consumed | Cut after generation |
+|---|---|---|---|---|
+| No futility, depth up to 2 | 106752 | 3664978 | 36% | 70% |
+| No futility, depth over 2 | 67431 | 2299618 | 57% | 46% |
+| Futility on | 323894 | 10226873 | 95% | 8% |
+
+- With futility on (65% of the generations, 63% of the moves) nearly all moves are just pruned: 11.9M pruned moves in these
+  loops. They are generated and sorted, then rejected one by one; only captures, checks, passers and new queen attacks are
+  searched (`canPruneMove`). Filter first, sort only the rest.
+- The expected node type does not separate the cases: of the generations in expected all nodes without futility 56% end
+  with a cut (expected cut nodes: 69%).
+- Without futility at depth up to 2 only 36% of the moves are used, but `dirSort` sorts all: a lazy selection could help.
 
 ## Candidates, not tested
 
-By expected gain, all without changing the search (same node counts), so no games are needed:
+By expected gain. Except 5 and 6 without changing the search (same node counts), so no games are needed:
 
 1. Search state: counters and the small fields (`absdp`, `maxdp`, LMR counters) in a mutable unboxed array instead of
    a record copied at every change. Up to several percent of allocation per field group; the statistics alone gave 4.6%.
@@ -161,6 +180,11 @@ By expected gain, all without changing the search (same node counts), so no game
 4. `genMovePromo`: 65 ns and 203 bytes in nearly every QS node, nearly always empty: a quick test of the pawns first.
 5. `dirSort`: heap sort at depth up to 2 with about 30 moves, 6.2 KB per call. It must keep the order for equal history
    values to stay the same engine, otherwise the node counts change and games are needed.
+
+6. Futility on: filter by `canPruneMove` before the sort (about 63% of the sort: 4% time, 5-6% allocation, estimated from
+   the share of the moves); pruned moves must still count in `movno` (LMR of later moves, stalemate test). The order among
+   equal history values changes; in real builds the small random history values decide these anyway. Checks and
+   passers directly from the bitboards would also save most of the generation there, but that is much more work.
 
 A realistic total is maybe 10-20% speed for considerable work. By the usual rule of thumb (not measured here) that is about
 10-15 Elo.
