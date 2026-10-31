@@ -10,7 +10,7 @@ module Uci.UciGlue (
 import Control.Monad (when)
 import Control.Monad.IO.Class (liftIO)
 
-import Moves.History (initHist)
+import Moves.History (initHist, clearCont)
 import Search.CStateMonad (runCState)
 import Search.Core
 import Search.AlbetaTypes
@@ -27,7 +27,9 @@ aspirWindow   = 24	-- initial aspiration window
 bestMoveCont :: Bool -> Maybe Int -> Int -> Int -> Int -> MyState -> Maybe Int -> [Move] -> [Move] -> CtxIO IterResult
 bestMoveCont tune mbNodes draft sttime1 sttime stati lastsc lpv rmvs = do
     case stack stati of
-        p:_ -> when (draft == 1) $ liftIO $ initHist (epHistPst ep) (epHistPstSh ep) p (hist stati)
+        p:_ -> when (draft == 1) $ liftIO $ do
+            when (epCHist ep /= 0) $ clearCont (hist stati)
+            initHist (epHistPst ep) (epHistPstSh ep) p (hist stati)
         []  -> return ()
     informGuiDraft draft
     ctxLog LogInfo $ "start search for depth " ++ show draft

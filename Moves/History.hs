@@ -2,7 +2,8 @@
 {-# LANGUAGE BangPatterns #-}
 
 module Moves.History (
-        History, newHist, initHist, toHist, histSortMoves, getCounter, setCounter
+        History, newHist, initHist, toHist, histSortMoves, getCounter, setCounter,
+        contSortMoves, contOffset, contUpdate, clearCont
     ) where
 
 import Control.Monad.ST.Unsafe (unsafeIOToST)
@@ -72,11 +73,11 @@ smallVals g = concatMap chop $ randoms g
 
 newHist :: IO History
 #ifdef REPRO_HIST
-newHist = U.thaw $ U.replicate (2 * vsize) 0
+newHist = U.thaw $ U.replicate (2 * vsize + 2 * contSize) 0
 #else
 newHist = do
     g <- newStdGen
-    U.thaw $ U.fromList $ map fromIntegral (take vsize $ smallVals g) ++ replicate vsize 0
+    U.thaw $ U.fromList (map fromIntegral $ take vsize $ smallVals g) U.++ U.replicate (vsize + 2 * contSize) 0
 #endif
 
 -- Initialize the history for a new search, mode (bits, 0 = zero as before):
@@ -97,7 +98,41 @@ initHist mode sh p h = do
     let vs = U.zipWith (+) (pstHistVals mode sh p) $ U.fromListN vsize $ map fromIntegral $ smallVals g
 #endif
     U.copy (V.take vsize h) vs
-    V.set (V.drop vsize h) 0
+    V.set (V.slice vsize vsize h) 0
+
+-- Continuation history: after the history and the counter moves 2 tables, per move before (1024) one row for the 512
+-- moves of a color: which color follows from which of the tables it is
+contRow, contSize :: Int
+contRow  = vsize `div` 2
+contSize = vsize * contRow
+
+clearCont :: History -> IO ()
+clearCont h = V.set (V.slice (2 * vsize) (2 * contSize) h) 0
+
+-- Offset of the row for a move before in table t (0 or 1)
+{-# INLINE contOffset #-}
+contOffset :: Int -> Move -> Int
+contOffset t pm = 2 * vsize + t * contSize + adr pm * contRow
+
+-- A quiet move cut at absolute depth d: its entry in a row gets the bonus, the values saturate
+contUpdate :: History -> Int -> Move -> Int -> IO ()
+contUpdate h !o m !d = do
+    let !i = o + adr m .&. (contRow - 1)
+    v <- V.unsafeRead h i
+    let !p = fromIntegral (histw (max 1 d)) :: Int64
+        !n = max (- (1 `unsafeShiftL` 30)) (fromIntegral v - p)
+    V.unsafeWrite h i (fromIntegral n)
+
+-- The sort value: history plus w / 4 times the rows (offset < 0: no such row), saturated to Int32
+{-# INLINE contVal #-}
+contVal :: U.Vector Int32 -> Int -> Int -> Int -> Int -> Int32
+contVal uh !w !o1 !o2 !a = fromIntegral $ max lo $ min hi $ hv + (fromIntegral w * (c o1 + c o2)) `shiftR` 2
+    where hv = fromIntegral (U.unsafeIndex uh a) :: Int64
+          c :: Int -> Int64
+          c o | o < 0     = 0
+              | otherwise = fromIntegral $ U.unsafeIndex uh (o + a .&. (contRow - 1))
+          lo = fromIntegral (minBound :: Int32)
+          hi = fromIntegral (maxBound :: Int32)
 
 -- The counter moves are in the second part of the vector, by the address of the move before
 getCounter :: History -> Move -> IO Move
@@ -202,6 +237,49 @@ takeAddr = fromIntegral . ((.&.) 0xFFFF)
 {-# INLINE takeMove #-}
 takeMove :: Word32 -> Word16
 takeMove = fromIntegral . (`unsafeShiftR` 16)
+
+-- As histSortMoves, with the continuation history in the sort value
+contSortMoves :: Int -> Int -> Int -> Int -> History -> [Move] -> [Move]
+contSortMoves w o1 o2 d h ms
+    | null ms   = []
+    | d > 2     = mtsListC w o1 o2 $ makeMTS h ms
+    | otherwise = dirSortC w o1 o2 h ms
+
+mtsListC :: Int -> Int -> Int -> MovesToSort -> [Move]
+mtsListC w o1 o2 (MTS h uwa k)
+    | k <  0    = []
+    | k == 0    = oneMove uwa
+    | otherwise = m : mtsListC w o1 o2 mts
+    where (m, mts) = runST $ do
+          uh <- unsafeIOToST $ U.unsafeFreeze h
+          let hival = contVal uh w o1 o2 . takeAddr . U.unsafeIndex uwa
+              go !i !i0 !v0
+                  | i > k     = i0
+                  | otherwise =
+                       let v = hival i
+                       in if v < v0
+                             then go (i+1) i  v
+                             else go (i+1) i0 v0
+          let !v0 = hival 0
+              !i = go 1 0 v0
+              !mw = takeMove $ U.unsafeIndex uwa i
+          if i == k
+             then return (Move mw, MTS h uwa (k-1))
+             else do
+                 vwa <- U.unsafeThaw uwa
+                 V.unsafeSwap vwa k i
+                 uwa'<- U.unsafeFreeze vwa
+                 return (Move mw, MTS h uwa' (k-1))
+
+dirSortC :: Int -> Int -> Int -> History -> [Move] -> [Move]
+dirSortC w o1 o2 h ms = runST $ do
+    uh <- unsafeIOToST $ U.unsafeFreeze h
+    let uz = U.fromListN maxMoves $ zipWith hivalMove ms $ map (contVal uh w o1 o2) $ adrs ms
+    vz <- U.unsafeThaw uz
+    H.sortBy (comparing ((.&.) mask)) vz
+    uz' <- U.unsafeFreeze vz
+    return $ map (Move . fromIntegral . ((.&.) 0xFFFF)) $ U.toList uz'
+    where mask = complement 0xFFFF
 
 -- We want to alloc a fix amount of memory, and although there are
 -- positions which have more (quiet) moves, they are very rare

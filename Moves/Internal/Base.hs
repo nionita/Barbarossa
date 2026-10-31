@@ -5,9 +5,9 @@
 module Moves.Internal.Base (
     posToState, getPos, posNewSearch,
     doRealMove, doMove, doQSMove, doNullMove, undoMove,
-    genMoves, genTactMoves, genEscapeMoves, canPruneMove,
+    genMoves, genMovesC, genTactMoves, genEscapeMoves, canPruneMove,
     tacticalPos, zugZwang, isMoveLegal, isKillCand, isTKillCand,
-    betaCut, counterOf, counterCut, ttRead, ttStore, curNodes, isTimeout, informCtx,
+    betaCut, counterOf, counterCut, contCut, contOffset, ttRead, ttStore, curNodes, isTimeout, informCtx,
     mateScore, qsDelta,
     draftStats,
     finNode, countRepetitions,
@@ -79,20 +79,26 @@ draftStats dst = do
     put s { mstats = addStats (mstats s) dst }
 
 genMoves :: Int -> Game ([Move], [Move])
-genMoves d = do
+genMoves = genMovesC 0 (-1) (-1)
+
+-- With the continuation history: weight and the offsets of the rows (< 0: none)
+genMovesC :: Int -> Int -> Int -> Int -> Game ([Move], [Move])
+genMovesC w o1 o2 d = do
     p <- getPos
     h <- gets hist
     qm <- gets (epQThr . esEParams . evalst)
+    let srt | o1 < 0 && o2 < 0 = histSortMoves d h
+            | otherwise        = contSortMoves w o1 o2 d h
     if inCheck p
        then do
             let escs = genMoveFCheck p
                 (escc, escq) = partition (moveIsCapture p) escs
-            return (escc, quietSort qm d h p escq)
+            return (escc, quietSort srt qm p escq)
        else do
             let l0 = genMoveCast p
                 (l1q, l1r) = genMovePromo p
                 (l2w, l2l) = genMoveCaptWL p
-                l3 = quietSort qm d h p $ genMoveNCapt p
+                l3 = quietSort srt qm p $ genMoveNCapt p
             -- Loosing captures after non-captures
             return (l1q ++ l2w, l1r ++ l0 ++ l3 ++ l2l)
 
@@ -100,10 +106,10 @@ genMoves d = do
 -- history: moves of a piece away from a square attacked by a cheaper enemy piece first (2), moves of
 -- a piece to such a square last (1, it has priority); knights and bishops are threatened by pawns,
 -- rooks also by knights and bishops, queens also by rooks
-quietSort :: Int -> Int -> History -> MyPos -> [Move] -> [Move]
-quietSort qm d h p ms
-    | qm == 0 || qm == 2 && thrd == 0 = histSortMoves d h ms
-    | otherwise = histSortMoves d h good ++ histSortMoves d h norm ++ histSortMoves d h bad
+quietSort :: ([Move] -> [Move]) -> Int -> MyPos -> [Move] -> [Move]
+quietSort srt qm p ms
+    | qm == 0 || qm == 2 && thrd == 0 = srt ms
+    | otherwise = srt good ++ srt norm ++ srt bad
     where (bad, rest) | qm .&. 1 /= 0 = partition (\m -> threat m `uTestBit` toSquare m) ms
                       | otherwise     = ([], ms)
           (good, norm) | qm .&. 2 /= 0 = partition (\m -> thrd `uTestBit` fromSquare m) rest
@@ -288,6 +294,17 @@ counterCut pm@(Move w) m@(Move mw)
         s <- get
         t <- getPos
         when (moveIsCastle m || moveIsNormal m && not (moveIsCapture t m)) $ liftIO $ setCounter (hist s) pm m
+
+-- Continuation history at a cut by a quiet move: bits of the tables, absolute depth, the moves before
+contCut :: Int -> Int -> Move -> Move -> Move -> Game ()
+contCut !bits !absdp pm@(Move w1) pm2@(Move w2) m@(Move mw)
+    | mw == 0   = return ()
+    | otherwise = do
+        s <- get
+        t <- getPos
+        when (moveIsCastle m || moveIsNormal m && not (moveIsCapture t m)) $ liftIO $ do
+            when (bits .&. 1 /= 0 && w1 /= 0) $ contUpdate (hist s) (contOffset 0 pm)  m absdp
+            when (bits .&. 2 /= 0 && w2 /= 0) $ contUpdate (hist s) (contOffset 1 pm2) m absdp
 
 isKillCand :: MyPos -> Move -> Move -> Bool
 isKillCand p mm ym

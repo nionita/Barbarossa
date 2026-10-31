@@ -137,7 +137,10 @@ data PVStRO
           abpol  :: !AbortPolicy,	-- search abort policy (time, nodes or none)
           futmar :: !(UArray Int Int),	-- futility margins of the depths 1 .. maxFutilDepth (index d - 1)
           cmv    :: !Bool,	-- use counter moves
+          chp    :: !Int,	-- continuation history: bits of the tables (0 = off)
+          chw    :: !Int,	-- continuation history: weight in quarters
           rfutd  :: !Int,	-- reverse futility pruning: maximum depth (0 = off)
+          lmrfx  :: !Int,	-- late move reduction: fixed level, < 0 = adaptive
           rfuta  :: !Int,	-- reverse futility pruning: constant margin (cp)
           rfutm  :: !Int,	-- reverse futility pruning: margin per depth (cp)
           rfutt  :: !Int	-- reverse futility pruning: extra margin with own pieces hanging (cp, 0 = off)
@@ -166,6 +169,7 @@ data NodeState
           rbmch  :: !Int,	-- number of changes in root best move / score type otherwise
           killer :: !Killer,	-- the current killer moves
           prvmv  :: !Move,	-- the move before this node (Move 0: null move or none)
+          prvmv2 :: !Move,	-- the move before that
           cursc  :: Path,	-- current alpha value (now plus path & depth)
           cpos   :: MyPos,	-- current position for this node
           pvsl   :: [Pvsl]	-- principal variation list (at root) with node statistics
@@ -253,7 +257,7 @@ pvsInit = PVState { ronly = pvro00, stats = ssts0, absdp = 0, maxdp = 0, abort =
                     lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
 nst0 :: NodeState
 nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore 0, rbmch = -1,
-             movno = 1, spcno = 1, killer = Killer [], prvmv = Move 0, albe = False, cpos = initPos, pvsl = [] }
+             movno = 1, spcno = 1, killer = Killer [], prvmv = Move 0, prvmv2 = Move 0, albe = False, cpos = initPos, pvsl = [] }
              -- we start with spcno = 1 as we consider the first move as special
              -- to avoid in any way reducing the tt move
 
@@ -262,13 +266,17 @@ cutCounter :: NodeState -> Move -> Search ()
 cutCounter nst e = do
     on <- gets (cmv . ronly)
     when on $ lift $ counterCut (prvmv nst) e
+    bits <- gets (chp . ronly)
+    when (bits /= 0) $ do
+        adp <- gets absdp
+        lift $ contCut bits adp (prvmv nst) (prvmv2 nst) e
 
 resetNSt :: Path -> Killer -> NodeState -> NodeState
 resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, rbmch = 0 }
 
 pvro00 :: PVStRO
 pvro00 = PVStRO { draft = 0, tuning = False, abpol = NoAbort, futmar = defaultFutMargins,
-                  cmv = False, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
+                  cmv = False, chp = 0, chw = 4, lmrfx = -1, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
 
 alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int, Int)
 alphaBeta abc = do
@@ -282,10 +290,12 @@ alphaBeta abc = do
     let pvro = PVStRO { draft = d, tuning = intuning abc,
                             abpol = abortPolicy abc, futmar = futMarginsOf (esEParams est),
                             cmv = epCMov (esEParams est) /= 0,
+                            chp = epCHist (esEParams est), chw = epCHistW (esEParams est),
+                            lmrfx = epLmrFix (esEParams est),
                             rfutd = epRFutD (esEParams est), rfuta = epRFutA (esEParams est),
                             rfutm = epRFutM (esEParams est),
                             rfutt = epRFutT (esEParams est) }
-        pvs0 = pvsInit { ronly = pvro }	-- :: PVState
+        pvs0 = pvsInit { ronly = pvro, lmrlv = if lmrfx pvro >= 0 then lmrfx pvro else lmrInitLv }	-- :: PVState
     -- We will get a result and a final state:
     (r, s) <- if useAspirWin
                  then case lastscore abc of
@@ -642,7 +652,7 @@ nullMoveFailsHigh pos nst b d
                when nulDebug $ incReBe 1
                lift doNullMove	-- do null move
                newNode d
-               let nst' = (deepNSt nst) { prvmv = Move 0 }
+               let nst' = (deepNSt nst) { prvmv = Move 0, prvmv2 = prvmv nst }
                val <- if v > b + bigDiff
                          then pnextlev <$> pvZeroW nst' (-nma) d2
                          else pnextlev <$> pvZeroW nst' (-nma) d1
@@ -713,7 +723,7 @@ pvInnerLoop b d zw prune nst e = timeToAbort nst $
                           -- Resetting means we reduce less (only with distance to last capture)
                           let nst1 | cap       = resetSpc nst
                                    | otherwise = nst
-                          s <- extenFunc b d (cap || nolmr) exd' (deepNSt nst1) { prvmv = e }
+                          s <- extenFunc b d (cap || nolmr) exd' (deepNSt nst1) { prvmv = e, prvmv2 = prvmv nst1 }
                           return (s, nst1)
                       Final   -> return (drawPath, nst)
                       Illegal -> error "Cannot be illegal here"
@@ -851,13 +861,19 @@ genAndPick !nst mttmv !a !b !d = do
                 Just mv -> return [mv]
                 Nothing -> bestMoveFromIID nst a b d	-- it will do nothing for AllNode
     on <- gets (cmv . ronly)
+    bits <- gets (chp . ronly)
+    wgt <- gets (chw . ronly)
+    let cont t bt pm@(Move w) | bits .&. bt /= 0 && w /= 0 = contOffset t pm
+                               | otherwise                   = -1
+        !o1 = cont 0 (1 :: Int) (prvmv nst)
+        !o2 = cont 1 2 (prvmv2 nst)
     lift $ do
         cm <- if on then counterOf (prvmv nst) else return (Move 0)
         let kl0 = filter (isMoveLegal (cpos nst)) $ killerToList (killer nst)
             kl | cm /= Move 0 && cm `notElem` kl0 && cm `notElem` path
                  && isMoveLegal (cpos nst) cm && not (moveIsCapture (cpos nst) cm) = kl0 ++ [cm]
                | otherwise = kl0
-        esp <- genMoves d
+        esp <- genMovesC wgt o1 o2 d
         let es = bestFirst path kl esp
         return $ Alt es
 
@@ -877,7 +893,8 @@ moreLMR more !d = do
     let !i  | more      = 1
             | otherwise = - (1 `unsafeShiftL` d)
         !i1 = lmrrs s + i
-    if i1 < 0
+    if lmrfx (ronly s) >= 0 then return () else
+     if i1 < 0
        then if lmrlv s <= lmrLevMin
                then put s { lmrhi = findir (lmrhi s), lmrrs = 0 }
                else put s { lmrlv = lmrlv s - 1, lmrrs = 0 }
