@@ -365,3 +365,5 @@ the measured timer cost (93 ns per timed call), on 16.65 s without timers:
 
 Eval is already lazy (`staticScore`), yet 96% of the nodes need it, mostly as the QS stand pat. Allocation is spread: the
 largest cost centre is pvZeroW with 12%. Files in `C:\Learn\Data\measurements\search\speed`.
+
+The further measurements (move generation, SEE, TT, allocation) and the methods are in `PROFILING.md`.
