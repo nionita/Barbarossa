@@ -24,7 +24,7 @@ Elo values are from the candidate's side, with 95% error bars.
 | `rfth` | hprf | RFP margin parameters: threat margin, constant part (S12) | experiment, compiled = hprf |
 | `nmlm` | rfth | LMR without the near-mate guard (S13) | SPRT +13.0 vs hprf, the best version so far |
 | `lmfx` | nmlm | LMR level fixed by parameter `epLmrFix` (S13) | closed, compiled = nmlm; SPRT vs adaptive: level 14 -36.4, level 11 -8.6 |
-| `lmpr` | nmlm | late move pruning by parameters (S15) | compiled off; SPRT D3 M1 -9.4 vs off |
+| `lmpr` | nmlm | late move pruning by parameters (S15) | compiled off; SPRT vs off: D3 M1 -9.4, D5 M1 -25.4 |
 | `lmpc` | lmpr | a pruned move counts for the adaptive LMR, `epLmpC` (S15) | compiled off; no games yet |
 
 Only `hpqt` is pushed; the other branches are local, and the commits cited here exist only while the branches
@@ -56,7 +56,7 @@ Open:
 | S12 | RFP threat margin | node counts: noise; no RFP with own pieces hanging -12.5 at 10k nodes | skipping failed; T100 open |
 | S13 | Node scan and shadow on real-game roots | shadow: endgame wrong cuts come from opponent passers on 6/7 (10x), own hanging 2.7x; node totals are ruled by the LMR near-mate guard, without it the 20 worst roots cost 344x less; without it no node minimum down to M10; removal SPRT +13.0; fixed LMR level against adaptive: 14 -36.4, 11 -8.6 | guard removal accepted; adaptive LMR stays; passer filter open |
 | S14 | HCE: the en-prise term and what RFP shows about it | | idea |
-| S15 | Late move pruning | off = nmlm; typical saving at most -19% on 50 roots; SPRT D3 M1 -9.4; it lowers the adaptive LMR level | D3 M1 rejected |
+| S15 | Late move pruning | off = nmlm; typical saving at most -19% on 50 roots; SPRT D3 M1 -9.4, D5 M1 -25.4; it lowers the adaptive LMR level | rejected in this form |
 | S16 | Speed: module interfaces | no speed from more unfoldings or an explicit Moves.Core export list ; direct timers: eval 29%, quiet sort 7%, update of the position 4%, no large hot spot | structure does not limit the speed |
 
 ## Findings
@@ -335,7 +335,11 @@ counter. Same measurement, depth 11, off 14.28 and 26486056 nodes (`roots-2000\l
 
 So the missing count does lower the level: C1 brings most of it back, more goes above off. The nodes do not follow the
 credit in order: the total of 50 positions is ruled by a few of them, and each change moves the tree. C1 is the setting
-that counts a pruned move as a move that failed low; for games D3 C1 against off, no result yet.
+that counts a pruned move as a move that failed low; for games D3 C1 against off, parked (user: too long for a small effect).
+
+SPRT D5 M1 vs off (same conditions): H0 after 1414 games, -25.4 +- 13.4. D5 has the limits of D3 up to depth 3 and prunes
+also at depths 4 and 5: the deeper part costs clearly more. This form of the LMP (no `improving`, limit from the last
+capture) loses; D3 C1 has little chance to change that much, so it stays parked.
 
 **S16.** Speed and the module structure (perf build of lmpc, tests.fen depth 10, 9919183 nodes in all builds, alternating
 runs on this PC, spread about +-3%). `-fexpose-all-unfoldings -fspecialise-aggressively`: no gain (about 590k nodes/s
