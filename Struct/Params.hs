@@ -39,6 +39,8 @@ params = [
         -- the move generation; 0 = zero
         ("epHistPst",           3),
         ("epHistPstSh",        -4),
+        -- counter move (1 = on): the quiet move which last cut after a given move is tried after the killers
+        ("epCMov",              0),
         -- sort of the quiet moves (Moves.Internal.Base.quietSort), bits: 1 = moves of a piece to a square
         -- attacked by a cheaper enemy piece last, 2 = moves of a piece away from such a square first;
         -- 0 = by history only

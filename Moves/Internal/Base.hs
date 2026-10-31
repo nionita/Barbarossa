@@ -7,7 +7,7 @@ module Moves.Internal.Base (
     doRealMove, doMove, doQSMove, doNullMove, undoMove,
     genMoves, genTactMoves, genEscapeMoves, canPruneMove,
     tacticalPos, zugZwang, isMoveLegal, isKillCand, isTKillCand,
-    betaCut, ttRead, ttStore, curNodes, isTimeout, informCtx,
+    betaCut, counterOf, counterCut, ttRead, ttStore, curNodes, isTimeout, informCtx,
     mateScore, qsDelta,
     draftStats,
     finNode, countRepetitions,
@@ -272,6 +272,23 @@ isMoveLegal = legalMove
 
 -- Why not just like isTKillCand?
 {-# INLINE isKillCand #-}
+-- The counter move after a move (the move before the current position), Move 0 when none
+counterOf :: Move -> Game Move
+counterOf pm@(Move w)
+    | w == 0    = return $ Move 0
+    | otherwise = do
+        s <- get
+        liftIO $ getCounter (hist s) pm
+
+-- Remember a quiet move which cut after the move before
+counterCut :: Move -> Move -> Game ()
+counterCut pm@(Move w) m@(Move mw)
+    | w == 0 || mw == 0 = return ()
+    | otherwise = do
+        s <- get
+        t <- getPos
+        when (moveIsCastle m || moveIsNormal m && not (moveIsCapture t m)) $ liftIO $ setCounter (hist s) pm m
+
 isKillCand :: MyPos -> Move -> Move -> Bool
 isKillCand p mm ym
     | toSquare mm == toSquare ym = False

@@ -2,7 +2,7 @@
 {-# LANGUAGE BangPatterns #-}
 
 module Moves.History (
-        History, newHist, initHist, toHist, histSortMoves
+        History, newHist, initHist, toHist, histSortMoves, getCounter, setCounter
     ) where
 
 import Control.Monad.ST.Unsafe (unsafeIOToST)
@@ -72,11 +72,11 @@ smallVals g = concatMap chop $ randoms g
 
 newHist :: IO History
 #ifdef REPRO_HIST
-newHist = U.thaw $ U.replicate vsize 0
+newHist = U.thaw $ U.replicate (2 * vsize) 0
 #else
 newHist = do
     g <- newStdGen
-    U.thaw $ U.fromList $ map fromIntegral $ take vsize $ smallVals g
+    U.thaw $ U.fromList $ map fromIntegral (take vsize $ smallVals g) ++ replicate vsize 0
 #endif
 
 -- Initialize the history for a new search, mode (bits, 0 = zero as before):
@@ -96,7 +96,15 @@ initHist mode sh p h = do
     g <- newStdGen
     let vs = U.zipWith (+) (pstHistVals mode sh p) $ U.fromListN vsize $ map fromIntegral $ smallVals g
 #endif
-    U.copy h vs
+    U.copy (V.take vsize h) vs
+    V.set (V.drop vsize h) 0
+
+-- The counter moves are in the second part of the vector, by the address of the move before
+getCounter :: History -> Move -> IO Move
+getCounter h pm = (Move . fromIntegral) <$> V.unsafeRead h (vsize + adr pm)
+
+setCounter :: History -> Move -> Move -> IO ()
+setCounter h pm (Move w) = V.unsafeWrite h (vsize + adr pm) (fromIntegral w)
 
 histOrderStep :: Int -> Int32
 histOrderStep sh = 1024 `unsafeShiftL` max 0 (sh + 4)

@@ -136,6 +136,7 @@ data PVStRO
           tuning :: !Bool,	-- in tuning we do not prune nor reduce (self play)
           abpol  :: !AbortPolicy,	-- search abort policy (time, nodes or none)
           futmar :: !(UArray Int Int),	-- futility margins of the depths 1 .. maxFutilDepth (index d - 1)
+          cmv    :: !Bool,	-- use counter moves
           rfutd  :: !Int,	-- reverse futility pruning: maximum depth (0 = off)
           rfuta  :: !Int,	-- reverse futility pruning: constant margin (cp)
           rfutm  :: !Int,	-- reverse futility pruning: margin per depth (cp)
@@ -164,6 +165,7 @@ data NodeState
           albe   :: !Bool,	-- in alpha/beta search (for small depths)
           rbmch  :: !Int,	-- number of changes in root best move / score type otherwise
           killer :: !Killer,	-- the current killer moves
+          prvmv  :: !Move,	-- the move before this node (Move 0: null move or none)
           cursc  :: Path,	-- current alpha value (now plus path & depth)
           cpos   :: MyPos,	-- current position for this node
           pvsl   :: [Pvsl]	-- principal variation list (at root) with node statistics
@@ -251,16 +253,22 @@ pvsInit = PVState { ronly = pvro00, stats = ssts0, absdp = 0, maxdp = 0, abort =
                     lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
 nst0 :: NodeState
 nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore 0, rbmch = -1,
-             movno = 1, spcno = 1, killer = Killer [], albe = False, cpos = initPos, pvsl = [] }
+             movno = 1, spcno = 1, killer = Killer [], prvmv = Move 0, albe = False, cpos = initPos, pvsl = [] }
              -- we start with spcno = 1 as we consider the first move as special
              -- to avoid in any way reducing the tt move
+
+-- Remember a counter move at a cut
+cutCounter :: NodeState -> Move -> Search ()
+cutCounter nst e = do
+    on <- gets (cmv . ronly)
+    when on $ lift $ counterCut (prvmv nst) e
 
 resetNSt :: Path -> Killer -> NodeState -> NodeState
 resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, rbmch = 0 }
 
 pvro00 :: PVStRO
 pvro00 = PVStRO { draft = 0, tuning = False, abpol = NoAbort, futmar = defaultFutMargins,
-                  rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
+                  cmv = False, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
 
 alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int, Int)
 alphaBeta abc = do
@@ -273,6 +281,7 @@ alphaBeta abc = do
     est <- gets evalst
     let pvro = PVStRO { draft = d, tuning = intuning abc,
                             abpol = abortPolicy abc, futmar = futMarginsOf (esEParams est),
+                            cmv = epCMov (esEParams est) /= 0,
                             rfutd = epRFutD (esEParams est), rfuta = epRFutA (esEParams est),
                             rfutm = epRFutM (esEParams est),
                             rfutt = epRFutT (esEParams est) }
@@ -512,6 +521,7 @@ pvSearch nst !a !b !d = do
            when (tp == 1 || tp == 2 && hsc > a) $ do
                adp <- gets absdp
                lift $ betaCut adp e
+               cutCounter nst e
            reSucc nodes' >> return ttpath
        else do
            when (hdeep < 0) reFail
@@ -569,6 +579,7 @@ pvZeroW !nst !b !d = do
            when (tp == 1 || tp == 2 && hsc >= b) $ do
                adp <- gets absdp
                lift $ betaCut adp e
+               cutCounter nst e
            reSucc nodes' >> return ttpath
        else do
            when (hdeep < 0) reFail
@@ -631,7 +642,7 @@ nullMoveFailsHigh pos nst b d
                when nulDebug $ incReBe 1
                lift doNullMove	-- do null move
                newNode d
-               let nst' = deepNSt nst
+               let nst' = (deepNSt nst) { prvmv = Move 0 }
                val <- if v > b + bigDiff
                          then pnextlev <$> pvZeroW nst' (-nma) d2
                          else pnextlev <$> pvZeroW nst' (-nma) d1
@@ -702,7 +713,7 @@ pvInnerLoop b d zw prune nst e = timeToAbort nst $
                           -- Resetting means we reduce less (only with distance to last capture)
                           let nst1 | cap       = resetSpc nst
                                    | otherwise = nst
-                          s <- extenFunc b d (cap || nolmr) exd' (deepNSt nst1)
+                          s <- extenFunc b d (cap || nolmr) exd' (deepNSt nst1) { prvmv = e }
                           return (s, nst1)
                       Final   -> return (drawPath, nst)
                       Illegal -> error "Cannot be illegal here"
@@ -790,6 +801,7 @@ checkFailOrPVLoop b d e s nst = whenAbort nst $ do
        else if pathScore s >= b
                then do
                  lift $ betaCut (absdp sst) e -- anounce a beta move (for example, update history)
+                 cutCounter nst e
                  incBeta mn
                  let fhsc = s { pathScore = b }
                  return $! nst { cursc = fhsc, movno = mn+1, rbmch = 1 }
@@ -810,6 +822,7 @@ checkFailOrPVLoopZ b d e s nst = whenAbort nst $ do
        then return $! nst { movno = mn+1, killer = newKiller d s nst }
        else do	-- here is s >= b: failed high
            lift $ betaCut (absdp sst) e -- anounce a beta move (for example, update history)
+           cutCounter nst e
            incBeta mn
            let fhsc = s { pathScore = b }
            return $! nst { cursc = fhsc, movno = mn+1, rbmch = 1 }
@@ -837,8 +850,13 @@ genAndPick !nst mttmv !a !b !d = do
     path <- case mttmv of
                 Just mv -> return [mv]
                 Nothing -> bestMoveFromIID nst a b d	-- it will do nothing for AllNode
+    on <- gets (cmv . ronly)
     lift $ do
-        let kl = filter (isMoveLegal (cpos nst)) $ killerToList (killer nst)
+        cm <- if on then counterOf (prvmv nst) else return (Move 0)
+        let kl0 = filter (isMoveLegal (cpos nst)) $ killerToList (killer nst)
+            kl | cm /= Move 0 && cm `notElem` kl0 && cm `notElem` path
+                 && isMoveLegal (cpos nst) cm && not (moveIsCapture (cpos nst) cm) = kl0 ++ [cm]
+               | otherwise = kl0
         esp <- genMoves d
         let es = bestFirst path kl esp
         return $ Alt es
