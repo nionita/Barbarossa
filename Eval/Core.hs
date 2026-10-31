@@ -9,7 +9,6 @@ module Eval.Core (
     posExactEval,
     gamePhase,
     evalTermSum,
-    evalEndScale,
     evalScales,
     evalFullSum,
     evalPstSum,
@@ -288,11 +287,6 @@ evalPstSum :: MyPos -> MidEnd
 evalPstSum p
     | moving p == White = MidEnd (pstMid p) (pstEnd p)
     | otherwise         = MidEnd (negate (pstMid p)) (negate (pstEnd p))
-
--- The end game scale factor of the normal evaluation (no special eval matched), given the
--- end game part of the term sum: 64 means not reduced
-evalEndScale :: MyPos -> Int -> Int
-evalEndScale p eg = scaleFactor p eg NotMatched
 
 -- For specific material configurations which reduce the chance of winning
 -- Not reduced: 64
