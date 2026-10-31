@@ -10,6 +10,8 @@ Data of the measurements: `C:\Learn\Data\measurements\search` (see `C:\Learn\Dat
 BarbarossaTuning (`sample_roots.py`, `node_scan.ps1`, `node_scan_report.py`, `rfp_shadow_report.py`).
 Elo values are from the candidate's side, with 95% error bars.
 
+This file is the log: facts, later corrections as notes. The current reading of every idea is in `SEARCH-IDEAS.md`.
+
 ## State (2026-10-30)
 
 | Branch | From | What | Status |
