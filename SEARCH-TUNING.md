@@ -24,6 +24,7 @@ Elo values are from the candidate's side, with 95% error bars.
 | `rfth` | hprf | RFP margin parameters: threat margin, constant part (S12) | experiment, compiled = hprf |
 | `nmlm` | rfth | LMR without the near-mate guard (S13) | SPRT +13.0 vs hprf, the best version so far |
 | `lmfx` | nmlm | LMR level fixed by parameter `epLmrFix` (S13) | closed, compiled = nmlm; SPRT vs adaptive: level 14 -36.4, level 11 -8.6 |
+| `hmal` | expo | history malus, gravity, root bug by parameters (S17) | compiled off; no games yet |
 | `lmpr` | nmlm | late move pruning by parameters (S15) | compiled off; SPRT vs off: D3 M1 -9.4, D5 M1 -25.4 |
 | `lmpc` | lmpr | a pruned move counts for the adaptive LMR, `epLmpC` (S15) | compiled off; no games yet |
 
@@ -58,6 +59,7 @@ Open:
 | S14 | HCE: the en-prise term and what RFP shows about it | | idea |
 | S15 | Late move pruning | off = nmlm; typical saving at most -19% on 50 roots; SPRT D3 M1 -9.4, D5 M1 -25.4; it lowers the adaptive LMR level | rejected in this form |
 | S16 | Speed: module interfaces | no speed from more unfoldings or an explicit Moves.Core export list ; direct timers: eval 29%, quiet sort 7%, update of the position 4%, no large hot spot | structure does not limit the speed |
+| S17 | History: overflow at the root, malus | late cuts -0.42 +- 0.25 with malus 1/8, nodes +5% | no games yet |
 
 ## Findings
 
@@ -371,3 +373,27 @@ Eval is already lazy (`staticScore`), yet 96% of the nodes need it, mostly as th
 largest cost centre is pvZeroW with 12%. Files in `C:\Learn\Data\measurements\search\speed`.
 
 The further measurements (move generation, SEE, TT, allocation) and the methods are in `PROFILING.md`.
+
+**S17.** History malus (hmal, from expo, compiled off, off identical: 9919183 nodes). Found on the way: `histw` is
+`1 << (31 - absolute depth)` and the root has absolute depth 0 (the comment there says 1), so at the root the Int32 overflows
+to minBound and the subtraction makes the value of the move huge and bad; repeated it wraps back. Root moves are sorted
+by nodes, so the damage would be in the deeper nodes through the shared table. Parameters: `epHGrav` 0 = as before, 2 = root
+with the bonus of depth 1, 3 = no update at the root, 1 = as 2 with gravity; `epHMal` n > 0: at a cut by a quiet move the quiet
+moves which failed low before get the bonus shifted right by n - 1.
+
+Paired late cuts (cuts not at move 1) against off, 400 openings (pos400.fen) in 16 chunks of 25, one process each, depth 10
+(`hist_scan.py`, `C:\Learn\Data\measurements\search\hmal`):
+
+| Setting | Late cuts | Move 4+ | Nodes (geomean) |
+|---|---|---|---|
+| Root as depth 1 | -0.234 +- 0.149 | -0.084 +- 0.034 | +8.4% +- 2.3 |
+| No root update | -0.117 +- 0.115 | -0.043 +- 0.029 | +3.4% +- 2.7 |
+| No root update, malus 1/2 | -0.312 +- 0.159 | -0.067 +- 0.043 | +6.7% +- 2.7 |
+| No root update, malus 1/4 | -0.349 +- 0.174 | -0.075 +- 0.043 | +4.5% +- 2.9 |
+| No root update, malus 1/8 | -0.416 +- 0.249 | -0.098 +- 0.062 | +5.2% +- 3.8 |
+
+For scale: the threat sort of S6 had -0.151 +- 0.018 and SPRT +10.8. Here all under about 2 sigma; only 16 chunks. The
+direction is better ordering, with more nodes at fixed depth (S2: node totals say little). A full run of the same 400 in one
+process (the TT carries over, without error bars) gave other signs for some settings, e.g. root as depth 1 worse:
+fresh TT per chunk and shared TT are not the same measurement. Malus 1/8 was also the best in that run. `SelfPlay -P`
+ignores `-s` and `-f`: chunks need their own files. On 50 positions root as depth 1 had +29% nodes: noise of few positions.
