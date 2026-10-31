@@ -343,3 +343,7 @@ both). Explicit export list of Moves.Core (27 of its 94 functions): no gain (567
 Core of Search.Core no monad dictionaries are left and few calls into other modules (betaCut, doNullMove, qsDelta,
 legalMove, moveChecks, retrieveEntry, writeCache). Merging modules was not built; these results give it little chance.
 Allocation: 70 GB for 9.9M nodes, about 7 KB per node, GC only 2% of the time: a start for the profile.
+
+Cleanup (expo 3227638, from nmlm): explicit export list of Moves.Core, unused exports and 3 dead functions removed. Same
+engine (9919183 nodes, perft of the 5 standard positions as known), same speed (399k against 396k nodes/s, 5 alternating
+runs; this PC was throttling, about 590k before: compare speeds only in alternating runs).
