@@ -26,6 +26,7 @@ Elo values are from the candidate's side, with 95% error bars.
 | `lmfx` | nmlm | LMR level fixed by parameter `epLmrFix` (S13) | closed, compiled = nmlm; SPRT vs adaptive: level 14 -36.4, level 11 -8.6 |
 | `hmal` | expo | history malus, gravity, root bug by parameters (S17) | compiled off; no games yet |
 | `hrem` | expo | history bonus by remaining depth, `epHRem` (S18) | parked, compiled off; no effect at 10k and 50k nodes |
+| `cmov` | expo | counter move after the killers, `epCMov` (S19) | compiled off; no Elo at 10k nodes |
 | `lmpr` | nmlm | late move pruning by parameters (S15) | compiled off; SPRT vs off: D3 M1 -9.4, D5 M1 -25.4 |
 | `lmpc` | lmpr | a pruned move counts for the adaptive LMR, `epLmpC` (S15) | compiled off; no games yet |
 
@@ -62,6 +63,7 @@ Open:
 | S16 | Speed: module interfaces | no speed from more unfoldings or an explicit Moves.Core export list ; direct timers: eval 29%, quiet sort 7%, update of the position 4%, no large hot spot | structure does not limit the speed |
 | S17 | History: overflow at the root, malus | late cuts -0.42 +- 0.25 with malus 1/8, nodes +5% | no games yet |
 | S18 | History bonus by remaining depth | late cuts -0.48 +- 0.27, nodes +9%; 10k nodes: 5000 games over 4 settings 50.0%; 50k nodes: s = 20 +3.5 +- 17.1 | parked |
+| S19 | Counter moves | late cuts -0.48 +- 0.14, move 4+ -0.25 +- 0.03, nodes +4%; 10k nodes: about -1 +- 12, 2000 games | ordering better, no Elo seen |
 
 ## Findings
 
@@ -428,3 +430,12 @@ act more in deeper search (user), so a deeper result can differ.
 
 At 50k nodes (s = 20, openings 1000-1499, 1000 games, about 55 minutes): 321 / 368 / 311, +3.5 +- 17.1; shards -29.3, +23.7, +22.3,
 -2.8. No effect seen at 5 times the nodes either, within +- 17, which does not exclude a small one. Parked, no timed games.
+
+**S19.** Counter moves (cmov, from expo, compiled off, off identical: 9919183 nodes): `epCMov` = 1: table by the move before
+(after a null move none, the second half of the history vector, cleared per search). A quiet move which cuts, also a TT
+cut, is stored; it is tried after the killers when legal, not a capture and not already the TT move or a killer.
+
+Same scan as S17: late cuts -0.480 +- 0.137, move 4+ -0.247 +- 0.034, nodes (geomean) +4.1% +- 2.8: the clearest ordering
+gain of this round. Games against off at 10k nodes: openings 0-499 331 / 337 / 332, -0.3 +- 17.5; openings 500-999 339 / 317 / 344,
+-1.7 +- 17.8; together 2000 games about -1 +- 12. No timed games. Open: whether 10k node games can show ordering gains at all
+(S4: the prior had +6.3 at 1000 nodes, +2.0 at 10k).
