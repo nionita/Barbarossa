@@ -24,7 +24,7 @@ Elo values are from the candidate's side, with 95% error bars.
 | `rfth` | hprf | RFP margin parameters: threat margin, constant part (S12) | experiment, compiled = hprf |
 | `nmlm` | rfth | LMR without the near-mate guard (S13) | SPRT +13.0 vs hprf, the best version so far |
 | `lmfx` | nmlm | LMR level fixed by parameter `epLmrFix` (S13) | closed, compiled = nmlm; SPRT vs adaptive: level 14 -36.4, level 11 -8.6 |
-| `lmpr` | nmlm | late move pruning by parameters (S15) | compiled off; no games yet |
+| `lmpr` | nmlm | late move pruning by parameters (S15) | compiled off; SPRT D3 M1 -9.4 vs off |
 
 Only `hpqt` is pushed; the other branches are local, and the commits cited here exist only while the branches
 are kept.
@@ -55,7 +55,7 @@ Open:
 | S12 | RFP threat margin | node counts: noise; no RFP with own pieces hanging -12.5 at 10k nodes | skipping failed; T100 open |
 | S13 | Node scan and shadow on real-game roots | shadow: endgame wrong cuts come from opponent passers on 6/7 (10x), own hanging 2.7x; node totals are ruled by the LMR near-mate guard, without it the 20 worst roots cost 344x less; without it no node minimum down to M10; removal SPRT +13.0; fixed LMR level against adaptive: 14 -36.4, 11 -8.6 | guard removal accepted; adaptive LMR stays; passer filter open |
 | S14 | HCE: the en-prise term and what RFP shows about it | | idea |
-| S15 | Late move pruning | off = nmlm; typical saving at most -19% on 50 roots | no games yet |
+| S15 | Late move pruning | off = nmlm; typical saving at most -19% on 50 roots; SPRT D3 M1 -9.4; it lowers the adaptive LMR level | D3 M1 rejected |
 
 ## Findings
 
@@ -308,4 +308,12 @@ nodes on tests.fen at depth 10 with both perf builds. Nodes on 50 roots at depth
 | D7 M2 | +3.4% | -3.3% |
 
 50 roots only (total 90% ranges about +-40% and more), and nodes give the cost, not the loss (S13). The saving is small
-at M2: the LMR already reduces these moves. For games: D3 M1 and D5 M1 against off, no result yet.
+at M2: the LMR already reduces these moves. For games: D3 M1 and D5 M1 against off.
+
+SPRT D3 M1 vs off (MEMO, same binary, 10+0.1, [0, 5]): H0 after 3340 games, -9.4 +- 8.8 (LOS 1.8%). One timeout of d3m1, in
+3340 games no effect on the verdict; not looked into.
+
+Side effect on the adaptive LMR: a pruned move no longer adds its +1 to the counter (`moreLMR`), the re-searches of the
+others still subtract. Level after draft 11 on tests.fen (50 positions): off mean 14.28, D3 M1 13.80 (49 read), D5 M1
+13.52, lower than off in 22 positions and higher in 5; nodes -6.1%, -16.6%. So the LMP also reduces the other moves less.
+The missing +1 as the cause and the share of this in the -9.4 are not measured. D5 M1 has the same limits up to depth 3.
