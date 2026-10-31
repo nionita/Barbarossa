@@ -33,8 +33,8 @@ This file is the log: facts, later corrections as notes. The current reading of 
 | `lmpr` | nmlm | late move pruning by parameters (S15) | compiled off; SPRT vs off: D3 M1 -9.4, D5 M1 -25.4 |
 | `lmpc` | lmpr | a pruned move counts for the adaptive LMR, `epLmpC` (S15) | compiled off; no games yet |
 
-Only `hpqt` is pushed; the other branches are local, and the commits cited here exist only while the branches
-are kept.
+All branches of this table are pushed (2026-10-31), not merged; the commits cited here exist only while the branches
+are kept. The whole repository: `C:\Learn\Data\historyarbarossa-all.bundle`.
 
 Open:
 - LMR near-mate guard (S13): removal accepted by SPRT; mate finding not measured.
