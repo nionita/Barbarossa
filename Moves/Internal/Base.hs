@@ -354,16 +354,16 @@ ttStore !deep !tp !sc !bestm !nds = do
     liftIO $ writeCache (hash s) (zobkey p) (min 40 deep) tp sc bestm nds
 
 -- History heuristic table update when beta cut
-betaCut :: Int -> Move -> Game ()
-betaCut absdp m
+betaCut :: Int -> Int -> Move -> Game ()
+betaCut absdp d m
     | moveIsCastle m = do
         s <- get
-        liftIO $ toHist (hist s) m absdp
+        liftIO $ toHist (epHRem (esEParams (evalst s))) (hist s) m absdp d
     | moveIsNormal m = do
         s <- get
         t <- getPos
         case tabla t (toSquare m) of
-            Empty -> liftIO $ toHist (hist s) m absdp
+            Empty -> liftIO $ toHist (epHRem (esEParams (evalst s))) (hist s) m absdp d
             _     -> return ()
     | otherwise = return ()
 

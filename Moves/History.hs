@@ -162,8 +162,11 @@ histw !d = 1 `unsafeShiftL` dm
           maxd = 31
 
 -- We don't use negative history (i.e. when move did not cut)
-toHist :: History -> Move -> Int -> IO ()
-toHist h m d = addHist h (adr m) (histw d)
+toHist :: Int -> History -> Move -> Int -> Int -> IO ()
+toHist s h m ad d
+    | s == 0    = addHist h (adr m) (histw ad)
+    | s < 0     = addHist h (adr m) (1 `unsafeShiftL` min 30 ((max 0 d + 2) `unsafeShiftR` 1 - s))
+    | otherwise = addHist h (adr m) (1 `unsafeShiftL` min 30 (s + max 0 d))
 
 addHist :: History -> Int -> Int32 -> IO ()
 addHist h !ad !p = do

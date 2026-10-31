@@ -138,6 +138,7 @@ data PVStRO
           futmar :: !(UArray Int Int),	-- futility margins of the depths 1 .. maxFutilDepth (index d - 1)
           cmv    :: !Bool,	-- use counter moves
           rfutd  :: !Int,	-- reverse futility pruning: maximum depth (0 = off)
+          lmrfx  :: !Int,	-- late move reduction: fixed level, < 0 = adaptive
           rfuta  :: !Int,	-- reverse futility pruning: constant margin (cp)
           rfutm  :: !Int,	-- reverse futility pruning: margin per depth (cp)
           rfutt  :: !Int	-- reverse futility pruning: extra margin with own pieces hanging (cp, 0 = off)
@@ -268,7 +269,7 @@ resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, r
 
 pvro00 :: PVStRO
 pvro00 = PVStRO { draft = 0, tuning = False, abpol = NoAbort, futmar = defaultFutMargins,
-                  cmv = False, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
+                  cmv = False, lmrfx = -1, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
 
 alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int, Int)
 alphaBeta abc = do
@@ -282,10 +283,11 @@ alphaBeta abc = do
     let pvro = PVStRO { draft = d, tuning = intuning abc,
                             abpol = abortPolicy abc, futmar = futMarginsOf (esEParams est),
                             cmv = epCMov (esEParams est) /= 0,
+                            lmrfx = epLmrFix (esEParams est),
                             rfutd = epRFutD (esEParams est), rfuta = epRFutA (esEParams est),
                             rfutm = epRFutM (esEParams est),
                             rfutt = epRFutT (esEParams est) }
-        pvs0 = pvsInit { ronly = pvro }	-- :: PVState
+        pvs0 = pvsInit { ronly = pvro, lmrlv = if lmrfx pvro >= 0 then lmrfx pvro else lmrInitLv }	-- :: PVState
     -- We will get a result and a final state:
     (r, s) <- if useAspirWin
                  then case lastscore abc of
@@ -457,7 +459,7 @@ checkFailOrPVRoot xstats b d e s nst = whenAbort (True, nst) $ do
                  lift $ do
                      let typ = 1	-- beta cut (score is lower limit) with move e
                      ttStore d typ b e nodes'
-                     betaCut (absdp sst) e
+                     betaCut (absdp sst) d e
                  let xpvslg = insertToPvs d pvg (pvsl nst)	-- the good
                      csc = s { pathScore = b }
                      nst1 = nst { cursc = csc, pvsl = xpvslg, rbmch = rbmch nst + 1 }
@@ -469,7 +471,7 @@ checkFailOrPVRoot xstats b d e s nst = whenAbort (True, nst) $ do
                  lift $ do
                      let typ = 2	-- best move so far (score is exact)
                      ttStore d typ sc e nodes'
-                     betaCut (absdp sst) e	-- not really cut, but good move
+                     betaCut (absdp sst) d e	-- not really cut, but good move
                  let xpvslg = insertToPvs d pvg (pvsl nst)	-- the good
                      nst1 = nst { cursc = s, nxtnt = nextNodeType (nxtnt nst),
                                   movno = mn + 1, pvsl = xpvslg, rbmch = rbmch nst + 1 }
@@ -520,7 +522,7 @@ pvSearch nst !a !b !d = do
            -- we will treat the beta cut here too, if it happens
            when (tp == 1 || tp == 2 && hsc > a) $ do
                adp <- gets absdp
-               lift $ betaCut adp e
+               lift $ betaCut adp d e
                cutCounter nst e
            reSucc nodes' >> return ttpath
        else do
@@ -578,7 +580,7 @@ pvZeroW !nst !b !d = do
            -- we will treat the beta cut here too, if it happens
            when (tp == 1 || tp == 2 && hsc >= b) $ do
                adp <- gets absdp
-               lift $ betaCut adp e
+               lift $ betaCut adp d e
                cutCounter nst e
            reSucc nodes' >> return ttpath
        else do
@@ -800,14 +802,14 @@ checkFailOrPVLoop b d e s nst = whenAbort nst $ do
        then return $! nst { movno = mn+1, killer = newKiller d s nst }
        else if pathScore s >= b
                then do
-                 lift $ betaCut (absdp sst) e -- anounce a beta move (for example, update history)
+                 lift $ betaCut (absdp sst) d e -- anounce a beta move (for example, update history)
                  cutCounter nst e
                  incBeta mn
                  let fhsc = s { pathScore = b }
                  return $! nst { cursc = fhsc, movno = mn+1, rbmch = 1 }
                else do	-- means: > a && < b
                    lift $ do
-                       betaCut (absdp sst) e -- not really a cut, but good move here
+                       betaCut (absdp sst) d e -- not really a cut, but good move here
                        -- let de = max d $ pathDepth s
                        ttStore d 1 (pathScore s) e 0	-- best move so far (score is lower limit)
                    let nnt  = nextNodeType (nxtnt nst)
@@ -821,7 +823,7 @@ checkFailOrPVLoopZ b d e s nst = whenAbort nst $ do
     if pathScore s < b	-- failed low
        then return $! nst { movno = mn+1, killer = newKiller d s nst }
        else do	-- here is s >= b: failed high
-           lift $ betaCut (absdp sst) e -- anounce a beta move (for example, update history)
+           lift $ betaCut (absdp sst) d e -- anounce a beta move (for example, update history)
            cutCounter nst e
            incBeta mn
            let fhsc = s { pathScore = b }
@@ -877,7 +879,8 @@ moreLMR more !d = do
     let !i  | more      = 1
             | otherwise = - (1 `unsafeShiftL` d)
         !i1 = lmrrs s + i
-    if i1 < 0
+    if lmrfx (ronly s) >= 0 then return () else
+     if i1 < 0
        then if lmrlv s <= lmrLevMin
                then put s { lmrhi = findir (lmrhi s), lmrrs = 0 }
                else put s { lmrlv = lmrlv s - 1, lmrrs = 0 }
