@@ -34,7 +34,7 @@ This file is the log: facts, later corrections as notes. The current reading of 
 | `lmpc` | lmpr | a pruned move counts for the adaptive LMR, `epLmpC` (S15) | compiled off; no games yet |
 
 All branches of this table are pushed (2026-10-31), not merged; the commits cited here exist only while the branches
-are kept. The whole repository: `C:\Learn\Data\historyarbarossa-all.bundle`.
+are kept. The whole repository: `C:\Learn\Data\historybarbarossa-all.bundle`.
 
 Open:
 - LMR near-mate guard (S13): removal accepted by SPRT; mate finding not measured.
