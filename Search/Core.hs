@@ -1158,6 +1158,14 @@ reportStats = do
 modStat :: (SStats -> SStats) -> Search ()
 modStat f = modify $ \s -> case f (stats s) of st -> s { stats = st }
 
+-- The counters which the search does not read: not in the engine, every change copies the records (S16, PROFILING.md)
+modInfo :: (SStats -> SStats) -> Search ()
+#ifdef NO_SEARCH_STATS
+modInfo _ = return ()
+#else
+modInfo = modStat
+#endif
+
 incNodes :: Int -> SStats -> SStats
 incNodes 1 s = incNodesQS s	-- d can't be < 0 here
 incNodes _ s = case sNodes s + 1 of n1 -> s { sNodes = n1 }
@@ -1182,31 +1190,31 @@ newNodeQS :: Search ()
 newNodeQS = modStat incNodesQS
 
 reTrieve :: Search ()
-reTrieve  = modStat incReTrieve
+reTrieve  = modInfo incReTrieve
 
 reFail :: Search ()
-reFail = modStat incReFail
+reFail = modInfo incReFail
 
 reSucc :: Int64 -> Search ()
 reSucc n  = modStat (addReSucc n)
 
 incBeta :: Int -> Search ()
-incBeta 1 = modStat $ \s -> s { sBeta = sBeta s + 1, sBM1  = sBM1  s + 1 }
-incBeta 2 = modStat $ \s -> s { sBeta = sBeta s + 1, sBM2  = sBM2  s + 1 }
-incBeta 3 = modStat $ \s -> s { sBeta = sBeta s + 1, sBM3  = sBM3  s + 1 }
-incBeta _ = modStat $ \s -> s { sBeta = sBeta s + 1, sBM4p = sBM4p s + 1 }
+incBeta 1 = modInfo $ \s -> s { sBeta = sBeta s + 1, sBM1  = sBM1  s + 1 }
+incBeta 2 = modInfo $ \s -> s { sBeta = sBeta s + 1, sBM2  = sBM2  s + 1 }
+incBeta 3 = modInfo $ \s -> s { sBeta = sBeta s + 1, sBM3  = sBM3  s + 1 }
+incBeta _ = modInfo $ \s -> s { sBeta = sBeta s + 1, sBM4p = sBM4p s + 1 }
 
 incReSe :: Int64 -> Search ()
-incReSe n = modStat $ \s -> s { sReSe = sReSe s + 1, sReNo = sReNo s + n }
+incReSe n = modInfo $ \s -> s { sReSe = sReSe s + 1, sReNo = sReNo s + n }
 
 incRedu :: Search ()
-incRedu = modStat $ \s -> s { sRedu = sRedu s + 1 }
+incRedu = modInfo $ \s -> s { sRedu = sRedu s + 1 }
 
 incReBe :: Int64 -> Search ()
-incReBe n = modStat $ \s -> s { sReBe = sReBe s + n }
+incReBe n = modInfo $ \s -> s { sReBe = sReBe s + n }
 
 incReMi :: Search ()
-incReMi = modStat $ \s -> s { sReMi = sReMi s + 1 }
+incReMi = modInfo $ \s -> s { sReMi = sReMi s + 1 }
 
 bestFirst :: [Move] -> [Move] -> ([Move], [Move]) -> [Move]
 bestFirst []    kl (es1, es2) = es1 ++ kl ++ chainUniqFilters kl es2
