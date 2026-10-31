@@ -168,6 +168,24 @@ forces all of them, on average 32.5.
   with a cut (expected cut nodes: 69%).
 - Without futility at depth up to 2 only 36% of the moves are used, but `dirSort` sorts all: a lazy selection could help.
 
+## Filter before the quiet sort (fsrt)
+
+Zero window nodes with futility pruning: only the moves `canPruneMove` rejects not, plus the best pruned move (so that
+the test for no valid moves and the best move of a fail low stay as they were), are sorted. Parameter `epQFilt`.
+
+| Build | Nodes | Time | Nodes/s | Allocation per node |
+|---|---|---|---|---|
+| expo | 9919183 | 16.56 s | 599k | 6.76 KB |
+| fsrt, filter off | 9919183 | 16.99 s | 584k | 6.82 KB |
+| fsrt, filter on (same binary) | 10169685 | 16.60 s | 613k | 6.22 KB |
+| fsrt, filter hard coded | 10169685 | 16.48 s | 617k | |
+
+- Same binary against itself looks better than it is: +5.3% nodes/s, while the off side is slower than expo (parameter
+  read or code layout). Hard coded against expo: +3.0% nodes/s (estimate from the share of moves was 4%).
+- 2.5% more nodes: the remaining moves have a smaller move number in the LMR, so they are reduced less. Time to depth
+  gains only 0.5%. Whether the extra nodes are worth anything only games can tell.
+- Compare builds also against the parent build, not only by a parameter in one binary.
+
 ## Candidates, not tested
 
 By expected gain. Except 5 and 6 without changing the search (same node counts), so no games are needed:
@@ -181,10 +199,8 @@ By expected gain. Except 5 and 6 without changing the search (same node counts),
 5. `dirSort`: heap sort at depth up to 2 with about 30 moves, 6.2 KB per call. It must keep the order for equal history
    values to stay the same engine, otherwise the node counts change and games are needed.
 
-6. Futility on: filter by `canPruneMove` before the sort (about 63% of the sort: 4% time, 5-6% allocation, estimated from
-   the share of the moves); pruned moves must still count in `movno` (LMR of later moves, stalemate test). The order among
-   equal history values changes; in real builds the small random history values decide these anyway. Checks and
-   passers directly from the bitboards would also save most of the generation there, but that is much more work.
+6. Futility on: filter by `canPruneMove` before the sort. Built, see below. Checks and passers directly from the bitboards
+   would also save most of the generation there, but that is much more work.
 
 A realistic total is maybe 10-20% speed for considerable work. By the usual rule of thumb (not measured here) that is about
 10-15 Elo.
