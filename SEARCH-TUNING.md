@@ -23,7 +23,7 @@ Elo values are from the candidate's side, with 95% error bars.
 | `rfpdiag` | hprf | RFP shadow diagnostic (S11) | measurement only, not for merging |
 | `rfth` | hprf | RFP margin parameters: threat margin, constant part (S12) | experiment, compiled = hprf |
 | `nmlm` | rfth | LMR without the near-mate guard (S13) | SPRT +13.0 vs hprf, the best version so far |
-| `lmfx` | nmlm | LMR level fixed by parameter `epLmrFix` (S13) | experiment, compiled = nmlm; level 14 SPRT -36.4 vs adaptive, level 11 running |
+| `lmfx` | nmlm | LMR level fixed by parameter `epLmrFix` (S13) | closed, compiled = nmlm; SPRT vs adaptive: level 14 -36.4, level 11 -8.6 |
 | `lmpr` | nmlm | late move pruning by parameters (S15) | compiled off; no games yet |
 
 Only `hpqt` is pushed; the other branches are local, and the commits cited here exist only while the branches
@@ -31,8 +31,7 @@ are kept.
 
 Open:
 - LMR near-mate guard (S13): removal accepted by SPRT; mate finding not measured.
-- LMR: no node minimum for a fixed level up to 15 (S13); fixed levels against the adaptive one need games.
-- RFP: SPRT of the threat margin T100 against adaptive base running on MEMO, with the level 11 one; they come first.
+- RFP: SPRT of the threat margin T100 running on MEMO; it comes first.
 - RFP: no cut with an opponent passer on rank 6/7 (S13): game test. Cutting more when an opponent piece hangs: only
   after these (user).
 - Search ideas next, before going back to the eval (user): not in Search/Core.hs are `improving`,
@@ -54,7 +53,7 @@ Open:
 | S10 | Pruning parameter by the minimum of the total nodes at fixed depth | M ~38 on 400 openings, agrees with the Elo | method plausible |
 | S11 | RFP shadow diagnostic: wrong cuts by margin, depth, node features | own hanging pieces 5x, linear margin over-protects deep nodes | knowledge |
 | S12 | RFP threat margin | node counts: noise; no RFP with own pieces hanging -12.5 at 10k nodes | skipping failed; T100 open |
-| S13 | Node scan and shadow on real-game roots | shadow: endgame wrong cuts come from opponent passers on 6/7 (10x), own hanging 2.7x; node totals are ruled by the LMR near-mate guard, without it the 20 worst roots cost 344x less; without it no node minimum down to M10; removal SPRT +13.0 | guard removal accepted; passer filter open |
+| S13 | Node scan and shadow on real-game roots | shadow: endgame wrong cuts come from opponent passers on 6/7 (10x), own hanging 2.7x; node totals are ruled by the LMR near-mate guard, without it the 20 worst roots cost 344x less; without it no node minimum down to M10; removal SPRT +13.0; fixed LMR level against adaptive: 14 -36.4, 11 -8.6 | guard removal accepted; adaptive LMR stays; passer filter open |
 | S14 | HCE: the en-prise term and what RFP shows about it | | idea |
 | S15 | Late move pruning | off = nmlm; typical saving at most -19% on 50 roots | no games yet |
 
@@ -275,7 +274,13 @@ Prediction, recorded before the end of the SPRTs: the worst 1% says level 11 > a
 marks a systematic anomaly, as the guard was.
 
 SPRT level 14 vs adaptive (MEMO, same binary, 10+0.1, [0, 5]): H0 after 1024 games, -36.4 +- 15.7. So 35% fewer nodes
-per position cost clearly: total and geomean are refuted as a guide; level 11 still open.
+per position cost clearly: total and geomean are refuted as a guide.
+
+SPRT level 11 vs adaptive (same conditions): H0 after 3556 games, -8.6 +- 8.5 (LOS 2.3%). The adaptive scheme stays and
+lmfx is closed; levels 12 and 13 were not played. The prediction above: the worst 1% had adaptive > 14 and 11 > 14
+right (11 and 14 only through their results against adaptive) and 11 > adaptive wrong, so it does not find the best
+setting. Total and geomean had only adaptive > 11 right. Three settings are too few to call any of them predictive; none
+is a selection criterion for reductions, games decide.
 
 **S14.** HCE and hanging pieces. The en-prise term (`enPrise`, Eval/Core.hs) counts only the side to move's pieces,
 linear in the hanging material; its tuned middle game weight is about 0 (`ewEnpHanging` -3 / -59): with
