@@ -55,6 +55,9 @@ params = [
         ("epLmpD",              0),
         ("epLmpA",              3),
         ("epLmpM",              2),
+        -- late move pruning: what a pruned move adds to the counter of the adaptive LMR (a searched move adds
+        -- at least 1 for its fail low)
+        ("epLmpC",              0),
         -- drawishness scale of the whole eval (Eval.Core.normalParts), instead of the heuristic rules of
         -- scaleFactor when epScaleNew = 1 (default: compiled in, scale-c-lin, TUNING-HISTORY finding 37;
         -- epScaleNew = 0 is the old scaling); factors in 1/64 (64 = 1), fitted by hv_scale.py --constrained

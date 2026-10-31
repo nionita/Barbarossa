@@ -139,6 +139,7 @@ data PVStRO
           lmpd   :: !Int,	-- late move pruning: maximum depth (0 = off)
           lmpa   :: !Int,	-- late move pruning: constant part of the move limit
           lmpm   :: !Int,	-- late move pruning: factor of depth * depth / 2 in the move limit
+          lmpc   :: !Int,	-- late move pruning: what a pruned move adds to the adaptive LMR counter
           rfutd  :: !Int,	-- reverse futility pruning: maximum depth (0 = off)
           rfuta  :: !Int,	-- reverse futility pruning: constant margin (cp)
           rfutm  :: !Int,	-- reverse futility pruning: margin per depth (cp)
@@ -264,7 +265,7 @@ resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, r
 
 pvro00 :: PVStRO
 pvro00 = PVStRO { draft = 0, tuning = False, abpol = NoAbort, futmar = defaultFutMargins,
-                  lmpd = 0, lmpa = 0, lmpm = 0, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
+                  lmpd = 0, lmpa = 0, lmpm = 0, lmpc = 0, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
 
 alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int, Int)
 alphaBeta abc = do
@@ -278,7 +279,7 @@ alphaBeta abc = do
     let pvro = PVStRO { draft = d, tuning = intuning abc,
                             abpol = abortPolicy abc, futmar = futMarginsOf (esEParams est),
                             lmpd = epLmpD (esEParams est), lmpa = epLmpA (esEParams est),
-                            lmpm = epLmpM (esEParams est),
+                            lmpm = epLmpM (esEParams est), lmpc = epLmpC (esEParams est),
                             rfutd = epRFutD (esEParams est), rfuta = epRFutA (esEParams est),
                             rfutm = epRFutM (esEParams est),
                             rfutt = epRFutT (esEParams est) }
@@ -692,8 +693,13 @@ pvInnerLoop :: Int 	-- current beta
             -> Move	-- move to search
             -> Search NodeState
 pvInnerLoop b d zw prune nst e = timeToAbort nst $
-    if (prune && (zw || movno nst > 1) || zw && movno nst - spcno nst >= lmpli nst) && canPruneMove (cpos nst) e
-       then return $! nst { movno = movno nst + 1 }
+    if (futil || lmp) && canPruneMove (cpos nst) e
+       then do
+           -- Only what is pruned just by the LMP would have counted without it
+           unless futil $ do
+               c <- gets (lmpc . ronly)
+               when (c > 0) $ addLMR c
+           return $! nst { movno = movno nst + 1 }
        else do
            !exd <- lift $ doMove e	-- do the move
            if legalResult exd
@@ -717,7 +723,9 @@ pvInnerLoop b d zw prune nst e = timeToAbort nst $
                   let s' = addToPath e s
                   checkFunc b d e s' nst1
               else return nst
-    where extenFunc | zw        = pvInnerLoopExtenZ
+    where futil = prune && (zw || movno nst > 1)
+          lmp   = zw && movno nst - spcno nst >= lmpli nst
+          extenFunc | zw        = pvInnerLoopExtenZ
                     | otherwise = pvInnerLoopExten
           checkFunc | zw        = checkFailOrPVLoopZ
                     | otherwise = checkFailOrPVLoop
@@ -860,11 +868,14 @@ reduceLmr spec d lmrlev w
 
 -- Adjust the LMR related parameters in the state
 moreLMR :: Bool -> Int -> Search ()
-moreLMR more !d = do
+moreLMR more !d
+    | more      = addLMR 1
+    | otherwise = addLMR $ - (1 `unsafeShiftL` d)
+
+addLMR :: Int -> Search ()
+addLMR !i = do
     s <- get
-    let !i  | more      = 1
-            | otherwise = - (1 `unsafeShiftL` d)
-        !i1 = lmrrs s + i
+    let !i1 = lmrrs s + i
     if i1 < 0
        then if lmrlv s <= lmrLevMin
                then put s { lmrhi = findir (lmrhi s), lmrrs = 0 }
