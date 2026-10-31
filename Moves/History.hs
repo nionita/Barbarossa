@@ -2,7 +2,7 @@
 {-# LANGUAGE BangPatterns #-}
 
 module Moves.History (
-        History, newHist, initHist, toHist, histSortMoves
+        History, newHist, initHist, toHist, histSortMoves, histBest
     ) where
 
 import Control.Monad.ST.Unsafe (unsafeIOToST)
@@ -194,6 +194,19 @@ takeAddr = fromIntegral . ((.&.) 0xFFFF)
 {-# INLINE takeMove #-}
 takeMove :: Word32 -> Word16
 takeMove = fromIntegral . (`unsafeShiftR` 16)
+
+-- The move with the best history value (the smallest) of a list which is not empty
+histBest :: History -> [Move] -> Move
+histBest h ms = runST $ do
+    uh <- unsafeIOToST $ U.unsafeFreeze h
+    let hv :: Move -> Int32
+        hv = U.unsafeIndex uh . adr
+        go !b !_  []     = b
+        go !b !bv (x:xs) = let !v = hv x
+                           in if v < bv then go x v xs else go b bv xs
+    return $ case ms of
+                 m:mt -> go m (hv m) mt
+                 []   -> error "histBest: no moves"
 
 -- We want to alloc a fix amount of memory, and although there are
 -- positions which have more (quiet) moves, they are very rare

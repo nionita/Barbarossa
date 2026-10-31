@@ -43,6 +43,8 @@ params = [
         -- attacked by a cheaper enemy piece last, 2 = moves of a piece away from such a square first;
         -- 0 = by history only
         ("epQThr",              2),
+        -- in zero window nodes with futility pruning sort only the quiet moves which will be searched (1 = on)
+        ("epQFilt",             0),
         -- reverse futility pruning (Search.Core.isRevFutil): zero window nodes of a remaining depth up to
         -- epRFutD (0 = off) fail high when the static score is over beta by epRFutA + epRFutM * depth (cp),
         -- plus epRFutT (cp, 0 = off) when own pieces hang (Search.Core.ownHanging)
