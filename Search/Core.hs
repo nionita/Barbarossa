@@ -136,6 +136,7 @@ data PVStRO
           tuning :: !Bool,	-- in tuning we do not prune nor reduce (self play)
           abpol  :: !AbortPolicy,	-- search abort policy (time, nodes or none)
           futmar :: !(UArray Int Int),	-- futility margins of the depths 1 .. maxFutilDepth (index d - 1)
+          hmalsh :: !Int,	-- history malus: shift of the bonus, -1 = off
           rfutd  :: !Int,	-- reverse futility pruning: maximum depth (0 = off)
           rfuta  :: !Int,	-- reverse futility pruning: constant margin (cp)
           rfutm  :: !Int,	-- reverse futility pruning: margin per depth (cp)
@@ -164,6 +165,7 @@ data NodeState
           albe   :: !Bool,	-- in alpha/beta search (for small depths)
           rbmch  :: !Int,	-- number of changes in root best move / score type otherwise
           killer :: !Killer,	-- the current killer moves
+          tried  :: [Move],	-- quiet moves which failed low in this node (only with history malus)
           cursc  :: Path,	-- current alpha value (now plus path & depth)
           cpos   :: MyPos,	-- current position for this node
           pvsl   :: [Pvsl]	-- principal variation list (at root) with node statistics
@@ -251,16 +253,28 @@ pvsInit = PVState { ronly = pvro00, stats = ssts0, absdp = 0, maxdp = 0, abort =
                     lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
 nst0 :: NodeState
 nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore 0, rbmch = -1,
-             movno = 1, spcno = 1, killer = Killer [], albe = False, cpos = initPos, pvsl = [] }
+             movno = 1, spcno = 1, killer = Killer [], tried = [], albe = False, cpos = initPos, pvsl = [] }
              -- we start with spcno = 1 as we consider the first move as special
              -- to avoid in any way reducing the tt move
 
+-- With history malus: remember a quiet move which failed low
+addTried :: PVState -> NodeState -> Move -> [Move]
+addTried sst nst e
+    | hmalsh (ronly sst) >= 0 && moveIsQuiet (cpos nst) e = e : tried nst
+    | otherwise                                   = tried nst
+
+-- History malus at a cut by a quiet move
+cutMalus :: PVState -> NodeState -> Move -> Search ()
+cutMalus sst nst e
+    | hmalsh (ronly sst) >= 0 && moveIsQuiet (cpos nst) e = lift $ histMalus (absdp sst) (hmalsh (ronly sst)) (tried nst)
+    | otherwise                                   = return ()
+
 resetNSt :: Path -> Killer -> NodeState -> NodeState
-resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, rbmch = 0 }
+resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, tried = [], rbmch = 0 }
 
 pvro00 :: PVStRO
 pvro00 = PVStRO { draft = 0, tuning = False, abpol = NoAbort, futmar = defaultFutMargins,
-                  rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
+                  hmalsh = -1, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
 
 alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int, Int)
 alphaBeta abc = do
@@ -273,6 +287,7 @@ alphaBeta abc = do
     est <- gets evalst
     let pvro = PVStRO { draft = d, tuning = intuning abc,
                             abpol = abortPolicy abc, futmar = futMarginsOf (esEParams est),
+                            hmalsh = epHMal (esEParams est) - 1,
                             rfutd = epRFutD (esEParams est), rfuta = epRFutA (esEParams est),
                             rfutm = epRFutM (esEParams est),
                             rfutt = epRFutT (esEParams est) }
@@ -786,10 +801,11 @@ checkFailOrPVLoop b d e s nst = whenAbort nst $ do
     sst <- get
     let mn = movno nst
     if pathScore s <= pathScore (cursc nst)
-       then return $! nst { movno = mn+1, killer = newKiller d s nst }
+       then return $! nst { movno = mn+1, killer = newKiller d s nst, tried = addTried sst nst e }
        else if pathScore s >= b
                then do
                  lift $ betaCut (absdp sst) e -- anounce a beta move (for example, update history)
+                 cutMalus sst nst e
                  incBeta mn
                  let fhsc = s { pathScore = b }
                  return $! nst { cursc = fhsc, movno = mn+1, rbmch = 1 }
@@ -807,9 +823,10 @@ checkFailOrPVLoopZ b d e s nst = whenAbort nst $ do
     sst <- get
     let mn = movno nst
     if pathScore s < b	-- failed low
-       then return $! nst { movno = mn+1, killer = newKiller d s nst }
+       then return $! nst { movno = mn+1, killer = newKiller d s nst, tried = addTried sst nst e }
        else do	-- here is s >= b: failed high
            lift $ betaCut (absdp sst) e -- anounce a beta move (for example, update history)
+           cutMalus sst nst e
            incBeta mn
            let fhsc = s { pathScore = b }
            return $! nst { cursc = fhsc, movno = mn+1, rbmch = 1 }

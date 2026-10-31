@@ -7,7 +7,7 @@ module Moves.Internal.Base (
     doRealMove, doMove, doQSMove, doNullMove, undoMove,
     genMoves, genTactMoves, genEscapeMoves, canPruneMove,
     tacticalPos, zugZwang, isMoveLegal, isKillCand, isTKillCand,
-    betaCut, ttRead, ttStore, curNodes, isTimeout, informCtx,
+    betaCut, histMalus, moveIsQuiet, ttRead, ttStore, curNodes, isTimeout, informCtx,
     mateScore, qsDelta,
     draftStats,
     finNode, countRepetitions,
@@ -338,17 +338,26 @@ ttStore !deep !tp !sc !bestm !nds = do
 
 -- History heuristic table update when beta cut
 betaCut :: Int -> Move -> Game ()
-betaCut absdp m
-    | moveIsCastle m = do
+betaCut absdp m = do
+    t <- getPos
+    when (moveIsQuiet t m) $ do
         s <- get
-        liftIO $ toHist (hist s) m absdp
-    | moveIsNormal m = do
-        s <- get
-        t <- getPos
-        case tabla t (toSquare m) of
-            Empty -> liftIO $ toHist (hist s) m absdp
-            _     -> return ()
-    | otherwise = return ()
+        liftIO $ toHist (epHGrav (esEParams (evalst s))) (hist s) m absdp
+
+-- The moves which update the history
+moveIsQuiet :: MyPos -> Move -> Bool
+moveIsQuiet t m
+    | moveIsCastle m = True
+    | moveIsNormal m = case tabla t (toSquare m) of
+                           Empty -> True
+                           _     -> False
+    | otherwise      = False
+
+-- Malus for the quiet moves which failed low before a cut at the given absolute depth
+histMalus :: Int -> Int -> [Move] -> Game ()
+histMalus !absdp !sh ms = do
+    s <- get
+    liftIO $ mapM_ (fromHist (epHGrav (esEParams (evalst s))) (hist s) absdp sh) ms
 
 -- Captures & promotions
 captOrPromo :: MyPos -> Move -> Bool

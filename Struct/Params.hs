@@ -39,6 +39,12 @@ params = [
         -- the move generation; 0 = zero
         ("epHistPst",           3),
         ("epHistPstSh",        -4),
+        -- history malus: at a beta cut the quiet moves which failed low before get the bonus of the cut shifted right
+        -- by epHMal - 1 (0 = off); epHGrav: 0 = as before (the bonus at the root overflows Int32 and makes the move
+        -- the worst), 2 = the root gets the bonus of absolute depth 1, 3 = no history update at the root,
+        -- 1 = as 2 and gravity, the values stay bounded instead of the rescale
+        ("epHMal",              0),
+        ("epHGrav",             0),
         -- sort of the quiet moves (Moves.Internal.Base.quietSort), bits: 1 = moves of a piece to a square
         -- attacked by a cheaper enemy piece last, 2 = moves of a piece away from such a square first;
         -- 0 = by history only

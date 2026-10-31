@@ -2,7 +2,7 @@
 {-# LANGUAGE BangPatterns #-}
 
 module Moves.History (
-        History, newHist, initHist, toHist, histSortMoves
+        History, newHist, initHist, toHist, fromHist, histSortMoves
     ) where
 
 import Control.Monad.ST.Unsafe (unsafeIOToST)
@@ -154,8 +154,41 @@ histw !d = 1 `unsafeShiftL` dm
           maxd = 31
 
 -- We don't use negative history (i.e. when move did not cut)
-toHist :: History -> Move -> Int -> IO ()
-toHist h m d = addHist h (adr m) (histw d)
+toHist :: Int -> History -> Move -> Int -> IO ()
+toHist grav h m d = case grav of
+    0 -> addHist h (adr m) (histw d)
+    1 -> gravHist h (adr m) (negate $ histwc d)
+    2 -> addHist h (adr m) (histwc d)
+    _ -> if d > 0 then addHist h (adr m) (histw d) else return ()
+
+-- The bonus without the overflow at the root
+{-# INLINE histwc #-}
+histwc :: Int -> Int32
+histwc = histw . max 1
+
+-- The malus for a move which failed low before a cut: the bonus at absolute depth d shifted right by sh
+fromHist :: Int -> History -> Int -> Int -> Move -> IO ()
+fromHist grav h d sh m
+    | grav == 1 = gravHist h (adr m) p
+    | otherwise = do
+        oh <- V.unsafeRead h (adr m)
+        if oh <= highLimit
+           then V.unsafeWrite h (adr m) (oh + p)
+           else do
+               rescaleHist h
+               V.unsafeWrite h (adr m) ((oh `unsafeShiftR` 1) + p)
+    where !p = histwc d `unsafeShiftR` sh
+          highLimit = 1 `unsafeShiftL` 29
+
+-- Gravity: the change gets smaller when the value is already in that direction, |value| stays below 2^30
+-- (b < 0 is better, as the values are sorted in increasing order)
+gravHist :: History -> Int -> Int32 -> IO ()
+gravHist h !ad !b = do
+    o <- V.unsafeRead h ad
+    let !o64 = fromIntegral o :: Int64
+        !b64 = fromIntegral b :: Int64
+        !n   = o64 + b64 - (o64 * abs b64) `shiftR` 30
+    V.unsafeWrite h ad (fromIntegral n)
 
 addHist :: History -> Int -> Int32 -> IO ()
 addHist h !ad !p = do
@@ -163,13 +196,16 @@ addHist h !ad !p = do
     nh <- if (oh >= lowLimit)
              then return $ oh - p -- we subtract, so that the sort is reverse (big first)
              else do
-                 -- Rescale the whole history
-                 forM_ [0..vsize-1] $ \i -> do
-                     o <- V.unsafeRead h i
-                     V.unsafeWrite h i (o `unsafeShiftR` 1)
+                 rescaleHist h
                  return $ (oh `unsafeShiftR` 1) - p
     V.unsafeWrite h ad nh
     where lowLimit = - (1 `unsafeShiftL` 30)
+
+-- Rescale the whole history
+rescaleHist :: History -> IO ()
+rescaleHist h = forM_ [0..vsize-1] $ \i -> do
+    o <- V.unsafeRead h i
+    V.unsafeWrite h i (o `unsafeShiftR` 1)
 
 -- We use a data structure to allow lazyness for the selection of the next
 -- best move (by history values), because we want to use by every selected move
