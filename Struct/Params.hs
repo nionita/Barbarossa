@@ -39,6 +39,9 @@ params = [
         -- the move generation; 0 = zero
         ("epHistPst",           3),
         ("epHistPstSh",        -4),
+        -- history bonus of a cut: 0 = by the absolute depth (1 << (31 - depth)), s > 0 = by the remaining depth d
+        -- (1 << (s + d), at most 1 << 30)
+        ("epHRem",              0),
         -- sort of the quiet moves (Moves.Internal.Base.quietSort), bits: 1 = moves of a piece to a square
         -- attacked by a cheaper enemy piece last, 2 = moves of a piece away from such a square first;
         -- 0 = by history only
