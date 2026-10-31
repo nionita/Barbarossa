@@ -27,6 +27,7 @@ Elo values are from the candidate's side, with 95% error bars.
 | `hmal` | expo | history malus, gravity, root bug by parameters (S17) | compiled off; no games yet |
 | `hrem` | expo | history bonus by remaining depth, `epHRem` (S18) | parked, compiled off; no effect at 10k and 50k nodes |
 | `cmov` | expo | counter move after the killers, `epCMov` (S19) | compiled off; no Elo at 10k nodes |
+| `lfix` | cmov | experiment: fixed LMR level + counter moves + remaining depth bonus (S20) | for measuring only |
 | `lmpr` | nmlm | late move pruning by parameters (S15) | compiled off; SPRT vs off: D3 M1 -9.4, D5 M1 -25.4 |
 | `lmpc` | lmpr | a pruned move counts for the adaptive LMR, `epLmpC` (S15) | compiled off; no games yet |
 
@@ -64,6 +65,7 @@ Open:
 | S17 | History: overflow at the root, malus | late cuts -0.42 +- 0.25 with malus 1/8, nodes +5% | no games yet |
 | S18 | History bonus by remaining depth | late cuts -0.48 +- 0.27, nodes +9%; 10k nodes: 5000 games over 4 settings 50.0%; 50k nodes: s = 20 +3.5 +- 17.1 | parked |
 | S19 | Counter moves | late cuts -0.48 +- 0.14, move 4+ -0.25 +- 0.03, nodes +4%; 10k nodes: about -1 +- 12, 2000 games | ordering better, no Elo seen |
+| S20 | Why ordering changes seemed to raise the nodes | the one perf base run is a single sample, placebo spread; move 4+ at fixed level 11 on two sets is the reliable measure | method; counter moves real |
 
 ## Findings
 
@@ -437,5 +439,41 @@ cut, is stored; it is tried after the killers when legal, not a capture and not 
 
 Same scan as S17: late cuts -0.480 +- 0.137, move 4+ -0.247 +- 0.034, nodes (geomean) +4.1% +- 2.8: the clearest ordering
 gain of this round. Games against off at 10k nodes: openings 0-499 331 / 337 / 332, -0.3 +- 17.5; openings 500-999 339 / 317 / 344,
--1.7 +- 17.8; together 2000 games about -1 +- 12. No timed games. Open: whether 10k node games can show ordering gains at all
-(S4: the prior had +6.3 at 1000 nodes, +2.0 at 10k).
+-1.7 +- 17.8; together 2000 games about -1 +- 12. No timed games. 10k node games do not show ordering gains: they reach depth 4-5 (S3), and the threat sort
+had +3.5 +- 3.2 there against +10.8 in the SPRT (S5).
+
+**S20.** All ordering changes seemed to raise the nodes at fixed depth (user: counterintuitive; suspected the adaptive LMR, and the
+openings as test positions). Test (lfix): the same settings at fixed level 11 and adaptive, depth 10, 16 chunks of `pos400.fen`
+(openings) and 20 chunks of `noguard\roots-500.fen` (real games), geomean nodes against the base of the same row:
+
+| Change | Adaptive, openings | Adaptive, real | Level 11, openings | Level 11, real |
+|---|---|---|---|---|
+| Counter moves | +4.1 | -4.5 | +6.6 | -11.5 |
+| Remaining depth, s = 20 | +9.0 | -5.6 | +4.2 | -6.0 |
+| Remaining depth, half slope | +6.2 | -9.0 | +3.7 | -1.4 |
+| Threat sort removed | +6.8 | -2.9 | -0.9 | -6.4 |
+| Prior removed | +7.7 | -7.5 | +3.4 | -11.0 |
+
+Nearly all up on the openings, nearly all down on the real positions, also when good changes are removed. Placebo: the same engine, normal
+flavour, 5 random history seeds: totals 78.0 - 80.2M on the openings, 75.4 - 79.4M on the real positions. The perf base has 75.5M and 80.3M: outside
+on both sides. The deterministic perf run is one sample of a chaotic tree, and every variant is compared with that one sample. So
+there is no general node increase from better ordering, and node differences of this size say nothing.
+
+Noise floor from the placebo, paired against one seed run: late cuts up to +- 0.18 (one with 2 sigma), move 4+ up to +- 0.04. Standard errors over chunks do
+not cover the shared base run. Move 4+:
+
+| Change | Adaptive, openings | Adaptive, real | Level 11, openings | Level 11, real |
+|---|---|---|---|---|
+| Counter moves | -0.247 | -0.241 | -0.234 | -0.217 |
+| Remaining depth, s = 20 | -0.064 | +0.166 | +0.034 | +0.059 |
+| Remaining depth, half slope | +0.039 | +0.323 | +0.096 | +0.083 |
+| Threat sort removed | +0.012 | +0.056 | +0.115 | +0.121 |
+| Prior removed | -0.094 | +0.038 | -0.009 | +0.027 |
+
+- Counter moves: the same real gain in all four columns.
+- Remaining depth: no gain, worse on the real positions; the gain on the openings under the adaptive LMR (S18) came with the LMR.
+- The fixed level does help the measuring (user): removing the threat sort, a proven gain, shows at level 11 in both sets (+0.115, +0.121), hardly
+  at the adaptive level (+0.012, +0.056). The cause of the increase was not the adaptive LMR, but it blurs the cuts.
+
+Method for ordering changes from now on: move 4+ at fixed level 11 on both sets, against the noise floor; several seeds where it is close; nodes only when
+far outside the placebo spread. Files in `C:\Learn\Data\measurements\search\lfix`.
