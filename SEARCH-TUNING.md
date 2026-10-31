@@ -25,6 +25,7 @@ Elo values are from the candidate's side, with 95% error bars.
 | `nmlm` | rfth | LMR without the near-mate guard (S13) | SPRT +13.0 vs hprf, the best version so far |
 | `lmfx` | nmlm | LMR level fixed by parameter `epLmrFix` (S13) | closed, compiled = nmlm; SPRT vs adaptive: level 14 -36.4, level 11 -8.6 |
 | `lmpr` | nmlm | late move pruning by parameters (S15) | compiled off; SPRT D3 M1 -9.4 vs off |
+| `lmpc` | lmpr | a pruned move counts for the adaptive LMR, `epLmpC` (S15) | compiled off; no games yet |
 
 Only `hpqt` is pushed; the other branches are local, and the commits cited here exist only while the branches
 are kept.
@@ -316,4 +317,21 @@ SPRT D3 M1 vs off (MEMO, same binary, 10+0.1, [0, 5]): H0 after 3340 games, -9.4
 Side effect on the adaptive LMR: a pruned move no longer adds its +1 to the counter (`moreLMR`), the re-searches of the
 others still subtract. Level after draft 11 on tests.fen (50 positions): off mean 14.28, D3 M1 13.80 (49 read), D5 M1
 13.52, lower than off in 22 positions and higher in 5; nodes -6.1%, -16.6%. So the LMP also reduces the other moves less.
-The missing +1 as the cause and the share of this in the -9.4 are not measured. D5 M1 has the same limits up to depth 3.
+The share of this in the -9.4 is not measured. D5 M1 has the same limits up to depth 3.
+
+Variant (lmpc cae8bcd, compiled off, off identical: 9919183 nodes): a move pruned only by the LMP adds `epLmpC` to the
+counter. Same measurement, depth 11, off 14.28 and 26486056 nodes (`roots-2000\lmp-credit-tests-d11`):
+
+| Setting | Mean level | Nodes vs off |
+|---|---|---|
+| D3 C0 | 13.82 | -6.1% |
+| D3 C1 | 14.12 | -17.6% |
+| D3 C2 | 14.64 | -50.7% |
+| D3 C4 | 14.84 | -28.3% |
+| D3 C8 | 14.98 | -44.3% |
+| D5 C1 | 14.12 | -46.0% |
+| D5 C4 | 14.92 | -41.8% |
+
+So the missing count does lower the level: C1 brings most of it back, more goes above off. The nodes do not follow the
+credit in order: the total of 50 positions is ruled by a few of them, and each change moves the tree. C1 is the setting
+that counts a pruned move as a move that failed low; for games D3 C1 against off, no result yet.
