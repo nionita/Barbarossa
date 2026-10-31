@@ -25,6 +25,7 @@ Elo values are from the candidate's side, with 95% error bars.
 | `nmlm` | rfth | LMR without the near-mate guard (S13) | SPRT +13.0 vs hprf, the best version so far |
 | `lmfx` | nmlm | LMR level fixed by parameter `epLmrFix` (S13) | closed, compiled = nmlm; SPRT vs adaptive: level 14 -36.4, level 11 -8.6 |
 | `hmal` | expo | history malus, gravity, root bug by parameters (S17) | compiled off; no games yet |
+| `hrem` | expo | history bonus by remaining depth, `epHRem` (S18) | compiled off; s = 20: +18.8 +- 17.4 at 10k nodes |
 | `lmpr` | nmlm | late move pruning by parameters (S15) | compiled off; SPRT vs off: D3 M1 -9.4, D5 M1 -25.4 |
 | `lmpc` | lmpr | a pruned move counts for the adaptive LMR, `epLmpC` (S15) | compiled off; no games yet |
 
@@ -60,6 +61,7 @@ Open:
 | S15 | Late move pruning | off = nmlm; typical saving at most -19% on 50 roots; SPRT D3 M1 -9.4, D5 M1 -25.4; it lowers the adaptive LMR level | rejected in this form |
 | S16 | Speed: module interfaces | no speed from more unfoldings or an explicit Moves.Core export list ; direct timers: eval 29%, quiet sort 7%, update of the position 4%, no large hot spot | structure does not limit the speed |
 | S17 | History: overflow at the root, malus | late cuts -0.42 +- 0.25 with malus 1/8, nodes +5% | no games yet |
+| S18 | History bonus by remaining depth | late cuts -0.48 +- 0.27, nodes +9%; +18.8 +- 17.4 at 10k nodes, 1000 games | promising |
 
 ## Findings
 
@@ -397,3 +399,14 @@ direction is better ordering, with more nodes at fixed depth (S2: node totals sa
 process (the TT carries over, without error bars) gave other signs for some settings, e.g. root as depth 1 worse:
 fresh TT per chunk and shared TT are not the same measurement. Malus 1/8 was also the best in that run. `SelfPlay -P`
 ignores `-s` and `-f`: chunks need their own files. On 50 positions root as depth 1 had +29% nodes: noise of few positions.
+
+**S18.** History bonus by the remaining depth (hrem, from expo, compiled off, off identical: 9919183 nodes): `epHRem` = s > 0:
+bonus `1 << (s + d)`, at most `1 << 30`, instead of `1 << (31 - absolute depth)`. No negative values, the exponential shape
+stays; at a fixed draft and without reductions the two differ only by a constant. So what changes: reduced and extended
+lines count by what is left to search, later iterations no longer reuse the bonus of a ply, no overflow at the root. s = 20:
+d = 1 gets 2^21, over the prior (piece step 1024). User: negative history and squared bonuses lost Elo in earlier tries.
+
+Same scan as S17: late cuts -0.482 +- 0.272, move 4+ -0.064 +- 0.075, nodes (geomean) +9.0% +- 3.7. Games against off (same
+binary, normal flavour, compiled eval, 10k nodes per move, 4 shards of 125 pairs, 6.5 minutes each here): 1000 games, W 353
+D 348 L 299, +18.8 +- 17.4; shards +37.7, +8.3, +6.9, +22.3. The games are node limited, so the extra nodes per depth are
+already paid. Only s = 20 was played; no timed games yet.
