@@ -57,7 +57,7 @@ Open:
 | S13 | Node scan and shadow on real-game roots | shadow: endgame wrong cuts come from opponent passers on 6/7 (10x), own hanging 2.7x; node totals are ruled by the LMR near-mate guard, without it the 20 worst roots cost 344x less; without it no node minimum down to M10; removal SPRT +13.0; fixed LMR level against adaptive: 14 -36.4, 11 -8.6 | guard removal accepted; adaptive LMR stays; passer filter open |
 | S14 | HCE: the en-prise term and what RFP shows about it | | idea |
 | S15 | Late move pruning | off = nmlm; typical saving at most -19% on 50 roots; SPRT D3 M1 -9.4; it lowers the adaptive LMR level | D3 M1 rejected |
-| S16 | Speed: module interfaces | no speed from more unfoldings or an explicit Moves.Core export list | structure does not limit the speed |
+| S16 | Speed: module interfaces | no speed from more unfoldings or an explicit Moves.Core export list ; direct timers: eval 29%, quiet sort 7%, update of the position 4%, no large hot spot | structure does not limit the speed |
 
 ## Findings
 
@@ -347,3 +347,21 @@ Allocation: 70 GB for 9.9M nodes, about 7 KB per node, GC only 2% of the time: a
 Cleanup (expo 3227638, from nmlm): explicit export list of Moves.Core, unused exports and 3 dead functions removed. Same
 engine (9919183 nodes, perft of the 5 standard positions as known), same speed (399k against 396k nodes/s, 5 alternating
 runs; this PC was throttling, about 590k before: compare speeds only in alternating runs).
+
+Profile (expo). GHC profile with late cost centres (`--library-profiling --executable-profiling --ghc-options "-fno-prof-auto
+-fprof-late"`, needs `Other-extensions: TemplateHaskell` in the stanza, otherwise the TH step finds no objects): 3 times
+slower (155k nodes/s) also with `--profiling-detail=none`, the vector operations remain as cost centres with hundreds of
+millions of entries, so it overstates the sort (about 30%). Its call counts are right; its times not. Direct timers
+(QueryPerformanceCounter, around forced calls, optimized build, runs agree within 1%), each call corrected by half of
+the measured timer cost (93 ns per timed call), on 16.65 s without timers:
+
+| Part | Calls | Per call | Share |
+|---|---|---|---|
+| posEval | 9571623 | 0.50 us | 29% |
+| dirSort (depth up to 2) | 588112 | 1.38 us | 5% |
+| makeMTS, selection steps (depth over 2) | 3315191 | 0.11 us | 2% |
+| updatePos | 9986434 | 0.07 us | 4% |
+| not timed: move generation, SEE, TT, search loop | | | 60% |
+
+Eval is already lazy (`staticScore`), yet 96% of the nodes need it, mostly as the QS stand pat. Allocation is spread: the
+largest cost centre is pvZeroW with 12%. Files in `C:\Learn\Data\measurements\search\speed`.
