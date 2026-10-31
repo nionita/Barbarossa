@@ -25,7 +25,7 @@ Elo values are from the candidate's side, with 95% error bars.
 | `nmlm` | rfth | LMR without the near-mate guard (S13) | SPRT +13.0 vs hprf, the best version so far |
 | `lmfx` | nmlm | LMR level fixed by parameter `epLmrFix` (S13) | closed, compiled = nmlm; SPRT vs adaptive: level 14 -36.4, level 11 -8.6 |
 | `hmal` | expo | history malus, gravity, root bug by parameters (S17) | compiled off; no games yet |
-| `hrem` | expo | history bonus by remaining depth, `epHRem` (S18) | compiled off; no effect at 10k nodes (5000 games) |
+| `hrem` | expo | history bonus by remaining depth, `epHRem` (S18) | parked, compiled off; no effect at 10k and 50k nodes |
 | `lmpr` | nmlm | late move pruning by parameters (S15) | compiled off; SPRT vs off: D3 M1 -9.4, D5 M1 -25.4 |
 | `lmpc` | lmpr | a pruned move counts for the adaptive LMR, `epLmpC` (S15) | compiled off; no games yet |
 
@@ -61,7 +61,7 @@ Open:
 | S15 | Late move pruning | off = nmlm; typical saving at most -19% on 50 roots; SPRT D3 M1 -9.4, D5 M1 -25.4; it lowers the adaptive LMR level | rejected in this form |
 | S16 | Speed: module interfaces | no speed from more unfoldings or an explicit Moves.Core export list ; direct timers: eval 29%, quiet sort 7%, update of the position 4%, no large hot spot | structure does not limit the speed |
 | S17 | History: overflow at the root, malus | late cuts -0.42 +- 0.25 with malus 1/8, nodes +5% | no games yet |
-| S18 | History bonus by remaining depth | late cuts -0.48 +- 0.27, nodes +9%; 10k nodes: 5000 games over 4 settings 50.0% | no effect at this depth |
+| S18 | History bonus by remaining depth | late cuts -0.48 +- 0.27, nodes +9%; 10k nodes: 5000 games over 4 settings 50.0%; 50k nodes: s = 20 +3.5 +- 17.1 | parked |
 
 ## Findings
 
@@ -424,4 +424,7 @@ reachable depths, proposal of the user):
 
 All 5000 games together: 1672 / 1656 / 1672, exactly 50.0% (mixed settings). The first +18.8 was noise. The better late cuts did
 not become Elo at 10k nodes. These games are shallow: the cap, the rescale, the aging and the weight of reduced lines
-act more in deeper search (user), so a deeper result can differ. No timed games.
+act more in deeper search (user), so a deeper result can differ.
+
+At 50k nodes (s = 20, openings 1000-1499, 1000 games, about 55 minutes): 321 / 368 / 311, +3.5 +- 17.1; shards -29.3, +23.7, +22.3,
+-2.8. No effect seen at 5 times the nodes either, within +- 17, which does not exclude a small one. Parked, no timed games.
