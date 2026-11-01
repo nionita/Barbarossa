@@ -348,7 +348,7 @@ pvRootSearch :: Int -> Int -> Int -> Seq Move -> Alt Move -> Bool
 pvRootSearch a b d lastpath rmvs aspir = do
     pos <- lift getPos
     edges <- if null (unalt rmvs)	-- only when d==1, but we could have lastpath from the previous real move
-                then genAndPick nst0 { cpos = pos } Nothing a b d	-- no IID here as d==1
+                then genAndPick False nst0 { cpos = pos } Nothing a b d	-- no IID here as d==1
                 else case lastpath of
                          Seq []    -> return rmvs	-- does this happen? - check to simplify!
                          Seq (e:_) -> return $ Alt $ e : delete e (unalt rmvs)
@@ -540,7 +540,7 @@ pvSearch nst !a !b !d = do
            -- Use the found TT move as best move
            let mttmv = if hdeep > 0 then Just e else Nothing
                !nst'  = nst { cpos = pos }
-           edges <- genAndPick nst' mttmv a b d
+           edges <- genAndPick False nst' mttmv a b d
            case unalt edges of
               []   -> return $! failHardNoValidMove a b pos
               ev:_ -> do
@@ -605,15 +605,15 @@ pvZeroW !nst !b !d = do
                    -- Use the TT move as best move
                    let mttmv = if hdeep > 0 then Just e else Nothing
                        !nst' = nst { cpos = pos }
-                   edges <- genAndPick nst' mttmv bGrain b d
+                   -- futility pruning:
+                   fm <- gets (futmar . ronly)
+                   let !prune | useFutility = isPruneFutil fm False d bGrain (staticScore pos)
+                              | otherwise   = False
+                   edges <- genAndPick prune nst' mttmv bGrain b d
                    case unalt edges of
                       []   -> return $! failHardNoValidMove bGrain b pos
                       ev:_ -> do
                         !nodes0 <- gets (sNodes . stats)
-                        -- futility pruning:
-                        fm <- gets (futmar . ronly)
-                        let !prune | useFutility = isPruneFutil fm False d bGrain (staticScore pos)
-                                   | otherwise   = False
                         -- Loop thru the moves
                         let kill1 = case nmhigh of
                                         NullMoveThreat s -> newTKiller pos d s
@@ -855,8 +855,8 @@ newTKiller pos d s
 
 -- We generate the moves, which come already sorted from genMoves
 -- But we pick the best move (TT or IID) and the killers first
-genAndPick :: NodeState -> Maybe Move -> Int -> Int -> Int -> Search (Alt Move)
-genAndPick !nst mttmv !a !b !d = do
+genAndPick :: Bool -> NodeState -> Maybe Move -> Int -> Int -> Int -> Search (Alt Move)
+genAndPick !flt !nst mttmv !a !b !d = do
     path <- case mttmv of
                 Just mv -> return [mv]
                 Nothing -> bestMoveFromIID nst a b d	-- it will do nothing for AllNode
@@ -873,7 +873,7 @@ genAndPick !nst mttmv !a !b !d = do
             kl | cm /= Move 0 && cm `notElem` kl0 && cm `notElem` path
                  && isMoveLegal (cpos nst) cm && not (moveIsCapture (cpos nst) cm) = kl0 ++ [cm]
                | otherwise = kl0
-        esp <- genMovesC wgt o1 o2 d
+        esp <- genMovesC flt wgt o1 o2 d
         let es = bestFirst path kl esp
         return $ Alt es
 

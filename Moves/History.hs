@@ -2,7 +2,7 @@
 {-# LANGUAGE BangPatterns #-}
 
 module Moves.History (
-        History, newHist, initHist, toHist, histSortMoves, getCounter, setCounter,
+        History, newHist, initHist, toHist, histSortMoves, histBest, getCounter, setCounter,
         contSortMoves, contOffset, contUpdate, clearCont
     ) where
 
@@ -237,6 +237,19 @@ takeAddr = fromIntegral . ((.&.) 0xFFFF)
 {-# INLINE takeMove #-}
 takeMove :: Word32 -> Word16
 takeMove = fromIntegral . (`unsafeShiftR` 16)
+
+-- The move with the best history value (the smallest) of a list which is not empty
+histBest :: History -> [Move] -> Move
+histBest h ms = runST $ do
+    uh <- unsafeIOToST $ U.unsafeFreeze h
+    let hv :: Move -> Int32
+        hv = U.unsafeIndex uh . adr
+        go !b !_  []     = b
+        go !b !bv (x:xs) = let !v = hv x
+                           in if v < bv then go x v xs else go b bv xs
+    return $ case ms of
+                 m:mt -> go m (hv m) mt
+                 []   -> error "histBest: no moves"
 
 -- As histSortMoves, with the continuation history in the sort value
 contSortMoves :: Int -> Int -> Int -> Int -> History -> [Move] -> [Move]

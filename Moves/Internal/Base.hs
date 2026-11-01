@@ -79,11 +79,14 @@ draftStats dst = do
     put s { mstats = addStats (mstats s) dst }
 
 genMoves :: Int -> Game ([Move], [Move])
-genMoves = genMovesC 0 (-1) (-1)
+genMoves = genMovesC False 0 (-1) (-1)
 
+-- With the flag (zero window node with futility pruning): most quiet moves will be pruned without searching
+-- them, so only the others are sorted. The best pruned move stays in the list: it counts as a move for the test
+-- for no valid moves and, when it comes first, as the best move of a fail low
 -- With the continuation history: weight and the offsets of the rows (< 0: none)
-genMovesC :: Int -> Int -> Int -> Int -> Game ([Move], [Move])
-genMovesC w o1 o2 d = do
+genMovesC :: Bool -> Int -> Int -> Int -> Int -> Game ([Move], [Move])
+genMovesC flt w o1 o2 d = do
     p <- getPos
     h <- gets hist
     qm <- gets (epQThr . esEParams . evalst)
@@ -98,9 +101,15 @@ genMovesC w o1 o2 d = do
             let l0 = genMoveCast p
                 (l1q, l1r) = genMovePromo p
                 (l2w, l2l) = genMoveCaptWL p
-                l3 = quietSort srt qm p $ genMoveNCapt p
+                l3 | flt       = quietSort srt qm p $ quietFilter h p $ genMoveNCapt p
+                   | otherwise = quietSort srt qm p $ genMoveNCapt p
             -- Loosing captures after non-captures
             return (l1q ++ l2w, l1r ++ l0 ++ l3 ++ l2l)
+
+quietFilter :: History -> MyPos -> [Move] -> [Move]
+quietFilter h p ms = case partition (canPruneMove p) ms of
+                         ([], ke) -> ke
+                         (pr, ke) -> histBest h pr : ke
 
 -- Sort of the quiet moves by history; with the mode bits (epQThr) in up to 3 groups, each sorted by
 -- history: moves of a piece away from a square attacked by a cheaper enemy piece first (2), moves of

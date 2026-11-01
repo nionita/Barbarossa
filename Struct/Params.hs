@@ -55,7 +55,7 @@ params = [
         ("epRFutD",             6),
         ("epRFutA",             0),
         ("epRFutM",            50),
-        ("epRFutT",             0),
+        ("epRFutT",           100),
         -- late move reduction: fixed level (0 = least reductions .. 15 = most), -1 = adaptive (Search.Core.moreLMR)
         ("epLmrFix",           -1),
         -- drawishness scale of the whole eval (Eval.Core.normalParts), instead of the heuristic rules of
