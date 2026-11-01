@@ -502,3 +502,41 @@ Against this floor the malus shows nothing, in no size, and the signs change bet
 neither. Gravity alone is clearly worse, in both sets: it pulls the good values back without any malus to balance them. The control stays visible, on the real positions
 at about 2 times the floor. Counter moves (-0.234, -0.217) are 3 to 8 times the floor. The malus is parked in this form: bonus and malus on the scale
 `1 << (31 - absolute depth)`. No games.
+
+**S22.** Two SPRTs on MEMO, 10+0.1, `open-moves-uniq-fm1.fen` (results in `C:\Learn\Data\results\memo\fsrt-expo-tc10`, `t100-ada-tc10`):
+
+| Run | Change | Bounds | Games | Elo | LLR | Outcome |
+|---|---|---|---|---|---|---|
+| `fsrt` vs `expo` | filter before the quiet sort | [-5, 0] | 4422 | +6.68 +- 7.72 | 2.96 | H1: no regression |
+| `t100` vs `lmfx` | RFP margin +100 when own pieces hang (`epRFutT=100`) | [0, 5] | 12000 | +4.75 +- 4.58 | 2.06 | no decision, ended at the game limit |
+
+The filter was tested for no loss, so +6.68 is not a proven gain. T100 did not reach the bound; its error bar just excludes 0, LOS 97.9%.
+
+**S23.** Continuation history (`chis` e2ad098: by the move before and the own move before, `epCHist` bits, `epCHistW` weight in quarters, off identical: 9919183 nodes,
+`epCMov=1`: 9790448). Base: level 11 with counter moves on. Files in `C:\Learn\Data\measurements\search\chis`.
+
+Screen, perf build, 15 settings, depth 10, 16 chunks of the openings, 20 of the real positions (`screen.txt`), best three by the mean of both sets:
+
+| Setting | Move 4+ openings | Move 4+ real |
+|---|---|---|
+| `epCHist=1, W=4` | -0.115 | -0.205 |
+| `epCHist=3, W=2` | -0.044 | -0.243 |
+| `epCHist=2, W=16` | -0.028 | -0.194 |
+
+Against one perf base run, and almost all 15 settings are down on the real positions (-0.058 to -0.243): the base shows in this pattern (S20).
+
+The three and the base again, normal flavour, 4 random seeds each, means over the seeds (`seeds-fixed.txt`; spread = largest - smallest):
+
+| Setting | Move 4+ openings (spread) | Move 4+ real (spread) | Against base |
+|---|---|---|---|
+| Base | 1.733 (0.035) | 1.968 (0.122) | |
+| `epCHist=1, W=4` | 1.643 (0.088) | 1.917 (0.085) | -0.090, -0.052 |
+| `epCHist=3, W=2` | 1.627 (0.080) | 1.898 (0.090) | -0.107, -0.070 |
+| `epCHist=2, W=16` | 1.683 (0.131) | 1.873 (0.146) | -0.050, -0.095 |
+
+All three gain in both sets, 1 to 3 times the single-run floor (S21), about a third to a half of what the counter moves gave (-0.234, -0.217); which setting is best is not resolved
+by these numbers. Speed (`speed-fixed.txt`, tests.fen depth 10, 6 alternating pairs, `epCHist=3, W=2` against counter moves alone): -1.9% nodes/s, standard error 0.7, pairs +0.4% to -4.1%. The PC was
+slower than usual in this run (about 390k against about 620k nodes/s in the runs before the games), so this is a rough number.
+
+No games: the script took the group name for the setting (`epLmrFix`, from splitting at the first `=`), so the speed stage ran without the candidate and the candidate engine of the timed
+games was started with `-p epLmrFix`. It lost all 4628 games on time, from the first move on. Stopped at 07:26 after 6.5 hours; the seed table was recomputed from the saved chunks, the speed stage rerun.

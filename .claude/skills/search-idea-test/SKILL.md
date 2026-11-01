@@ -64,6 +64,8 @@ placebo when the method changes. Controls with known outcome: `epQThr=0` (threat
 - Record the prediction before the result comes (S13). If two explanations remain, design the test that separates them.
 - Say what a result does not exclude: +3.5 +- 17 does not mean zero.
 - State estimates of time with their basis and correct them when they were wrong.
+- An unattended chain of stages: run every stage first with a minimal input, and let a game stage stop itself when one side loses on time from the start. A wrong parameter
+  in a late stage cost 6.5 hours of games (S23), and the first lines of its output would have shown it.
 
 ## 4. Environment
 
