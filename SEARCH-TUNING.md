@@ -540,3 +540,8 @@ slower than usual in this run (about 390k against about 620k nodes/s in the runs
 
 No games: the script took the group name for the setting (`epLmrFix`, from splitting at the first `=`), so the speed stage ran without the candidate and the candidate engine of the timed
 games was started with `-p epLmrFix`. It lost all 4628 games on time, from the first move on. Stopped at 07:26 after 6.5 hours; the seed table was recomputed from the saved chunks, the speed stage rerun.
+
+**S24.** New base `fbas` 24a69e7 = `expo` + filter always on (parameter removed) + `epRFutT=100` compiled + counter moves and continuation history compiled off. Same nodes as `fsrt` with
+`epQFilt=1,epRFutT=100`, tests.fen depth 10: 11196580; `epCMov=1`: 11794874; `epCMov=1,epCHist=3,epCHistW=2`: 12086912. The filter and T100 were measured apart, against different parents, never
+together. Smoke test of the continuation history against the counter moves: at 10+0.1 16 games, 8 points, no time losses; at 1+0.01 24 games, 22 time losses, 16 of them by the continuation history side, by a
+few ms. Too few games to say more; the time losses are to be watched in the SPRT (the tables are cleared at the start of every search).

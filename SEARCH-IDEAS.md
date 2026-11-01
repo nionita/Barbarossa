@@ -12,9 +12,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
 
 ## Now (2026-11-01)
 
-- Best version by games: `nmlm` (+13.0 vs `hprf`, which has both orderings and RFP). `expo` = `nmlm` with cleanups, same search.
-- Finished on MEMO: filter before the quiet sort no regression (+6.7 +- 7.7), RFP threat margin T100 +4.8 +- 4.6 without an SPRT decision. Neither compiled in yet.
-- Next for games: counter moves, continuation history on top of them (no valid games yet, S23).
+- Current base: `fbas` (S24) = `expo` (`nmlm` with cleanups, +13.0 vs `hprf`) + filter + T100, the last two measured apart.
+- Running on MEMO: counter moves against `fbas` (`cmov-fbas-tc10`), continuation history against counter moves (`chis-cmov-tc10`).
 
 ## Methods
 
@@ -64,7 +63,7 @@ Evidence:
 | 2026-10 | With threat sort, against `qthr` | SPRT [0, 5], 10+0.1 | +5.8 +- 4.6 | S7 | worked |
 | 10-31 | Removed | move 4+, level 11 | -0.009, +0.027 | S20 | below or near the floor |
 
-### Counter moves (status: promising)
+### Counter moves (status: running)
 Now: real ordering gain, the same in all four measures. Elo unknown: 10k-node games cannot show it. 2026-10-31.
 Forms:
 | Form | Branch, commit | Parameters | Differs by |
@@ -78,7 +77,7 @@ Evidence:
 | 10-31 | After killers | 10k nodes, 2000 games, 2 batches | about -1 +- 12 | S19 | not informative |
 Interpretation history: 10-31: "no Elo" withdrawn, the test cannot see ordering gains (S3, S5).
 Review when: LMR retune.
-Next: SPRT at 10+0.1, [0, 5], when MEMO is free.
+Next: SPRT at 10+0.1, [0, 5] on `fbas` (`cmov-fbas-tc10`).
 
 ### History malus (status: parked)
 Now: no gain in any size under the current method; the earlier late-cut gain did not repeat. Fits the user's earlier experience. 2026-10-31.
@@ -122,7 +121,7 @@ Now: clearly worse alone, no gain with a malus. It pulls good values back withou
 Forms: `hmal` f10edb1, `epHGrav=1`.
 Evidence: move 4+ at level 11: alone +0.570, +0.733; with malus 1/8 -0.054, +0.138 (S21). No games.
 
-### Continuation history (status: promising)
+### Continuation history (status: running)
 Now: on top of counter moves a smaller ordering gain, in both sets, about a third to a half of theirs, for about 2% speed; best setting not resolved. Elo unknown. 2026-11-01.
 Forms:
 | Form | Branch, commit | Parameters | Differs by |
@@ -136,7 +135,7 @@ Evidence:
 | 11-01 | `epCHist=3, W=2` | speed, 6 pairs, disturbed PC | -1.9% +- 0.7 (SE) | S23 | rough |
 | 11-01 | - | timed games, script error | none valid | S23 | no reading |
 Review when: LMR retune.
-Next: timed SPRT [0, 5], `epCMov=1,epCHist=3,epCHistW=2` against `epCMov=1`, once the counter moves are decided or in parallel with them.
+Next: timed SPRT [0, 5] on `fbas`, `epCMov=1,epCHist=3,epCHistW=2` against `epCMov=1` (`chis-cmov-tc10`); watch the time losses (S24).
 
 ## Pruning
 
@@ -152,7 +151,7 @@ Evidence:
 Interpretation history: S10's method looked good, then S13 showed the blow-ups behind it.
 Review when: the margin measured without the LMR guard (S8 ran with it); timed games for M25 and M38.
 
-### RFP: more margin when own pieces hang (status: promising)
+### RFP: more margin when own pieces hang (status: adopted)
 Now: a margin of 100 is probably a small gain: +4.8 +- 4.6, SPRT [0, 5] undecided at 12000 games (LLR 2.06). Skipping RFP in these nodes lost. 2026-11-01.
 Forms: `rfth` 7693aa9, `lmfx` 32c4bb8, `epRFutT`.
 Evidence:
@@ -161,7 +160,7 @@ Evidence:
 | 2026-10 | T10000 (no RFP) | 10k nodes, 8000 games | -12.5 +- 6.3 | S12 | skipping is wrong |
 | 2026-10 | T25 .. T200 | node scan | noise | S12 | old method |
 | 2026-11 | T100 | SPRT [0, 5], 10+0.1, 12000 games | +4.75 +- 4.58 | S22 | likely small gain, no decision |
-Next: decision (user) whether to compile `epRFutT=100` on this evidence.
+2026-11-01: compiled in `fbas` on this evidence (user), without a passed SPRT.
 
 ### RFP: no cut with an opponent passer on rank 6/7 (status: open)
 Now: the sharpest signal of the shadow diagnostic, never played; wrong cuts can be cheap. 2026-10-31.
@@ -230,10 +229,10 @@ Now: no effect on speed; more unfoldings neither. Explicit exports stay for clea
 ### Statistics counters off in the engine (status: adopted)
 Now: -2.2% time, -4.6% allocation measured in SelfPlay, same nodes; on `expo` 1e7130b, not re-measured in the engine. 2026-10-31.
 
-### Filter before the quiet sort (status: promising)
+### Filter before the quiet sort (status: adopted)
 Now: +3.0% nodes/s against `expo`, 8% less allocation per node, but 2.5% more nodes (LMR move numbers), time to depth -0.5%. Games decide. 2026-10-31.
 Forms: `fsrt` 696882e, `epQFilt=1`. 2026-11-01: non-regression SPRT [-5, 0] against `expo` passed: +6.68 +- 7.72, 4422 games (S22).
-Next: compile it in, remove the parameter.
+2026-11-01: always on in `fbas`, parameter removed.
 
 ### Other speed candidates (status: open)
 Now: each small, `PROFILING.md` lists them: search state in mutable arrays by depth (user; half of the allocation is in the search itself), quiet generation
