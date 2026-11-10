@@ -12,9 +12,9 @@ are not reviewed here. The user's experience: negative history and squared bonus
 
 ## Now (2026-11-01)
 
-- Current base: `fbas` (S24) = `expo` (`nmlm` with cleanups, +13.0 vs `hprf`) + filter + T100, the last two measured apart.
-- Running on MEMO: counter moves against `fbas` (`cmov-fbas-tc10`).
-- Continuation history on top of counter moves passed: +10.5 +- 7.2 (S25).
+- Current base: `chcm` (S26) = `fbas` + counter moves + continuation history. `fbas` (S24) = `expo` (`nmlm` with cleanups, +13.0 vs `hprf`) + filter + T100, the last two measured apart.
+- Continuation history on top of counter moves passed: +10.5 +- 7.2 (S25); counter moves alone +1.5 +- 6.8, stopped (S26). Both compiled in `chcm`.
+- MEMO free.
 
 ## Methods
 
@@ -64,7 +64,7 @@ Evidence:
 | 2026-10 | With threat sort, against `qthr` | SPRT [0, 5], 10+0.1 | +5.8 +- 4.6 | S7 | worked |
 | 10-31 | Removed | move 4+, level 11 | -0.009, +0.027 | S20 | below or near the floor |
 
-### Counter moves (status: running)
+### Counter moves (status: adopted)
 Now: real ordering gain, the same in all four measures. Elo unknown: 10k-node games cannot show it. 2026-10-31.
 Forms:
 | Form | Branch, commit | Parameters | Differs by |
@@ -76,9 +76,11 @@ Evidence:
 | 10-31 | After killers | move 4+, adaptive | -0.247, -0.241 | S19, S20 | real |
 | 10-31 | After killers | move 4+, level 11 | -0.234, -0.217 | S20 | real, far above the floor |
 | 10-31 | After killers | 10k nodes, 2000 games, 2 batches | about -1 +- 12 | S19 | not informative |
+| 11-10 | After killers | SPRT [0, 5], 10+0.1, stopped at 5398 games | +1.54 +- 6.80 | S26 | small at most |
 Interpretation history: 10-31: "no Elo" withdrawn, the test cannot see ordering gains (S3, S5).
 Review when: LMR retune.
-Next: SPRT at 10+0.1, [0, 5] on `fbas` (`cmov-fbas-tc10`).
+2026-11-10: the large cut gain did not carry Elo alone; kept in `chcm` because the continuation history was measured on top of them (S25).
+Next (optional): continuation history with and without counter moves, to see whether they add anything.
 Prediction (2026-11-10, before the result): +3 to +10, most likely about +5; H1 more likely than H0. Basis: twice the cut gain of the threat sort (S20: -0.234 / -0.217
 against +0.115 / +0.121), which gave +10.8 in its SPRT; gains in cuts turn into less Elo than that; almost no speed cost. Strong engines report a few Elo for counter moves.
 
@@ -124,7 +126,7 @@ Now: clearly worse alone, no gain with a malus. It pulls good values back withou
 Forms: `hmal` f10edb1, `epHGrav=1`.
 Evidence: move 4+ at level 11: alone +0.570, +0.733; with malus 1/8 -0.054, +0.138 (S21). No games.
 
-### Continuation history (status: promising)
+### Continuation history (status: adopted)
 Now: on top of counter moves a smaller ordering gain, in both sets, about a third to a half of theirs, for about 2% speed; best setting not resolved. Elo unknown. 2026-11-01.
 Forms:
 | Form | Branch, commit | Parameters | Differs by |
@@ -138,7 +140,7 @@ Evidence:
 | 11-01 | `epCHist=3, W=2` | speed, 6 pairs, disturbed PC | -1.9% +- 0.7 (SE) | S23 | rough |
 | 11-01 | - | timed games, script error | none valid | S23 | no reading |
 | 11-10 | `epCHist=3, W=2` on counter moves | SPRT [0, 5], 10+0.1, 5010 games | +10.54 +- 7.22 | S25 | gain, larger than predicted |
-Interpretation history: 2026-11-10: the prediction 0 to +4 was too low; small cut gains at level 11 can carry a real gain in games.
+Interpretation history: 2026-11-10: the prediction 0 to +4 was too low; small cut gains at level 11 can carry a real gain in games. Compiled in `chcm` (`epCHist=3`, `epCHistW=2`).
 Review when: LMR retune.
 Next: timed SPRT [0, 5] on `fbas`, `epCMov=1,epCHist=3,epCHistW=2` against `epCMov=1` (`chis-cmov-tc10`); watch the time losses (S24).
 Prediction (2026-11-10, before the result): 0 to +4, likely no quick decision. Basis: a third to a half of the counter move cut gain (S23), minus about 2% speed (about

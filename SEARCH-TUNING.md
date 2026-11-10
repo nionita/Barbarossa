@@ -549,3 +549,12 @@ few ms. Too few games to say more; the time losses are to be watched in the SPRT
 **S25.** Continuation history on top of the counter moves, SPRT on MEMO (`chis-cmov-tc10`, `fbas` 24a69e7, `epCMov=1,epCHist=3,epCHistW=2` against `epCMov=1`, the opponent
 shows as `fbas`), 10+0.1, [0, 5]: +10.54 +- 7.22, 5010 games, LLR 2.96, H1 accepted, 11.4 hours. One time loss, by the opponent. The prediction was 0 to +4 (S24 register): the cut
 gain at level 11 (S23, a third to a half of the counter moves) underrated it, and the speed cost of about 2% did not weigh much. Result in `C:\Learn\Data\results\memo\chis-cmov-tc10`.
+
+**S26.** Counter moves alone against `fbas` (`cmov-fbas-tc10`, `epCMov=1`), 10+0.1, [0, 5], stopped by hand at 5398 games: +1.54 +- 6.80, LLR -0.40, no decision. The prediction was
++3 to +10. Stopped because the pair counter moves + continuation history is proven (S25) and the remaining question is whether the counter moves add anything on top of the
+continuation history, which this match does not answer.
+
+Cut gains and Elo, at fixed level 11 against timed games: counter moves -0.234 / -0.217 gave about +1.5; continuation history on top of them -0.107 / -0.070 gave +10.5. The cut rate
+at move 4+ does not rank ordering ideas by their Elo: use it to see whether a change works at all, not to choose between changes.
+
+New base `chcm` = `fbas` + `epCMov=1`, `epCHist=3`, `epCHistW=2` compiled. Same nodes as `fbas` with these parameters, tests.fen depth 10: 12086912.
