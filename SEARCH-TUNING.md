@@ -545,3 +545,7 @@ games was started with `-p epLmrFix`. It lost all 4628 games on time, from the f
 `epQFilt=1,epRFutT=100`, tests.fen depth 10: 11196580; `epCMov=1`: 11794874; `epCMov=1,epCHist=3,epCHistW=2`: 12086912. The filter and T100 were measured apart, against different parents, never
 together. Smoke test of the continuation history against the counter moves: at 10+0.1 16 games, 8 points, no time losses; at 1+0.01 24 games, 22 time losses, 16 of them by the continuation history side, by a
 few ms. Too few games to say more; the time losses are to be watched in the SPRT (the tables are cleared at the start of every search).
+
+**S25.** Continuation history on top of the counter moves, SPRT on MEMO (`chis-cmov-tc10`, `fbas` 24a69e7, `epCMov=1,epCHist=3,epCHistW=2` against `epCMov=1`, the opponent
+shows as `fbas`), 10+0.1, [0, 5]: +10.54 +- 7.22, 5010 games, LLR 2.96, H1 accepted, 11.4 hours. One time loss, by the opponent. The prediction was 0 to +4 (S24 register): the cut
+gain at level 11 (S23, a third to a half of the counter moves) underrated it, and the speed cost of about 2% did not weigh much. Result in `C:\Learn\Data\results\memo\chis-cmov-tc10`.

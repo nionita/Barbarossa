@@ -13,7 +13,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
 ## Now (2026-11-01)
 
 - Current base: `fbas` (S24) = `expo` (`nmlm` with cleanups, +13.0 vs `hprf`) + filter + T100, the last two measured apart.
-- Running on MEMO: counter moves against `fbas` (`cmov-fbas-tc10`), continuation history against counter moves (`chis-cmov-tc10`).
+- Running on MEMO: counter moves against `fbas` (`cmov-fbas-tc10`).
+- Continuation history on top of counter moves passed: +10.5 +- 7.2 (S25).
 
 ## Methods
 
@@ -123,7 +124,7 @@ Now: clearly worse alone, no gain with a malus. It pulls good values back withou
 Forms: `hmal` f10edb1, `epHGrav=1`.
 Evidence: move 4+ at level 11: alone +0.570, +0.733; with malus 1/8 -0.054, +0.138 (S21). No games.
 
-### Continuation history (status: running)
+### Continuation history (status: promising)
 Now: on top of counter moves a smaller ordering gain, in both sets, about a third to a half of theirs, for about 2% speed; best setting not resolved. Elo unknown. 2026-11-01.
 Forms:
 | Form | Branch, commit | Parameters | Differs by |
@@ -136,6 +137,8 @@ Evidence:
 | 11-01 | Best 3 | move 4+, level 11, 4 seeds | -0.05 to -0.107, -0.052 to -0.095 | S23 | small, real |
 | 11-01 | `epCHist=3, W=2` | speed, 6 pairs, disturbed PC | -1.9% +- 0.7 (SE) | S23 | rough |
 | 11-01 | - | timed games, script error | none valid | S23 | no reading |
+| 11-10 | `epCHist=3, W=2` on counter moves | SPRT [0, 5], 10+0.1, 5010 games | +10.54 +- 7.22 | S25 | gain, larger than predicted |
+Interpretation history: 2026-11-10: the prediction 0 to +4 was too low; small cut gains at level 11 can carry a real gain in games.
 Review when: LMR retune.
 Next: timed SPRT [0, 5] on `fbas`, `epCMov=1,epCHist=3,epCHistW=2` against `epCMov=1` (`chis-cmov-tc10`); watch the time losses (S24).
 Prediction (2026-11-10, before the result): 0 to +4, likely no quick decision. Basis: a third to a half of the counter move cut gain (S23), minus about 2% speed (about
