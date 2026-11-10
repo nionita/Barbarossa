@@ -78,6 +78,8 @@ Evidence:
 Interpretation history: 10-31: "no Elo" withdrawn, the test cannot see ordering gains (S3, S5).
 Review when: LMR retune.
 Next: SPRT at 10+0.1, [0, 5] on `fbas` (`cmov-fbas-tc10`).
+Prediction (2026-11-10, before the result): +3 to +10, most likely about +5; H1 more likely than H0. Basis: twice the cut gain of the threat sort (S20: -0.234 / -0.217
+against +0.115 / +0.121), which gave +10.8 in its SPRT; gains in cuts turn into less Elo than that; almost no speed cost. Strong engines report a few Elo for counter moves.
 
 ### History malus (status: parked)
 Now: no gain in any size under the current method; the earlier late-cut gain did not repeat. Fits the user's earlier experience. 2026-10-31.
@@ -136,6 +138,8 @@ Evidence:
 | 11-01 | - | timed games, script error | none valid | S23 | no reading |
 Review when: LMR retune.
 Next: timed SPRT [0, 5] on `fbas`, `epCMov=1,epCHist=3,epCHistW=2` against `epCMov=1` (`chis-cmov-tc10`); watch the time losses (S24).
+Prediction (2026-11-10, before the result): 0 to +4, likely no quick decision. Basis: a third to a half of the counter move cut gain (S23), minus about 2% speed (about
+-1.5 Elo at 10+0.1). If after about 8000 games the estimate is under +2, stop it and park the form; a weight or table form that costs less speed would be the next try.
 
 ## Pruning
 
