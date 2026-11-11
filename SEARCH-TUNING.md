@@ -567,3 +567,6 @@ counter moves, continuation history), each measured against another parent, toge
 (-16.5%). With the filter (S24) the moves futility would prune are mostly out of the list in nodes with the futility flag, so they no longer count towards the LMP limit there. Smoke
 games against `chcm` at 10+0.1: 16 games 4 points, then 80 games 43 points, together 47 of 96, all ended normally, no time losses. SPRT on MEMO: `lmpn-chcm-tc10`, D3 M1 C1
 against the `chcm` build, [0, 5].
+Result: -7.60 +- 8.08, LOS 3.3%, H0 after 3888 games (LLR -2.97). Prediction (-5 to +5, about 0, H0 more likely): direction right, the loss a bit larger than expected; about
+the same as D3 M1 with the old ordering (-9.4). Neither the better ordering nor the count for the LMR level (C1) made the pruning pay. Late move pruning stays out until
+`improving` (and history in the LMR) is in. Result in `C:\Learn\Data\results\memo\lmpn-chcm-tc10`.
