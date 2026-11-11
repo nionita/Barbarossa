@@ -58,6 +58,11 @@ params = [
         ("epRFutT",           100),
         -- late move reduction: fixed level (0 = least reductions .. 15 = most), -1 = adaptive (Search.Core.moreLMR)
         ("epLmrFix",           -1),
+        -- late move reduction by history (Search.Core.lmrHistAdj), for quiet moves the LMR reduces: one less with a
+        -- sort value (history plus the continuation rows) of at least 2^epLmrHG (0 = off), one more when epLmrHB = 1
+        -- and the move got no bonus in this search (sort value >= 0)
+        ("epLmrHG",             0),
+        ("epLmrHB",             0),
         -- drawishness scale of the whole eval (Eval.Core.normalParts), instead of the heuristic rules of
         -- scaleFactor when epScaleNew = 1 (default: compiled in, scale-c-lin, TUNING-HISTORY finding 37;
         -- epScaleNew = 0 is the old scaling); factors in 1/64 (64 = 1), fitted by hv_scale.py --constrained

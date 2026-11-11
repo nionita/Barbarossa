@@ -21,6 +21,7 @@ import Moves.Internal.Base
 import Moves.Internal.BaseTypes (Game)
 import Struct.Status (MyState(..), EvalState(..), EvalParams(..))
 import Moves.Notation
+import Moves.History (histParts)
 
 -- This is a specialized monad transformer for state
 absurd :: String -> Game ()
@@ -141,6 +142,8 @@ data PVStRO
           chw    :: !Int,	-- continuation history: weight in quarters
           rfutd  :: !Int,	-- reverse futility pruning: maximum depth (0 = off)
           lmrfx  :: !Int,	-- late move reduction: fixed level, < 0 = adaptive
+          lmrhg  :: !Int,	-- late move reduction: one less from a sort value of 2^lmrhg (0 = off)
+          lmrhb  :: !Int,	-- late move reduction: one more without a bonus in this search (1 = on)
           rfuta  :: !Int,	-- reverse futility pruning: constant margin (cp)
           rfutm  :: !Int,	-- reverse futility pruning: margin per depth (cp)
           rfutt  :: !Int	-- reverse futility pruning: extra margin with own pieces hanging (cp, 0 = off)
@@ -276,7 +279,7 @@ resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, r
 
 pvro00 :: PVStRO
 pvro00 = PVStRO { draft = 0, tuning = False, abpol = NoAbort, futmar = defaultFutMargins,
-                  cmv = False, chp = 0, chw = 4, lmrfx = -1, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
+                  cmv = False, chp = 0, chw = 4, lmrfx = -1, lmrhg = 0, lmrhb = 0, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
 
 alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int, Int)
 alphaBeta abc = do
@@ -292,6 +295,7 @@ alphaBeta abc = do
                             cmv = epCMov (esEParams est) /= 0,
                             chp = epCHist (esEParams est), chw = epCHistW (esEParams est),
                             lmrfx = epLmrFix (esEParams est),
+                            lmrhg = epLmrHG (esEParams est), lmrhb = epLmrHB (esEParams est),
                             rfutd = epRFutD (esEParams est), rfuta = epRFutA (esEParams est),
                             rfutm = epRFutM (esEParams est),
                             rfutt = epRFutT (esEParams est) }
@@ -723,7 +727,12 @@ pvInnerLoop b d zw prune nst e = timeToAbort nst $
                           -- Resetting means we reduce less (only with distance to last capture)
                           let nst1 | cap       = resetSpc nst
                                    | otherwise = nst
-                          s <- extenFunc b d (cap || nolmr) exd' (deepNSt nst1) { prvmv = e, prvmv2 = prvmv nst1 }
+                              spec = cap || nolmr
+                          ro <- gets ronly
+                          hadj <- if spec || lmrhg ro == 0 && lmrhb ro == 0
+                                     then return 0
+                                     else lmrHistAdj ro e (prvmv nst) (prvmv2 nst)
+                          s <- extenFunc b d spec hadj exd' (deepNSt nst1) { prvmv = e, prvmv2 = prvmv nst1 }
                           return (s, nst1)
                       Final   -> return (drawPath, nst)
                       Illegal -> error "Cannot be illegal here"
@@ -740,8 +749,21 @@ pvInnerLoop b d zw prune nst e = timeToAbort nst $
 resetSpc :: NodeState -> NodeState
 resetSpc nst = nst { spcno = movno nst }
 
-pvInnerLoopExten :: Int -> Int -> Bool -> Int -> NodeState -> Search Path
-pvInnerLoopExten b d spec !exd nst = do
+-- Change of the LMR by the sort value of a quiet move (as in the quiet sort: history plus chw / 4 times the
+-- continuation rows in use; negative = good): -1 = reduce one less, 1 = one more, 0 = as before
+lmrHistAdj :: PVStRO -> Move -> Move -> Move -> Search Int
+lmrHistAdj ro e pm pm2 = do
+    st <- lift get
+    (h, c1, c2) <- liftIO $ histParts (hist st) e pm pm2
+    let c t v | chp ro .&. t /= 0 = fromIntegral v
+              | otherwise         = 0 :: Int
+        !sv = fromIntegral h + (chw ro * (c 1 c1 + c 2 c2)) `shiftR` 2
+    return $! if lmrhg ro > 0 && sv <= - (1 `unsafeShiftL` lmrhg ro)
+                 then -1
+                 else if lmrhb ro > 0 && sv >= 0 then 1 else 0
+
+pvInnerLoopExten :: Int -> Int -> Bool -> Int -> Int -> NodeState -> Search Path
+pvInnerLoopExten b d spec hadj !exd nst = do
     let !pvnode = crtnt nst == PVNode
         !d1   = d + exd - 1	-- this is the normal (unreduced) depth for next search
         a     = pathScore $ cursc nst
@@ -754,7 +776,7 @@ pvInnerLoopExten b d spec !exd nst = do
            -- Here we must be in a Cut node (will fail low)
            -- and we should have: crtnt = CutNode, nxtnt = AllNode
            old <- get
-           let d' = reduceLmr spec d1 (lmrlv old) (movno nst - spcno nst)
+           let d' = reduceLmr spec d1 (lmrlv old) (movno nst - spcno nst) hadj
            !s1 <- zeroWithLMR d' d1 (-a) (a+scoreGrain) nst
            whenAbort s1 $
                if pathScore s1 <= a
@@ -765,12 +787,12 @@ pvInnerLoopExten b d spec !exd nst = do
                       pnextlev <$> pvSearch nst1 (-b) (-a) d1
 
 -- For zero window
-pvInnerLoopExtenZ :: Int -> Int -> Bool -> Int -> NodeState -> Search Path
-pvInnerLoopExtenZ b d spec !exd nst = do
+pvInnerLoopExtenZ :: Int -> Int -> Bool -> Int -> Int -> NodeState -> Search Path
+pvInnerLoopExtenZ b d spec hadj !exd nst = do
     old  <- get
     -- late move reduction
     let !d1 = d + exd - 1	-- this is the normal (unreduced) depth for next search
-        d' = reduceLmr spec d1 (lmrlv old) (movno nst - spcno nst)
+        d' = reduceLmr spec d1 (lmrlv old) (movno nst - spcno nst) hadj
         !onemB = scoreGrain - b
     zeroWithLMR d' d1 onemB b nst
 
@@ -881,10 +903,13 @@ genAndPick !flt !nst mttmv !a !b !d = do
 -- With a variable lmrlev the reduction should stay in a region
 -- where the number of researches has an acceptable level
 {-# INLINE reduceLmr #-}
-reduceLmr :: Bool -> Int -> Int -> Int -> Int
-reduceLmr spec d lmrlev w
+-- The history change hadj applies only to moves the table reduces
+reduceLmr :: Bool -> Int -> Int -> Int -> Int -> Int
+reduceLmr spec d lmrlev w hadj
     | spec || d <= lmrNoDepth = d
-    | otherwise               = max 1 $ d - lmrArr!(lmrlev, w)
+    | r == 0                  = d
+    | otherwise               = max 1 $ d - max 0 (r + hadj)
+    where r = lmrArr!(lmrlev, w)
 
 -- Adjust the LMR related parameters in the state
 moreLMR :: Bool -> Int -> Search ()
