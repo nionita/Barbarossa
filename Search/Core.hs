@@ -139,6 +139,7 @@ data PVStRO
           cmv    :: !Bool,	-- use counter moves
           chp    :: !Int,	-- continuation history: bits of the tables (0 = off)
           chw    :: !Int,	-- continuation history: weight in quarters
+          hroot  :: !Int,	-- history bonus at the root: 0 = depth 0 (overflow), 1 = as depth 1, 2 = none
           rfutd  :: !Int,	-- reverse futility pruning: maximum depth (0 = off)
           lmrfx  :: !Int,	-- late move reduction: fixed level, < 0 = adaptive
           rfuta  :: !Int,	-- reverse futility pruning: constant margin (cp)
@@ -276,7 +277,7 @@ resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, r
 
 pvro00 :: PVStRO
 pvro00 = PVStRO { draft = 0, tuning = False, abpol = NoAbort, futmar = defaultFutMargins,
-                  cmv = False, chp = 0, chw = 4, lmrfx = -1, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
+                  cmv = False, chp = 0, chw = 4, hroot = 0, lmrfx = -1, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
 
 alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int, Int)
 alphaBeta abc = do
@@ -291,6 +292,7 @@ alphaBeta abc = do
                             abpol = abortPolicy abc, futmar = futMarginsOf (esEParams est),
                             cmv = epCMov (esEParams est) /= 0,
                             chp = epCHist (esEParams est), chw = epCHistW (esEParams est),
+                            hroot = epHRoot (esEParams est),
                             lmrfx = epLmrFix (esEParams est),
                             rfutd = epRFutD (esEParams est), rfuta = epRFutA (esEParams est),
                             rfutm = epRFutM (esEParams est),
@@ -467,7 +469,7 @@ checkFailOrPVRoot xstats b d e s nst = whenAbort (True, nst) $ do
                  lift $ do
                      let typ = 1	-- beta cut (score is lower limit) with move e
                      ttStore d typ b e nodes'
-                     betaCut (absdp sst) e
+                     rootCut (hroot $ ronly sst) e
                  let xpvslg = insertToPvs d pvg (pvsl nst)	-- the good
                      csc = s { pathScore = b }
                      nst1 = nst { cursc = csc, pvsl = xpvslg, rbmch = rbmch nst + 1 }
@@ -479,11 +481,18 @@ checkFailOrPVRoot xstats b d e s nst = whenAbort (True, nst) $ do
                  lift $ do
                      let typ = 2	-- best move so far (score is exact)
                      ttStore d typ sc e nodes'
-                     betaCut (absdp sst) e	-- not really cut, but good move
+                     rootCut (hroot $ ronly sst) e	-- not really cut, but good move
                  let xpvslg = insertToPvs d pvg (pvsl nst)	-- the good
                      nst1 = nst { cursc = s, nxtnt = nextNodeType (nxtnt nst),
                                   movno = mn + 1, pvsl = xpvslg, rbmch = rbmch nst + 1 }
                  return (False, nst1)
+
+-- History update by a new best move at the root (absolute depth 0)
+rootCut :: Int -> Move -> Game ()
+rootCut hr e = case hr of
+    0 -> betaCut 0 e
+    1 -> betaCut 1 e
+    _ -> return ()
 
 insertToPvs :: Int -> Pvsl -> [Pvsl] -> [Pvsl]
 insertToPvs _ p [] = [p]

@@ -45,6 +45,9 @@ params = [
         -- value of a quiet move is its history plus epCHistW / 4 times these
         ("epCHist",             3),
         ("epCHistW",            2),
+        -- history bonus of a new best move at the root (absolute depth 0): 0 = as at depth 0, where the bonus
+        -- 2^31 overflows Int32 and makes the move the worst in the table, 1 = the bonus of depth 1, 2 = no update
+        ("epHRoot",             0),
         -- sort of the quiet moves (Moves.Internal.Base.quietSort), bits: 1 = moves of a piece to a square
         -- attacked by a cheaper enemy piece last, 2 = moves of a piece away from such a square first;
         -- 0 = by history only
