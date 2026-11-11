@@ -15,7 +15,7 @@ are not reviewed here. The user's experience: negative history and squared bonus
 - Current base: `chcm` (S26) = `fbas` + counter moves + continuation history, +22.5 +- 8.0 against `expo` (S27, 4000 games). `fbas` (S24) = `expo` (`nmlm` with cleanups,
   +13.0 vs `hprf`) + filter + T100.
 - Continuation history on top of counter moves passed: +10.5 +- 7.2 (S25); counter moves alone +1.5 +- 6.8, stopped (S26). Both compiled in `chcm`.
-- MEMO free.
+- Running on MEMO: late move pruning D3 M1 C1 on `chcm` (`lmpn-chcm-tc10`, S28).
 
 ## Methods
 
@@ -180,13 +180,14 @@ Next: build, 10k-node games (pruning shows there), then SPRT.
 ### RFP: cut more when an opponent piece hangs (status: open)
 Now: wrong rate 0.3x (S13). User: only after the RFP SPRTs. 2026-10-31.
 
-### Late move pruning (status: rejected in this form)
+### Late move pruning (status: running)
 Now: loses, more with depth. Without better history and `improving` late moves are not reliably bad. 2026-10-31.
 Forms:
 | Form | Branch, commit | Parameters | Differs by |
 |---|---|---|---|
 | Limit A + M d d / 2 from the last capture | `lmpr` 484b2e6 | `epLmpD`, `epLmpA=3`, `epLmpM` | zero window, not in check |
 | A pruned move counts for the adaptive LMR | `lmpc` cae8bcd | `epLmpC` | keeps the LMR level |
+| As `lmpc`, on the new ordering | `lmpn` 256dbad | as `lmpc` | base `chcm`: filter, T100, counter moves, continuation history |
 Evidence:
 | Date | Form | Test | Result | Ref | Reading then |
 |---|---|---|---|---|---|
@@ -194,6 +195,9 @@ Evidence:
 | 10-31 | D5 M1 | SPRT [0, 5], 10+0.1 | -25.4 +- 13.4 | S15 | rejected, deeper costs more |
 | 10-31 | With the count | LMR level, nodes | C1 restores most of the level | S15 | not played |
 Review when: better history and `improving` are in.
+Next: SPRT [0, 5], 10+0.1, D3 M1 C1 against `chcm` (`lmpn-chcm-tc10`).
+Prediction (2026-11-11, before the result): -5 to +5, most likely about 0; H0 more likely than H1. Basis: D3 M1 lost 9.4 with the old ordering, a part of it by the lower LMR level,
+which C1 restores; the better ordering makes the late moves worse and so cheaper to prune; `improving` is still missing.
 
 ## Reductions
 

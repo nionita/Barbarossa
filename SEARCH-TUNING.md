@@ -562,3 +562,8 @@ New base `chcm` = `fbas` + `epCMov=1`, `epCHist=3`, `epCHistW=2` compiled. Same 
 **S27.** `chcm` 09fb3d4 against `expo` 1e7130b on MEMO (`chcm-expo-tc10`), 10+0.1, fixed 4000 games, concurrency 8: +22.53 +- 7.95, LOS 100%, 4h35. The steps since `expo` (filter, T100,
 counter moves, continuation history), each measured against another parent, together: the expectation from their sum was +10 to +20. No sign that they cancel. Result in
 `C:\Learn\Data\results\memo\chcm-expo-tc10`.
+
+**S28.** Late move pruning on the new ordering: `lmpn` 256dbad = `chcm` + `lmpc` (compiled off). Off identical to `chcm`: 12086912 nodes on tests.fen depth 10; D3 M1 C1 10087341
+(-16.5%). With the filter (S24) the moves futility would prune are mostly out of the list in nodes with the futility flag, so they no longer count towards the LMP limit there. Smoke
+games against `chcm` at 10+0.1: 16 games 4 points, then 80 games 43 points, together 47 of 96, all ended normally, no time losses. SPRT on MEMO: `lmpn-chcm-tc10`, D3 M1 C1
+against the `chcm` build, [0, 5].
