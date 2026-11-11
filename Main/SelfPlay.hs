@@ -16,6 +16,7 @@ import Data.Char (isSpace)
 import Data.IORef
 import Data.List (intercalate, intersperse, partition)
 import Search.Core (qsValue)
+import Search.Diag (diagReport)
 import qualified Data.Map.Strict as M
 import Data.Maybe (catMaybes, fromMaybe, isJust)
 import Foreign hiding (void)
@@ -785,6 +786,7 @@ perfTestFile opts = do
         when (sBeta st > 0) $
             putStrLn $ "Beta cuts:          " ++ show (sBeta st) ++ " at move 1: " ++ pc (sBM1 st)
                 ++ ", 2: " ++ pc (sBM2 st) ++ ", 3: " ++ pc (sBM3 st) ++ ", 4+: " ++ pc (sBM4p st)
+        diagReport
         hClose hi
 
 perfLoop :: Handle -> Maybe Handle -> Maybe Handle -> Int -> Int -> PerfAcc -> CtxIO (Bool, PerfAcc)

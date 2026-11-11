@@ -15,6 +15,7 @@ import Data.List
 import Data.Maybe (fromMaybe)
 import Search.CStateMonad
 import Search.AlbetaTypes
+import Search.Diag (diagLevel, diagLimited, diagShadow)
 import Struct.Struct
 import Moves.Core
 import Moves.Internal.Base
@@ -143,6 +144,7 @@ data PVStRO
           lmpa   :: !Int,	-- late move pruning: constant part of the move limit
           lmpm   :: !Int,	-- late move pruning: factor of depth * depth / 2 in the move limit
           lmpc   :: !Int,	-- late move pruning: what a pruned move adds to the adaptive LMR counter
+          dgn    :: !Int,	-- diagnostics, bits: 1 = nodes by LMR level, 2 = LMP shadow
           rfutd  :: !Int,	-- reverse futility pruning: maximum depth (0 = off)
           lmrfx  :: !Int,	-- late move reduction: fixed level, < 0 = adaptive
           rfuta  :: !Int,	-- reverse futility pruning: constant margin (cp)
@@ -282,7 +284,7 @@ resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, r
 pvro00 :: PVStRO
 pvro00 = PVStRO { draft = 0, tuning = False, abpol = NoAbort, futmar = defaultFutMargins,
                   cmv = False, chp = 0, chw = 4, lmrfx = -1,
-                  lmpd = 0, lmpa = 0, lmpm = 0, lmpc = 0, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
+                  lmpd = 0, lmpa = 0, lmpm = 0, lmpc = 0, dgn = 0, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
 
 alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int, Int)
 alphaBeta abc = do
@@ -300,6 +302,7 @@ alphaBeta abc = do
                             lmrfx = epLmrFix (esEParams est),
                             lmpd = epLmpD (esEParams est), lmpa = epLmpA (esEParams est),
                             lmpm = epLmpM (esEParams est), lmpc = epLmpC (esEParams est),
+                            dgn = epDiag (esEParams est),
                             rfutd = epRFutD (esEParams est), rfuta = epRFutA (esEParams est),
                             rfutm = epRFutM (esEParams est),
                             rfutt = epRFutT (esEParams est) }
@@ -626,7 +629,9 @@ pvZeroW !nst !b !d = do
                         let kill1 = case nmhigh of
                                         NullMoveThreat s -> newTKiller pos d s
                                         _                -> Killer []
-                            !nsti = (resetNSt (pathFromScore bGrain) kill1 nst') { lmpli = lmpLimit ro pos b d }
+                            !lim  = lmpLimit ro pos b d
+                            !nsti = (resetNSt (pathFromScore bGrain) kill1 nst') { lmpli = lim }
+                        when (dgn ro .&. 2 /= 0 && lim < maxBound) $ liftIO $ diagLimited d
                         !nstf <- pvSLoop b d True prune nsti edges
                         let s = cursc nstf
                         whenAbort s $
@@ -714,8 +719,10 @@ pvInnerLoop :: Int 	-- current beta
             -> NodeState 	-- node status
             -> Move	-- move to search
             -> Search NodeState
-pvInnerLoop b d zw prune nst e = timeToAbort nst $
-    if (futil || lmp) && canPruneMove (cpos nst) e
+pvInnerLoop b d zw prune nst e = timeToAbort nst $ do
+  dg <- gets (dgn . ronly)
+  let shadow = dg .&. 2 /= 0
+  if (futil || lmp && not shadow) && canPruneMove (cpos nst) e
        then do
            -- Only what is pruned just by the LMP would have counted without it
            unless futil $ do
@@ -728,6 +735,7 @@ pvInnerLoop b d zw prune nst e = timeToAbort nst $
               then do
                   newNode d
                   old <- get
+                  when (dg .&. 1 /= 0) $ liftIO $ diagLevel (lmrlv old)
                   let adp = absdp old + 1
                       mdp = max (maxdp old) adp
                   modify $ \s -> s { absdp = adp, maxdp = mdp }
@@ -743,6 +751,8 @@ pvInnerLoop b d zw prune nst e = timeToAbort nst $
                   lift undoMove	-- undo the move
                   modify $ \s' -> s' { absdp = absdp old }
                   let s' = addToPath e s
+                  when (shadow && lmp && not futil && canPruneMove (cpos nst) e) $
+                      liftIO $ diagShadow d (movno nst - spcno nst - lmpli nst) (pathScore s' >= b)
                   checkFunc b d e s' nst1
               else return nst
     where futil = prune && (zw || movno nst > 1)

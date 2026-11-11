@@ -66,6 +66,9 @@ params = [
         -- late move pruning: what a pruned move adds to the counter of the adaptive LMR (a searched move adds
         -- at least 1 for its fail low)
         ("epLmpC",              0),
+        -- diagnostics (Search.Diag, printed by SelfPlay -P), bits: 1 = nodes by LMR level, 2 = LMP shadow: the moves
+        -- the late move pruning would prune are searched (no pruning, no count for the LMR) and counted
+        ("epDiag",              0),
         -- drawishness scale of the whole eval (Eval.Core.normalParts), instead of the heuristic rules of
         -- scaleFactor when epScaleNew = 1 (default: compiled in, scale-c-lin, TUNING-HISTORY finding 37;
         -- epScaleNew = 0 is the old scaling); factors in 1/64 (64 = 1), fitted by hv_scale.py --constrained
