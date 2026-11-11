@@ -219,6 +219,15 @@ Review when: ordering has changed much.
 Now: the adaptive LMR restarts at level 8 in every iteration and climbs; 29% of the nodes are searched at level 8, mean level 10.8 (S30). Not built.
 2026-11-11.
 
+### LMR: mate escape (status: open)
+Idea (user, 2026-11-11): less or no LMR in nodes where alpha is a "being mated" score for the side to move (alpha <= -mate threshold): all
+moves so far get mated, and a reduced late move may hide the escape. Background (S13): the beta guard was removed (`nmlm` 5795f3f, SPRT +13.0);
+`nearmate a` was only node-scanned (50 roots, depth 10): 48 equal to no guard, 2 still blew up (real near-mate windows, probably defender PV
+nodes), so a full LMR stop there is costly. Missed mate escapes were never measured.
+Forms: only the losing side (not +-mate); one ply less reduction instead of none; only from some depth; only for checks and evasions.
+Measure: not by node totals. A mate-escape test set, compare the time or depth to the correct escape; then an SPRT against the current base
+with no-loss bounds [-3, 2] (a gain from rare escapes will hardly show). Not built, for later.
+
 ### Retune of the adaptive LMR after ordering changes (status: open)
 Now: user's point: the adaptive parameters (`lmrInitLim`, weight 2^d of a re-search) were set for the old ordering. No data. 2026-10-31.
 
