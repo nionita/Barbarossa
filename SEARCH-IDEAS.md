@@ -15,7 +15,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
 - Current base: `chcm` (S26) = `fbas` + counter moves + continuation history, +22.5 +- 8.0 against `expo` (S27, 4000 games). `fbas` (S24) = `expo` (`nmlm` with cleanups,
   +13.0 vs `hprf`) + filter + T100.
 - Continuation history on top of counter moves passed: +10.5 +- 7.2 (S25); counter moves alone +1.5 +- 6.8, stopped (S26). Both compiled in `chcm`.
-- Late move pruning D3 M1 C1 on `chcm`: -7.6 +- 8.1, H0 (S28). MEMO free.
+- Late move pruning D3 M1 C1 on `chcm`: -7.6 +- 8.1, H0 (S28).
+- Running on MEMO: the root overflow fix on `chcm`, root as depth 1 and no root update (`hr1-chcm-tc10`, `hr2-chcm-tc10`, S29).
 
 ## Methods
 
@@ -116,11 +117,14 @@ Evidence:
 Interpretation history: 10-31: the gain on openings under the adaptive LMR (S18) came with the LMR (S20).
 Review when: timed games at depth are cheap; a better history; separating aging from the weight of reduced lines (bonus `2^(r + ply - draft)`, not built).
 
-### Overflow of the history bonus at the root (status: open)
+### Overflow of the history bonus at the root (status: running)
 Now: a real bug (at absolute depth 0 the Int32 overflows and makes the move the worst), removing it shows no clear gain. Clean up when the code is touched. 2026-10-31.
-Forms: `hmal` f10edb1: `epHGrav=0` as before, `2` root as depth 1 (still 2^30), `3` no root update.
+Forms: `hmal` f10edb1: `epHGrav=0` as before, `2` root as depth 1 (still 2^30), `3` no root update. On `chcm`: `hroot` 1f0bec8, `epHRoot` 0 as before, 1 root as
+depth 1, 2 no root update.
 Evidence: no root update, move 4+ -0.043 under the adaptive LMR on openings (S17); at level 11 -0.046, +0.031, at the floor (S21). No games.
 Review when: the bonus is changed for another reason.
+Next: SPRTs [0, 5], 10+0.1, `epHRoot=1` and `epHRoot=2` against `chcm` (S29). If both end in H0, adopt the cleaner one by a non-regression test.
+Prediction (2026-11-11, before the results): both about 0 to +3, H0 more likely than H1, no clear order.
 
 ### History gravity (status: rejected in this form)
 Now: clearly worse alone, no gain with a malus. It pulls good values back without a malus to balance them. 2026-10-31.

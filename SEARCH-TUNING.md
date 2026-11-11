@@ -570,3 +570,11 @@ against the `chcm` build, [0, 5].
 Result: -7.60 +- 8.08, LOS 3.3%, H0 after 3888 games (LLR -2.97). Prediction (-5 to +5, about 0, H0 more likely): direction right, the loss a bit larger than expected; about
 the same as D3 M1 with the old ordering (-9.4). Neither the better ordering nor the count for the LMR level (C1) made the pruning pay. Late move pruning stays out until
 `improving` (and history in the LMR) is in. Result in `C:\Learn\Data\results\memo\lmpn-chcm-tc10`.
+
+**S29.** Overflow of the history bonus at the root, fixed on the current base: `hroot` 1f0bec8 = `chcm` + `epHRoot` (compiled 0 = as before). Only the two history updates
+of the root move loop (a new best move, a fail high in the aspiration window) change: 1 gives them the bonus of depth 1 (2^30, as the continuation history already does),
+2 drops them. Off identical to `chcm`: 12086912 nodes on tests.fen depth 10; root as depth 1 11422571 (-5.5%), no root update 11605996 (-4.0%), move 4+ 1.43% and 1.44%
+against 1.39% (one sample each, S20: says little). Smoke games against `chcm` at 10+0.1: 10 of 16 each, no time losses. SPRTs on MEMO, [0, 5], 10+0.1, concurrency 4 each,
+against the `chcm` build: `hr1-chcm-tc10` (epHRoot=1) and `hr2-chcm-tc10` (epHRoot=2).
+Prediction (2026-11-11, before the results): both about 0 to +3; H0 more likely than H1 for both; no clear order between them. Basis: the bug hits one entry per new root
+best move and only the order in the deeper nodes; the cut rates of no root update were at the floor (S21).
