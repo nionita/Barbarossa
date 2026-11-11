@@ -642,3 +642,26 @@ For reductions: within the same move number the best fifth by history cuts 3 to 
 does not use now (it reduces by the level and the move number only). Limits: only moves over the LMP limit at depth 1 to 3 in zero window nodes;
 the values are on the depth-weighted scale (bonus 2^(31 - absolute depth), halved when full), so a reduction by history should use the position of
 the value in the node (rank) or classes of size, not fixed values.
+
+**S32.** Late move reduction by history: `lmrh` 4019537 (from `chcm`, compiled off). For a quiet move the LMR table reduces (reduction > 0), the
+sort value s (history plus chw / 4 times the continuation rows in use, as in the quiet sort; negative = good) changes the reduction: one less with
+s <= -2^`epLmrHG` (0 = off), one more with `epLmrHB` = 1 and s >= 0 (no bonus in this search). Size classes, not fixed small values (S31). From
+S31 at depth 1: g = 24 takes about the best 20% of the late moves (fail high 3.2% and more against 1.6% on average), no bonus about 46% (0.37%).
+The adaptive LMR answers through its counter.
+
+Off identical to `chcm`: 12086912 nodes on tests.fen depth 10. Nodes and move 4+ at depth 10 (adaptive LMR, single samples, S20: they say little):
+
+| Setting | tests.fen | Move 4+ | roots-500 | Move 4+ |
+|---|---|---|---|---|
+| Off | 12086912 | 1.39% | 90007659 | 1.61% |
+| G22 | 12919519 | 1.37% | | |
+| G24 | 12064619 | 1.50% | 93941046 (+4.4%) | 1.76% |
+| G26 | 12267644 | 1.39% | | |
+| B1 | 10669093 | 1.45% | 82554287 (-8.3%) | 1.73% |
+| G24 B1 | 13023409 | 1.40% | 90238188 (+0.3%) | 1.74% |
+
+Smoke games against `chcm` at 10+0.1, 16 each: G24 7 points, G24 B1 8 points, no time losses. For MEMO, once `hroot` is done: G24 B1 (both
+directions, about the same nodes) and B1 alone against `chcm`, SPRT [0, 5], concurrency 4 each (`lmrh-gb-chcm-tc10`, `lmrh-b-chcm-tc10`).
+Prediction (2026-11-11, before the results): G24 B1 0 to +8, most likely +3, H1 about as likely as H0; B1 alone -4 to +4, about 0, H0 more likely.
+Basis: S31 shows a real separation by history within the same move number, but the classes are coarse (one ply, one threshold), and the adaptive
+level takes back part of any change in the mean reduction.

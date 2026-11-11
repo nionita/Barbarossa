@@ -222,10 +222,13 @@ Now: the adaptive LMR restarts at level 8 in every iteration and climbs; 29% of 
 ### Retune of the adaptive LMR after ordering changes (status: open)
 Now: user's point: the adaptive parameters (`lmrInitLim`, weight 2^d of a re-search) were set for the old ordering. No data. 2026-10-31.
 
-### History and depth in the LMR (status: open)
+### History and depth in the LMR (status: built)
 Now: the reduction depends only on the level and the move number. Within the same move number the best fifth by sort value cuts 3 to 5 times as often
 as the worst fifth (S31, late moves at depth 1 to 3): history holds information the LMR does not use. Use the rank in the node or size classes, not
-fixed values. Not built. 2026-11-11.
+fixed values. 2026-11-11.
+Forms: `lmrh` 4019537: `epLmrHG` g (one less from s <= -2^g), `epLmrHB` (one more without a bonus); only moves the table reduces.
+Next: SPRT [0, 5], 10+0.1, G24 B1 and B1 against `chcm` on MEMO after `hroot` (S32).
+Prediction (2026-11-11, before the results): G24 B1 0 to +8, most likely +3, H1 about as likely as H0; B1 alone about 0, H0 more likely.
 Next: after counter moves.
 
 ## Other search
