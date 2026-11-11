@@ -12,7 +12,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
 
 ## Now (2026-11-01)
 
-- Current base: `chcm` (S26) = `fbas` + counter moves + continuation history. `fbas` (S24) = `expo` (`nmlm` with cleanups, +13.0 vs `hprf`) + filter + T100, the last two measured apart.
+- Current base: `chcm` (S26) = `fbas` + counter moves + continuation history, +22.5 +- 8.0 against `expo` (S27, 4000 games). `fbas` (S24) = `expo` (`nmlm` with cleanups,
+  +13.0 vs `hprf`) + filter + T100.
 - Continuation history on top of counter moves passed: +10.5 +- 7.2 (S25); counter moves alone +1.5 +- 6.8, stopped (S26). Both compiled in `chcm`.
 - MEMO free.
 

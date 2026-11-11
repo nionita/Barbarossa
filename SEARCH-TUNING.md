@@ -558,3 +558,7 @@ Cut gains and Elo, at fixed level 11 against timed games: counter moves -0.234 /
 at move 4+ does not rank ordering ideas by their Elo: use it to see whether a change works at all, not to choose between changes.
 
 New base `chcm` = `fbas` + `epCMov=1`, `epCHist=3`, `epCHistW=2` compiled. Same nodes as `fbas` with these parameters, tests.fen depth 10: 12086912.
+
+**S27.** `chcm` 09fb3d4 against `expo` 1e7130b on MEMO (`chcm-expo-tc10`), 10+0.1, fixed 4000 games, concurrency 8: +22.53 +- 7.95, LOS 100%, 4h35. The steps since `expo` (filter, T100,
+counter moves, continuation history), each measured against another parent, together: the expectation from their sum was +10 to +20. No sign that they cancel. Result in
+`C:\Learn\Data\results\memo\chcm-expo-tc10`.
