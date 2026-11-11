@@ -615,3 +615,30 @@ Reading: the loss comes from the pruning itself (the first reading), most of it 
 in both directions depending on the count. Next for LMP, if again: no LMP at depth 1 or a larger limit there, or a limit by history. For the LMR: the
 restart at level 8 in every iteration (29% of the nodes at level 8) is its own candidate: carry the level over from the previous iteration. Before
 history in the LMR or a history limit for LMP: the same shadow by history value of the move, to see whether history separates the moves that cut.
+
+**S31.** LMP shadow by history: does the history separate the moves that cut, beyond the move number? `lmpx` e8adbb4, `epDiag=6` (bit 4: each
+shadow move with its history value h and its entries c1, c2 in the two continuation rows, read before the move is made), D3 M1, roots-500, depth
+10: 11112572 moves, 107342 fail high (same counts as S30). Sort value as in the engine s = h + (c1 + c2) / 2; negative = good. Analysis
+`shadow_hist.py`, results in `C:\Learn\Data\measurements\search\lmpx\shadow-hist-roots.txt`.
+
+AUC for the moves that fail high (0.5 = no information, 1 = perfect):
+
+| Depth | Move number k | h | c1 + c2 | s | s within the same k |
+|---|---|---|---|---|---|
+| 1 | 0.81 | 0.77 | 0.73 | 0.79 | 0.62 to 0.65 |
+| 2 | 0.75 | 0.71 | 0.66 | 0.73 | 0.58 to 0.64 |
+| 3 | 0.73 | 0.70 | 0.64 | 0.72 | 0.57 to 0.68 |
+
+The move number and the sort value are about equally good, and they overlap (the moves are sorted by s). Within the same k, s still separates:
+depth 1, k 0 to 2, fail high by quintile of s from best to worst 10.6%, 7.1%, 6.0%, 4.6%, 2.2%; k 3 to 6: 3.5% to 1.0%. Moves with no bonus in
+this search (s >= 0, 46% of the moves at depth 1) fail high 0.37%, the largest values (-2^26 and more) 4.5% to 21%. The continuation rows add to h
+(0.79 against 0.77).
+
+For pruning: pruning the worst share of the prunable moves, ranked by k alone or by k and s together, loses almost the same share of their cuts:
+depth 1, half of the moves: 10.0% by k, 9.7% by both; 90%: 54.7% and 52.6%; depth 2 and 3 alike. History does not make LMP safe: even the safest
+half of the moves holds a tenth of the cuts.
+
+For reductions: within the same move number the best fifth by history cuts 3 to 5 times as often as the worst fifth. That is information the LMR
+does not use now (it reduces by the level and the move number only). Limits: only moves over the LMP limit at depth 1 to 3 in zero window nodes;
+the values are on the depth-weighted scale (bonus 2^(31 - absolute depth), halved when full), so a reduction by history should use the position of
+the value in the node (rank) or classes of size, not fixed values.

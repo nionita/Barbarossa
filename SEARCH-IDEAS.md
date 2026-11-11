@@ -200,7 +200,8 @@ Evidence:
 | 10-31 | With the count | LMR level, nodes | C1 restores most of the level | S15 | not played |
 | 11-11 | D3 M1 C1 on `chcm` | SPRT [0, 5], 10+0.1 | -7.6 +- 8.1, 3888 games | S28 | rejected; prediction -5 to +5 (about 0): direction right |
 | 11-11 | Shadow, LMR level | lost cuts, nodes by level | about 1/3 of the move 4+ cuts lost, 78% at depth 1; C0 lowers, C1 raises the level | S30 | the pruning itself loses |
-Review when: `improving` and history in the LMR are in; first forms then: no LMP at depth 1, a limit by history (S30).
+| 11-11 | Shadow by history | AUC, cuts lost by ranking | k and history about equal and overlapping; ranking by both loses almost as many cuts | S31 | a history limit does not make LMP safe |
+Review when: `improving` and history in the LMR are in; first form then: no LMP at depth 1 (S30); a limit by history adds little (S31).
 
 ## Reductions
 
@@ -222,7 +223,9 @@ Now: the adaptive LMR restarts at level 8 in every iteration and climbs; 29% of 
 Now: user's point: the adaptive parameters (`lmrInitLim`, weight 2^d of a re-search) were set for the old ordering. No data. 2026-10-31.
 
 ### History and depth in the LMR (status: open)
-Now: the reduction depends only on the level and the move number. Largest expected effect after better history, not built. 2026-10-31.
+Now: the reduction depends only on the level and the move number. Within the same move number the best fifth by sort value cuts 3 to 5 times as often
+as the worst fifth (S31, late moves at depth 1 to 3): history holds information the LMR does not use. Use the rank in the node or size classes, not
+fixed values. Not built. 2026-11-11.
 Next: after counter moves.
 
 ## Other search
