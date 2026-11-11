@@ -67,7 +67,8 @@ params = [
         -- at least 1 for its fail low)
         ("epLmpC",              0),
         -- diagnostics (Search.Diag, printed by SelfPlay -P), bits: 1 = nodes by LMR level, 2 = LMP shadow: the moves
-        -- the late move pruning would prune are searched (no pruning, no count for the LMR) and counted
+        -- the late move pruning would prune are searched (no pruning, no count for the LMR) and counted, 4 = with 2:
+        -- each of these moves with its history values in lmp-shadow.csv
         ("epDiag",              0),
         -- drawishness scale of the whole eval (Eval.Core.normalParts), instead of the heuristic rules of
         -- scaleFactor when epScaleNew = 1 (default: compiled in, scale-c-lin, TUNING-HISTORY finding 37;

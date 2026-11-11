@@ -15,7 +15,8 @@ import Data.List
 import Data.Maybe (fromMaybe)
 import Search.CStateMonad
 import Search.AlbetaTypes
-import Search.Diag (diagLevel, diagLimited, diagShadow)
+import Search.Diag (diagLevel, diagLimited, diagShadow, diagDump)
+import Moves.History (histParts)
 import Struct.Struct
 import Moves.Core
 import Moves.Internal.Base
@@ -730,6 +731,10 @@ pvInnerLoop b d zw prune nst e = timeToAbort nst $ do
                when (c > 0) $ addLMR c
            return $! nst { movno = movno nst + 1 }
        else do
+           let dump = shadow && dg .&. 4 /= 0 && lmp && not futil && canPruneMove (cpos nst) e
+           hv <- if dump
+                    then lift get >>= \st -> liftIO (histParts (hist st) e (prvmv nst) (prvmv2 nst))
+                    else return (0, 0, 0)
            !exd <- lift $ doMove e	-- do the move
            if legalResult exd
               then do
@@ -753,6 +758,9 @@ pvInnerLoop b d zw prune nst e = timeToAbort nst $ do
                   let s' = addToPath e s
                   when (shadow && lmp && not futil && canPruneMove (cpos nst) e) $
                       liftIO $ diagShadow d (movno nst - spcno nst - lmpli nst) (pathScore s' >= b)
+                  when dump $ do
+                      let (h, c1, c2) = hv
+                      liftIO $ diagDump d (movno nst - spcno nst - lmpli nst) h c1 c2 (pathScore s' >= b)
                   checkFunc b d e s' nst1
               else return nst
     where futil = prune && (zw || movno nst > 1)

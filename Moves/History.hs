@@ -3,7 +3,7 @@
 
 module Moves.History (
         History, newHist, initHist, toHist, histSortMoves, histBest, getCounter, setCounter,
-        contSortMoves, contOffset, contUpdate, clearCont
+        contSortMoves, contOffset, contUpdate, clearCont, histParts
     ) where
 
 import Control.Monad.ST.Unsafe (unsafeIOToST)
@@ -122,6 +122,18 @@ contUpdate h !o m !d = do
     let !p = fromIntegral (histw (max 1 d)) :: Int64
         !n = max (- (1 `unsafeShiftL` 30)) (fromIntegral v - p)
     V.unsafeWrite h i (fromIntegral n)
+
+-- Diagnostics: the history value of a move and its entries in the continuation rows of the move before (table 0)
+-- and of the own move before (table 1), 0 when there is no such move
+histParts :: History -> Move -> Move -> Move -> IO (Int32, Int32, Int32)
+histParts h m pm pm2 = do
+    v  <- V.unsafeRead h (adr m)
+    c1 <- row 0 pm
+    c2 <- row 1 pm2
+    return (v, c1, c2)
+    where row t p@(Move w)
+              | w == 0    = return 0
+              | otherwise = V.unsafeRead h (contOffset t p + adr m .&. (contRow - 1))
 
 -- The sort value: history plus w / 4 times the rows (offset < 0: no such row), saturated to Int32
 {-# INLINE contVal #-}

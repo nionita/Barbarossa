@@ -1,11 +1,14 @@
 -- Diagnostic counters of the search (global, for single process measurements like SelfPlay -P):
 -- nodes per LMR level and the late move pruning shadow (moves which would be pruned and are searched anyway)
 module Search.Diag (
-    diagLevel, diagLimited, diagShadow, diagReport
+    diagLevel, diagLimited, diagShadow, diagDump, diagReport
 ) where
 
 import Control.Monad (forM, when)
 import Data.Array.IO
+import Data.Int (Int32)
+import Data.IORef
+import System.IO
 import System.IO.Unsafe (unsafePerformIO)
 import Text.Printf (printf)
 
@@ -15,6 +18,15 @@ counters :: IOUArray Int Int
 counters = unsafePerformIO $ newArray (0, 151) 0
 {-# NOINLINE counters #-}
 
+-- Number of the current zero window node with an LMP limit, and the dump file of the shadow moves
+nodeNo :: IORef Int
+nodeNo = unsafePerformIO $ newIORef 0
+{-# NOINLINE nodeNo #-}
+
+dumpH :: IORef (Maybe Handle)
+dumpH = unsafePerformIO $ newIORef Nothing
+{-# NOINLINE dumpH #-}
+
 incr :: Int -> IO ()
 incr i = readArray counters i >>= writeArray counters i . (+ 1)
 
@@ -22,7 +34,26 @@ diagLevel :: Int -> IO ()
 diagLevel = incr
 
 diagLimited :: Int -> IO ()
-diagLimited d = when (d >= 1 && d <= 7) $ incr (16 + d)
+diagLimited d = when (d >= 1 && d <= 7) $ do
+    incr (16 + d)
+    modifyIORef' nodeNo (+ 1)
+
+-- One line per shadow move in lmp-shadow.csv (current directory): node, depth, moves over the limit, history,
+-- continuation rows by the move before and by the own move before, fail high
+diagDump :: Int -> Int -> Int32 -> Int32 -> Int32 -> Bool -> IO ()
+diagDump d k h c1 c2 fh = do
+    mh <- readIORef dumpH
+    hd <- case mh of
+        Just hd -> return hd
+        Nothing -> do
+            hd <- openFile "lmp-shadow.csv" WriteMode
+            hSetBuffering hd (BlockBuffering Nothing)
+            hPutStrLn hd "node,d,k,h,c1,c2,fh"
+            writeIORef dumpH (Just hd)
+            return hd
+    n <- readIORef nodeNo
+    hPutStrLn hd $ show n ++ "," ++ show d ++ "," ++ show k ++ "," ++ show h ++ "," ++ show c1 ++ "," ++ show c2
+        ++ "," ++ (if fh then "1" else "0")
 
 -- Remaining depth, moves over the limit, fail high
 diagShadow :: Int -> Int -> Bool -> IO ()
@@ -33,6 +64,7 @@ diagShadow d k fh = when (d >= 1 && d <= 7) $ do
 
 diagReport :: IO ()
 diagReport = do
+    readIORef dumpH >>= mapM_ hClose
     vs <- getElems counters
     let lv = take 16 vs
         tl = sum lv
