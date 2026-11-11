@@ -199,7 +199,8 @@ Evidence:
 | 10-31 | D5 M1 | SPRT [0, 5], 10+0.1 | -25.4 +- 13.4 | S15 | rejected, deeper costs more |
 | 10-31 | With the count | LMR level, nodes | C1 restores most of the level | S15 | not played |
 | 11-11 | D3 M1 C1 on `chcm` | SPRT [0, 5], 10+0.1 | -7.6 +- 8.1, 3888 games | S28 | rejected; prediction -5 to +5 (about 0): direction right |
-Review when: `improving` and history in the LMR are in.
+| 11-11 | Shadow, LMR level | lost cuts, nodes by level | about 1/3 of the move 4+ cuts lost, 78% at depth 1; C0 lowers, C1 raises the level | S30 | the pruning itself loses |
+Review when: `improving` and history in the LMR are in; first forms then: no LMP at depth 1, a limit by history (S30).
 
 ## Reductions
 
@@ -212,6 +213,10 @@ Now: adaptive is stronger than 11 and 14. Useful for measuring ordering. 2026-10
 Forms: `lmfx` 32c4bb8, `epLmrFix`; with ordering changes `lfix` fbfb381.
 Evidence: SPRT [0, 5] level 14 -36.4 +- 15.7, level 11 -8.6 +- 8.5 (S13). Levels 12, 13 not played.
 Review when: ordering has changed much.
+
+### LMR level carried over between iterations (status: open)
+Now: the adaptive LMR restarts at level 8 in every iteration and climbs; 29% of the nodes are searched at level 8, mean level 10.8 (S30). Not built.
+2026-11-11.
 
 ### Retune of the adaptive LMR after ordering changes (status: open)
 Now: user's point: the adaptive parameters (`lmrInitLim`, weight 2^d of a re-search) were set for the old ordering. No data. 2026-10-31.

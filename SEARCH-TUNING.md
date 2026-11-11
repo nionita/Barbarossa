@@ -578,3 +578,40 @@ against 1.39% (one sample each, S20: says little). Smoke games against `chcm` at
 against the `chcm` build: `hr1-chcm-tc10` (epHRoot=1) and `hr2-chcm-tc10` (epHRoot=2).
 Prediction (2026-11-11, before the results): both about 0 to +3; H0 more likely than H1 for both; no clear order between them. Basis: the bug hits one entry per new root
 best move and only the order in the deeper nodes; the cut rates of no root update were at the floor (S21).
+
+**S30.** How late move pruning interacts with the adaptive LMR (user's question after S28: too aggressive pruning, or an LMR that no longer reaches
+its aggressive levels?). Diagnostics `lmpx` 9480c12 (from `lmpn`, `epDiag`, compiled off, off identical: 12086912): 1 = nodes by LMR level, 2 = LMP
+shadow (nothing pruned, no count for the LMR, so the same tree as off; the moves LMP would prune are searched and counted). D3 M1, depth 10, perf
+build, tests.fen (50) and roots-500 (real games). Results in `C:\Learn\Data\measurements\search\lmpx`.
+
+The adaptive LMR restarts in every iteration (`alphaBeta` sets level 8, `lmrhi` 8500, counter 0) and climbs with the moves that fail low. So the
+level is a ramp, not an equilibrium: on roots-500 (off) 28.7% of the nodes are searched at the start level 8, 15.4% at 9, 18.8% at the top 15, mean
+10.83 (tests.fen 10.65). The end level of S15 (14.3) hid this.
+
+| roots-500 | Nodes | Mean level | Level 8 | Level 15 |
+|---|---|---|---|---|
+| Off | 90007659 | 10.83 | 28.7% | 18.8% |
+| D3 M1 C0 | 79164741 (-12.0%) | 10.55 | 30.6% | 15.1% |
+| D3 M1 C1 | 76984920 (-14.5%) | 11.09 | 25.5% | 21.3% |
+
+tests.fen the same way: 10.65, 10.59, 11.02. C0 lowers the level, C1 raises it above off: the count of a pruned move is more than the move would have
+given (its subtree is gone, but it also cannot fail high and subtract). Both lost about the same (C0 -9.4 on `nmlm`, C1 -7.6 on `chcm`), with the
+level moving in opposite directions: the level is not the main cause.
+
+Shadow on roots-500, prunable moves by remaining depth and moves over the limit (k), fail high = LMP would have pruned the cut move:
+
+| Depth | Nodes with limit | Prunable | Fail high | k 0 | k 3 | k 7+ |
+|---|---|---|---|---|---|---|
+| 1 | 7771050 | 5148166 | 83942 (1.63%) | 8.6% | 3.0% | 0.49% |
+| 2 | 2413049 | 3565485 | 19217 (0.54%) | 2.2% | 1.1% | 0.23% |
+| 3 | 1176236 | 2398921 | 4183 (0.17%) | 0.7% | 0.3% | 0.08% |
+
+tests.fen: the same shape (d1 1.44%, d2 0.39%, d3 0.13%). Together 107342 lost cuts against about 292000 cuts at move 4+ (1.61% of 18111095): LMP turns
+about a third of the late cuts into fail lows. 78% of them are at depth 1, where LMP only saves the quiescence search of the move (no LMR at depth 1)
+and the limit is 3 moves from the last capture. The fail high rate falls steeply with k at every depth: the move number predicts well, but the first
+moves over the limit still cut often.
+
+Reading: the loss comes from the pruning itself (the first reading), most of it at depth 1 and just over the limit; the LMR level is a side effect,
+in both directions depending on the count. Next for LMP, if again: no LMP at depth 1 or a larger limit there, or a limit by history. For the LMR: the
+restart at level 8 in every iteration (29% of the nodes at level 8) is its own candidate: carry the level over from the previous iteration. Before
+history in the LMR or a history limit for LMP: the same shadow by history value of the move, to see whether history separates the moves that cut.
