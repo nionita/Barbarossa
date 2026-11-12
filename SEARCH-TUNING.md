@@ -682,3 +682,22 @@ complete). Prediction (-6 to +2, most likely -2): direction right, the loss larg
 those moves cut often anyway at the reduced depth (a cheap cut, the re-search confirms it), so the extra depth buys little; besides, fewer failed
 reductions let the adaptive level rise, so the other late moves are reduced more. Against G24 B1 (-3.6) this hints that B1 adds, open until B1 alone
 is in. Result in `C:\Learn\Data\results\memo\lmrh-g-chcm-tc10`.
+
+**S33.** LMR level carried over between iterations: `lmrc` 6894348 (from `chcm`, compiled off). Until now every iteration restarts the adaptive LMR
+at level 8 with the node limit 8500 and counter 0, and climbs again (29% of the nodes at level 8, mean 10.8, S30). `epLmrCarry` 1: the next iteration
+starts at the level where the last one ended (kept in `MyState`, the UCI loop and SelfPlay pass it on); 2: also the node limit (it grows only at level
+15); draft 1 starts a new search as before.
+
+Off identical to `chcm`: 12086912 nodes on tests.fen depth 10. Nodes and move 4+ at depth 10:
+
+| Setting | tests.fen | Move 4+ | roots-500 | Move 4+ |
+|---|---|---|---|---|
+| Off | 12086912 | 1.39% | 90007659 | 1.61% |
+| Carry 1 | 8413953 (-30.4%) | 1.33% | 68724425 (-23.6%) | 1.54% |
+| Carry 2 | 8413953 (-30.4%) | 1.33% | 68638855 (-23.7%) | 1.54% |
+
+Carry 2 is practically carry 1, so only carry 1 is played. Smoke games against `chcm` at 10+0.1, 16 each: 8.5 points each, no time losses. SPRT on
+MEMO: `lmrc-chcm-tc10` (`lc`, epLmrCarry=1), [0, 5], concurrency 4, against `chcm`.
+Prediction (2026-11-13, before the result): -10 to +8, most likely -1, H0 more likely than H1. Basis: a quarter fewer nodes at the same depth is
+about half a ply at the same time, but it comes from more reduction, and more reduction has lost so far: fixed level 11 -8.6, 14 -36.4 (S13); the
+restart at level 8 may work as a safety margin in every new iteration. The adaptive counter still pulls the level down where reductions fail.

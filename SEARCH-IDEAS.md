@@ -17,7 +17,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
 - Continuation history on top of counter moves passed: +10.5 +- 7.2 (S25); counter moves alone +1.5 +- 6.8, stopped (S26). Both compiled in `chcm`.
 - Late move pruning D3 M1 C1 on `chcm`: -7.6 +- 8.1, H0 (S28).
 - Root overflow fix on `chcm`: root as depth 1 -4.1 +- 6.5, H0; no root update -3.4 +- 8.7, stopped; neither is neutral, overflow kept (S29).
-- History in the LMR on `chcm`: G24 B1 -3.6 +- 6.3, G24 alone -9.9 +- 9.0, both H0 (S32). Running on MEMO: B1 alone (`lmrh-b-chcm-tc10`).
+- History in the LMR on `chcm`: G24 B1 -3.6 +- 6.3, G24 alone -9.9 +- 9.0, both H0 (S32). Running on MEMO: B1 alone (`lmrh-b-chcm-tc10`) and the
+  LMR level carried over (`lmrc-chcm-tc10`, S33).
 
 ## Methods
 
@@ -233,9 +234,12 @@ Forms: `lmfx` 32c4bb8, `epLmrFix`; with ordering changes `lfix` fbfb381.
 Evidence: SPRT [0, 5] level 14 -36.4 +- 15.7, level 11 -8.6 +- 8.5 (S13). Levels 12, 13 not played.
 Review when: ordering has changed much.
 
-### LMR level carried over between iterations (status: open)
-Now: the adaptive LMR restarts at level 8 in every iteration and climbs; 29% of the nodes are searched at level 8, mean level 10.8 (S30). Not built.
-2026-11-11.
+### LMR level carried over between iterations (status: running)
+Now: the adaptive LMR restarts at level 8 in every iteration and climbs; 29% of the nodes are searched at level 8, mean level 10.8 (S30). Carried
+over: -30% nodes on tests.fen, -24% on roots-500 at depth 10 (S33). 2026-11-13.
+Forms: `lmrc` 6894348: `epLmrCarry` 1 the level, 2 also the node limit (practically the same).
+Next: SPRT [0, 5], 10+0.1, carry 1 against `chcm` on MEMO (S33).
+Prediction (2026-11-13, before the result): -10 to +8, most likely -1, H0 more likely than H1.
 
 ### LMR: mate escape (status: open)
 Idea (user, 2026-11-11): less or no LMR in nodes where alpha is a "being mated" score for the side to move (alpha <= -mate threshold): all
