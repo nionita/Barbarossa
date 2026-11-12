@@ -671,3 +671,6 @@ directions, about the same nodes) and B1 alone against `chcm`, SPRT [0, 5], conc
 Prediction (2026-11-11, before the results): G24 B1 0 to +8, most likely +3, H1 about as likely as H0; B1 alone -4 to +4, about 0, H0 more likely.
 Basis: S31 shows a real separation by history within the same move number, but the classes are coarse (one ply, one threshold), and the adaptive
 level takes back part of any change in the mean reduction.
+Result G24 B1 (`lhgb`): -3.60 +- 6.30, LOS 13.1%, H0 after 6078 games (LLR -2.95). Prediction (0 to +8, most likely +3): wrong in direction, outside the
+range. The two directions together (about the same nodes) do not pay; which part costs is open until B1 alone (`lmrh-b-chcm-tc10`, running) is in.
+Result in `C:\Learn\Data\results\memo\lmrh-gb-chcm-tc10`.

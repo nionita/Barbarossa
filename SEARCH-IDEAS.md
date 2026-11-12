@@ -17,7 +17,7 @@ are not reviewed here. The user's experience: negative history and squared bonus
 - Continuation history on top of counter moves passed: +10.5 +- 7.2 (S25); counter moves alone +1.5 +- 6.8, stopped (S26). Both compiled in `chcm`.
 - Late move pruning D3 M1 C1 on `chcm`: -7.6 +- 8.1, H0 (S28).
 - Root overflow fix on `chcm`: root as depth 1 -4.1 +- 6.5, H0; no root update -3.4 +- 8.7, stopped; neither is neutral, overflow kept (S29).
-- Running on MEMO: history in the LMR, G24 B1 against `chcm` (`lmrh-gb-chcm-tc10`, S32); next B1 alone.
+- History in the LMR, G24 B1 on `chcm`: -3.6 +- 6.3, H0 (S32). Running on MEMO: B1 alone (`lmrh-b-chcm-tc10`).
 
 ## Methods
 
@@ -249,14 +249,17 @@ with no-loss bounds [-3, 2] (a gain from rare escapes will hardly show). Not bui
 ### Retune of the adaptive LMR after ordering changes (status: open)
 Now: user's point: the adaptive parameters (`lmrInitLim`, weight 2^d of a re-search) were set for the old ordering. No data. 2026-10-31.
 
-### History and depth in the LMR (status: built)
+### History and depth in the LMR (status: running)
 Now: the reduction depends only on the level and the move number. Within the same move number the best fifth by sort value cuts 3 to 5 times as often
 as the worst fifth (S31, late moves at depth 1 to 3): history holds information the LMR does not use. Use the rank in the node or size classes, not
 fixed values. 2026-11-11.
 Forms: `lmrh` 4019537: `epLmrHG` g (one less from s <= -2^g), `epLmrHB` (one more without a bonus); only moves the table reduces.
-Next: SPRT [0, 5], 10+0.1, G24 B1 and B1 against `chcm` on MEMO after `hroot` (S32).
 Prediction (2026-11-11, before the results): G24 B1 0 to +8, most likely +3, H1 about as likely as H0; B1 alone about 0, H0 more likely.
-Next: after counter moves.
+Evidence:
+| Date | Form | Test | Result | Ref | Reading then |
+|---|---|---|---|---|---|
+| 11-13 | G24 B1 on `chcm` | SPRT [0, 5], 10+0.1, 6078 games | -3.60 +- 6.30, H0 | S32 | both directions together do not pay; prediction (+3) wrong |
+Next: B1 alone (running); then decide between G24 alone and other forms (rank in the node, two plies).
 
 ## Other search
 
