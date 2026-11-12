@@ -131,6 +131,19 @@ Evidence (games):
 | 11-12 | `epHRoot=1` on `chcm` | SPRT [0, 5], 10+0.1, 5824 games | -4.12 +- 6.52, H0; LLR under [-3, 2] -1.64 | S29 | not neutral; prediction 0 to +3: H0 right |
 | 11-12 | `epHRoot=2` on `chcm` | SPRT [0, 5], 10+0.1, stopped at 3400 games | -3.37 +- 8.67 | S29 | not better than `epHRoot=1` |
 
+### Root best move deprioritized deeper (status: open)
+Idea (discussion of S29 with the user, 2026-11-12): the root overflow is not a lasting "worst" mark. The history is new per search and not cleared
+between iterations; a stable root best move B gets the root update in every iteration, so its entry (side, piece type, to square) flips: from
+oh < 0 to about +2^31 (worst), at the next update back to oh; from oh >= 0 to about -2^31 (best), then the whole table is halved and B lands at +2^30.
+Under B the entry hardly acts (the to square holds the own piece); it acts in the subtrees of the other root moves X (zero window, expected fail
+low), where it mostly means "B one move later", a near-transposition of the main line. Hypothesis: B last there (reduced most) lets X fail low
+more easily: fewer best move changes and re-searches, a stability bias. The S29 order fits: B high (`epHRoot=1`, 2^30) -4.1, no update
+(`epHRoot=2`) -3.4, the bug (worst every other iteration) 0; together about -3.8 +- 5.2, about 1.5 sigma: weak, may be noise.
+Forms: `epHRoot=3`: B's entry fixed to the worst value at every root update (no flipping, no halving of the table); general form: reduce the
+root best move more in the subtrees of the other root moves.
+Measure: first a perf build diagnostic (how often the entry is read below the root, by node type, cut rate of the delayed B), then an SPRT
+[0, 5] against the current base. Even: the overflow is noise, fix it when convenient (S29). Not built, after the `lmrh` runs.
+
 ### History gravity (status: rejected in this form)
 Now: clearly worse alone, no gain with a malus. It pulls good values back without a malus to balance them. 2026-10-31.
 Forms: `hmal` f10edb1, `epHGrav=1`.
