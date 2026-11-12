@@ -677,3 +677,8 @@ Result in `C:\Learn\Data\results\memo\lmrh-gb-chcm-tc10`.
 To separate the two halves, G24 alone in the free slot: `lmrh-g-chcm-tc10` (`lhg`, epLmrHG=24), SPRT [0, 5], concurrency 4, against `chcm`.
 Prediction (2026-11-13, before the result): G24 alone -6 to +2, most likely -2, H0 much more likely. Basis: +4.4% nodes on roots-500 without a clear
 place where the extra depth pays; the moves with large values cut often anyway.
+Result G24 alone (`lhg`): -9.93 +- 8.95, LOS 1.5%, H0 after 3114 games (LLR -2.96; fastchess was stopped by hand after the SPRT ended, the result is
+complete). Prediction (-6 to +2, most likely -2): direction right, the loss larger. Less reduction for late moves with a large history value costs:
+those moves cut often anyway at the reduced depth (a cheap cut, the re-search confirms it), so the extra depth buys little; besides, fewer failed
+reductions let the adaptive level rise, so the other late moves are reduced more. Against G24 B1 (-3.6) this hints that B1 adds, open until B1 alone
+is in. Result in `C:\Learn\Data\results\memo\lmrh-g-chcm-tc10`.
