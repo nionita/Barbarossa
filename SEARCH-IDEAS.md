@@ -16,7 +16,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
   +13.0 vs `hprf`) + filter + T100.
 - Continuation history on top of counter moves passed: +10.5 +- 7.2 (S25); counter moves alone +1.5 +- 6.8, stopped (S26). Both compiled in `chcm`.
 - Late move pruning D3 M1 C1 on `chcm`: -7.6 +- 8.1, H0 (S28).
-- Running on MEMO: the root overflow fix on `chcm`, root as depth 1 and no root update (`hr1-chcm-tc10`, `hr2-chcm-tc10`, S29).
+- Root overflow fix on `chcm`: root as depth 1 -4.1 +- 6.5, H0; no root update -3.4 +- 8.7, stopped; neither is neutral, overflow kept (S29).
+- Running on MEMO: history in the LMR, G24 B1 against `chcm` (`lmrh-gb-chcm-tc10`, S32); next B1 alone.
 
 ## Methods
 
@@ -117,14 +118,18 @@ Evidence:
 Interpretation history: 10-31: the gain on openings under the adaptive LMR (S18) came with the LMR (S20).
 Review when: timed games at depth are cheap; a better history; separating aging from the weight of reduced lines (bonus `2^(r + ply - draft)`, not built).
 
-### Overflow of the history bonus at the root (status: running)
-Now: a real bug (at absolute depth 0 the Int32 overflows and makes the move the worst), removing it shows no clear gain. Clean up when the code is touched. 2026-10-31.
+### Overflow of the history bonus at the root (status: parked)
+Now: a real bug (at absolute depth 0 the Int32 overflows and makes the move the worst), but both fixes play about -4 on `chcm` and pass no non-regression reading:
+keep it, it is harmless or even useful. Do not "clean it up" without a test. 2026-11-12.
 Forms: `hmal` f10edb1: `epHGrav=0` as before, `2` root as depth 1 (still 2^30), `3` no root update. On `chcm`: `hroot` 1f0bec8, `epHRoot` 0 as before, 1 root as
 depth 1, 2 no root update.
 Evidence: no root update, move 4+ -0.043 under the adaptive LMR on openings (S17); at level 11 -0.046, +0.031, at the floor (S21). No games.
 Review when: the bonus is changed for another reason.
-Next: SPRTs [0, 5], 10+0.1, `epHRoot=1` and `epHRoot=2` against `chcm` (S29). If both end in H0, adopt the cleaner one by a non-regression test.
-Prediction (2026-11-11, before the results): both about 0 to +3, H0 more likely than H1, no clear order.
+Evidence (games):
+| Date | Form | Test | Result | Ref | Reading then |
+|---|---|---|---|---|---|
+| 11-12 | `epHRoot=1` on `chcm` | SPRT [0, 5], 10+0.1, 5824 games | -4.12 +- 6.52, H0; LLR under [-3, 2] -1.64 | S29 | not neutral; prediction 0 to +3: H0 right |
+| 11-12 | `epHRoot=2` on `chcm` | SPRT [0, 5], 10+0.1, stopped at 3400 games | -3.37 +- 8.67 | S29 | not better than `epHRoot=1` |
 
 ### History gravity (status: rejected in this form)
 Now: clearly worse alone, no gain with a malus. It pulls good values back without a malus to balance them. 2026-10-31.

@@ -578,6 +578,12 @@ against 1.39% (one sample each, S20: says little). Smoke games against `chcm` at
 against the `chcm` build: `hr1-chcm-tc10` (epHRoot=1) and `hr2-chcm-tc10` (epHRoot=2).
 Prediction (2026-11-11, before the results): both about 0 to +3; H0 more likely than H1 for both; no clear order between them. Basis: the bug hits one entry per new root
 best move and only the order in the deeper nodes; the cut rates of no root update were at the floor (S21).
+Result: `hr1` (root as depth 1) -4.12 +- 6.52, LOS 10.8%, H0 after 5824 games (LLR -2.99); after 3400 games it stood at +4.80 +- 8.54. `hr2` (no root update)
+-3.37 +- 8.67, LOS 22.3%, stopped after 3400 games (LLR -1.50), its slot went to `lmrh`. Both forms about -4. The plan was a non-regression test if both end in H0;
+recomputed from the pentanomial counts, `hr1` under [-3, 2] has LLR -1.64 (`hr2` -0.73 at 3400 games): no form shows itself neutral, so neither is adopted, the
+overflow stays as it is. Prediction (0 to +3, H0 more likely): H0 right, the value a bit lower. The overflow makes the root best move the worst in the history
+of the quiet sort below the root; that seems to cost nothing, maybe it even helps (variety after a new best move). Results in
+`C:\Learn\Data\results\memo\hr1-chcm-tc10` and `hr2-chcm-tc10`.
 
 **S30.** How late move pruning interacts with the adaptive LMR (user's question after S28: too aggressive pruning, or an LMR that no longer reaches
 its aggressive levels?). Diagnostics `lmpx` 9480c12 (from `lmpn`, `epDiag`, compiled off, off identical: 12086912): 1 = nodes by LMR level, 2 = LMP
