@@ -17,7 +17,7 @@ are not reviewed here. The user's experience: negative history and squared bonus
 - Continuation history on top of counter moves passed: +10.5 +- 7.2 (S25); counter moves alone +1.5 +- 6.8, stopped (S26). Both compiled in `chcm`.
 - Late move pruning D3 M1 C1 on `chcm`: -7.6 +- 8.1, H0 (S28).
 - Root overflow fix on `chcm`: root as depth 1 -4.1 +- 6.5, H0; no root update -3.4 +- 8.7, stopped; neither is neutral, overflow kept (S29).
-- History in the LMR, G24 B1 on `chcm`: -3.6 +- 6.3, H0 (S32). Running on MEMO: B1 alone (`lmrh-b-chcm-tc10`).
+- History in the LMR, G24 B1 on `chcm`: -3.6 +- 6.3, H0 (S32). Running on MEMO: B1 alone and G24 alone (`lmrh-b-chcm-tc10`, `lmrh-g-chcm-tc10`).
 
 ## Methods
 
@@ -259,7 +259,8 @@ Evidence:
 | Date | Form | Test | Result | Ref | Reading then |
 |---|---|---|---|---|---|
 | 11-13 | G24 B1 on `chcm` | SPRT [0, 5], 10+0.1, 6078 games | -3.60 +- 6.30, H0 | S32 | both directions together do not pay; prediction (+3) wrong |
-Next: B1 alone (running); then decide between G24 alone and other forms (rank in the node, two plies).
+Next: B1 alone and G24 alone (both running); if both lose, the next form is the rank in the node, not size classes.
+Prediction G24 alone (2026-11-13, before the result): -6 to +2, most likely -2, H0 much more likely.
 
 ## Other search
 

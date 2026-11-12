@@ -674,3 +674,6 @@ level takes back part of any change in the mean reduction.
 Result G24 B1 (`lhgb`): -3.60 +- 6.30, LOS 13.1%, H0 after 6078 games (LLR -2.95). Prediction (0 to +8, most likely +3): wrong in direction, outside the
 range. The two directions together (about the same nodes) do not pay; which part costs is open until B1 alone (`lmrh-b-chcm-tc10`, running) is in.
 Result in `C:\Learn\Data\results\memo\lmrh-gb-chcm-tc10`.
+To separate the two halves, G24 alone in the free slot: `lmrh-g-chcm-tc10` (`lhg`, epLmrHG=24), SPRT [0, 5], concurrency 4, against `chcm`.
+Prediction (2026-11-13, before the result): G24 alone -6 to +2, most likely -2, H0 much more likely. Basis: +4.4% nodes on roots-500 without a clear
+place where the extra depth pays; the moves with large values cut often anyway.
