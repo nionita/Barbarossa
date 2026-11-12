@@ -29,6 +29,8 @@ data MyState = MyState {
         mstats :: SStats,	-- per move search statistics
         evalst :: EvalState,	-- eval status (parameter & statistics)
         rootmn :: !Int,		-- root move number
+        lmrcl  :: !Int,		-- LMR level at the end of the last iteration (for epLmrCarry)
+        lmrch  :: !Int,		-- LMR node limit at the end of the last iteration (for epLmrCarry)
         lorig  :: Maybe MyPos	-- leaf (eval) position of the last root search iteration (data collection)
     }
 

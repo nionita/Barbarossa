@@ -295,7 +295,17 @@ alphaBeta abc = do
                             rfutd = epRFutD (esEParams est), rfuta = epRFutA (esEParams est),
                             rfutm = epRFutM (esEParams est),
                             rfutt = epRFutT (esEParams est) }
-        pvs0 = pvsInit { ronly = pvro, lmrlv = if lmrfx pvro >= 0 then lmrfx pvro else lmrInitLv }	-- :: PVState
+    -- With epLmrCarry the adaptive LMR goes on from the state at the end of the last iteration
+    -- (draft 1 starts a new search with the initial state)
+    lmrc0 <- gets lmrcl
+    lmrh0 <- gets lmrch
+    let carry = epLmrCarry (esEParams est)
+        lv0 | lmrfx pvro >= 0    = lmrfx pvro
+            | carry > 0 && d > 1 = lmrc0
+            | otherwise          = lmrInitLv
+        hi0 | carry > 1 && d > 1 = lmrh0
+            | otherwise          = lmrInitLim
+        pvs0 = pvsInit { ronly = pvro, lmrlv = lv0, lmrhi = hi0 }	-- :: PVState
     -- We will get a result and a final state:
     (r, s) <- if useAspirWin
                  then case lastscore abc of
@@ -315,6 +325,7 @@ alphaBeta abc = do
                                 else runCState (searchFull es1) pvs0
                      Nothing -> runCState (searchFull lpv) pvs0
                  else runCState (searchFull lpv) pvs0
+    when (carry > 0) $ modify $ \ms -> ms { lmrcl = lmrlv s, lmrch = lmrhi s }
     let timint   = abort s
         seldepth = maxdp s
     -- When aborted, return the last found good move

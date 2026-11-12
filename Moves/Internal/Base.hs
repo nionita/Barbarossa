@@ -65,6 +65,8 @@ posToState p c h e = MyState {
                        mstats = ssts0,
                        evalst = e,
                        rootmn = 1,
+                       lmrcl = 8,
+                       lmrch = 8500,
                        lorig = Nothing
                    }
     where stsc = posEval p e
