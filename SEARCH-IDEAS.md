@@ -291,6 +291,9 @@ longer time control.
 S38 (`lmrm` e908bd8, table to level 19): at 3 s per move cap 19 +0.41 +- 0.13 ply against 15, at 1.5 s no difference; the cap that costs no
 depth grows with the time. Possible link to the weaker play at long time controls. Next: an SPRT of a higher cap at a long time control when a
 MEMO slot is free; a ramp by depth instead of nodes would not depend on the time control at all.
+Cap 19 at a long time control (2026-11-13): `lmrm` e908bd8 `epLmrMax=19` against `lmrm` (cap 15, same binary) on m3b at
+192+3.2 (60+1 on MEMO, factor 3.2), a fixed 2000 games read once at the end (LOS >= 95% to adopt), run `lmrm-m19-lmrm-tc60`.
+Prediction (before the result): -6 to +12, most likely +3; LOS >= 95% unlikely at 2000 games (+-12).
 S39: in games the endgame runs at lower levels at equal draft (10+0.1, d13+: 10.0 against 12-13), not in searches from scratch: the phase
 reaches the level through the iteration size (TT, time), not by itself. A depth ramp would need the phase or the move count to keep it.
 
