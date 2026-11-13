@@ -254,6 +254,12 @@ Forms: `lmrb` 5092839: `epLmrIni` (8), `epLmrLim` (8500), `epLmrPV` (0).
 Next: SPRT [0, 5], 10+0.1, Ini 6 and PV 1 against `chcm` on MEMO, Lim 17000 on m3a (S34); Ini 7 built, not played.
 Prediction Lim 17000 (2026-11-14, before the result): -5 to +6, most likely +1, H0 more likely.
 Prediction (2026-11-14, before the results): Ini 6 -4 to +8, most likely +2; PV 1 -5 to +6, most likely +1; H0 more likely for both.
+Evidence:
+| Date | Form | Test | Result | Ref | Reading then |
+|---|---|---|---|---|---|
+| 11-14 | Ini 6 on `chcm` | SPRT [0, 5], 10+0.1, MEMO, 3506 games | -8.13 +- 8.31, H0 | S34 | a lower start loses too; prediction (+2) wrong |
+Interpretation history: 2026-11-14: the start level 8 looks like a local optimum (higher -25, lower -8); a slower climb (Lim 17000) is now expected
+to lose as well; Ini 7 would at best be neutral, not worth an SPRT.
 
 ### LMR: mate escape (status: open)
 Idea (user, 2026-11-11): less or no LMR in nodes where alpha is a "being mated" score for the side to move (alpha <= -mate threshold): all

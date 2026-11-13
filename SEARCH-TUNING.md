@@ -735,3 +735,8 @@ smaller than the carry-over in the other direction; PV nodes are few, the late m
 Third form on the new Linux runner m3a (concurrency 6, time control by its calibration, built there from `lmrb`): `lmrb-l17-chcm` (`lbl17`,
 epLmrLim=17000), SPRT [0, 5] against `chcm`. Prediction (2026-11-14, before the result): -5 to +6, most likely +1, H0 more likely than H1. Basis:
 a slower climb keeps less reduction longer in every iteration, like a lower start, but over the whole iteration; +13% nodes on roots-500.
+Result Ini 6 (`lbi6`, MEMO, 10+0.1): -8.13 +- 8.31, LOS 2.8%, H0 after 3506 games (LLR -2.95), pentanomial [137, 439, 653, 417, 107]. Prediction
+(-4 to +8, most likely +2): wrong, the result is below the range. A lower start loses too, less than a higher one (carry-over -25, S33): the start
+level 8 looks like a local optimum, and the loss in both directions is not symmetric. The extra nodes (+9% on tests.fen, +3% on roots-500) do not
+buy enough depth quality for the time they cost. Expected from this for Lim 17000 (slower climb, +13% nodes): rather a loss as well. Result in
+`C:\Learn\Dataesults\memo\lmrb-i6-chcm-tc10`.
