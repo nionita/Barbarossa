@@ -913,14 +913,23 @@ moreLMR more !d = do
     if lmrfx (ronly s) >= 0 then return () else
      if i1 < 0
        then if lmrlv s <= lmrLevMin
-               then put s { lmrhi = findir (lmrhi s), lmrrs = 0 }
-               else put s { lmrlv = lmrlv s - 1, lmrrs = 0 }
+               then change s s { lmrhi = findir (lmrhi s), lmrrs = 0 }
+               else change s s { lmrlv = lmrlv s - 1, lmrrs = 0 }
        else if i1 > lmrhi s
                then if lmrlv s >= lmrLevMax
-                       then put s { lmrhi = fdir (lmrhi s), lmrrs = 0 }
-                       else put s { lmrlv = lmrlv s + 1, lmrrs = 0 }
+                       then change s s { lmrhi = fdir (lmrhi s), lmrrs = 0 }
+                       else change s s { lmrlv = lmrlv s + 1, lmrrs = 0 }
                else put s { lmrrs = i1 }
-    where fdir x = x `unsafeShiftL` 2
+    where change :: PVState -> PVState -> Search ()
+          change s0 s1 = do
+              put s1
+              -- trace of the adaptive level (log level info; rare: one step up needs lmrhi nodes)
+              lift $ logmes $ "LMR change: draft " ++ show (draft $ ronly s0)
+                  ++ " nodes " ++ show (sNodes $ stats s0) ++ " ply " ++ show (absdp s0)
+                  ++ " pen " ++ (if more then "0" else show d)
+                  ++ " lv " ++ show (lmrlv s0) ++ " " ++ show (lmrlv s1)
+                  ++ " hi " ++ show (lmrhi s0) ++ " " ++ show (lmrhi s1)
+          fdir x = x `unsafeShiftL` 2
           findir x = max 1 $ x `unsafeShiftR` 1
 
 -- This is a kind of monadic fold optimized for (beta) cut
