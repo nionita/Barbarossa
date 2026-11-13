@@ -17,8 +17,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
 - Continuation history on top of counter moves passed: +10.5 +- 7.2 (S25); counter moves alone +1.5 +- 6.8, stopped (S26). Both compiled in `chcm`.
 - Late move pruning D3 M1 C1 on `chcm`: -7.6 +- 8.1, H0 (S28).
 - Root overflow fix on `chcm`: root as depth 1 -4.1 +- 6.5, H0; no root update -3.4 +- 8.7, stopped; neither is neutral, overflow kept (S29).
-- History in the LMR on `chcm`: G24 B1 -3.6 +- 6.3, G24 alone -9.9 +- 9.0, both H0 (S32). Running on MEMO: B1 alone (`lmrh-b-chcm-tc10`) and the
-  LMR level carried over (`lmrc-chcm-tc10`, S33).
+- History in the LMR on `chcm`: G24 B1 -3.6 +- 6.3, G24 alone -9.9 +- 9.0, B1 alone -2.6 +- 5.7, all H0 (S32).
+- LMR level carried over between iterations: -25.0 +- 13.3, H0 (S33): the restart at level 8 is worth much.
 
 ## Methods
 
@@ -234,12 +234,20 @@ Forms: `lmfx` 32c4bb8, `epLmrFix`; with ordering changes `lfix` fbfb381.
 Evidence: SPRT [0, 5] level 14 -36.4 +- 15.7, level 11 -8.6 +- 8.5 (S13). Levels 12, 13 not played.
 Review when: ordering has changed much.
 
-### LMR level carried over between iterations (status: running)
+### LMR level carried over between iterations (status: rejected in this form)
 Now: the adaptive LMR restarts at level 8 in every iteration and climbs; 29% of the nodes are searched at level 8, mean level 10.8 (S30). Carried
 over: -30% nodes on tests.fen, -24% on roots-500 at depth 10 (S33). 2026-11-13.
 Forms: `lmrc` 6894348: `epLmrCarry` 1 the level, 2 also the node limit (practically the same).
-Next: SPRT [0, 5], 10+0.1, carry 1 against `chcm` on MEMO (S33).
 Prediction (2026-11-13, before the result): -10 to +8, most likely -1, H0 more likely than H1.
+Evidence:
+| Date | Form | Test | Result | Ref | Reading then |
+|---|---|---|---|---|---|
+| 11-13 | Carry 1 on `chcm` | SPRT [0, 5], 10+0.1, 1366 games | -24.97 +- 13.28, H0 | S33 | the restart at level 8 is worth about 25 Elo; prediction (-1) right in direction only |
+
+### Lower LMR start level, less LMR in PV nodes (status: open)
+Now: from S33 (carrying the level over -25), S13 (fixed 11 -8.6, 14 -36.4) and S32 (G24 -9.9): every change that raises the reduction where an
+iteration starts loses. The other direction was never tried: each iteration starts lower than 8 (`lmrInitLv` 6, 7) or the level climbs slower
+(`lmrInitLim` higher); or one ply less reduction in PV nodes (now the same table for PV and zero window). Not built. 2026-11-13.
 
 ### LMR: mate escape (status: open)
 Idea (user, 2026-11-11): less or no LMR in nodes where alpha is a "being mated" score for the side to move (alpha <= -mate threshold): all
@@ -253,7 +261,7 @@ with no-loss bounds [-3, 2] (a gain from rare escapes will hardly show). Not bui
 ### Retune of the adaptive LMR after ordering changes (status: open)
 Now: user's point: the adaptive parameters (`lmrInitLim`, weight 2^d of a re-search) were set for the old ordering. No data. 2026-10-31.
 
-### History and depth in the LMR (status: running)
+### History and depth in the LMR (status: rejected in this form)
 Now: the reduction depends only on the level and the move number. Within the same move number the best fifth by sort value cuts 3 to 5 times as often
 as the worst fifth (S31, late moves at depth 1 to 3): history holds information the LMR does not use. Use the rank in the node or size classes, not
 fixed values. 2026-11-11.
@@ -264,9 +272,10 @@ Evidence:
 |---|---|---|---|---|---|
 | 11-13 | G24 B1 on `chcm` | SPRT [0, 5], 10+0.1, 6078 games | -3.60 +- 6.30, H0 | S32 | both directions together do not pay; prediction (+3) wrong |
 | 11-13 | G24 alone on `chcm` | SPRT [0, 5], 10+0.1, 3114 games | -9.93 +- 8.95, H0 | S32 | less reduction for good history costs; prediction (-2) right in direction |
+| 11-13 | B1 alone on `chcm` | SPRT [0, 5], 10+0.1, 7584 games | -2.57 +- 5.73, H0 | S32 | even at best; prediction (about 0) right |
 Prediction G24 alone (2026-11-13, before the result): -6 to +2, most likely -2, H0 much more likely.
-Next: B1 alone (running). Less reduction by history is out in this form; if B1 gains, try more of it (two plies, a lower class); if it loses too, the
-rank in the node.
+Reading: the move number already holds most of the history (sorted by it), the adaptive level answers changes in the mean reduction.
+Review when: the LMR itself changes (start level, PV nodes); the rank in the node and depth as a factor were not tried.
 
 ## Other search
 

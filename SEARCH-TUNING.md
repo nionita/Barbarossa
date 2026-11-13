@@ -682,6 +682,10 @@ complete). Prediction (-6 to +2, most likely -2): direction right, the loss larg
 those moves cut often anyway at the reduced depth (a cheap cut, the re-search confirms it), so the extra depth buys little; besides, fewer failed
 reductions let the adaptive level rise, so the other late moves are reduced more. Against G24 B1 (-3.6) this hints that B1 adds, open until B1 alone
 is in. Result in `C:\Learn\Data\results\memo\lmrh-g-chcm-tc10`.
+Result B1 alone (`lhb`): -2.57 +- 5.73, LOS 19.0%, H0 after 7584 games (LLR -2.96). Prediction (about 0, H0 more likely): right. All three forms lose
+or are even at best: G24 -9.9, G24 B1 -3.6, B1 -2.6. History classes in the LMR do not pay in this form: the move number already carries most of the
+history (the quiet moves are sorted by it, S31: AUC within the same k only 0.62 to 0.65), and the adaptive level answers any change in the mean
+reduction. Results in `C:\Learn\Data\results\memo\lmrh-b-chcm-tc10`.
 
 **S33.** LMR level carried over between iterations: `lmrc` 6894348 (from `chcm`, compiled off). Until now every iteration restarts the adaptive LMR
 at level 8 with the node limit 8500 and counter 0, and climbs again (29% of the nodes at level 8, mean 10.8, S30). `epLmrCarry` 1: the next iteration
@@ -701,3 +705,9 @@ MEMO: `lmrc-chcm-tc10` (`lc`, epLmrCarry=1), [0, 5], concurrency 4, against `chc
 Prediction (2026-11-13, before the result): -10 to +8, most likely -1, H0 more likely than H1. Basis: a quarter fewer nodes at the same depth is
 about half a ply at the same time, but it comes from more reduction, and more reduction has lost so far: fixed level 11 -8.6, 14 -36.4 (S13); the
 restart at level 8 may work as a safety margin in every new iteration. The adaptive counter still pulls the level down where reductions fail.
+Result carry 1 (`lc`): -24.97 +- 13.28, LOS 0.01%, H0 after 1366 games (LLR -2.95). Prediction (-10 to +8, most likely -1): direction right, the loss
+much larger, outside the range. The restart at level 8 in every iteration is worth about 25 Elo: the early part of each iteration (the first root
+moves, the new PV) is searched with less reduction, and a quarter fewer nodes at the same depth do not make up for it. Together with the fixed levels
+(S13: 11 -8.6, 14 -36.4) and G24 alone (less reduction for some moves, but a higher level for the others, -9.9): every change that raises the
+reduction where the search starts loses. Open the other direction: start lower than 8, or reduce less in PV nodes. Result in
+`C:\Learn\Data\results\memo\lmrc-chcm-tc10`.
