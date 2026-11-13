@@ -152,6 +152,7 @@ data PVStRO
           lmrtb  :: !(UArray (Int, Int) Int),	-- late move reduction: reductions by level and move number
           lmrpn  :: !(UArray Int Int),	-- late move reduction: re-search penalty by depth (0 .. 63)
           lmrnd  :: !Int,	-- late move reduction: none up to this depth
+          lmrmx  :: !Int,	-- late move reduction: highest level of the adaptive LMR
           rfuta  :: !Int,	-- reverse futility pruning: constant margin (cp)
           rfutm  :: !Int,	-- reverse futility pruning: margin per depth (cp)
           rfutt  :: !Int	-- reverse futility pruning: extra margin with own pieces hanging (cp, 0 = off)
@@ -288,7 +289,8 @@ resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, r
 pvro00 :: PVStRO
 pvro00 = PVStRO { draft = 0, tuning = False, abpol = NoAbort, futmar = defaultFutMargins,
                   cmv = False, chp = 0, chw = 4, lmrfx = -1, lmrpv = 0,
-                  lmrtb = lmrTable 120, lmrpn = lmrPenTable 20, lmrnd = 1, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
+                  lmrtb = lmrTable 120, lmrpn = lmrPenTable 20, lmrnd = 1,
+                  lmrmx = lmrLevMax, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
 
 alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int, Int)
 alphaBeta abc = do
@@ -307,6 +309,7 @@ alphaBeta abc = do
                             lmrtb = lmrTable (epLmrGrw (esEParams est)),
                             lmrpn = lmrPenTable (epLmrPen (esEParams est)),
                             lmrnd = epLmrNoD (esEParams est),
+                            lmrmx = max lmrLevMin $ min lmrLevMax $ epLmrMax (esEParams est),
                             rfutd = epRFutD (esEParams est), rfuta = epRFutA (esEParams est),
                             rfutm = epRFutM (esEParams est),
                             rfutt = epRFutT (esEParams est) }
@@ -916,7 +919,7 @@ moreLMR more !d = do
                then change s s { lmrhi = findir (lmrhi s), lmrrs = 0 }
                else change s s { lmrlv = lmrlv s - 1, lmrrs = 0 }
        else if i1 > lmrhi s
-               then if lmrlv s >= lmrLevMax
+               then if lmrlv s >= lmrmx (ronly s)
                        then change s s { lmrhi = fdir (lmrhi s), lmrrs = 0 }
                        else change s s { lmrlv = lmrlv s + 1, lmrrs = 0 }
                else put s { lmrrs = i1 }

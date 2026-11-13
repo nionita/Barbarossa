@@ -70,6 +70,8 @@ params = [
         ("epLmrGrw",          120),
         ("epLmrPen",           20),
         ("epLmrNoD",            1),
+        -- late move reduction: highest level the adaptive LMR climbs to (0 .. 15, as before 15)
+        ("epLmrMax",           15),
         -- drawishness scale of the whole eval (Eval.Core.normalParts), instead of the heuristic rules of
         -- scaleFactor when epScaleNew = 1 (default: compiled in, scale-c-lin, TUNING-HISTORY finding 37;
         -- epScaleNew = 0 is the old scaling); factors in 1/64 (64 = 1), fitted by hv_scale.py --constrained
