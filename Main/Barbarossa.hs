@@ -41,7 +41,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.9.0"
-progVerSuff = "rel090"
+progVerSuff = "mvtm"
 
 data Options = Options {
         optConfFile :: Maybe String,    -- config file
@@ -404,11 +404,13 @@ doGo cmds = do
         else if Ponder `elem` cmds
             then ctxLog DebugUci "Just ponder: ignored"
             else do
-                let (tim, tpm, mtg) = getUCITime cmds $ myColor chg
+                let mvt  = max 0 $ fromMaybe 0 (findMoveTime cmds)    -- fixed time per move (ms), 0 = none
+                    (tim, tpm, mtg) | mvt > 0   = (0, 0, 0)  -- movetime replaces the clock
+                                    | otherwise = getUCITime cmds $ myColor chg
                     rept = countRepetitions $ crtStatus chg
                     md   = 25   -- max search depth
                     dpt  = fromMaybe md (findDepth cmds)
-                startWorking tim tpm mtg dpt rept
+                startWorking tim tpm mtg mvt dpt rept
 
 data Agreg = Agreg {
          agrCumErr :: !Integer, -- accumulated error
@@ -509,12 +511,12 @@ newThread a = do
     ctx <- ask
     liftIO $ forkIO $ runReaderT a ctx
 
-startWorking :: Int -> Int -> Int -> Int -> Int -> CtxIO ()
-startWorking tim tpm mtg dpt rept = do
+startWorking :: Int -> Int -> Int -> Int -> Int -> Int -> CtxIO ()
+startWorking tim tpm mtg mvt dpt rept = do
     ctx <- ask
     currms <- lift $ currMilli (strttm ctx)
     ctxLog DebugUci $ "Start at " ++ show currms
-        ++ " to search: " ++ show tim ++ " / " ++ show tpm ++ " / " ++ show mtg
+        ++ " to search: " ++ show tim ++ " / " ++ show tpm ++ " / " ++ show mtg ++ " / movetime " ++ show mvt
         ++ " - maximal " ++ show dpt ++ " plys"
     tok <- beginSearch $ \c -> c {
             srchStrtMs = currms,
@@ -522,13 +524,13 @@ startWorking tim tpm mtg dpt rept = do
             lastChDr = 0,
             crtStatus = (posNewSearch (crtStatus c)) { lorig = Nothing }
         }
-    tid <- newThread (startSearchThread tok tim tpm mtg dpt rept)
+    tid <- newThread (startSearchThread tok tim tpm mtg mvt dpt rept)
     ok <- attachSearchThread tok tid
     unless ok $ liftIO $ killThread tid
 
-startSearchThread :: Int -> Int -> Int -> Int -> Int -> Int -> CtxIO ()
-startSearchThread tok tim tpm mtg dpt rept =
-    ctxCatch (void $ searchTheTree tok 1 dpt 0 0 tim tpm mtg rept Nothing [] [])
+startSearchThread :: Int -> Int -> Int -> Int -> Int -> Int -> Int -> CtxIO ()
+startSearchThread tok tim tpm mtg mvt dpt rept =
+    ctxCatch (void $ searchTheTree tok 1 dpt 0 0 tim tpm mtg mvt rept Nothing [] [])
         $ \e -> do
             chg <- readChanging
             if searchToken chg /= tok || not (working chg)
@@ -556,8 +558,10 @@ ctxCatch a f = do
             (\e -> runReaderT (f e) ctx)
 
 -- Search with the given depth
-searchTheTree :: Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Maybe Int -> [Move] -> [Move] -> CtxIO Int
-searchTheTree tok draft mdraft timx1 timx tim tpm mtg rept lsc lpv rmvs = do
+-- mvt > 0: fixed time per move (go movetime), tim, tpm and mtg are then 0
+searchTheTree :: Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int -> Maybe Int -> [Move] -> [Move]
+              -> CtxIO Int
+searchTheTree tok draft mdraft timx1 timx tim tpm mtg mvt rept lsc lpv rmvs = do
     ctxLog LogInfo $ "searchTheTree starts draft " ++ show draft
     ctx <- ask
     chg <- readChanging
@@ -588,7 +592,7 @@ searchTheTree tok draft mdraft timx1 timx tim tpm mtg rept lsc lpv rmvs = do
                redp  = reduceBegin $ realPly chg
                start = srchStrtMs chg
                used  = currms - start
-               over  = timed && used >= mx
+               over  = timed && used >= mx || mvt > 0 && used >= mvt
                onlyone = timed && length rmvsf == 1 && draft >= 4       -- only in normal play
                draftmax = draft >= mdraft       --  or maximal draft
                mes = "Draft " ++ show draft ++ " Score " ++ show sc ++ " path " ++ show path
@@ -615,13 +619,17 @@ searchTheTree tok draft mdraft timx1 timx tim tpm mtg rept lsc lpv rmvs = do
                   ctxLog LogInfo $ "searchTheTree finishes draft " ++ show draft
                   chg' <- readChanging
                   if working chg' && searchToken chg' == tok
-                      then if not timed -- no time constraint (take original maximum)
-                              then searchTheTree tok (draft+1) mdraft 0 0 tim tpm mtg rept (Just sc) path rmvsf
+                      then if mvt > 0   -- fixed time per move: abort at its end, in every root move
+                              then do
+                                  let mvte = start + mvt
+                                  searchTheTree tok (draft+1) mdraft mvte mvte tim tpm mtg mvt rept (Just sc) path rmvsf
+                              else if not timed -- no time constraint (take original maximum)
+                              then searchTheTree tok (draft+1) mdraft 0 0 tim tpm mtg mvt rept (Just sc) path rmvsf
                               else do
                                   -- absolute times, 0 would mean no limit
                                   let mxt  = max 1 $ start + mxr
                                       mxt1 = max 1 $ start + mxr `div` firstMoveTimeReductionFactor
-                                  searchTheTree tok (draft+1) mdraft mxt1 mxt tim tpm mtg rept (Just sc) path rmvsf
+                                  searchTheTree tok (draft+1) mdraft mxt1 mxt tim tpm mtg mvt rept (Just sc) path rmvsf
                       else do
                           ctxLog DebugUci "in searchTheTree: not working"
                           return sc
