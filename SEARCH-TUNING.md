@@ -791,3 +791,8 @@ That is an implicit depth term. It explains S33 (carry-over: the new PV searched
 Ini, Lim and the cap the knobs that matter; the re-search penalty matters little (S35 Pen 15: now expected about 0, against the recorded -4,
 which assumed frequent drops). The premise of the drops being costly (user, 2026-11-13: a fail high lowers the level drastically for a while)
 does not hold in this form; mini searches fewer nodes per move than MEMO, the shape should hold.
+Pen 15 on MEMO stopped by hand after S36 (it hardly changes the search; result recorded when pasted). In its slot the faster ramp, the other
+side of Lim 17000 on m3a: `lmrt-l6-lmrt-tc10` (`ltl6`, epLmrLim=6000), [0, 5], against `lmrt`. The level rises one step per about 6000 nodes
+instead of 8500: the first root moves and the PV keep level 8 for fewer nodes, later root moves and deep iterations get more reduction (more
+nodes at the cap). Prediction (2026-11-13, before the result): -10 to +4, most likely -3, H0 much more likely. Basis: every increase of the
+reduction lost so far (S33, S13); this one leaves the start of each iteration nearly as it is, so it should cost less than the carry-over.

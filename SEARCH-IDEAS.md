@@ -283,6 +283,8 @@ Prediction Pen 15 on MEMO (2026-11-13, before the result): -12 to +4, most likel
 Interpretation history: 2026-11-13 (S36): the level is a ramp, not a regulator: it starts at 8 in every iteration and rises one step per about
 8500 nodes to the cap 15, drops are rare (38 in 105M nodes). The knobs are the start, the ramp speed (Lim) and the cap; the penalty hardly acts
 (Pen 15 now expected about 0). The ramp is an implicit depth term: large iterations reach high levels.
+Next (2026-11-13): Pen 15 stopped; Lim 6000 on MEMO (faster ramp) against Lim 17000 on m3a (slower); then the cap (13 instead of 15).
+Prediction Lim 6000 (2026-11-13, before the result): -10 to +4, most likely -3, H0 much more likely.
 
 ### History and depth in the LMR (status: rejected in this form)
 Now: the reduction depends only on the level and the move number. Within the same move number the best fifth by sort value cuts 3 to 5 times as often
