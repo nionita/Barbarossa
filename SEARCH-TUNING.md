@@ -740,6 +740,12 @@ Result Ini 6 (`lbi6`, MEMO, 10+0.1): -8.13 +- 8.31, LOS 2.8%, H0 after 3506 game
 level 8 looks like a local optimum, and the loss in both directions is not symmetric. The extra nodes (+9% on tests.fen, +3% on roots-500) do not
 buy enough depth quality for the time they cost. Expected from this for Lim 17000 (slower climb, +13% nodes): rather a loss as well. Result in
 `C:\Learn\Data\results\memo\lmrb-i6-chcm-tc10`.
+Result PV 1 (`lbpv`, MEMO, 10+0.1): -6.65 +- 7.72, LOS 4.6%, H0 after 4286 games (LLR -2.95), pentanomial [182, 521, 792, 493, 155]; one time
+loss of `chcm`. Prediction (-5 to +6, most likely +1): wrong, just below the range. Less reduction for the late moves of PV nodes costs too,
+although it adds few nodes on real positions (+0.6% on roots-500, +13% on tests.fen). With S33 (higher start -25) and Ini 6 (-8.1): every change of
+the amount of reduction tried so far loses, in both directions; the adaptive LMR as it is sits near an optimum for its amount. What is left in
+this form: the shape (growth, penalty, S35); outside it, a reduction that depends on depth. Result in
+`C:\Learn\Data\results\memo\lmrb-pv1-chcm-tc10`.
 
 **S35.** The hard coded constants of the adaptive LMR as parameters: `lmrt` dea4035 (from `lmrb`, compiled as before): `epLmrGrw` (120) growth
 of the reduction table with the move number (factor 1.2), `epLmrPen` (20) base of the re-search penalty 2^d in tenths, `epLmrNoD` (1) no LMR up

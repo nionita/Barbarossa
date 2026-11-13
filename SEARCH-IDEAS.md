@@ -258,8 +258,11 @@ Evidence:
 | Date | Form | Test | Result | Ref | Reading then |
 |---|---|---|---|---|---|
 | 11-13 | Ini 6 on `chcm` | SPRT [0, 5], 10+0.1, MEMO, 3506 games | -8.13 +- 8.31, H0 | S34 | a lower start loses too; prediction (+2) wrong |
+| 11-13 | PV 1 on `chcm` | SPRT [0, 5], 10+0.1, MEMO, 4286 games | -6.65 +- 7.72, H0 | S34 | less reduction in PV nodes loses too; prediction (+1) wrong |
 Interpretation history: 2026-11-13: the start level 8 looks like a local optimum (higher -25, lower -8); a slower climb (Lim 17000) is now expected
 to lose as well; Ini 7 would at best be neutral, not worth an SPRT.
+2026-11-13 (PV 1): every change of the amount of reduction loses, in both directions and also only in PV nodes: the amount is near its optimum
+in this form. Open: the shape (S35) and a depth term.
 
 ### LMR: mate escape (status: open)
 Idea (user, 2026-11-11): less or no LMR in nodes where alpha is a "being mated" score for the side to move (alpha <= -mate threshold): all
