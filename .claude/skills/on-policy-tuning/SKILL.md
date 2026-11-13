@@ -8,22 +8,21 @@ description: One round of on-policy tuning of Barbarossa's HCE (weights + piece 
 Background and results: `TUNING.md` (state, lessons, ideas) and `TUNING-HISTORY.md` findings 24-36. The method
 works only with positions from the engine's own games labelled with the real game results (on-policy); data of
 other engines or adjudicated results (LogScan) made the engine weaker. Tools: BarbarossaTuning (`hv_*.py`,
-`run_*.ps1`), next to this repository. Python: see the user's machine notes (on the mini PC
-`C:\Users\Nicu\miniconda3a\envs\jacob\python.exe`).
+`run_*.ps1`), next to this repository. Python and everything about the machines: see the user's private machines repository (`lab`: `MACHINES.md`, `MATCHES.md`).
 
 ## 1. Data: the compiled engine plays itself
 
 - Neutral config (candidate = compiled engine): one weight set to its CURRENT compiled value in
   `Struct/Weights.hs` (e.g. `mid.ewKingSafe = <value>`). Check it: `TuneSGD -X` with and without `-c` on a small
   position set gives identical `eval` columns.
-- Long runs go to the second machine (MEMO): pack `SelfPlay-<branch>.exe` and the config as a zip with the
-  folder structure below `C:\` into `Z:\nicu\transf\<name>.zip`, give the `Expand-Archive` command and plain
-  `.\run_sharded.ps1` commands (no ExecutionPolicy wrapper there).
+- Long runs go to another machine (MEMO): pack `SelfPlay-<branch>.exe` and the config as described in `MACHINES.md`
+  (how files get there, the unpack command), and give plain `.\run_sharded.ps1` commands.
 - `run_sharded.ps1 -Name <run> -Config <neutral.cfg> -Shards 4 -Pairs <p> -Nodes <n> -DataDir <dir>` with
   `-Offset` / `-Fens` so that runs use disjoint openings (`open-moves-uniq.fen`, `open-chilo-eq.fen`).
   Speed on MEMO: about 1 game/s per shard at 10k nodes, about 100 positions per game.
 - More nodes per move = better data but proportionally slower; the gains grew with depth.
-- Back: `Compress-Archive` of the data dir to Z:, unpack, check the game count in the last line of each `.meta`.
+- Back: `Compress-Archive` of the data dir to the transfer place of `MACHINES.md`, unpack, check the game count in the
+  last line of each `.meta`.
 - Keep the raw data in `C:\Learn\Data\raw\selfplay\<set>` (engine games: `raw\games\<set>`) and add the set to
   `C:\Learn\Data\DATA.md` (engine, branch and commit, config, nodes or time control, openings and range, games,
   positions); that folder is the backup set, derived data stays in the work folder.

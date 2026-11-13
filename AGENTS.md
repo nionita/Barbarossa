@@ -3,6 +3,9 @@
 ## Repository expectations
 
 - Module exports must be always explicit
+- Machine specific facts (paths of the user's machines, shares, how to reach them and start runs there) and runner
+  scripts for those machines belong to the user's private machines repository (`lab`), not to this public one;
+  machine names alone are fine in logs. Secrets (keys, passwords, host names, user names) go into no repository.
 
 ## Editing notes
 
