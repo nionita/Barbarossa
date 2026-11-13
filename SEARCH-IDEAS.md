@@ -279,6 +279,7 @@ Now: user's point: the adaptive parameters (`lmrInitLim`, weight 2^d of a re-sea
 Forms: `lmrb` 5092839: `epLmrIni` (8), `epLmrLim` (8500), `epLmrPV` (0); `lmrt` dea4035: `epLmrGrw` (120), `epLmrPen` (20), `epLmrNoD` (1).
 Next: Grw 110 on MEMO (S35), then Pen 15 or 30 on m3a after Lim 17000; SPRTs [0, 5] against `lmrt` with its defaults (same binary).
 Prediction Grw 110 (2026-11-13, before the result): -4 to +4, most likely 0, H0 much more likely.
+Prediction Pen 15 on MEMO (2026-11-13, before the result): -12 to +4, most likely -4, H0 much more likely.
 
 ### History and depth in the LMR (status: rejected in this form)
 Now: the reduction depends only on the level and the move number. Within the same move number the best fifth by sort value cuts 3 to 5 times as often

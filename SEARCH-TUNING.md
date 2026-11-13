@@ -767,3 +767,7 @@ First: `lmrt-g110-lmrt-tc10` (`ltg110`, epLmrGrw=110) on MEMO, [0, 5]. Predictio
 much more likely than H1. Basis: at the levels the search uses (6 to 10) a growth of 1.1 changes the reductions only from about the 40th quiet
 move on (one ply more), so few nodes see a difference; the level may settle a little lower in compensation. A weak test of the shape: if it is
 even, growth 1.0 or a table with depth would be the stronger step.
+Second: `lmrt-p15-lmrt-tc10` (`ltp15`, epLmrPen=15) on MEMO, [0, 5], against `lmrt`. A failed reduction costs the counter 1.5^d instead of 2^d
+(depth 4: 5 instead of 16, depth 8: 25 instead of 256): the level settles higher, most where the search is deep. A crude depth term, but also
+more reduction overall. Prediction (2026-11-13, before the result): -12 to +4, most likely -4, H0 much more likely. Basis: every increase of
+the amount lost so far (S33 -25, S13); the shift of the reduction towards deep subtrees, which strong engines use, may win back part of it.
