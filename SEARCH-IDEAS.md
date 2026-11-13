@@ -288,6 +288,9 @@ Prediction Lim 6000 (2026-11-13, before the result): -10 to +4, most likely -3, 
 Form `lmrm` 790aca7: `epLmrMax` (15), the cap. S37: at a MEMO-like 0.5 s per move the cap hardly binds (2.7% of the nodes), at 1.5 s a third of
 the nodes run at it and lower caps cost depth (13: -0.76 ply). Cap 13 at 10+0.1 not worth an SPRT; above 15 needs a table extension and a
 longer time control.
+S38 (`lmrm` e908bd8, table to level 19): at 3 s per move cap 19 +0.41 +- 0.13 ply against 15, at 1.5 s no difference; the cap that costs no
+depth grows with the time. Possible link to the weaker play at long time controls. Next: an SPRT of a higher cap at a long time control when a
+MEMO slot is free; a ramp by depth instead of nodes would not depend on the time control at all.
 
 ### History and depth in the LMR (status: rejected in this form)
 Now: the reduction depends only on the level and the move number. Within the same move number the best fifth by sort value cuts 3 to 5 times as often
