@@ -70,7 +70,8 @@ params = [
         ("epLmrGrw",          120),
         ("epLmrPen",           20),
         ("epLmrNoD",            1),
-        -- late move reduction: highest level the adaptive LMR climbs to (0 .. 15, as before 15)
+        -- late move reduction: highest level the adaptive LMR climbs to (0 .. 19, as before 15; a level 15 + k reduces the
+        -- moves level 15 reduces by k plies more)
         ("epLmrMax",           15),
         -- drawishness scale of the whole eval (Eval.Core.normalParts), instead of the heuristic rules of
         -- scaleFactor when epScaleNew = 1 (default: compiled in, scale-c-lin, TUNING-HISTORY finding 37;

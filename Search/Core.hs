@@ -50,20 +50,23 @@ maxKillers :: Int
 maxKillers = 3
 
 -- Parameters for late move reduction:
-lmrInitLv, lmrInitLim, lmrLevMin, lmrLevMax :: Int
+lmrInitLv, lmrInitLim, lmrLevMin, lmrLevTop, lmrLevDef, lmrLevMax :: Int
 lmrInitLv  = 8
 lmrInitLim = 8500
 lmrLevMin  = 0
-lmrLevMax  = 15
+lmrLevTop  = 15	-- highest level of the table formula (its first step is 1 move wide)
+lmrLevDef  = 15	-- default cap of the adaptive level (as before)
+lmrLevMax  = 19	-- levels above lmrLevTop: k more plies for the moves level lmrLevTop reduces
 
 -- The late move reduction is variable and regulated by the number of re-searches
 -- Lower levels (towards 0) means less reductions, higher - more
 -- The table grows with the move number by the factor g (hundredths, 120 = 1.2)
 lmrTable :: Int -> UArray (Int, Int) Int
 lmrTable g = array ((lmrLevMin, 0), (lmrLevMax, 255))
-               [ ((l, i), varImp gf (fromIntegral (1+lmrLevMax-l)) (fromIntegral i))
-                    | l <- [lmrLevMin..lmrLevMax], i <- [0..255]]
+               [ ((l, i), red l i) | l <- [lmrLevMin..lmrLevMax], i <- [0..255]]
     where gf = fromIntegral g / 100
+          red l i | l <= lmrLevTop = varImp gf (fromIntegral (1+lmrLevTop-l)) (fromIntegral i)
+                  | otherwise      = let r = red lmrLevTop i in if r > 0 then r + l - lmrLevTop else 0
 
 -- Here b == 1 is not good, too sharp
 varImp :: Double -> Double -> Double -> Int
@@ -290,7 +293,7 @@ pvro00 :: PVStRO
 pvro00 = PVStRO { draft = 0, tuning = False, abpol = NoAbort, futmar = defaultFutMargins,
                   cmv = False, chp = 0, chw = 4, lmrfx = -1, lmrpv = 0,
                   lmrtb = lmrTable 120, lmrpn = lmrPenTable 20, lmrnd = 1,
-                  lmrmx = lmrLevMax, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
+                  lmrmx = lmrLevDef, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
 
 alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int, Int)
 alphaBeta abc = do
