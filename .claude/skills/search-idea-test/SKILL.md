@@ -49,7 +49,10 @@ placebo when the method changes. Controls with known outcome: `epQThr=0` (threat
   gains and losses of pruning show (RFP). Node-limited games do not count speed costs.
 - 50k nodes: 55 minutes per 1000 games here, deeper but still +-17.
 - Depth matters by itself: caps, rescaling, aging, the LMR level act more in deep search (user).
-- Timed SPRT on MEMO at 10+0.1 decides: `run_timed.ps1` (watchdog against the fastchess hang). `[0, 5]` for changes worth it, D3 M1 took 8
+- Time controls (user, 2026-11-13; the user's machines repository, `MATCHES.md`): search changes are screened at 10+0.1 and decided
+  at 60+1 (later 5m+1s) by a fixed number of games read once at the end (LOS >= 95%); changes acting with the time control (LMR ramp
+  and cap, S36-S38) need the long one. Eval changes stay short: long games let the search hide a weaker eval.
+- Timed SPRT on MEMO at 10+0.1 screens: `run_timed.ps1` (watchdog against the fastchess hang). `[0, 5]` for changes worth it, D3 M1 took 8
   hours for a -9; `[0, 10]` needs about a quarter and may lose a +3; non-regression `[-5, 0]` when the aim is speed or allocation. Play against
   the parent build when a parameter read could favour one side.
 - Prior experience (user): negative history and squared bonuses lost Elo each time.
