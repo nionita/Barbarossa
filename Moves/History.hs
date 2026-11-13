@@ -2,12 +2,15 @@
 {-# LANGUAGE BangPatterns #-}
 
 module Moves.History (
-        History, newHist, toHist, histSortMoves
+        History, newHist, initHist, toHist, histSortMoves, histBest, getCounter, setCounter,
+        contSortMoves, contOffset, contUpdate, clearCont
     ) where
 
 import Control.Monad.ST.Unsafe (unsafeIOToST)
 import Control.Monad.ST
 import Control.Monad (forM_)
+import Data.Array.Base (unsafeAt)
+import Data.Array.Unboxed (UArray, listArray)
 import Data.Bits
 #ifndef REPRO_HIST
 import Data.List (unfoldr)
@@ -23,6 +26,8 @@ import System.Random
 #endif
 
 import Struct.Struct
+import Struct.Pst (pstValues)
+import Moves.Core (gamePhase)
 
 -- Int32 should be enough for now with max depth 20
 type History = V.IOVector Int32
@@ -68,12 +73,118 @@ smallVals g = concatMap chop $ randoms g
 
 newHist :: IO History
 #ifdef REPRO_HIST
-newHist = U.thaw $ U.replicate vsize 0
+newHist = U.thaw $ U.replicate (2 * vsize + 2 * contSize) 0
 #else
 newHist = do
     g <- newStdGen
-    U.thaw $ U.fromList $ map fromIntegral $ take vsize $ smallVals g
+    U.thaw $ U.fromList (map fromIntegral $ take vsize $ smallVals g) U.++ U.replicate (vsize + 2 * contSize) 0
 #endif
+
+-- Initialize the history for a new search, mode (bits, 0 = zero as before):
+-- 1: from the compiled PST in the phase of the root position: per piece the value of the to square
+--    minus the mean of that piece over the squares (so that only the square counts, not the material),
+--    negated (smaller is better), shifted by the given shift (left, or right when negative)
+-- 2: piece order of the move generation (knight, bishop, rook, queen, pawn, king), histOrderStep per
+--    step: with mode 3 the PST orders only within a piece (the step grows with the shift, so that the
+--    shifted PST values, at most about 2500 >> 4 with shift -4, stay below it)
+-- Castles get the king values of the to square
+-- Without REPRO_HIST the small random values are added
+initHist :: Int -> Int -> MyPos -> History -> IO ()
+initHist mode sh p h = do
+#ifdef REPRO_HIST
+    let vs = pstHistVals mode sh p
+#else
+    g <- newStdGen
+    let vs = U.zipWith (+) (pstHistVals mode sh p) $ U.fromListN vsize $ map fromIntegral $ smallVals g
+#endif
+    U.copy (V.take vsize h) vs
+    V.set (V.slice vsize vsize h) 0
+
+-- Continuation history: after the history and the counter moves 2 tables, per move before (1024) one row for the 512
+-- moves of a color: which color follows from which of the tables it is
+contRow, contSize :: Int
+contRow  = vsize `div` 2
+contSize = vsize * contRow
+
+clearCont :: History -> IO ()
+clearCont h = V.set (V.slice (2 * vsize) (2 * contSize) h) 0
+
+-- Offset of the row for a move before in table t (0 or 1)
+{-# INLINE contOffset #-}
+contOffset :: Int -> Move -> Int
+contOffset t pm = 2 * vsize + t * contSize + adr pm * contRow
+
+-- A quiet move cut at absolute depth d: its entry in a row gets the bonus, the values saturate
+contUpdate :: History -> Int -> Move -> Int -> IO ()
+contUpdate h !o m !d = do
+    let !i = o + adr m .&. (contRow - 1)
+    v <- V.unsafeRead h i
+    let !p = fromIntegral (histw (max 1 d)) :: Int64
+        !n = max (- (1 `unsafeShiftL` 30)) (fromIntegral v - p)
+    V.unsafeWrite h i (fromIntegral n)
+
+-- The sort value: history plus w / 4 times the rows (offset < 0: no such row), saturated to Int32
+{-# INLINE contVal #-}
+contVal :: U.Vector Int32 -> Int -> Int -> Int -> Int -> Int32
+contVal uh !w !o1 !o2 !a = fromIntegral $ max lo $ min hi $ hv + (fromIntegral w * (c o1 + c o2)) `shiftR` 2
+    where hv = fromIntegral (U.unsafeIndex uh a) :: Int64
+          c :: Int -> Int64
+          c o | o < 0     = 0
+              | otherwise = fromIntegral $ U.unsafeIndex uh (o + a .&. (contRow - 1))
+          lo = fromIntegral (minBound :: Int32)
+          hi = fromIntegral (maxBound :: Int32)
+
+-- The counter moves are in the second part of the vector, by the address of the move before
+getCounter :: History -> Move -> IO Move
+getCounter h pm = (Move . fromIntegral) <$> V.unsafeRead h (vsize + adr pm)
+
+setCounter :: History -> Move -> Move -> IO ()
+setCounter h pm (Move w) = V.unsafeWrite h (vsize + adr pm) (fromIntegral w)
+
+histOrderStep :: Int -> Int32
+histOrderStep sh = 1024 `unsafeShiftL` max 0 (sh + 4)
+
+pstHistVals :: Int -> Int -> MyPos -> U.Vector Int32
+pstHistVals mode sh p
+    | mode == 0 = U.replicate vsize 0
+    | otherwise = U.generate vsize val
+    where !gph = gamePhase p
+          val i
+              | pc <= 5                  = pieceVal pc
+              | pc == 7 && castleTo c sq = pieceVal 5
+              | otherwise                = 0
+              where (c, r)   = i `divMod` bloff
+                    (pc, sq) = r `divMod` squares
+                    pieceVal f = ordVal f + pstVal f
+                    pstVal f | mode .&. 1 /= 0 = pstHist sh gph c f sq
+                             | otherwise       = 0
+          ordVal f | mode .&. 2 /= 0 = histOrderStep sh * (pieceOrder `unsafeAt` f)
+                   | otherwise       = 0
+          castleTo 0 sq = sq == 2  || sq == 6
+          castleTo _ sq = sq == 58 || sq == 62
+
+-- The history init value of a piece (0 to 5) of color c (0 white, 1 black) on square sq,
+-- black from the vertically mirrored square, as in the PST
+pstHist :: Int -> Int -> Int -> Int -> Int -> Int32
+pstHist sh gph c pc sq = fromIntegral $ negate $ if sh >= 0 then v `unsafeShiftL` sh else v `shiftR` negate sh
+    where !i  = pc * squares + (if c == 0 then sq else sq `xor` 56)
+          !dm = pstHMid `unsafeAt` i - pstHMean `unsafeAt` (2 * pc)
+          !de = pstHEnd `unsafeAt` i - pstHMean `unsafeAt` (2 * pc + 1)
+          !v  = (dm * gph + de * (256 - gph)) `unsafeShiftR` 8
+
+-- Rank of the pieces (pawn .. king) in the move generation order (genMoveNCapt, moveGenAscendent)
+pieceOrder :: UArray Int Int32
+pieceOrder = listArray (0, 5) [4, 0, 1, 2, 3, 5]
+
+pstHMid, pstHEnd, pstHMean :: UArray Int Int
+pstHMid = listArray (0, 383) $ map fst pstValues
+pstHEnd = listArray (0, 383) $ map snd pstValues
+-- Means (mid, end) per piece over the squares (pawns: only ranks 2 to 7)
+pstHMean = listArray (0, 11) $ concatMap mean [0 .. 5]
+    where mean pc = [sum (map fst vs) `div` length vs, sum (map snd vs) `div` length vs]
+              where vs | pc == 0   = take 48 $ drop 8 $ pcs pc
+                       | otherwise = pcs pc
+          pcs pc = take squares $ drop (pc * squares) pstValues
 
 -- History value: exponential
 -- d is absolute depth, root = 1, so that cuts near root count more
@@ -126,6 +237,62 @@ takeAddr = fromIntegral . ((.&.) 0xFFFF)
 {-# INLINE takeMove #-}
 takeMove :: Word32 -> Word16
 takeMove = fromIntegral . (`unsafeShiftR` 16)
+
+-- The move with the best history value (the smallest) of a list which is not empty
+histBest :: History -> [Move] -> Move
+histBest h ms = runST $ do
+    uh <- unsafeIOToST $ U.unsafeFreeze h
+    let hv :: Move -> Int32
+        hv = U.unsafeIndex uh . adr
+        go !b !_  []     = b
+        go !b !bv (x:xs) = let !v = hv x
+                           in if v < bv then go x v xs else go b bv xs
+    return $ case ms of
+                 m:mt -> go m (hv m) mt
+                 []   -> error "histBest: no moves"
+
+-- As histSortMoves, with the continuation history in the sort value
+contSortMoves :: Int -> Int -> Int -> Int -> History -> [Move] -> [Move]
+contSortMoves w o1 o2 d h ms
+    | null ms   = []
+    | d > 2     = mtsListC w o1 o2 $ makeMTS h ms
+    | otherwise = dirSortC w o1 o2 h ms
+
+mtsListC :: Int -> Int -> Int -> MovesToSort -> [Move]
+mtsListC w o1 o2 (MTS h uwa k)
+    | k <  0    = []
+    | k == 0    = oneMove uwa
+    | otherwise = m : mtsListC w o1 o2 mts
+    where (m, mts) = runST $ do
+          uh <- unsafeIOToST $ U.unsafeFreeze h
+          let hival = contVal uh w o1 o2 . takeAddr . U.unsafeIndex uwa
+              go !i !i0 !v0
+                  | i > k     = i0
+                  | otherwise =
+                       let v = hival i
+                       in if v < v0
+                             then go (i+1) i  v
+                             else go (i+1) i0 v0
+          let !v0 = hival 0
+              !i = go 1 0 v0
+              !mw = takeMove $ U.unsafeIndex uwa i
+          if i == k
+             then return (Move mw, MTS h uwa (k-1))
+             else do
+                 vwa <- U.unsafeThaw uwa
+                 V.unsafeSwap vwa k i
+                 uwa'<- U.unsafeFreeze vwa
+                 return (Move mw, MTS h uwa' (k-1))
+
+dirSortC :: Int -> Int -> Int -> History -> [Move] -> [Move]
+dirSortC w o1 o2 h ms = runST $ do
+    uh <- unsafeIOToST $ U.unsafeFreeze h
+    let uz = U.fromListN maxMoves $ zipWith hivalMove ms $ map (contVal uh w o1 o2) $ adrs ms
+    vz <- U.unsafeThaw uz
+    H.sortBy (comparing ((.&.) mask)) vz
+    uz' <- U.unsafeFreeze vz
+    return $ map (Move . fromIntegral . ((.&.) 0xFFFF)) $ U.toList uz'
+    where mask = complement 0xFFFF
 
 -- We want to alloc a fix amount of memory, and although there are
 -- positions which have more (quiet) moves, they are very rare

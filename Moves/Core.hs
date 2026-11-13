@@ -4,7 +4,10 @@
 {-# LANGUAGE PatternGuards #-}
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns -Wno-x-partial #-}
 module Moves.Core (
-    module Moves.Core,
+    Attacks(..), castKingRookOk, castQueenRookOk, checkOk, doFromToMove, gamePhase, genMoveCaptWL,
+    genMoveCast, genMoveFCheck, genMoveNCapt, genMoveNCaptToCheck, genMovePromo, inCheck, initPos,
+    isCheck, legalMove, legalPrefix, matPiece, matPiece1, materWhite, moveChecks, moveGenAscendent,
+    moveIsCapture, movePassed, posFromFen, pstRecompute, reverseMoving, startFen,
     module Moves.Internal.BitBoard,
     module Moves.Internal.Pattern,
     module Moves.Internal.Moves
@@ -86,6 +89,16 @@ pstPackPiece c f sq = pstPackArr `unsafeAt` pstIndex c f sq
 pstRecompute :: MyPos -> (Int, Int)
 pstRecompute p = foldl' add (0, 0) [ (c, f, sq) | sq <- [0 .. 63], Busy c f <- [tabla p sq] ]
     where add (!m, !e) (c, f, sq) = (m + pstMidPiece c f sq, e + pstEndPiece c f sq)
+
+-- The game phase for the mix of mid and end game values (eval, history init)
+{-# INLINE gamePhase #-}
+gamePhase :: MyPos -> Int
+gamePhase p = g
+    where qs = popCount $ queens p
+          rs = popCount $ rooks p
+          bs = popCount $ bishops p
+          ns = popCount $ knights p
+          !g = qs * 39 + rs * 20 + (bs + ns) * 12       -- opening: 254, end: 0
 
 {-# INLINE seeValue #-}
 seeValue :: Piece -> Int
@@ -639,16 +652,6 @@ clearingCast sdcas cas = (cascl, zobcl)
           bkbb = 0x1000000000000000     -- black king
           bqrb = 0x0100000000000000     -- black queen rook
           bkrb = 0x8000000000000000     -- black king rook
-
--- Just for a dumb debug: a quick check if two consecutive moves
--- can be part of a move sequence
-alternateMoves :: MyPos -> Move -> Move -> Bool
-alternateMoves p m1 m2
-    | Busy c1 _ <- tabla p src1,
-      Busy c2 _ <- tabla p src2 = c1 /= c2
-    | otherwise = True  -- means: we cannot say...
-    where src1 = fromSquare m1
-          src2 = fromSquare m2
 
 -- This is used to filter the illegal moves coming from killers or hash table
 -- but we must treat special moves (en-passant, castle and promotion) differently,

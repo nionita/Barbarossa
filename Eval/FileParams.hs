@@ -1,6 +1,5 @@
 module Eval.FileParams (
-    makeEvalState,
-    fileToState
+    makeEvalState
   ) where
 
 -- import Data.Char (isSpace)

@@ -34,6 +34,30 @@ params = [
         ("epFutil4",          192),
         ("epFutil5",          384),
         ("epFutil6",          768),
+        -- history init of a new search (Moves.History.initHist), bits: 1 = from the compiled PST in the phase
+        -- of the root position, shifted by epHistPstSh (left, or right when negative), 2 = piece order of
+        -- the move generation; 0 = zero
+        ("epHistPst",           3),
+        ("epHistPstSh",        -4),
+        -- counter move (1 = on): the quiet move which last cut after a given move is tried after the killers
+        ("epCMov",              1),
+        -- continuation history, bits (0 = off): 1 = by the move before (opponent), 2 = by the own move before; the sort
+        -- value of a quiet move is its history plus epCHistW / 4 times these
+        ("epCHist",             3),
+        ("epCHistW",            2),
+        -- sort of the quiet moves (Moves.Internal.Base.quietSort), bits: 1 = moves of a piece to a square
+        -- attacked by a cheaper enemy piece last, 2 = moves of a piece away from such a square first;
+        -- 0 = by history only
+        ("epQThr",              2),
+        -- reverse futility pruning (Search.Core.isRevFutil): zero window nodes of a remaining depth up to
+        -- epRFutD (0 = off) fail high when the static score is over beta by epRFutA + epRFutM * depth (cp),
+        -- plus epRFutT (cp, 0 = off) when own pieces hang (Search.Core.ownHanging)
+        ("epRFutD",             6),
+        ("epRFutA",             0),
+        ("epRFutM",            50),
+        ("epRFutT",           100),
+        -- late move reduction: fixed level (0 = least reductions .. 15 = most), -1 = adaptive (Search.Core.moreLMR)
+        ("epLmrFix",           -1),
         -- drawishness scale of the whole eval (Eval.Core.normalParts), instead of the heuristic rules of
         -- scaleFactor when epScaleNew = 1 (default: compiled in, scale-c-lin, TUNING-HISTORY finding 37;
         -- epScaleNew = 0 is the old scaling); factors in 1/64 (64 = 1), fitted by hv_scale.py --constrained

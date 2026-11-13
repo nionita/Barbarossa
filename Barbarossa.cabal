@@ -80,7 +80,7 @@ Executable Barbarossa
                -fno-warn-tabs
                -msse4.2
                -optl-s
-  CPP-Options: -DSMSTRICT
+  CPP-Options: -DSMSTRICT -DNO_SEARCH_STATS
   if flag(qscollect)
     CPP-Options: -DQS_COLLECT
   if flag(ddump)

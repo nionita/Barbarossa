@@ -6,7 +6,7 @@ module Struct.Context (
     Changing(..),
     UciData(..), UciSink(..),
     IterResult,
-    levToPrf, readChanging, modifyChanging,
+    readChanging, modifyChanging,
     beginSearch, attachSearchThread, publishSearchProgress,
     finishSearch, stopSearch, ctxLog, logging,
     getMyTime, formatMyTime, startSecond, currMilli,

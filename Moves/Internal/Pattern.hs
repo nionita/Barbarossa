@@ -2,8 +2,8 @@ module Moves.Internal.Pattern (
         genMovesArray, regPawnsBB,
         row1,  row2,  row3,  row4,  row5,  row6,  row7,  row8,
         fileA, fileB, fileC, fileD, fileE, fileF, fileG, fileH,
-        bbLeft, bbRight, up,
-        rowBB, colBB, rookFiles, lightSquares, darkSquares
+        bbLeft, bbRight,
+        rowBB, colBB, lightSquares, darkSquares
     ) where
 
 import Data.Bits
@@ -33,9 +33,6 @@ fileH = 0x8080808080808080
 
 regPawnsBB :: BBoard
 regPawnsBB = row2 .|. row3 .|. row4 .|. row5 .|. row6 .|. row7
-
-rookFiles :: BBoard
-rookFiles = fileA .|. fileH
 
 notFileA, notFileH :: BBoard
 notFileA = complement fileA

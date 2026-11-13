@@ -135,7 +135,15 @@ data PVStRO
           draft  :: !Int,	-- root search depth
           tuning :: !Bool,	-- in tuning we do not prune nor reduce (self play)
           abpol  :: !AbortPolicy,	-- search abort policy (time, nodes or none)
-          futmar :: !(UArray Int Int)	-- futility margins of the depths 1 .. maxFutilDepth (index d - 1)
+          futmar :: !(UArray Int Int),	-- futility margins of the depths 1 .. maxFutilDepth (index d - 1)
+          cmv    :: !Bool,	-- use counter moves
+          chp    :: !Int,	-- continuation history: bits of the tables (0 = off)
+          chw    :: !Int,	-- continuation history: weight in quarters
+          rfutd  :: !Int,	-- reverse futility pruning: maximum depth (0 = off)
+          lmrfx  :: !Int,	-- late move reduction: fixed level, < 0 = adaptive
+          rfuta  :: !Int,	-- reverse futility pruning: constant margin (cp)
+          rfutm  :: !Int,	-- reverse futility pruning: margin per depth (cp)
+          rfutt  :: !Int	-- reverse futility pruning: extra margin with own pieces hanging (cp, 0 = off)
     } deriving Show
 
 data PVState
@@ -160,6 +168,8 @@ data NodeState
           albe   :: !Bool,	-- in alpha/beta search (for small depths)
           rbmch  :: !Int,	-- number of changes in root best move / score type otherwise
           killer :: !Killer,	-- the current killer moves
+          prvmv  :: !Move,	-- the move before this node (Move 0: null move or none)
+          prvmv2 :: !Move,	-- the move before that
           cursc  :: Path,	-- current alpha value (now plus path & depth)
           cpos   :: MyPos,	-- current position for this node
           pvsl   :: [Pvsl]	-- principal variation list (at root) with node statistics
@@ -247,15 +257,26 @@ pvsInit = PVState { ronly = pvro00, stats = ssts0, absdp = 0, maxdp = 0, abort =
                     lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
 nst0 :: NodeState
 nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore 0, rbmch = -1,
-             movno = 1, spcno = 1, killer = Killer [], albe = False, cpos = initPos, pvsl = [] }
+             movno = 1, spcno = 1, killer = Killer [], prvmv = Move 0, prvmv2 = Move 0, albe = False, cpos = initPos, pvsl = [] }
              -- we start with spcno = 1 as we consider the first move as special
              -- to avoid in any way reducing the tt move
+
+-- Remember a counter move at a cut
+cutCounter :: NodeState -> Move -> Search ()
+cutCounter nst e = do
+    on <- gets (cmv . ronly)
+    when on $ lift $ counterCut (prvmv nst) e
+    bits <- gets (chp . ronly)
+    when (bits /= 0) $ do
+        adp <- gets absdp
+        lift $ contCut bits adp (prvmv nst) (prvmv2 nst) e
 
 resetNSt :: Path -> Killer -> NodeState -> NodeState
 resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, rbmch = 0 }
 
 pvro00 :: PVStRO
-pvro00 = PVStRO { draft = 0, tuning = False, abpol = NoAbort, futmar = defaultFutMargins }
+pvro00 = PVStRO { draft = 0, tuning = False, abpol = NoAbort, futmar = defaultFutMargins,
+                  cmv = False, chp = 0, chw = 4, lmrfx = -1, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
 
 alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int, Int)
 alphaBeta abc = do
@@ -267,8 +288,14 @@ alphaBeta abc = do
         searchFull    lp  = pvRootSearch alpha0 beta0 d lp  rmvs False
     est <- gets evalst
     let pvro = PVStRO { draft = d, tuning = intuning abc,
-                            abpol = abortPolicy abc, futmar = futMarginsOf (esEParams est) }
-        pvs0 = pvsInit { ronly = pvro }	-- :: PVState
+                            abpol = abortPolicy abc, futmar = futMarginsOf (esEParams est),
+                            cmv = epCMov (esEParams est) /= 0,
+                            chp = epCHist (esEParams est), chw = epCHistW (esEParams est),
+                            lmrfx = epLmrFix (esEParams est),
+                            rfutd = epRFutD (esEParams est), rfuta = epRFutA (esEParams est),
+                            rfutm = epRFutM (esEParams est),
+                            rfutt = epRFutT (esEParams est) }
+        pvs0 = pvsInit { ronly = pvro, lmrlv = if lmrfx pvro >= 0 then lmrfx pvro else lmrInitLv }	-- :: PVState
     -- We will get a result and a final state:
     (r, s) <- if useAspirWin
                  then case lastscore abc of
@@ -321,7 +348,7 @@ pvRootSearch :: Int -> Int -> Int -> Seq Move -> Alt Move -> Bool
 pvRootSearch a b d lastpath rmvs aspir = do
     pos <- lift getPos
     edges <- if null (unalt rmvs)	-- only when d==1, but we could have lastpath from the previous real move
-                then genAndPick nst0 { cpos = pos } Nothing a b d	-- no IID here as d==1
+                then genAndPick False nst0 { cpos = pos } Nothing a b d	-- no IID here as d==1
                 else case lastpath of
                          Seq []    -> return rmvs	-- does this happen? - check to simplify!
                          Seq (e:_) -> return $ Alt $ e : delete e (unalt rmvs)
@@ -504,6 +531,7 @@ pvSearch nst !a !b !d = do
            when (tp == 1 || tp == 2 && hsc > a) $ do
                adp <- gets absdp
                lift $ betaCut adp e
+               cutCounter nst e
            reSucc nodes' >> return ttpath
        else do
            when (hdeep < 0) reFail
@@ -512,7 +540,7 @@ pvSearch nst !a !b !d = do
            -- Use the found TT move as best move
            let mttmv = if hdeep > 0 then Just e else Nothing
                !nst'  = nst { cpos = pos }
-           edges <- genAndPick nst' mttmv a b d
+           edges <- genAndPick False nst' mttmv a b d
            case unalt edges of
               []   -> return $! failHardNoValidMove a b pos
               ev:_ -> do
@@ -561,11 +589,15 @@ pvZeroW !nst !b !d = do
            when (tp == 1 || tp == 2 && hsc >= b) $ do
                adp <- gets absdp
                lift $ betaCut adp e
+               cutCounter nst e
            reSucc nodes' >> return ttpath
        else do
            when (hdeep < 0) reFail
            pos <- lift getPos
-           !nmhigh <- nullMoveFailsHigh pos nst b d
+           ro <- gets ronly
+           !nmhigh <- if useFutility && isRevFutil ro pos b d
+                         then return NullMoveHigh	-- fails high like after a null move
+                         else nullMoveFailsHigh pos nst b d
            whenAbort (pathFromScore b) $ do
                case nmhigh of
                  NullMoveHigh -> return $ pathFromScore b
@@ -573,15 +605,15 @@ pvZeroW !nst !b !d = do
                    -- Use the TT move as best move
                    let mttmv = if hdeep > 0 then Just e else Nothing
                        !nst' = nst { cpos = pos }
-                   edges <- genAndPick nst' mttmv bGrain b d
+                   -- futility pruning:
+                   fm <- gets (futmar . ronly)
+                   let !prune | useFutility = isPruneFutil fm False d bGrain (staticScore pos)
+                              | otherwise   = False
+                   edges <- genAndPick prune nst' mttmv bGrain b d
                    case unalt edges of
                       []   -> return $! failHardNoValidMove bGrain b pos
                       ev:_ -> do
                         !nodes0 <- gets (sNodes . stats)
-                        -- futility pruning:
-                        fm <- gets (futmar . ronly)
-                        let !prune | useFutility = isPruneFutil fm False d bGrain (staticScore pos)
-                                   | otherwise   = False
                         -- Loop thru the moves
                         let kill1 = case nmhigh of
                                         NullMoveThreat s -> newTKiller pos d s
@@ -620,7 +652,7 @@ nullMoveFailsHigh pos nst b d
                when nulDebug $ incReBe 1
                lift doNullMove	-- do null move
                newNode d
-               let nst' = deepNSt nst
+               let nst' = (deepNSt nst) { prvmv = Move 0, prvmv2 = prvmv nst }
                val <- if v > b + bigDiff
                          then pnextlev <$> pvZeroW nst' (-nma) d2
                          else pnextlev <$> pvZeroW nst' (-nma) d1
@@ -691,7 +723,7 @@ pvInnerLoop b d zw prune nst e = timeToAbort nst $
                           -- Resetting means we reduce less (only with distance to last capture)
                           let nst1 | cap       = resetSpc nst
                                    | otherwise = nst
-                          s <- extenFunc b d (cap || nolmr) exd' (deepNSt nst1)
+                          s <- extenFunc b d (cap || nolmr) exd' (deepNSt nst1) { prvmv = e, prvmv2 = prvmv nst1 }
                           return (s, nst1)
                       Final   -> return (drawPath, nst)
                       Illegal -> error "Cannot be illegal here"
@@ -722,7 +754,7 @@ pvInnerLoopExten b d spec !exd nst = do
            -- Here we must be in a Cut node (will fail low)
            -- and we should have: crtnt = CutNode, nxtnt = AllNode
            old <- get
-           let d' = reduceLmr (nearmate b) spec d1 (lmrlv old) (movno nst - spcno nst)
+           let d' = reduceLmr spec d1 (lmrlv old) (movno nst - spcno nst)
            !s1 <- zeroWithLMR d' d1 (-a) (a+scoreGrain) nst
            whenAbort s1 $
                if pathScore s1 <= a
@@ -738,7 +770,7 @@ pvInnerLoopExtenZ b d spec !exd nst = do
     old  <- get
     -- late move reduction
     let !d1 = d + exd - 1	-- this is the normal (unreduced) depth for next search
-        d' = reduceLmr (nearmate b) spec d1 (lmrlv old) (movno nst - spcno nst)
+        d' = reduceLmr spec d1 (lmrlv old) (movno nst - spcno nst)
         !onemB = scoreGrain - b
     zeroWithLMR d' d1 onemB b nst
 
@@ -779,6 +811,7 @@ checkFailOrPVLoop b d e s nst = whenAbort nst $ do
        else if pathScore s >= b
                then do
                  lift $ betaCut (absdp sst) e -- anounce a beta move (for example, update history)
+                 cutCounter nst e
                  incBeta mn
                  let fhsc = s { pathScore = b }
                  return $! nst { cursc = fhsc, movno = mn+1, rbmch = 1 }
@@ -799,6 +832,7 @@ checkFailOrPVLoopZ b d e s nst = whenAbort nst $ do
        then return $! nst { movno = mn+1, killer = newKiller d s nst }
        else do	-- here is s >= b: failed high
            lift $ betaCut (absdp sst) e -- anounce a beta move (for example, update history)
+           cutCounter nst e
            incBeta mn
            let fhsc = s { pathScore = b }
            return $! nst { cursc = fhsc, movno = mn+1, rbmch = 1 }
@@ -821,14 +855,25 @@ newTKiller pos d s
 
 -- We generate the moves, which come already sorted from genMoves
 -- But we pick the best move (TT or IID) and the killers first
-genAndPick :: NodeState -> Maybe Move -> Int -> Int -> Int -> Search (Alt Move)
-genAndPick !nst mttmv !a !b !d = do
+genAndPick :: Bool -> NodeState -> Maybe Move -> Int -> Int -> Int -> Search (Alt Move)
+genAndPick !flt !nst mttmv !a !b !d = do
     path <- case mttmv of
                 Just mv -> return [mv]
                 Nothing -> bestMoveFromIID nst a b d	-- it will do nothing for AllNode
+    on <- gets (cmv . ronly)
+    bits <- gets (chp . ronly)
+    wgt <- gets (chw . ronly)
+    let cont t bt pm@(Move w) | bits .&. bt /= 0 && w /= 0 = contOffset t pm
+                               | otherwise                   = -1
+        !o1 = cont 0 (1 :: Int) (prvmv nst)
+        !o2 = cont 1 2 (prvmv2 nst)
     lift $ do
-        let kl = filter (isMoveLegal (cpos nst)) $ killerToList (killer nst)
-        esp <- genMoves d
+        cm <- if on then counterOf (prvmv nst) else return (Move 0)
+        let kl0 = filter (isMoveLegal (cpos nst)) $ killerToList (killer nst)
+            kl | cm /= Move 0 && cm `notElem` kl0 && cm `notElem` path
+                 && isMoveLegal (cpos nst) cm && not (moveIsCapture (cpos nst) cm) = kl0 ++ [cm]
+               | otherwise = kl0
+        esp <- genMovesC flt wgt o1 o2 d
         let es = bestFirst path kl esp
         return $ Alt es
 
@@ -836,10 +881,10 @@ genAndPick !nst mttmv !a !b !d = do
 -- With a variable lmrlev the reduction should stay in a region
 -- where the number of researches has an acceptable level
 {-# INLINE reduceLmr #-}
-reduceLmr :: Bool -> Bool -> Int -> Int -> Int -> Int
-reduceLmr nearmatea spec d lmrlev w
-    | spec || d <= lmrNoDepth || nearmatea = d
-    | otherwise                            = max 1 $ d - lmrArr!(lmrlev, w)
+reduceLmr :: Bool -> Int -> Int -> Int -> Int
+reduceLmr spec d lmrlev w
+    | spec || d <= lmrNoDepth = d
+    | otherwise               = max 1 $ d - lmrArr!(lmrlev, w)
 
 -- Adjust the LMR related parameters in the state
 moreLMR :: Bool -> Int -> Search ()
@@ -848,7 +893,8 @@ moreLMR more !d = do
     let !i  | more      = 1
             | otherwise = - (1 `unsafeShiftL` d)
         !i1 = lmrrs s + i
-    if i1 < 0
+    if lmrfx (ronly s) >= 0 then return () else
+     if i1 < 0
        then if lmrlv s <= lmrLevMin
                then put s { lmrhi = findir (lmrhi s), lmrrs = 0 }
                else put s { lmrlv = lmrlv s - 1, lmrrs = 0 }
@@ -876,6 +922,25 @@ isPruneFutil fm pv d a v
     | d >  maxFutilDepth       = False
     | d >= maxFutilDepth && pv = False	-- for PV nodes: less prune
     | otherwise                = v + fm `unsafeAt` (d - 1) <= a
+
+-- Reverse futility pruning (beta side): in a zero window node of remaining depth d <= rfutd the node fails
+-- high without search when the static score is over beta by a margin rfuta + rfutm * depth, plus rfutt when
+-- own pieces hang (the static score does not see the threat); not in check, not near mate and not with only
+-- king and pawns (zugzwang, as for the null move)
+isRevFutil :: PVStRO -> MyPos -> Int -> Int -> Bool
+isRevFutil ro pos b d
+    | d > rfutd ro || nearmate b || tacticalPos pos || zugZwang pos = False
+    | otherwise = v >= b && (rfutt ro == 0 || v - rfutt ro >= b || ownHanging pos == 0)
+    where v = staticScore pos - rfuta ro - rfutm ro * d
+
+-- Own pieces (no king) attacked by a cheaper enemy piece (as in the quiet sort by threats) or attacked and
+-- not defended
+ownHanging :: MyPos -> BBoard
+ownHanging p = me p .&. (cheaper .|. yoAttacs p .&. complement (myAttacs p .|. kings p))
+    where cheaper  = (knights p .|. bishops p) .&. thrMinor .|. rooks p .&. thrRook .|. queens p .&. thrQueen
+          thrMinor = yoPAttacs p
+          thrRook  = thrMinor .|. yoNAttacs p .|. yoBAttacs p
+          thrQueen = thrRook  .|. yoRAttacs p
 
 failHardNoValidMove :: Int -> Int -> MyPos -> Path
 failHardNoValidMove !a !b pos = trimaxPath a b $! if tacticalPos pos then matedPath else drawPath
@@ -1128,6 +1193,14 @@ reportStats = do
 modStat :: (SStats -> SStats) -> Search ()
 modStat f = modify $ \s -> case f (stats s) of st -> s { stats = st }
 
+-- The counters which the search does not read: not in the engine, every change copies the records (S16, PROFILING.md)
+modInfo :: (SStats -> SStats) -> Search ()
+#ifdef NO_SEARCH_STATS
+modInfo _ = return ()
+#else
+modInfo = modStat
+#endif
+
 incNodes :: Int -> SStats -> SStats
 incNodes 1 s = incNodesQS s	-- d can't be < 0 here
 incNodes _ s = case sNodes s + 1 of n1 -> s { sNodes = n1 }
@@ -1152,31 +1225,31 @@ newNodeQS :: Search ()
 newNodeQS = modStat incNodesQS
 
 reTrieve :: Search ()
-reTrieve  = modStat incReTrieve
+reTrieve  = modInfo incReTrieve
 
 reFail :: Search ()
-reFail = modStat incReFail
+reFail = modInfo incReFail
 
 reSucc :: Int64 -> Search ()
 reSucc n  = modStat (addReSucc n)
 
 incBeta :: Int -> Search ()
-incBeta 1 = modStat $ \s -> s { sBeta = sBeta s + 1, sBM1  = sBM1  s + 1 }
-incBeta 2 = modStat $ \s -> s { sBeta = sBeta s + 1, sBM2  = sBM2  s + 1 }
-incBeta 3 = modStat $ \s -> s { sBeta = sBeta s + 1, sBM3  = sBM3  s + 1 }
-incBeta _ = modStat $ \s -> s { sBeta = sBeta s + 1, sBM4p = sBM4p s + 1 }
+incBeta 1 = modInfo $ \s -> s { sBeta = sBeta s + 1, sBM1  = sBM1  s + 1 }
+incBeta 2 = modInfo $ \s -> s { sBeta = sBeta s + 1, sBM2  = sBM2  s + 1 }
+incBeta 3 = modInfo $ \s -> s { sBeta = sBeta s + 1, sBM3  = sBM3  s + 1 }
+incBeta _ = modInfo $ \s -> s { sBeta = sBeta s + 1, sBM4p = sBM4p s + 1 }
 
 incReSe :: Int64 -> Search ()
-incReSe n = modStat $ \s -> s { sReSe = sReSe s + 1, sReNo = sReNo s + n }
+incReSe n = modInfo $ \s -> s { sReSe = sReSe s + 1, sReNo = sReNo s + n }
 
 incRedu :: Search ()
-incRedu = modStat $ \s -> s { sRedu = sRedu s + 1 }
+incRedu = modInfo $ \s -> s { sRedu = sRedu s + 1 }
 
 incReBe :: Int64 -> Search ()
-incReBe n = modStat $ \s -> s { sReBe = sReBe s + n }
+incReBe n = modInfo $ \s -> s { sReBe = sReBe s + n }
 
 incReMi :: Search ()
-incReMi = modStat $ \s -> s { sReMi = sReMi s + 1 }
+incReMi = modInfo $ \s -> s { sReMi = sReMi s + 1 }
 
 bestFirst :: [Move] -> [Move] -> ([Move], [Move]) -> [Move]
 bestFirst []    kl (es1, es2) = es1 ++ kl ++ chainUniqFilters kl es2
