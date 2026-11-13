@@ -851,3 +851,30 @@ control, and at long ones the cap holds it back. Depth is not Elo (more reductio
 user's long-standing observation that Barbarossa plays relatively weaker at longer time controls (strength measured mostly at 1m+1s). A test
 needs a long time control: a cap above 15 at 10+0.1 would show nothing (S37: at 0.5 s even cap 15 hardly binds). Data in
 `C:\Learn\Tune\lmrt\capscan\h1500`, `h3000`.
+
+**S39.** Does the adaptive LMR level follow the game phase (user, 2026-11-13: a reason the scheme works may be that it adapts to the phase,
+where the number of moves differs)? The traces of S36 to S38 grouped by the pieces other than pawns and kings in the root position (BarbarossaTuning
+`lmr_phase.py`), node weighted mean level, overall and at equal draft:
+
+| Source | Pieces | Searches | All | d <= 8 | d 9-12 | d 13+ |
+|---|---|---|---|---|---|---|
+| 24 games 10+0.1 | 13-14 | 152 | 10.45 | 8.78 | 10.84 | 12.95 |
+| | 9-12 | 658 | 10.52 | 8.99 | 10.86 | 12.46 |
+| | 5-8 | 739 | 10.31 | 8.68 | 10.63 | 12.14 |
+| | 0-4 | 2175 | 9.47 | 8.92 | 9.58 | 10.02 |
+| 8 games 30+0.3 | 13-14 | 131 | 12.30 | 8.59 | 12.46 | 13.73 |
+| | 9-12 | 186 | 12.11 | 8.72 | 12.09 | 13.75 |
+| | 5-8 | 165 | 12.07 | 8.51 | 11.19 | 13.11 |
+| | 0-4 | 677 | 11.76 | 9.95 | 10.83 | 12.28 |
+| 200 roots, 3 s each, cap 15 | 13-14 | 18 | 13.07 | 9.00 | 12.69 | 13.97 |
+| | 9-12 | 51 | 12.95 | 8.93 | 12.34 | 13.62 |
+| | 5-8 | 39 | 13.22 | 8.74 | 12.62 | 13.76 |
+| | 0-4 | 92 | 13.10 | 8.72 | 12.47 | 13.43 |
+
+In games the endgame (0-4 pieces) runs at clearly lower levels at the same draft (10+0.1, d13+: 10.0 against 12.1 to 13.0; at 30+0.3 the gap
+is smaller), the other phases hardly differ. In single searches from scratch (fixed 3 s, `ucinewgame` before each, same time for every phase)
+the difference is gone. So the level does follow the phase in games, but not by the phase itself: through the size of the iterations. In a
+game an endgame iteration of a given draft costs fewer nodes (transposition table from the moves before, less time per move), so the node ramp
+climbs less and the endgame gets less reduction. Two readings for later: a ramp by depth (form #2) would lose this unless it takes the
+phase or the move count in; and whether the endgame wants less reduction is open (the scheme gives it less by accident of the node count).
+Group sizes are small for 13-14 pieces; d <= 8 shows no difference anywhere (the ramp has not started there).
