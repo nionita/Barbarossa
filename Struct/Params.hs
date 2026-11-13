@@ -64,6 +64,12 @@ params = [
         ("epLmrLim",         8500),
         -- late move reduction: reduce so many plies less for the late moves of PV nodes (0 = as before)
         ("epLmrPV",             0),
+        -- late move reduction, the hard coded constants before (Search.Core): growth of the reduction table with the
+        -- move number in hundredths (120 = factor 1.2), base of the re-search penalty 2^d in tenths (20), no LMR up to
+        -- this depth (1)
+        ("epLmrGrw",          120),
+        ("epLmrPen",           20),
+        ("epLmrNoD",            1),
         -- drawishness scale of the whole eval (Eval.Core.normalParts), instead of the heuristic rules of
         -- scaleFactor when epScaleNew = 1 (default: compiled in, scale-c-lin, TUNING-HISTORY finding 37;
         -- epScaleNew = 0 is the old scaling); factors in 1/64 (64 = 1), fitted by hv_scale.py --constrained

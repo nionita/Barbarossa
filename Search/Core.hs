@@ -50,26 +50,33 @@ maxKillers :: Int
 maxKillers = 3
 
 -- Parameters for late move reduction:
-lmrInitLv, lmrInitLim, lmrLevMin, lmrLevMax, lmrNoDepth :: Int
+lmrInitLv, lmrInitLim, lmrLevMin, lmrLevMax :: Int
 lmrInitLv  = 8
 lmrInitLim = 8500
 lmrLevMin  = 0
 lmrLevMax  = 15
-lmrNoDepth = 1
 
 -- The late move reduction is variable and regulated by the number of re-searches
 -- Lower levels (towards 0) means less reductions, higher - more
-lmrArr :: UArray (Int, Int) Int
-lmrArr = array ((lmrLevMin, 0), (lmrLevMax, 255))
-               [ ((l, i), varImp (fromIntegral (1+lmrLevMax-l)) (fromIntegral i))
+-- The table grows with the move number by the factor g (hundredths, 120 = 1.2)
+lmrTable :: Int -> UArray (Int, Int) Int
+lmrTable g = array ((lmrLevMin, 0), (lmrLevMax, 255))
+               [ ((l, i), varImp gf (fromIntegral (1+lmrLevMax-l)) (fromIntegral i))
                     | l <- [lmrLevMin..lmrLevMax], i <- [0..255]]
+    where gf = fromIntegral g / 100
 
 -- Here b == 1 is not good, too sharp
-varImp :: Double -> Double -> Int
-varImp lev w = round $ go 0 lev w
+varImp :: Double -> Double -> Double -> Int
+varImp gf lev w = round $ go 0 lev w
     where go :: Double -> Double -> Double -> Double
           go !lv !b !i | i <= b    = lv
-                       | otherwise = go (lv+1) (b*1.2) (i-b)
+                       | otherwise = go (lv+1) (b*gf) (i-b)
+
+-- Re-search penalty of the adaptive LMR by depth: base^d, base in tenths (20 = 2^d as before), capped against overflow
+lmrPenTable :: Int -> UArray Int Int
+lmrPenTable p = listArray (0, 63) [ min (2^(50::Int)) (penOf d) | d <- [0..63::Int] ]
+    where penOf d | p == 20   = 2^d
+                  | otherwise = floor ((fromIntegral p / 10 :: Double) ^ d)
 
 -- Parameters for futility pruning:
 maxFutilDepth :: Int
@@ -142,6 +149,9 @@ data PVStRO
           rfutd  :: !Int,	-- reverse futility pruning: maximum depth (0 = off)
           lmrfx  :: !Int,	-- late move reduction: fixed level, < 0 = adaptive
           lmrpv  :: !Int,	-- late move reduction: so many plies less in PV nodes
+          lmrtb  :: !(UArray (Int, Int) Int),	-- late move reduction: reductions by level and move number
+          lmrpn  :: !(UArray Int Int),	-- late move reduction: re-search penalty by depth (0 .. 63)
+          lmrnd  :: !Int,	-- late move reduction: none up to this depth
           rfuta  :: !Int,	-- reverse futility pruning: constant margin (cp)
           rfutm  :: !Int,	-- reverse futility pruning: margin per depth (cp)
           rfutt  :: !Int	-- reverse futility pruning: extra margin with own pieces hanging (cp, 0 = off)
@@ -277,7 +287,8 @@ resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, r
 
 pvro00 :: PVStRO
 pvro00 = PVStRO { draft = 0, tuning = False, abpol = NoAbort, futmar = defaultFutMargins,
-                  cmv = False, chp = 0, chw = 4, lmrfx = -1, lmrpv = 0, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
+                  cmv = False, chp = 0, chw = 4, lmrfx = -1, lmrpv = 0,
+                  lmrtb = lmrTable 120, lmrpn = lmrPenTable 20, lmrnd = 1, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
 
 alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int, Int)
 alphaBeta abc = do
@@ -293,6 +304,9 @@ alphaBeta abc = do
                             cmv = epCMov (esEParams est) /= 0,
                             chp = epCHist (esEParams est), chw = epCHistW (esEParams est),
                             lmrfx = epLmrFix (esEParams est), lmrpv = epLmrPV (esEParams est),
+                            lmrtb = lmrTable (epLmrGrw (esEParams est)),
+                            lmrpn = lmrPenTable (epLmrPen (esEParams est)),
+                            lmrnd = epLmrNoD (esEParams est),
                             rfutd = epRFutD (esEParams est), rfuta = epRFutA (esEParams est),
                             rfutm = epRFutM (esEParams est),
                             rfutt = epRFutT (esEParams est) }
@@ -757,7 +771,7 @@ pvInnerLoopExten b d spec !exd nst = do
            -- Here we must be in a Cut node (will fail low)
            -- and we should have: crtnt = CutNode, nxtnt = AllNode
            old <- get
-           let d' = min d1 $ reduceLmr spec d1 (lmrlv old) (movno nst - spcno nst) + lmrpv (ronly old)
+           let d' = min d1 $ reduceLmr (ronly old) spec d1 (lmrlv old) (movno nst - spcno nst) + lmrpv (ronly old)
            !s1 <- zeroWithLMR d' d1 (-a) (a+scoreGrain) nst
            whenAbort s1 $
                if pathScore s1 <= a
@@ -773,7 +787,7 @@ pvInnerLoopExtenZ b d spec !exd nst = do
     old  <- get
     -- late move reduction
     let !d1 = d + exd - 1	-- this is the normal (unreduced) depth for next search
-        d' = reduceLmr spec d1 (lmrlv old) (movno nst - spcno nst)
+        d' = reduceLmr (ronly old) spec d1 (lmrlv old) (movno nst - spcno nst)
         !onemB = scoreGrain - b
     zeroWithLMR d' d1 onemB b nst
 
@@ -884,17 +898,17 @@ genAndPick !flt !nst mttmv !a !b !d = do
 -- With a variable lmrlev the reduction should stay in a region
 -- where the number of researches has an acceptable level
 {-# INLINE reduceLmr #-}
-reduceLmr :: Bool -> Int -> Int -> Int -> Int
-reduceLmr spec d lmrlev w
-    | spec || d <= lmrNoDepth = d
-    | otherwise               = max 1 $ d - lmrArr!(lmrlev, w)
+reduceLmr :: PVStRO -> Bool -> Int -> Int -> Int -> Int
+reduceLmr ro spec d lmrlev w
+    | spec || d <= lmrnd ro = d
+    | otherwise             = max 1 $ d - lmrtb ro ! (lmrlev, w)
 
 -- Adjust the LMR related parameters in the state
 moreLMR :: Bool -> Int -> Search ()
 moreLMR more !d = do
     s <- get
     let !i  | more      = 1
-            | otherwise = - (1 `unsafeShiftL` d)
+            | otherwise = - (lmrpn (ronly s) ! min 63 d)
         !i1 = lmrrs s + i
     if lmrfx (ronly s) >= 0 then return () else
      if i1 < 0
