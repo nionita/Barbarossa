@@ -3,7 +3,7 @@
 module Uci.UCI (
          UCIMess(..), Option(..), Pos(..), GoCmds(..),
          parseUciStr,
-         findDepth, findTInc, findTime, findMovesToGo
+         findDepth, findTInc, findTime, findMovesToGo, findMoveTime
     ) where
 
 import Data.Char
@@ -322,3 +322,8 @@ findMovesToGo :: [GoCmds] -> Maybe Int
 findMovesToGo [] = Nothing
 findMovesToGo (MovesToGo m : _) = Just m
 findMovesToGo (_ : cms) = findMovesToGo cms
+
+findMoveTime :: [GoCmds] -> Maybe Int
+findMoveTime [] = Nothing
+findMoveTime (MoveTime ms : _) = Just ms
+findMoveTime (_ : cms) = findMoveTime cms
