@@ -280,6 +280,9 @@ Forms: `lmrb` 5092839: `epLmrIni` (8), `epLmrLim` (8500), `epLmrPV` (0); `lmrt` 
 Next: Grw 110 on MEMO (S35), then Pen 15 or 30 on m3a after Lim 17000; SPRTs [0, 5] against `lmrt` with its defaults (same binary).
 Prediction Grw 110 (2026-11-13, before the result): -4 to +4, most likely 0, H0 much more likely.
 Prediction Pen 15 on MEMO (2026-11-13, before the result): -12 to +4, most likely -4, H0 much more likely.
+Interpretation history: 2026-11-13 (S36): the level is a ramp, not a regulator: it starts at 8 in every iteration and rises one step per about
+8500 nodes to the cap 15, drops are rare (38 in 105M nodes). The knobs are the start, the ramp speed (Lim) and the cap; the penalty hardly acts
+(Pen 15 now expected about 0). The ramp is an implicit depth term: large iterations reach high levels.
 
 ### History and depth in the LMR (status: rejected in this form)
 Now: the reduction depends only on the level and the move number. Within the same move number the best fifth by sort value cuts 3 to 5 times as often

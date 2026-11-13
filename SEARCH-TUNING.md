@@ -771,3 +771,23 @@ Second: `lmrt-p15-lmrt-tc10` (`ltp15`, epLmrPen=15) on MEMO, [0, 5], against `lm
 (depth 4: 5 instead of 16, depth 8: 25 instead of 256): the level settles higher, most where the search is deep. A crude depth term, but also
 more reduction overall. Prediction (2026-11-13, before the result): -12 to +4, most likely -4, H0 much more likely. Basis: every increase of
 the amount lost so far (S33 -25, S13); the shift of the reduction towards deep subtrees, which strong engines use, may win back part of it.
+
+**S36.** What the adaptive LMR level does in games: trace on `lmrt` 38658b1 (one log line per level change, search unchanged: 12086912 nodes),
+8 games of the trace engine against itself at 10+0.1 on mini (concurrency 2, `-l 2`), 9423 iterations, 105M nodes, parsed with
+BarbarossaTuning `lmr_trace.py`. Data in `C:\Learn\Tune\lmrt\trace`.
+
+| Iterations | Nodes | Mean level | Level 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| draft <= 8 | 31M | 8.85 | 55.5% | 20.7 | 12.5 | 6.9 | 3.2 | 1.0 | 0.2 | 0.0 |
+| draft 9-12 | 65M | 10.38 | 26.8% | 19.3 | 14.5 | 11.0 | 8.1 | 6.7 | 4.9 | 8.8 |
+| draft 13+ | 8M | 11.39 | 22.6% | 14.1 | 9.5 | 7.8 | 6.4 | 7.1 | 6.0 | 26.5 |
+
+Steps up 6215, down 38 (one per 2.7M nodes; once two in a row); the drops came from penalty depths 1 to 11, the level was back after a median
+of 12301 nodes. The level hardly adapts downwards: every node without a failure adds 1 to the counter, which restarts at 0 after a step up; a
+failure costs 2^d, mostly 8 to 128, and only right after a step up does that exceed the credit. So the scheme is a ramp: every iteration starts at
+level 8 and the level rises one step per about 8500 nodes up to the cap 15. The reduction grows with the nodes already searched in the iteration:
+the first root moves and the new PV with level 8, the later root moves with more, large (deep) iterations at the cap for a quarter of their nodes.
+That is an implicit depth term. It explains S33 (carry-over: the new PV searched at the level of the end of the last iteration, -25) and makes
+Ini, Lim and the cap the knobs that matter; the re-search penalty matters little (S35 Pen 15: now expected about 0, against the recorded -4,
+which assumed frequent drops). The premise of the drops being costly (user, 2026-11-13: a fail high lowers the level drastically for a while)
+does not hold in this form; mini searches fewer nodes per move than MEMO, the shape should hold.
