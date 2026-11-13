@@ -19,6 +19,7 @@ are not reviewed here. The user's experience: negative history and squared bonus
 - Root overflow fix on `chcm`: root as depth 1 -4.1 +- 6.5, H0; no root update -3.4 +- 8.7, stopped; neither is neutral, overflow kept (S29).
 - History in the LMR on `chcm`: G24 B1 -3.6 +- 6.3, G24 alone -9.9 +- 9.0, B1 alone -2.6 +- 5.7, all H0 (S32).
 - LMR level carried over between iterations: -25.0 +- 13.3, H0 (S33): the restart at level 8 is worth much.
+- Running on MEMO: LMR start level 6 and one ply less LMR in PV nodes (`lmrb-i6-chcm-tc10`, `lmrb-pv1-chcm-tc10`, S34).
 
 ## Methods
 
@@ -244,10 +245,13 @@ Evidence:
 |---|---|---|---|---|---|
 | 11-13 | Carry 1 on `chcm` | SPRT [0, 5], 10+0.1, 1366 games | -24.97 +- 13.28, H0 | S33 | the restart at level 8 is worth about 25 Elo; prediction (-1) right in direction only |
 
-### Lower LMR start level, less LMR in PV nodes (status: open)
+### Lower LMR start level, less LMR in PV nodes (status: running)
 Now: from S33 (carrying the level over -25), S13 (fixed 11 -8.6, 14 -36.4) and S32 (G24 -9.9): every change that raises the reduction where an
 iteration starts loses. The other direction was never tried: each iteration starts lower than 8 (`lmrInitLv` 6, 7) or the level climbs slower
-(`lmrInitLim` higher); or one ply less reduction in PV nodes (now the same table for PV and zero window). Not built. 2026-11-13.
+(`lmrInitLim` higher); or one ply less reduction in PV nodes (now the same table for PV and zero window). 2026-11-14.
+Forms: `lmrb` 5092839: `epLmrIni` (8), `epLmrLim` (8500), `epLmrPV` (0).
+Next: SPRT [0, 5], 10+0.1, Ini 6 and PV 1 against `chcm` on MEMO (S34); Lim 17000 and Ini 7 built, not played.
+Prediction (2026-11-14, before the results): Ini 6 -4 to +8, most likely +2; PV 1 -5 to +6, most likely +1; H0 more likely for both.
 
 ### LMR: mate escape (status: open)
 Idea (user, 2026-11-11): less or no LMR in nodes where alpha is a "being mated" score for the side to move (alpha <= -mate threshold): all

@@ -711,3 +711,24 @@ moves, the new PV) is searched with less reduction, and a quarter fewer nodes at
 (S13: 11 -8.6, 14 -36.4) and G24 alone (less reduction for some moves, but a higher level for the others, -9.9): every change that raises the
 reduction where the search starts loses. Open the other direction: start lower than 8, or reduce less in PV nodes. Result in
 `C:\Learn\Data\results\memo\lmrc-chcm-tc10`.
+
+**S34.** Less reduction where an iteration starts, and in PV nodes (the other direction after S33): `lmrb` 5092839 (from `chcm`, compiled as before).
+`epLmrIni` (8) the start level of the adaptive LMR in every iteration, `epLmrLim` (8500) its node limit to raise the level (higher = slower climb),
+`epLmrPV` (0) so many plies less reduction for the late moves of PV nodes (the zero window searches after the first move there; the re-search is as
+before).
+
+Off identical to `chcm`: 12086912 nodes on tests.fen depth 10. Nodes and move 4+ at depth 10:
+
+| Setting | tests.fen | Move 4+ | roots-500 | Move 4+ |
+|---|---|---|---|---|
+| Off | 12086912 | 1.39% | 90007659 | 1.61% |
+| Ini 7 | 12842998 (+6.3%) | 1.39% | 95257685 (+5.8%) | 1.71% |
+| Ini 6 | 13172044 (+9.0%) | 1.44% | 92409753 (+2.7%) | 1.82% |
+| Lim 17000 | 13475972 (+11.5%) | 1.49% | 102076719 (+13.4%) | 1.75% |
+| PV 1 | 13671482 (+13.1%) | 1.37% | 90592275 (+0.6%) | 1.81% |
+
+Smoke games against `chcm` at 10+0.1, 16 each: Ini 7 7 points, PV 1 8.5 points, no time losses. SPRTs on MEMO, [0, 5], concurrency 4 each, against
+`chcm`: `lmrb-i6-chcm-tc10` (`lbi6`, epLmrIni=6; the larger step, the nodes on real roots grow least) and `lmrb-pv1-chcm-tc10` (`lbpv`, epLmrPV=1).
+Prediction (2026-11-14, before the results): Ini 6 -4 to +8, most likely +2, H0 more likely than H1; PV 1 -5 to +6, most likely +1, H0 more likely.
+Basis: S33 (-25 for a higher start) shows the start matters, but the adaptive level climbs back from 6 within the iteration, so the change is much
+smaller than the carry-over in the other direction; PV nodes are few, the late moves there are mostly searched by the re-search anyway.
