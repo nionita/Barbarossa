@@ -72,9 +72,8 @@ placebo when the method changes. Controls with known outcome: `epQThr=0` (threat
 - This PC throttles, MEMO is for long runs; speeds only from alternating runs. Copy binaries under own names, use a worktree (`git worktree add
   --detach C:\Learn\Tune\modx <branch>`) for experiments with other flags, and remove it afterwards.
 - Patches by scripts in the scratchpad; after a branch switch working files can have CRLF: normalize with `sed -i 's/\r$//'` before a commit.
-- Other machines (MEMO, m3a): how a build gets there, the start commands, the limits and quirks are in the user's private machines repository (`lab`: `MACHINES.md`, `MATCHES.md`).
-  Plain `.\run_timed.ps1 ...` on MEMO, quote values with commas (`-CandParams "a=1,b=2"`), give the SHA-256 start of new exes (Defender
-  flags them; its settings are the user's).
+- Timed games on the other machines (MEMO, m3a): the user-level skill `match-runs` (checks before a run, packing, start, watch,
+  results back), with the facts in the user's private machines repository (`lab`: `MACHINES.md`, `MATCHES.md`).
 - `TaskStop` leaves a script's SelfPlay children running: end them explicitly.
 
 ## 5. Recording
