@@ -796,3 +796,18 @@ side of Lim 17000 on m3a: `lmrt-l6-lmrt-tc10` (`ltl6`, epLmrLim=6000), [0, 5], a
 instead of 8500: the first root moves and the PV keep level 8 for fewer nodes, later root moves and deep iterations get more reduction (more
 nodes at the cap). Prediction (2026-11-13, before the result): -10 to +4, most likely -3, H0 much more likely. Basis: every increase of the
 reduction lost so far (S33, S13); this one leaves the start of each iteration nearly as it is, so it should cost less than the carry-over.
+Pen 15 stopped after fewer than 140 games, no summary printed: no result.
+Check of S36 with more games (same trace engine, mini, concurrency 2): 16 games at 10+0.1 on other openings (28437 iterations, 321M nodes) and 8
+games at 30+0.3 (15631 iterations, 453M nodes; about three times the nodes per move, beyond MEMO at 10+0.1):
+
+| Games | Mean level all | d9-12 | d13+ | At cap 15 (all / d13+) | Steps up / down | Drops in a row |
+|---|---|---|---|---|---|---|
+| 8 at 10+0.1 | 10.01 | 10.38 | 11.39 | 7.6% / 26.5% | 6215 / 38 | 1: 36, 2: 1 |
+| 16 at 10+0.1 | 10.07 | 10.34 | 10.86 | 7.9% / 15.4% | 18049 / 174 | 1: 158, 2: 8 |
+| 8 at 30+0.3 | 11.97 | 11.73 | 12.62 | 32.2% / 39.6% | 20229 / 578 | 1: 398, 2: 66, 3: 8, 8: 3 |
+
+The ramp is confirmed at 10+0.1 (the 16 games repeat the 8). At 30+0.3 the iterations are larger, the level climbs further: a third of all
+nodes at the cap. Drops grow to 3% of the steps and come from deeper failures (penalty depth up to 18, 2^18 beats any credit); three cascades
+went from 8 down to 0. So the scheme depends on the time control: the longer the search, the more of it runs at the cap, and parameters tuned
+at 10+0.1 need not fit longer games. The cap and the ramp speed are the knobs; a ramp by depth instead of by nodes would not depend on the time
+control. Data in `C:\Learn\Tune\lmrt\trace\tc10b`, `tc30`.
