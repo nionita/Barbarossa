@@ -141,6 +141,7 @@ data PVStRO
           chw    :: !Int,	-- continuation history: weight in quarters
           rfutd  :: !Int,	-- reverse futility pruning: maximum depth (0 = off)
           lmrfx  :: !Int,	-- late move reduction: fixed level, < 0 = adaptive
+          lmrpv  :: !Int,	-- late move reduction: so many plies less in PV nodes
           rfuta  :: !Int,	-- reverse futility pruning: constant margin (cp)
           rfutm  :: !Int,	-- reverse futility pruning: margin per depth (cp)
           rfutt  :: !Int	-- reverse futility pruning: extra margin with own pieces hanging (cp, 0 = off)
@@ -276,7 +277,7 @@ resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, r
 
 pvro00 :: PVStRO
 pvro00 = PVStRO { draft = 0, tuning = False, abpol = NoAbort, futmar = defaultFutMargins,
-                  cmv = False, chp = 0, chw = 4, lmrfx = -1, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
+                  cmv = False, chp = 0, chw = 4, lmrfx = -1, lmrpv = 0, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
 
 alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int, Int)
 alphaBeta abc = do
@@ -291,11 +292,13 @@ alphaBeta abc = do
                             abpol = abortPolicy abc, futmar = futMarginsOf (esEParams est),
                             cmv = epCMov (esEParams est) /= 0,
                             chp = epCHist (esEParams est), chw = epCHistW (esEParams est),
-                            lmrfx = epLmrFix (esEParams est),
+                            lmrfx = epLmrFix (esEParams est), lmrpv = epLmrPV (esEParams est),
                             rfutd = epRFutD (esEParams est), rfuta = epRFutA (esEParams est),
                             rfutm = epRFutM (esEParams est),
                             rfutt = epRFutT (esEParams est) }
-        pvs0 = pvsInit { ronly = pvro, lmrlv = if lmrfx pvro >= 0 then lmrfx pvro else lmrInitLv }	-- :: PVState
+        lv0 | lmrfx pvro >= 0 = lmrfx pvro
+            | otherwise       = epLmrIni (esEParams est)
+        pvs0 = pvsInit { ronly = pvro, lmrlv = lv0, lmrhi = epLmrLim (esEParams est) }	-- :: PVState
     -- We will get a result and a final state:
     (r, s) <- if useAspirWin
                  then case lastscore abc of
@@ -754,7 +757,7 @@ pvInnerLoopExten b d spec !exd nst = do
            -- Here we must be in a Cut node (will fail low)
            -- and we should have: crtnt = CutNode, nxtnt = AllNode
            old <- get
-           let d' = reduceLmr spec d1 (lmrlv old) (movno nst - spcno nst)
+           let d' = min d1 $ reduceLmr spec d1 (lmrlv old) (movno nst - spcno nst) + lmrpv (ronly old)
            !s1 <- zeroWithLMR d' d1 (-a) (a+scoreGrain) nst
            whenAbort s1 $
                if pathScore s1 <= a

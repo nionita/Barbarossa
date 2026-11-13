@@ -58,6 +58,12 @@ params = [
         ("epRFutT",           100),
         -- late move reduction: fixed level (0 = least reductions .. 15 = most), -1 = adaptive (Search.Core.moreLMR)
         ("epLmrFix",           -1),
+        -- late move reduction: start of the adaptive LMR in every iteration (Search.Core.alphaBeta): level and node limit
+        -- to raise the level (as before: 8, 8500)
+        ("epLmrIni",            8),
+        ("epLmrLim",         8500),
+        -- late move reduction: reduce so many plies less for the late moves of PV nodes (0 = as before)
+        ("epLmrPV",             0),
         -- drawishness scale of the whole eval (Eval.Core.normalParts), instead of the heuristic rules of
         -- scaleFactor when epScaleNew = 1 (default: compiled in, scale-c-lin, TUNING-HISTORY finding 37;
         -- epScaleNew = 0 is the old scaling); factors in 1/64 (64 = 1), fitted by hv_scale.py --constrained
