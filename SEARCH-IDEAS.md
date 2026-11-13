@@ -249,16 +249,16 @@ Evidence:
 ### Lower LMR start level, less LMR in PV nodes (status: running)
 Now: from S33 (carrying the level over -25), S13 (fixed 11 -8.6, 14 -36.4) and S32 (G24 -9.9): every change that raises the reduction where an
 iteration starts loses. The other direction was never tried: each iteration starts lower than 8 (`lmrInitLv` 6, 7) or the level climbs slower
-(`lmrInitLim` higher); or one ply less reduction in PV nodes (now the same table for PV and zero window). 2026-11-14.
+(`lmrInitLim` higher); or one ply less reduction in PV nodes (now the same table for PV and zero window). 2026-11-13.
 Forms: `lmrb` 5092839: `epLmrIni` (8), `epLmrLim` (8500), `epLmrPV` (0).
 Next: SPRT [0, 5], 10+0.1, Ini 6 and PV 1 against `chcm` on MEMO, Lim 17000 on m3a (S34); Ini 7 built, not played.
-Prediction Lim 17000 (2026-11-14, before the result): -5 to +6, most likely +1, H0 more likely.
-Prediction (2026-11-14, before the results): Ini 6 -4 to +8, most likely +2; PV 1 -5 to +6, most likely +1; H0 more likely for both.
+Prediction Lim 17000 (2026-11-13, before the result): -5 to +6, most likely +1, H0 more likely.
+Prediction (2026-11-13, before the results): Ini 6 -4 to +8, most likely +2; PV 1 -5 to +6, most likely +1; H0 more likely for both.
 Evidence:
 | Date | Form | Test | Result | Ref | Reading then |
 |---|---|---|---|---|---|
-| 11-14 | Ini 6 on `chcm` | SPRT [0, 5], 10+0.1, MEMO, 3506 games | -8.13 +- 8.31, H0 | S34 | a lower start loses too; prediction (+2) wrong |
-Interpretation history: 2026-11-14: the start level 8 looks like a local optimum (higher -25, lower -8); a slower climb (Lim 17000) is now expected
+| 11-13 | Ini 6 on `chcm` | SPRT [0, 5], 10+0.1, MEMO, 3506 games | -8.13 +- 8.31, H0 | S34 | a lower start loses too; prediction (+2) wrong |
+Interpretation history: 2026-11-13: the start level 8 looks like a local optimum (higher -25, lower -8); a slower climb (Lim 17000) is now expected
 to lose as well; Ini 7 would at best be neutral, not worth an SPRT.
 
 ### LMR: mate escape (status: open)
@@ -270,8 +270,12 @@ Forms: only the losing side (not +-mate); one ply less reduction instead of none
 Measure: not by node totals. A mate-escape test set, compare the time or depth to the correct escape; then an SPRT against the current base
 with no-loss bounds [-3, 2] (a gain from rare escapes will hardly show). Not built, for later.
 
-### Retune of the adaptive LMR after ordering changes (status: open)
+### Retune of the adaptive LMR after ordering changes (status: running)
 Now: user's point: the adaptive parameters (`lmrInitLim`, weight 2^d of a re-search) were set for the old ordering. No data. 2026-10-31.
+2026-11-13: the start level is a local optimum (S33 higher -25, S34 lower -8.1); the other constants are now parameters, tuned one at a time.
+Forms: `lmrb` 5092839: `epLmrIni` (8), `epLmrLim` (8500), `epLmrPV` (0); `lmrt` dea4035: `epLmrGrw` (120), `epLmrPen` (20), `epLmrNoD` (1).
+Next: Grw 110 on MEMO (S35), then Pen 15 or 30 on m3a after Lim 17000; SPRTs [0, 5] against `lmrt` with its defaults (same binary).
+Prediction Grw 110 (2026-11-13, before the result): -4 to +4, most likely 0, H0 much more likely.
 
 ### History and depth in the LMR (status: rejected in this form)
 Now: the reduction depends only on the level and the move number. Within the same move number the best fifth by sort value cuts 3 to 5 times as often

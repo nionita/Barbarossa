@@ -729,14 +729,35 @@ Off identical to `chcm`: 12086912 nodes on tests.fen depth 10. Nodes and move 4+
 
 Smoke games against `chcm` at 10+0.1, 16 each: Ini 7 7 points, PV 1 8.5 points, no time losses. SPRTs on MEMO, [0, 5], concurrency 4 each, against
 `chcm`: `lmrb-i6-chcm-tc10` (`lbi6`, epLmrIni=6; the larger step, the nodes on real roots grow least) and `lmrb-pv1-chcm-tc10` (`lbpv`, epLmrPV=1).
-Prediction (2026-11-14, before the results): Ini 6 -4 to +8, most likely +2, H0 more likely than H1; PV 1 -5 to +6, most likely +1, H0 more likely.
+Prediction (2026-11-13, before the results): Ini 6 -4 to +8, most likely +2, H0 more likely than H1; PV 1 -5 to +6, most likely +1, H0 more likely.
 Basis: S33 (-25 for a higher start) shows the start matters, but the adaptive level climbs back from 6 within the iteration, so the change is much
 smaller than the carry-over in the other direction; PV nodes are few, the late moves there are mostly searched by the re-search anyway.
 Third form on the new Linux runner m3a (concurrency 6, time control by its calibration, built there from `lmrb`): `lmrb-l17-chcm` (`lbl17`,
-epLmrLim=17000), SPRT [0, 5] against `chcm`. Prediction (2026-11-14, before the result): -5 to +6, most likely +1, H0 more likely than H1. Basis:
+epLmrLim=17000), SPRT [0, 5] against `chcm`. Prediction (2026-11-13, before the result): -5 to +6, most likely +1, H0 more likely than H1. Basis:
 a slower climb keeps less reduction longer in every iteration, like a lower start, but over the whole iteration; +13% nodes on roots-500.
 Result Ini 6 (`lbi6`, MEMO, 10+0.1): -8.13 +- 8.31, LOS 2.8%, H0 after 3506 games (LLR -2.95), pentanomial [137, 439, 653, 417, 107]. Prediction
 (-4 to +8, most likely +2): wrong, the result is below the range. A lower start loses too, less than a higher one (carry-over -25, S33): the start
 level 8 looks like a local optimum, and the loss in both directions is not symmetric. The extra nodes (+9% on tests.fen, +3% on roots-500) do not
 buy enough depth quality for the time they cost. Expected from this for Lim 17000 (slower climb, +13% nodes): rather a loss as well. Result in
 `C:\Learn\Data\results\memo\lmrb-i6-chcm-tc10`.
+
+**S35.** The hard coded constants of the adaptive LMR as parameters: `lmrt` dea4035 (from `lmrb`, compiled as before): `epLmrGrw` (120) growth
+of the reduction table with the move number (factor 1.2), `epLmrPen` (20) base of the re-search penalty 2^d in tenths, `epLmrNoD` (1) no LMR up
+to this depth. Off identical to `chcm`: 12086912 nodes on tests.fen at depth 10 (perf build).
+
+Node scan (`hist_scan.py`, depth 10, chunks, against `lmrt` off): node totals from -14% to +12% without a common sign on the two sets (Pen 25:
+-8.4% on tests.fen, +5.3% on roots-500; Grw 110 and 130 both about -13% on tests.fen); the adaptive level absorbs most of a table change, the
+scan does not select. Data in `C:\Learn\Tune\lmrt`. Reductions at level 8 by quiet move number w:
+
+| Growth | w 5 | 10 | 15 | 20 | 30 | 40 | 60 |
+|---|---|---|---|---|---|---|---|
+| 1.1 | 0 | 1 | 1 | 2 | 3 | 4 | 5 |
+| 1.2 (now) | 0 | 1 | 1 | 2 | 3 | 3 | 5 |
+| 1.3 | 0 | 1 | 1 | 2 | 2 | 3 | 4 |
+
+Smoke games against `lmrt` (same build, 10+0.1, 16 each) for Pen 15, Pen 30, Grw 110, Grw 130, NoD 2: all normal ends, no time losses.
+SPRTs of this series play against `lmrt` with its defaults, the same binary: no speed difference from reading the parameters.
+First: `lmrt-g110-lmrt-tc10` (`ltg110`, epLmrGrw=110) on MEMO, [0, 5]. Prediction (2026-11-13, before the result): -4 to +4, most likely 0, H0
+much more likely than H1. Basis: at the levels the search uses (6 to 10) a growth of 1.1 changes the reductions only from about the 40th quiet
+move on (one ply more), so few nodes see a difference; the level may settle a little lower in compensation. A weak test of the shape: if it is
+even, growth 1.0 or a table with depth would be the stronger step.
