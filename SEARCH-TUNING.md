@@ -2,9 +2,10 @@
 
 The record of the search experiments since 0.8.0: move ordering, pruning, and how to measure them. The HCE
 tuning has its own record (`TUNING.md`, `TUNING-HISTORY.md`, cited there as plain numbers); the findings here
-are cited as S1, S2, ... This file lives on the development base branch (`dev090`) only, as commits that
-touch nothing else: the experiment branches carry code, so a merged or dropped branch never takes its
-findings with it. Every finding names the branch and commit it came from.
+are cited as S1, S2, ... This file lives on the release collector (`rel090`, since 2026-11-13; before on the
+development base branch `dev090`, which now stays as the identity of its data), as commits that touch nothing
+else: the experiment branches carry code, so a merged or dropped branch never takes its findings with it. Every
+finding names the branch and commit it came from.
 
 Data of the measurements: `C:\Learn\Data\measurements\search` (see `C:\Learn\Data\DATA.md`); tools:
 BarbarossaTuning (`sample_roots.py`, `node_scan.ps1`, `node_scan_report.py`, `rfp_shadow_report.py`).

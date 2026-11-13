@@ -2,10 +2,10 @@
 
 One block per idea, always current: what was tried in which form, what came out, how it is read today. The numbers and how they
 were obtained are in the log `SEARCH-TUNING.md` (S1, S2, ...; speed: `PROFILING.md`); this file holds the interpretation, which may
-change with more evidence. Both live on `dev090` only. How to test and how to keep this file: skill `search-idea-test`.
+change with more evidence. Both live on `rel090` (before 2026-11-13 on `dev090`). How to test and how to keep this file: skill `search-idea-test`.
 
 Status: open (not tried), running, promising, adopted, parked, rejected in this form. "Parked" and "rejected" name the form tested, not
-the idea. Elo from the candidate's side with 95% error bars. "Adopted" means in the best branch, nothing is merged into `dev090` yet.
+the idea. Elo from the candidate's side with 95% error bars. "Adopted" means in the best branch, nothing is merged into `rel090` yet.
 
 Older branches (before 0.8.0, e.g. `lmrfix`, `lmrfix14`, `hlmr`, `slmr`, `ttlmr`, `hiss`, `mpru`) hold earlier tries of some of these ideas; they
 are not reviewed here. The user's experience: negative history and squared bonuses lost Elo each time.

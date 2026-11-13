@@ -5,7 +5,7 @@ description: How to test an idea for Barbarossa's search (move ordering, history
 
 # Testing a search idea (Barbarossa)
 
-Each rule here comes from a real wrong conclusion; the details are in `SEARCH-TUNING.md` on dev090 (S2, S3, S5, S13, S16-S20) and
+Each rule here comes from a real wrong conclusion; the details are in `SEARCH-TUNING.md` on rel090 (S2, S3, S5, S13, S16-S20) and
 `PROFILING.md`. A quick test answers only some questions. Say which question it answers, and call a result preliminary until the
 right test has confirmed it. Only timed games decide about strength.
 
@@ -81,7 +81,8 @@ placebo when the method changes. Controls with known outcome: `epQThr=0` (threat
 
 ## 5. Recording
 
-All on dev090 in document-only commits, the experiment branches carry only code. Raw results to
+All on rel090 (the release collector; before 2026-11-13 dev090) in document-only commits, the experiment branches carry only
+code. Raw results to
 `C:\Learn\Data\measurements\search\<idea>` or `C:\Learn\Data\results\<machine>\<run>\result.txt`.
 
 - `SEARCH-TUNING.md`: the log. A finding S<n>: what was done, branch and commit, conditions, numbers. Facts stay; a later correction is added
@@ -104,5 +105,5 @@ Next: <the test that would decide>
 "Parked" and "rejected" name the form tested, not the idea: what failed under an old method or at low depth may deserve a new test.
 When the method changes, go through the register for readings that rested on the old one.
 
-The source of this skill is `.claude/skills/search-idea-test` on dev090; the copy in `~/.claude/skills/search-idea-test` makes it available on
+The source of this skill is `.claude/skills/search-idea-test` on rel090; the copy in `~/.claude/skills/search-idea-test` makes it available on
 all branches. Change both.
