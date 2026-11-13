@@ -811,3 +811,25 @@ nodes at the cap. Drops grow to 3% of the steps and come from deeper failures (p
 went from 8 down to 0. So the scheme depends on the time control: the longer the search, the more of it runs at the cap, and parameters tuned
 at 10+0.1 need not fit longer games. The cap and the ramp speed are the knobs; a ramp by depth instead of by nodes would not depend on the time
 control. Data in `C:\Learn\Tune\lmrt\trace\tc10b`, `tc30`.
+
+**S37.** The cap of the LMR ramp as a parameter and what it does at fixed time: `lmrm` 790aca7 (from `lmrt` with the trace), `epLmrMax` (15)
+the highest level of the adaptive LMR (the table has levels 0 to 15 only). Off identical: 12086912 nodes on tests.fen, 90007659 on roots-500
+(depth 10). Nodes at depth 10 on tests.fen: cap 14 +2.5%, 13 +11.5% (roots-500 +6.2%), 12 +20.9%. Smoke games cap 13 against `lmrm` at
+10+0.1, 16: normal ends.
+
+Fixed time on 200 positions of roots-500, all four caps in parallel on mini (BarbarossaTuning `fixed_time_scan.py`: the search is stopped
+after the time, because the engine ignores `go movetime`), completed depth paired against cap 15, and the share of nodes at the cap
+(`lmr_trace.py`):
+
+| Time | Cap 15 depth | 14 | 13 | 12 | Nodes at cap 15 (all / d13+) |
+|---|---|---|---|---|---|
+| 0.5 s | 11.66 | +0.01 +- 0.06 | -0.09 +- 0.06 | -0.09 +- 0.05 | 2.7% / 1.7% |
+| 1.5 s | 14.43 | -0.35 +- 0.09 | -0.76 +- 0.09 | -0.91 +- 0.10 | 35.0% / 40.7% |
+
+With 0.5 s per move (about 200k nodes: close to a move of MEMO at 10+0.1) the cap hardly binds and lowering it costs no depth; with 1.5 s (600k
+nodes) a third of the nodes run at the cap and every step down costs depth (13: three quarters of a ply). Depth is not Elo, but: a lower cap
+would show little at 10+0.1 (an SPRT of cap 13 there probably ends near 0), and where the cap binds, more reduction at the end of large
+iterations buys depth. The open question is above the cap: levels over 15 need a table extension (a level 15 + k reducing the moves level 15
+reduces by k more), and a time control long enough for the cap to bind (MEMO 10+0.1 and m3a 32+0.32 search about as much as the 0.5 s
+row). Engine gap found on the way: `go movetime` is parsed but not used (`Main/Barbarossa.hs`), the search runs without a limit.
+Data in `C:\Learn\Tune\lmrt\capscan`.
