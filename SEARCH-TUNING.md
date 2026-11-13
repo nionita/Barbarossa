@@ -732,3 +732,6 @@ Smoke games against `chcm` at 10+0.1, 16 each: Ini 7 7 points, PV 1 8.5 points, 
 Prediction (2026-11-14, before the results): Ini 6 -4 to +8, most likely +2, H0 more likely than H1; PV 1 -5 to +6, most likely +1, H0 more likely.
 Basis: S33 (-25 for a higher start) shows the start matters, but the adaptive level climbs back from 6 within the iteration, so the change is much
 smaller than the carry-over in the other direction; PV nodes are few, the late moves there are mostly searched by the re-search anyway.
+Third form on the new Linux runner m3a (concurrency 6, time control by its calibration, built there from `lmrb`): `lmrb-l17-chcm` (`lbl17`,
+epLmrLim=17000), SPRT [0, 5] against `chcm`. Prediction (2026-11-14, before the result): -5 to +6, most likely +1, H0 more likely than H1. Basis:
+a slower climb keeps less reduction longer in every iteration, like a lower start, but over the whole iteration; +13% nodes on roots-500.
