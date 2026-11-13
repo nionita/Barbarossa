@@ -833,3 +833,20 @@ iterations buys depth. The open question is above the cap: levels over 15 need a
 reduces by k more), and a time control long enough for the cap to bind (MEMO 10+0.1 and m3a 32+0.32 search about as much as the 0.5 s
 row). Engine gap found on the way: `go movetime` is parsed but not used (`Main/Barbarossa.hs`), the search runs without a limit.
 Data in `C:\Learn\Tune\lmrt\capscan`.
+
+**S38.** Caps above 15: `lmrm` e908bd8 extends the table to levels 16 to 19 (level 15 + k reduces the moves level 15 reduces by k plies
+more; levels 0 to 15 unchanged), `epLmrMax` up to 19, default 15. Off identical: 12086912 nodes (depth 10, tests.fen); caps 17 and 19 -3.0% and
+-2.4% there. Fixed time on the same 200 positions of roots-500 as S37, caps in parallel on mini, completed depth paired against cap 15, share
+of the nodes at the top levels:
+
+| Time | Cap 15 depth | 17 | 19 | At 15 with cap 15 | At 16-17 with cap 17 | At 18-19 with cap 19 |
+|---|---|---|---|---|---|---|
+| 1.5 s | 14.56 | +0.03 +- 0.13 | +0.03 +- 0.11 | 38.2% | 30.2% | 11.2% |
+| 3 s | 14.69 | +0.16 +- 0.13 | +0.41 +- 0.13 | 50.1% | 40.7% | 23.6% |
+
+With S37: the depth at fixed time rises with the cap up to 15 from 1.5 s on, and beyond 15 only at 3 s; the cap where more costs nothing in
+depth grows with the time per move. At 3 s half the nodes run at cap 15. The node ramp makes the engine reduce differently at every time
+control, and at long ones the cap holds it back. Depth is not Elo (more reduction also loses moves), but this is a candidate explanation for the
+user's long-standing observation that Barbarossa plays relatively weaker at longer time controls (strength measured mostly at 1m+1s). A test
+needs a long time control: a cap above 15 at 10+0.1 would show nothing (S37: at 0.5 s even cap 15 hardly binds). Data in
+`C:\Learn\Tune\lmrt\capscan\h1500`, `h3000`.
