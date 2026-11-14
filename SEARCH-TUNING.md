@@ -747,6 +747,11 @@ although it adds few nodes on real positions (+0.6% on roots-500, +13% on tests.
 the amount of reduction tried so far loses, in both directions; the adaptive LMR as it is sits near an optimum for its amount. What is left in
 this form: the shape (growth, penalty, S35); outside it, a reduction that depends on depth. Result in
 `C:\Learn\Data\results\memo\lmrb-pv1-chcm-tc10`.
+Result Lim 17000 (`lbl17`, m3a, 32+0.32 = 10+0.1 on MEMO by the calibration factor 3.2): -6.72 +- 7.75, LOS 4.5%, H0 after 4084 games (LLR
+-2.95, 19.5 hours, about 210 games per hour), pentanomial [161, 504, 763, 481, 133]; one time loss of `lbl17`. Prediction (-5 to +6, most likely
++1): wrong, just below the range, as expected after Ini 6. A slower climb (+13% nodes) loses like a lower start and PV 1: the third change
+towards less reduction, all near -7. First result of m3a; its size and direction fit the MEMO results of the same series. Result in
+`C:\Learn\Data\results\m3a\lmrb-l17-chcm`.
 
 **S35.** The hard coded constants of the adaptive LMR as parameters: `lmrt` dea4035 (from `lmrb`, compiled as before): `epLmrGrw` (120) growth
 of the reduction table with the move number (factor 1.2), `epLmrPen` (20) base of the re-search penalty 2^d in tenths, `epLmrNoD` (1) no LMR up

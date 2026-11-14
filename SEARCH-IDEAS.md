@@ -19,8 +19,7 @@ are not reviewed here. The user's experience: negative history and squared bonus
 - Root overflow fix on `chcm`: root as depth 1 -4.1 +- 6.5, H0; no root update -3.4 +- 8.7, stopped; neither is neutral, overflow kept (S29).
 - History in the LMR on `chcm`: G24 B1 -3.6 +- 6.3, G24 alone -9.9 +- 9.0, B1 alone -2.6 +- 5.7, all H0 (S32).
 - LMR level carried over between iterations: -25.0 +- 13.3, H0 (S33): the restart at level 8 is worth much.
-- Running on MEMO: LMR start level 6 and one ply less LMR in PV nodes (`lmrb-i6-chcm-tc10`, `lmrb-pv1-chcm-tc10`, S34); on m3a: limit 17000
-  (`lmrb-l17-chcm`).
+- Less LMR in three forms, all H0 near -7: start level 6 -8.1, PV 1 -6.7 (MEMO), limit 17000 -6.7 (m3a) (S34).
 
 ## Methods
 
@@ -259,6 +258,7 @@ Evidence:
 |---|---|---|---|---|---|
 | 11-13 | Ini 6 on `chcm` | SPRT [0, 5], 10+0.1, MEMO, 3506 games | -8.13 +- 8.31, H0 | S34 | a lower start loses too; prediction (+2) wrong |
 | 11-13 | PV 1 on `chcm` | SPRT [0, 5], 10+0.1, MEMO, 4286 games | -6.65 +- 7.72, H0 | S34 | less reduction in PV nodes loses too; prediction (+1) wrong |
+| 11-14 | Lim 17000 on `chcm` | SPRT [0, 5], 32+0.32 (= 10+0.1), m3a, 4084 games | -6.72 +- 7.75, H0 | S34 | a slower climb loses too; prediction (+1) wrong |
 Interpretation history: 2026-11-13: the start level 8 looks like a local optimum (higher -25, lower -8); a slower climb (Lim 17000) is now expected
 to lose as well; Ini 7 would at best be neutral, not worth an SPRT.
 2026-11-13 (PV 1): every change of the amount of reduction loses, in both directions and also only in PV nodes: the amount is near its optimum
