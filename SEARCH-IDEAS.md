@@ -341,6 +341,11 @@ reached: 25 to 47 s against a target of about 6 s), and the moves to go come fro
 show it (both sides waste alike). A candidate explanation of the weaker play at long time controls against other engines.
 Measure: a change of the time management against the same engine with the old one (asymmetric, so self-play works), at a
 long time control; the clock at moves 20 and 40 and the moves under 10 s from the logs (Info level). Not built.
+Background (user, 2026-11-14): many experiments with the time management in earlier versions; none was at least as good at
+60+1 and better at 300+1, all failed badly: the time management matters much for the strength. No sensible formula was found
+to keep it for short games (60+1) and change it for longer ones. 0.8.0 still had the LMR explosion fixed since; with `chcm`
+the time use is expected better, not much.
+Next: after the search experiments (user); first `chcm`'s tournament log (2026-11-14 evening) against S41.
 Interpretation history: 2026-11-14: first seen in the tournament log; not yet in `chcm`'s own games (its tournament
 log will show it at 256 MB hash).
 
