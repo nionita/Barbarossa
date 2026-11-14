@@ -896,3 +896,29 @@ the ramp reaches the cap at long time controls and the reduction there may alrea
 the same time control, a fixed 2000 games each, read once at the end: cap 13 on m3b (`lmrm-m13-lmrm-tc60`), cap 17 on m3a
 (`lmrm-m17-lmrm-tc60`). Prediction (2026-11-14, before the results): cap 17 -45 to -5, most likely -25; cap 13 -15 to +15, most likely 0.
 Result in `C:\Learn\Data\results\m3b\lmrm-m19-lmrm-tc60`.
+
+**S41.** Time use in games against other engines (2026-11-14): the Barbarossa log of an online tournament (ICS through WinBoard,
+engine `0.8.0 w5`, hash 68 MB from WinBoard, one engine process for all games), 13 games of which 12 played (one ended after one
+move). Time control 4+1: 246.6 s on the clock at the first move, about 0.97 s added per move. 29 to 90 moves per game, mean
+completed draft 13 to 15 per game; at the end 3 games with a mate score for Barbarossa, 8 against it (the last search; result
+tags are not in the log). The LMR level stood at the cap 15 at the last draft of 78 to 98% of the moves (S36 to S40: the cap
+binds at long time controls).
+
+| Game | Moves | Clock at move 20 | at move 40 | Moves under 10 s |
+|---|---|---|---|---|
+| 1 | 59 | 127 s | 20 s | 18 |
+| 2 | 69 | 54 s | 9 s | 31 |
+| 4 | 45 | 97 s | 1.7 s | 10 |
+| 6 | 40 | 5 s | 1.7 s | 22 |
+| 9 | 69 | 92 s | 6 s | 31 |
+| 12 | 90 | 108 s | 41 s | 37 |
+
+Half of the clock is gone by about move 20 (game 2: the first 8 moves took 154 of 246 s), the rest of the game is played on the
+increment. Causes in `compTime` (`Main/Barbarossa.hs`, unchanged from 0.8.0 to `chcm`): (1) the maximum of a move is the target
+plus a share of the rest (`remTimeFracIni` 0.15, rising to 0.5 near zero), and the searches reach it often (game 2 moves 2, 3, 5:
+28.7, 32.5, 32.1 s at the maximum, against targets of 5 to 6 s); (2) the moves to go come from the score (`estimateMovesToGo`:
+50 below 1 pawn, 36, 24, 15, 10 at 4 pawns, ..., 2 from 8 pawns): in game 6 the score was +4 to +8.5 from move 11 on, the engine
+spent as for a game about to end and had 5 s left at move 20 (it won). The matches of the tuning work cannot see this: both sides
+use the same time management. Against other engines it means many moves at about 1 s from the middlegame on, a candidate
+explanation of the weaker play at long time controls (the user's observation, S38) besides the LMR cap. Register entry "Time
+management at long time controls". Log in `C:\Learn\Data\logs\ics-4p1`.

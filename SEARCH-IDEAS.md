@@ -332,6 +332,18 @@ Now: not built; `staticScore` two plies back is on `stack`, so cheap. 2026-10-31
 ### Singular extensions (status: open)
 Now: not built, needs good ordering and TT first. 2026-10-31.
 
+### Time management at long time controls (status: open)
+Now: S41 (2026-11-14): in an online tournament at 4+1 (`0.8.0 w5`, 12 games against other engines) half of the clock is
+gone by about move 20 and most of the endgame is played on the increment (games with 10 to 37 moves under 10 s). Two parts of
+`compTime` (`Main/Barbarossa.hs`, the same in `chcm`): a single move may take up to about 15% of the remaining time (often
+reached: 25 to 47 s against a target of about 6 s), and the moves to go come from the score (`estimateMovesToGo`: 50 below
+1 pawn, 10 at 4 pawns, 2 at 8 pawns), so a large score spends the clock as if the game ended soon. Self-play matches cannot
+show it (both sides waste alike). A candidate explanation of the weaker play at long time controls against other engines.
+Measure: a change of the time management against the same engine with the old one (asymmetric, so self-play works), at a
+long time control; the clock at moves 20 and 40 and the moves under 10 s from the logs (Info level). Not built.
+Interpretation history: 2026-11-14: first seen in the tournament log; not yet in `chcm`'s own games (its tournament
+log will show it at 256 MB hash).
+
 ### Threaded search (status: open)
 Now: after the lower fruits (user). Per-thread state arrays would fit. 2026-10-31.
 
