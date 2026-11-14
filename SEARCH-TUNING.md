@@ -945,3 +945,10 @@ completed draft is higher (mean 13 to 20 by game against 13 to 15 for 0.8.0); th
 64 to 94% of the moves. So the waste comes from the time control, not from the LMR explosion of 0.8.0: at 4+1 the maximum per
 move (target plus 15% of the rest) is reached often and the clock is gone by the middlegame; at 60+1 the increment carries the
 game. Log in `C:\Learn\Data\logs\ics-4p1-chcm`.
+
+Playing on the increment in a decided game costs nothing (user): Barbarossa does not count the moves to mate in a mate score (on
+purpose from the beginning), so with a mate found it does not take the shortest way, but it never loses the mate; it only makes
+the game longer (the 184-move game). The clock at the first move under 10% of the start, by game: move 21 to 51, with a score of
+-136 to -504 in 8 games (all 8 lost by mate later) and +936 / +1124 in the 2 won ones; a score of 1000 or more came 1 to 20 moves
+after that point. So in the lost games the clock was low while the game was still open; whether the low clock made them lost is
+not shown (the score was already negative). Reading (user): the time management fits short time controls (60+1), not longer ones.
