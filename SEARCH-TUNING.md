@@ -939,7 +939,7 @@ Logs in `C:\Learn\Data\logs\gui-60p1`. Script: BarbarossaTuning `time_use.py`.
 
 `chcm` at 4+1 in the online tournament of 2026-11-14 (ICS through WinBoard, hash 516 MB = 512 + 4 MB EGTB cache, one engine
 process, 11 games, 10 with 10 moves or more, 652 moves; last row of the table): the same picture as `0.8.0 w5`. Clock at move 20
-11-53% by game, at move 40 1-3% in 8 of 8 games that got there (one 14%), half of the moves under 10% of the start, 29% of the
+11-53% by game, at move 40 1-3% in 7 of the 8 games that got there (one 14%), half of the moves under 10% of the start, 29% of the
 moves at the maximum, 1.6 times the target (1.7 without the 184-move game, which was played almost all on the increment). The
 completed draft is higher (mean 13 to 20 by game against 13 to 15 for 0.8.0); the LMR level at the last draft at the cap 15 in
 64 to 94% of the moves. So the waste comes from the time control, not from the LMR explosion of 0.8.0: at 4+1 the maximum per
