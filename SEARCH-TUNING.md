@@ -929,9 +929,19 @@ share of the starting clock; moves at the maximum: used >= 90% of `mxr`):
 |---|---|---|---|---|---|
 | `0.8.0 w5`, 4+1 (ICS) | 32% | 5% | 44% | 30% | 1.7 (5.4 s / 3.2 s) |
 | `chcm`, 60+1 (GUI) | 46-74% by log, about 58% | 18-36%, about 26% | 5-35%, about 16% | 8-20%, about 12% | 1.0 (1.8 s / 1.8 s) |
+| `chcm`, 4+1 (ICS) | 29% | 3% | 53% | 29% | 1.6 (4.6 s / 2.9 s) |
 
 `chcm` keeps much more of its clock and uses about its target per move; 0.8.0 used 1.7 times its target, mostly by searches
 running to the maximum. Two differences at once: the engine (the LMR explosion fixed since 0.8.0, user) and the time control
 (at 60+1 the increment is about 40% of the time per move, at 4+1 about 15%), so the share of each is open; `chcm` at 4+1
 (tournament of 2026-11-14) separates them. Still in `chcm`: a quarter of the clock left at move 40, single games with 3% there.
 Logs in `C:\Learn\Data\logs\gui-60p1`. Script: BarbarossaTuning `time_use.py`.
+
+`chcm` at 4+1 in the online tournament of 2026-11-14 (ICS through WinBoard, hash 516 MB = 512 + 4 MB EGTB cache, one engine
+process, 11 games, 10 with 10 moves or more, 652 moves; last row of the table): the same picture as `0.8.0 w5`. Clock at move 20
+11-53% by game, at move 40 1-3% in 8 of 8 games that got there (one 14%), half of the moves under 10% of the start, 29% of the
+moves at the maximum, 1.6 times the target (1.7 without the 184-move game, which was played almost all on the increment). The
+completed draft is higher (mean 13 to 20 by game against 13 to 15 for 0.8.0); the LMR level at the last draft at the cap 15 in
+64 to 94% of the moves. So the waste comes from the time control, not from the LMR explosion of 0.8.0: at 4+1 the maximum per
+move (target plus 15% of the rest) is reached often and the clock is gone by the middlegame; at 60+1 the increment carries the
+game. Log in `C:\Learn\Data\logs\ics-4p1-chcm`.

@@ -345,9 +345,12 @@ Background (user, 2026-11-14): many experiments with the time management in earl
 60+1 and better at 300+1, all failed badly: the time management matters much for the strength. No sensible formula was found
 to keep it for short games (60+1) and change it for longer ones. 0.8.0 still had the LMR explosion fixed since; with `chcm`
 the time use is expected better, not much.
-Next: after the search experiments (user); first `chcm`'s tournament log (2026-11-14 evening) against S41.
-Interpretation history: 2026-11-14: first seen in the tournament log; not yet in `chcm`'s own games (its tournament
-log will show it at 256 MB hash).
+`chcm` at 4+1 (tournament 2026-11-14, S41): the same as 0.8.0 (clock 29% at move 20, 3% at move 40, 53% of the moves under
+10%, used 1.6 times the target), with deeper searches; at 60+1 in the GUI it keeps 58% / 26%. The cause is the time control
+(the share of the increment), not the engine version.
+Next: after the search experiments (user).
+Interpretation history: 2026-11-14: first seen in the tournament log of 0.8.0; the same evening confirmed for `chcm` at 4+1,
+not seen at 60+1: a long time control effect of `compTime`, not of the LMR explosion.
 
 ### Threaded search (status: open)
 Now: after the lower fruits (user). Per-thread state arrays would fit. 2026-10-31.
