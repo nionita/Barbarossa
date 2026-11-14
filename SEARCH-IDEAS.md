@@ -393,6 +393,7 @@ leaves where going into a pawn race is decided. Fix: `snd` in the two lines (or 
 (perf node counts change where pawn endings are reached). Measure: the example and its flip, the table positions (+8 cp per step
 for both colours), a set of pawn endings with known results; a match hardly shows it (rare). Prediction: 0 to +3 Elo, not
 measurable by a match of normal size. Not built.
+Next: fix it in the eval phase, after the search work (user, 2026-11-14: to be corrected, but little strength expected).
 Interpretation history: 2026-11-14: found in the eval review, confirmed by reading `Eval/Core.hs` lines 1186-1195.
 
 ### Threat features in the HCE (status: open)
