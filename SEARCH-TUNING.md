@@ -922,3 +922,16 @@ spent as for a game about to end and had 5 s left at move 20 (it won). The match
 use the same time management. Against other engines it means many moves at about 1 s from the middlegame on, a candidate
 explanation of the weaker play at long time controls (the user's observation, S38) besides the LMR cap. Register entry "Time
 management at long time controls". Log in `C:\Learn\Data\logs\ics-4p1`.
+`chcm` in the GUI at 60+1 against other engines (2026-11-10/11, 7 logs, 28 games, 1753 moves), the same measures (by
+share of the starting clock; moves at the maximum: used >= 90% of `mxr`):
+
+| Engine, time control | Clock at move 20 | at move 40 | Moves under 10% | Moves at the maximum | Used / target |
+|---|---|---|---|---|---|
+| `0.8.0 w5`, 4+1 (ICS) | 32% | 5% | 44% | 30% | 1.7 (5.4 s / 3.2 s) |
+| `chcm`, 60+1 (GUI) | 46-74% by log, about 58% | 18-36%, about 26% | 5-35%, about 16% | 8-20%, about 12% | 1.0 (1.8 s / 1.8 s) |
+
+`chcm` keeps much more of its clock and uses about its target per move; 0.8.0 used 1.7 times its target, mostly by searches
+running to the maximum. Two differences at once: the engine (the LMR explosion fixed since 0.8.0, user) and the time control
+(at 60+1 the increment is about 40% of the time per move, at 4+1 about 15%), so the share of each is open; `chcm` at 4+1
+(tournament of 2026-11-14) separates them. Still in `chcm`: a quarter of the clock left at move 40, single games with 3% there.
+Logs in `C:\Learn\Data\logs\gui-60p1`. Script: BarbarossaTuning `time_use.py`.
