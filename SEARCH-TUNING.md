@@ -883,3 +883,16 @@ game an endgame iteration of a given draft costs fewer nodes (transposition tabl
 climbs less and the endgame gets less reduction. Two readings for later: a ramp by depth (form #2) would lose this unless it takes the
 phase or the move count in; and whether the endgame wants less reduction is open (the scheme gives it less by accident of the node count).
 Group sizes are small for 13-14 pieces; d <= 8 shows no difference anywhere (the ramp has not started there).
+
+**S40.** The cap at a long time control (2026-11-13/14). Machines: m3b, the second Linux box, set up on 2026-11-13, the same hardware as m3a
+and the same speed (149k nodes per second alone, 143k with 6 in parallel; m3a 145k / 143k), so the same factor 3.2: 60+1 on MEMO = 192+3.2 on
+the boxes, about 28 games per hour at concurrency 6. Run `lmrm-m19-lmrm-tc60`: `lmrm` e908bd8 `epLmrMax=19` (`lm19`) against `lmrm` (cap 15),
+same binary, a fixed 2000 games planned. Prediction (before the result): -6 to +12, most likely +3.
+Result: stopped by hand after 283 games as a clear loss (the one exception of the fixed-length rule): +50 -109 =124, 39.6%, about -74 Elo; the
+last summary, at 200 games, -75.9 +- 35.9, LOS 0.00%, pentanomial [14, 37, 29, 18, 2]; all games ended normally, no time losses. Prediction
+badly wrong. S38's +0.41 ply at 3 s per move is not strength: the levels above 15 reduce the late moves so much that the search misses moves
+(depth is not Elo, as S38 warned). The weaker play at long time controls is then not a cap that holds the ramp back; if anything the reverse:
+the ramp reaches the cap at long time controls and the reduction there may already be too strong. Test of that: the cap on both sides of 15 at
+the same time control, a fixed 2000 games each, read once at the end: cap 13 on m3b (`lmrm-m13-lmrm-tc60`), cap 17 on m3a
+(`lmrm-m17-lmrm-tc60`). Prediction (2026-11-14, before the results): cap 17 -45 to -5, most likely -25; cap 13 -15 to +15, most likely 0.
+Result in `C:\Learn\Data\results\m3b\lmrm-m19-lmrm-tc60`.

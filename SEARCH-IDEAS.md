@@ -20,6 +20,7 @@ are not reviewed here. The user's experience: negative history and squared bonus
 - History in the LMR on `chcm`: G24 B1 -3.6 +- 6.3, G24 alone -9.9 +- 9.0, B1 alone -2.6 +- 5.7, all H0 (S32).
 - LMR level carried over between iterations: -25.0 +- 13.3, H0 (S33): the restart at level 8 is worth much.
 - Less LMR in three forms, all H0 near -7: start level 6 -8.1, PV 1 -6.7 (MEMO), limit 17000 -6.7 (m3a) (S34).
+- LMR cap 19 at 60+1 (m3b, 192+3.2): about -74 after 283 games, stopped (S40). Running: cap 13 on m3b, cap 17 on m3a, 2000 games each.
 
 ## Methods
 
@@ -294,6 +295,12 @@ MEMO slot is free; a ramp by depth instead of nodes would not depend on the time
 Cap 19 at a long time control (2026-11-13): `lmrm` e908bd8 `epLmrMax=19` against `lmrm` (cap 15, same binary) on m3b at
 192+3.2 (60+1 on MEMO, factor 3.2), a fixed 2000 games read once at the end (LOS >= 95% to adopt), run `lmrm-m19-lmrm-tc60`.
 Prediction (before the result): -6 to +12, most likely +3; LOS >= 95% unlikely at 2000 games (+-12).
+Result cap 19 (2026-11-14): stopped by hand after 283 games as a clear loss: +50 -109 =124, about -74 Elo (at 200 games -75.9 +- 35.9,
+LOS 0.00%), no time losses (S40). Prediction (+3) badly wrong: the extra depth of S38 does not buy strength, the extra reduction loses moves.
+Next (S40): the cap on both sides of 15 at the same long time control, fixed 2000 games each: cap 13 on m3b (`lmrm-m13-lmrm-tc60`),
+cap 17 on m3a (`lmrm-m17-lmrm-tc60`), against `lmrm` (cap 15, same binary).
+Prediction (2026-11-14, before the results): cap 17 -45 to -5, most likely -25; cap 13 -15 to +15, most likely 0 (S37: 13 costs 0.76 ply at
+1.5 s, but if more reduction loses this steeply above 15, less may not cost much); LOS >= 95% for cap 13 unlikely.
 S39: in games the endgame runs at lower levels at equal draft (10+0.1, d13+: 10.0 against 12-13), not in searches from scratch: the phase
 reaches the level through the iteration size (TT, time), not by itself. A depth ramp would need the phase or the move count to keep it.
 
