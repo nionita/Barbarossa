@@ -304,6 +304,34 @@ Prediction (2026-11-14, before the results): cap 17 -45 to -5, most likely -25; 
 S39: in games the endgame runs at lower levels at equal draft (10+0.1, d13+: 10.0 against 12-13), not in searches from scratch: the phase
 reaches the level through the iteration size (TT, time), not by itself. A depth ramp would need the phase or the move count to keep it.
 
+### LMR cap depending on the size of the search (status: open)
+Idea (user, 2026-11-14): the mechanism of the adaptive LMR: every iteration starts at level 8 and collects the important moves
+(history), then the level rises and the less promising moves are searched less hard (corrected only by re-searches). Two
+questions: how high (the cap) and how fast (Lim). The time control acts together with the LMR, so the cap may need a measure of
+the time control, or of the time for the current move.
+Now: evidence so far: the start and the ramp at 10+0.1 are near their optimum in both directions (S33, S34: start 6 -8.1, carry
+-25, Lim 17000 -6.7; Lim 6000 running). The cap binds only in large iterations (S37: 2.7% of the nodes at 0.5 s per move), so
+it is measured at long time controls: cap 19 about -74 (S40); caps 13 and 17 running (2000 games each). A lower cap was never
+played at 10+0.1.
+First, before any encoding: if cap 13 holds at the long time control and is neutral at 10+0.1, a fixed cap serves both (it hardly
+binds in short games). An encoding is needed only if the best cap at short time controls is higher than at long ones.
+Measure: cap 13 at 10+0.1 (SPRT with no-loss bounds, e.g. [-3, 2]); cap 11 or 12 at 192+3.2 to find the bottom; the speed of
+the ramp at the long time control too (a faster ramp reaches the cap sooner: Lim 6000 may gain at 10+0.1 and lose at long time
+controls if the cap is too high there).
+Forms, if an encoding is needed (preferred first):
+1. The draft of the iteration (or the remaining depth): a cap falling with the draft. Plausible mechanism: in deep iterations
+   large reductions pile up along a path (cap 19 searched deeper and lost). Independent of time and hardware, measurable with
+   the deterministic perf build, node counts and node limited games. S39: the node ramp follows the game phase through the TT,
+   so the draft should only bound the level, the ramp stays by nodes.
+2. The node budget of the move (allotted time times measured nodes per second): the size of the search on any hardware;
+   node limited matches emulate it (budget = node limit), the deterministic checks do not.
+3. The time allotted to the root move: simple, but hardware dependent (the same time control on a faster machine reduces
+   differently).
+4. The remaining time: not recommended, it mixes the time control with the time already spent (S41: the clock is gone by move
+   20 at 4+1), so the time management problem would enter the LMR.
+Choice between 1 and 2 (depth or size of the search): the cap 11/12 run and a trace like S37 of the levels by draft in long games.
+Next: after the cap runs end (about 2026-11-17).
+
 ### History and depth in the LMR (status: rejected in this form)
 Now: the reduction depends only on the level and the move number. Within the same move number the best fifth by sort value cuts 3 to 5 times as often
 as the worst fifth (S31, late moves at depth 1 to 3): history holds information the LMR does not use. Use the rank in the node or size classes, not
