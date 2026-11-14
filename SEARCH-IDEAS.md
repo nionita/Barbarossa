@@ -373,6 +373,23 @@ without pairs, insertion sort for captures, pawn check in `genMovePromo`, lazy s
 
 ## Eval
 
+Reviews of the eval and of the tuning method from reading the code (2026-11-14, `lmrm`, nothing measured), for the eval phase
+after the search work: `Eval/EVAL-REVIEW-EXISTING.md` (king attack, passed pawns), `Eval/EVAL-REVIEW-MISSING.md` (safe checks,
+pawn shelter and storm), `Eval/FORK-TERMS.md`, `Eval/TUNING-REVIEW.md`, `Eval/PAWN-ENDGAME-BUG.md`.
+
+### `pawnEndGame`: square used as the distance to promotion (status: open)
+Now: a bug, in the engine since before 0.8.0 and in `chcm`: in `pawnEndGame` (`Eval/Core.hs`, the special eval for kings and pawns
+only) `mim`/`miy` take the square of the escaped pawn nearest to promotion (`fst`) instead of its distance (`snd`). Read from the
+code (`Eval/PAWN-ENDGAME-BUG.md`): with one escaped pawn the score falls 64 cp per step for White (rises 64 for Black, 8 meant);
+with escaped pawns on both sides the race compares square numbers, so a won race can be scored about -750 (example
+`7k/1K6/P7/8/7p/8/8/8 w`: as coded -752, meant +984), and a position and its colour flip get different scores. The tuning does not
+see it (`posExactEval` skips the special evals); the search repairs it once the promotions are inside the horizon, the damage is at
+leaves where going into a pawn race is decided. Fix: `snd` in the two lines (or `minimum $ map snd`). Not an identity change
+(perf node counts change where pawn endings are reached). Measure: the example and its flip, the table positions (+8 cp per step
+for both colours), a set of pawn endings with known results; a match hardly shows it (rare). Prediction: 0 to +3 Elo, not
+measurable by a match of normal size. Not built.
+Interpretation history: 2026-11-14: found in the eval review, confirmed by reading `Eval/Core.hs` lines 1186-1195.
+
 ### Threat features in the HCE (status: open)
 Now: after the search work (user). S14.
 
