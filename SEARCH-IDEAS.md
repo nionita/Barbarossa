@@ -238,6 +238,9 @@ Built (2026-11-15): `mbnd` b7fb86e from `rel090`, both guards. Local checks (S43
 mates found earlier or at all in 4 of 6 mate positions; the level 19 explosions of S42 shrink 10 and 12 times in two KQ/KR positions,
 less than half in the third (362, check extension still the candidate). Next: SPRT [-5, 0] against `chcm` at 10+0.1 when a slot is
 free (a no-loss test: a bug fix kept unless it loses).
+The "-19744" of S43 is the clamp of the static eval (`matesc = 20000 - 255` in `Eval/Core.hs`, rounded to the grain), one grain
+outside `nearmate` (>= 19745): the guards of `mbnd`, RFP and futility do not hold there. Frequent in lost games (151 draft scores,
+5 of the 8 lost games of S41 reach it before -20000). Open: align the two definitions (decision: it is an eval score, not a mate).
 
 ### Late move pruning (status: rejected in this form)
 Now: loses, more with depth, also on the new ordering and with the count for the LMR level. Without `improving` late moves are not reliably bad. 2026-11-11.
@@ -465,6 +468,15 @@ Forms: B: no extension beyond ply 2 * draft (diagnostic build, not committed); a
 extension in reduced lines; an extension only while the line is not too far below the draft.
 Measure: roots-500 node scan by stratum (queen endings apart), a set of KQKR and mate by check positions (solved, time to mate), then
 an SPRT with no-loss bounds; on top of `mbnd` (the guards), against `chcm` or `mbnd`.
+Review (2026-11-15, `TIME-MATE-EXTENSION-REVIEW.md`, read only): a one-sided check chain costs a ply every two plies and ends near
+ply 2 * draft by itself; checks of both sides in turn cost nothing, and a reduced line at depth 1 keeps extending (checking moves
+are not exempt from LMR, `noLMR` is passed pawns only). Recommended form D: extend only while `ply + d >= draft - k` (k 2 or 3, no
+new state; the full depth re-search is back above the threshold), with the ply limit 2 * draft as backstop, both as parameters
+compiled off first; the QS still sees a mate in one by check (all evasions in `qsInCheck`); the last queen / last rook extension
+stays. In the 4+1 log the S44 mechanism shows in a won queen ending (game 7: drafts 7 to 16 in 0.86 s, 144 moves to the end), not
+in the losses. Test plan in the review: S43/S44 positions, mates by check, game 7 roots, 100 KQKR positions played out at fixed
+nodes, then SPRT [-5, 0] against `mbnd` and a fixed match at 60+1; cap 19 against 15 with the fixes at 60+1 (the -74 of S40 may
+contain the explosions).
 Next: after the LMR results; it also cleans the node statistics of the LMR scans.
 
 ### Singular extensions (status: open)
@@ -499,6 +511,12 @@ moves about zero), 4+1 (main, fixed games), 5+3; then a gauntlet at 4+1 against 
 Next: after the search experiments (user).
 Interpretation history: 2026-11-14: first seen in the tournament log of 0.8.0; the same evening confirmed for `chcm` at 4+1,
 not seen at 60+1: a long time control effect of `compTime`, not of the LMR explosion.
+2026-11-15 (review `TIME-MATE-EXTENSION-REVIEW.md`, the 4+1 log of S41 read again, 652 searches): the mate bound bugs and the
+check extension do not explain the clock: the 8 lost games reach -500 with 2 to 9% of the clock left, the decided phase is played
+on the increment (2% of the time over target). The time goes in moves 1 to 10 and to the score drop rule: a final score 24 to 300 cp
+under the last move's (`exte`, no stop before the maximum) takes 36% of all time in 109 of 652 moves (used / target 2.6 to 3.7).
+So change A and the score drop rule come first. Second lever, for the decided phase: the search goes on after a mate score (mate
+scores carry no distance, the move cannot change): 174 s, 6% of the time; stopping at a stable mate score is a candidate.
 
 ### Threaded search (status: open)
 Now: after the lower fruits (user). Per-thread state arrays would fit. 2026-10-31.
