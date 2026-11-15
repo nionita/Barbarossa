@@ -54,6 +54,8 @@ it. It is frequent: 151 draft scores of -19744 and 5 of the 8 lost games reach i
 `isRevFutil`, `isPruneFutil`) do not hold at this bound. Whether they should is a decision (it is an eval score), but the two
 definitions should not differ by one.
 
+Scripts: BarbarossaTuning `mate_time.py`, `mate_time2.py`, `mate_time3.py` (argument: the log).
+
 Missing for more: results and opponent times (not in the log); nodes by type and a count of extensions per draft; the ply at the
 abort. The log has every root position (first `NoEval` line of a search): a replay of the 652 roots with `rel090` and `mbnd` at the
 logged draft would show directly whether the drops and the slow drafts change.
