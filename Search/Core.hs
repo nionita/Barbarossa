@@ -642,6 +642,7 @@ data NullMoveResult = NoNullMove | NullMoveHigh | NullMoveLow | NullMoveThreat P
 nullMoveFailsHigh :: MyPos -> NodeState -> Int -> Int -> Search NullMoveResult
 nullMoveFailsHigh pos nst b d
     | not useNullMove = return NoNullMove
+    | nearmate b = return NoNullMove	-- at a mate bound the null move proves nothing
     | d < 2 || tacticalPos pos || zugZwang pos		-- no null move at d < 2
       || crtnt nst == AllNode = return NoNullMove	-- no null move in all nodes
     | otherwise = do
@@ -1048,11 +1049,12 @@ qSearchLims !qsa !qsb front = do
        then qsInCheck qsa qsb pos
        else qsNormal  qsa qsb pos front
 
--- The delta cut of the QS (switched by useQsDelta)
-qsDeltaCut :: Int -> Search Bool
-qsDeltaCut a
-    | useQsDelta = lift $ qsDelta a
-    | otherwise  = return False
+-- The delta cut of the QS (switched by useQsDelta), not at a mate bound (alpha a): there it would
+-- always cut and the QS could not find its own mate
+qsDeltaCut :: Int -> Int -> Search Bool
+qsDeltaCut a delta
+    | useQsDelta && not (nearmate a) = lift $ qsDelta delta
+    | otherwise                      = return False
 
 qsInCheck :: QSScore -> QSScore -> MyPos -> Search QSScore
 qsInCheck !qsa !qsb pos = do
@@ -1060,7 +1062,7 @@ qsInCheck !qsa !qsb pos = do
     if noMove edges
        then return $ maxQSScore qsa (toQSScore mated)	-- remain in limits (a could even be minBound!)
        else do
-          !dcut <- qsDeltaCut $ (qsScore qsa) - (staticScore pos) - qsDeltaMargin
+          !dcut <- qsDeltaCut (qsScore qsa) $ (qsScore qsa) - (staticScore pos) - qsDeltaMargin
           if dcut
              then do
                  when collectFens $ finWithNodes "DELT"
@@ -1075,7 +1077,7 @@ qsNormal !qsa !qsb pos front
          when collectFens $ finWithNodes "BETA"
          return qsb
     | otherwise = do
-         !dcut <- qsDeltaCut $ (qsScore qsa) - (staticScore pos) - qsDeltaMargin
+         !dcut <- qsDeltaCut (qsScore qsa) $ (qsScore qsa) - (staticScore pos) - qsDeltaMargin
          if dcut
             then do
                 when collectFens $ finWithNodes "DELT"
