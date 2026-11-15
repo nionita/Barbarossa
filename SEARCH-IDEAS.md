@@ -27,6 +27,15 @@ are not reviewed here. The user's experience: negative history and squared bonus
 
 Readings rest on the method of their time; when a method falls, the readings resting on it are marked below.
 
+Method review (2026-11-15, `Search/METHOD-REVIEW.md`, read from the records with a simulation of the tests, nothing played): an H0 stop
+of [0, 5] fixes the estimate by the number of games (about 2.5 - 38000 / games), so "H0 near -7" says "not +5", not "-7"; [-3, 2]
+passes a true 0 in only 64% of the runs (for "harmless" put 0 at the upper bound: [-5, 0] or [-8, 0]); the most likely value of the
+predictions was above the result in all 11 cases S28-S40 (a tuned search starts near -5); 2000 long games decide only effects from
+about 15 Elo; early looks: loser stops at fixed looks are safe, winner stops only by a rule fixed before the start; the long runs
+use the default hash of 16 MB (no `option.Hash` in `run_timed`), unlike real use; node scans: per position ratios with a bootstrap
+interval, one process per position, a placebo, positions with 5 men or fewer apart. Adjudication measured on Grw 110: about 9% of the
+time at 10+0.1 for about 1% changed results. Not yet adopted: each point is decided when it is used.
+
 | Method | For | Status | Why | Ref |
 |---|---|---|---|---|
 | Move 4+ cuts at fixed LMR level 11, two position sets, against a placebo floor | ordering | current | a proven change shows clearly; floor +-0.03 openings, +-0.065 real | S20, S21 |
