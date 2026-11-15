@@ -159,6 +159,7 @@ data PVStRO
           lmrpn  :: !(UArray Int Int),	-- late move reduction: re-search penalty by depth (0 .. 63)
           lmrnd  :: !Int,	-- late move reduction: none up to this depth
           lmrmx  :: !Int,	-- late move reduction: highest level of the adaptive LMR
+          lmrfl  :: !Int,	-- late move reduction: floor of the reduced depth in eighths of the depth (0 = off)
           rfuta  :: !Int,	-- reverse futility pruning: constant margin (cp)
           rfutm  :: !Int,	-- reverse futility pruning: margin per depth (cp)
           rfutt  :: !Int	-- reverse futility pruning: extra margin with own pieces hanging (cp, 0 = off)
@@ -296,7 +297,7 @@ pvro00 :: PVStRO
 pvro00 = PVStRO { draft = 0, tuning = False, abpol = NoAbort, futmar = defaultFutMargins,
                   cmv = False, chp = 0, chw = 4, lmrfx = -1, lmrpv = 0,
                   lmrtb = lmrTable 120, lmrpn = lmrPenTable 20, lmrnd = 1,
-                  lmrmx = lmrLevDef, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
+                  lmrmx = lmrLevDef, lmrfl = 0, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
 
 alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int, Int)
 alphaBeta abc = do
@@ -316,6 +317,7 @@ alphaBeta abc = do
                             lmrpn = lmrPenTable (epLmrPen (esEParams est)),
                             lmrnd = epLmrNoD (esEParams est),
                             lmrmx = max lmrLevMin $ min lmrLevMax $ epLmrMax (esEParams est),
+                            lmrfl = max 0 $ min 7 $ epLmrFlr (esEParams est),
                             rfutd = epRFutD (esEParams est), rfuta = epRFutA (esEParams est),
                             rfutm = epRFutM (esEParams est),
                             rfutt = epRFutT (esEParams est) }
@@ -956,7 +958,8 @@ genAndPick !flt !nst mttmv !a !b !d = do
 reduceLmr :: PVStRO -> Bool -> Int -> Int -> Int -> Int
 reduceLmr ro spec d lmrlev w
     | spec || d <= lmrnd ro = d
-    | otherwise             = max 1 $ d - lmrtb ro ! (lmrlev, w)
+    | otherwise             = max dmin $ d - lmrtb ro ! (lmrlev, w)
+    where dmin = max 1 $ (d * lmrfl ro) `unsafeShiftR` 3
 
 -- Adjust the LMR related parameters in the state
 moreLMR :: Bool -> Int -> Search ()
