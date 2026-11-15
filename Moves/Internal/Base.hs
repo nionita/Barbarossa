@@ -11,7 +11,7 @@ module Moves.Internal.Base (
     mateScore, qsDelta,
     draftStats,
     finNode, countRepetitions,
-    nearmate,
+    nearmate, isMating,
     getRootMoveNumber, incrementRootMoveNumber
 ) where
 
@@ -37,6 +37,11 @@ import Moves.Notation
 {-# INLINE nearmate #-}
 nearmate :: Int -> Bool
 nearmate i = i >= mateScore - 255 || i <= -mateScore + 255
+
+-- A mate score for the side to move (the mating side), not a mated one
+{-# INLINE isMating #-}
+isMating :: Int -> Bool
+isMating i = i >= mateScore - 255
 
 -- Some options and parameters:
 printEvalInt :: Int64

@@ -223,8 +223,8 @@ pathFromScorePos s mp = Path { pathScore = s, pathDepth = 0, pathMoves = Seq [],
 addToPath :: Move -> Path -> Path
 addToPath e p = p { pathDepth = pathDepth p + 1, pathMoves = Seq $ e : unseq (pathMoves p) }
 
-pnearmate :: Path -> Bool
-pnearmate = nearmate . pathScore
+pmating :: Path -> Bool
+pmating = isMating . pathScore
 
 pnextlev :: Path -> Path
 pnextlev p = p { pathScore = - pathScore p }
@@ -497,8 +497,8 @@ insertToPvs d p ps@(q:qs)
     where betters = pathScore (pvPath p) >  pathScore (pvPath q)
           equaln  = pvNodes p == pvNodes q
           bettern = pvNodes p > pvNodes q
-          pmate   = pnearmate $ pvPath p
-          qmate   = pnearmate $ pvPath q
+          pmate   = pmating $ pvPath p	-- only mates for us go first, a mated move stays behind
+          qmate   = pmating $ pvPath q
           dscore  = 1
 
 -- PV Search
