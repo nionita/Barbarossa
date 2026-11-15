@@ -477,6 +477,8 @@ stays. In the 4+1 log the S44 mechanism shows in a won queen ending (game 7: dra
 in the losses. Test plan in the review: S43/S44 positions, mates by check, game 7 roots, 100 KQKR positions played out at fixed
 nodes, then SPRT [-5, 0] against `mbnd` and a fixed match at 60+1; cap 19 against 15 with the fixes at 60+1 (the -74 of S40 may
 contain the explosions).
+Test sets (2026-11-15): the 652 roots of the 4+1 log of S41 (BarbarossaTuning `log_roots.py`): all, the 206 with a final mate
+score (+-20000), the 184 of game 7 (won queen ending); `C:\Learn\Data\measurements\search\mbnd\roots-ics`.
 Next: after the LMR results; it also cleans the node statistics of the LMR scans.
 
 ### Singular extensions (status: open)
