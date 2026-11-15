@@ -22,6 +22,7 @@ are not reviewed here. The user's experience: negative history and squared bonus
 - Less LMR in three forms, all H0 near -7: start level 6 -8.1, PV 1 -6.7 (MEMO), limit 17000 -6.7 (m3a) (S34).
 - LMR cap 19 at 60+1 (m3b, 192+3.2): about -74 after 283 games, stopped (S40). Running: cap 13 on m3b, cap 17 on m3a, 2000 games each.
 - LMR table growth 1.1 (Grw 110): -0.35 +- 4.30, H0 after 13964 games (S35). Running: Lim 6000 on MEMO.
+- Plan for the LMR after these runs (branches A to D by the outcome): "LMR cap depending on the size of the search", end of the block.
 
 ## Methods
 
@@ -381,6 +382,30 @@ M3 census (S42, 2026-11-15, fixed levels on roots-500, draft 12): reductions end
 reduced searches; the confirmation rate at equal d1 and w hardly falls from 15 to 19 near the horizon (no large blind spot shown),
 somewhat for d1 7-10. New: fixed level 19 needs 619M nodes against 327M (15) and 270M (17), the extra nodes outside the LMR loop
 (PV or aspiration re-searches?): a possible instability at the top level. Next: nodes per position (15, 17, 19) and re-search counts.
+Plan after the running cap and ramp runs (2026-11-15, strategy; the predictions of each run are written at its start, about 5
+lower than the first guess, see Methods). Working picture: the cap matters only where it binds, so the long time control decides it,
+and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEMO (10+0.1), cap 17 (m3a) and cap 13 (m3b) at
+192+3.2, 2000 games each, to about 2026-11-17. Interims at 798 games, for planning only (fixed matches are read at the end): cap 17
+-24.4 +- 17.5, cap 13 +36.7 +- 17.1; they point to A. Branches, by the outcome:
+- A (most expected): cap 13 gains at 60+1, cap 17 loses, cap 13 passes [-5, 0] at 10+0.1. Lower is better where the cap binds and
+  harmless where it does not: no time control encoding yet. 1. The bottom of the curve: cap 11 (m3a) and cap 12 (m3b) against cap
+  15 at 192+3.2, 2000 games each, still with 16 MB hash so that the four points compare. 2. MEMO, after Lim 6000: `chcm` against
+  `dev090` at 60+1, 1000 games (does the gain of the short SPRTs arrive at the long time control). 3. The best cap against 15 with
+  a realistic hash (size to settle, 64 to 128 MB), then the speed of the ramp (Lim) at the long time control with the new cap.
+- B: cap 13 neutral at 60+1 (the interim a lucky start), cap 17 loses. Flat optimum between 13 and 15, only higher hurts. 1. Cap 13
+  as the default (safer for longer time controls, free at 10+0.1). 2. The other axis of the review: a bound of the reduction by the
+  remaining depth (e.g. d' >= d1 / 3), against the collapse to depth 1 (S42), tested first at the long time control. 3. MEMO short
+  slots: new mechanisms with [0, 5] (`improving`, singular extensions, aspiration).
+- C: cap 13 gains at 60+1 but fails [-5, 0] at 10+0.1. A real time control dependence (the user's encoding idea). 1. Cap by the
+  planned size of the move (form 2 above: node budget; 15 below a threshold, 13 above). 2. Screen at 30+0.3 on MEMO (40% of 60+1)
+  after eight trace games show that the cap binds there. 3. Confirm at 10+0.1 and 60+1.
+- D (unexpected): cap 17 neutral or better, or both caps far from their interims. The long results are not trusted as they stand:
+  1. validate a box by a replay of a known result (`lmrc`, -25, 600 games); 2. one cap again with a large hash (effect of the 16 MB
+  load).
+- Lim 6000 apart: H0 (expected) ends the single ramp steps at 10+0.1; a pass keeps 6000 and checks it at the long time control with
+  the cap.
+- Lower priority, independent of A to D, in this order: TT replacement and mate bound fixes, a limit of the check extension (clean
+  node statistics, KQKR still solved), time management change A, `pawnEndGame` in the eval phase.
 
 ### History and depth in the LMR (status: rejected in this form)
 Now: the reduction depends only on the level and the move number. Within the same move number the best fifth by sort value cuts 3 to 5 times as often
