@@ -810,6 +810,12 @@ instead of 8500: the first root moves and the PV keep level 8 for fewer nodes, l
 nodes at the cap). Prediction (2026-11-13, before the result): -10 to +4, most likely -3, H0 much more likely. Basis: every increase of the
 reduction lost so far (S33, S13); this one leaves the start of each iteration nearly as it is, so it should cost less than the carry-over.
 Pen 15 stopped after fewer than 140 games, no summary printed: no result.
+Result Lim 6000 (2026-11-15): no decision at the game limit, 20000 games, +1.86 +- 3.50 (nElo +2.55 +- 4.82), +5830 -5723 =8447,
+Ptnml [717, 2328, 3851, 2339, 765], LLR -1.00 [0, 5], LOS 85%. Prediction (-10 to +4, most likely -3, H0 much more likely): inside the
+range, but the first result of S28 onwards above the most likely value. Reading: the faster ramp is neutral to slightly positive at
+10+0.1 (not +5); with Lim 17000 (S34, -6.7 at an H0 stop, so "not +5", likely a few Elo less) the ramp speed is flat or falls
+slowly towards slower ramps around the default 8500. At 10+0.1 the ramp hardly reaches the cap (S37), so this measures the climb
+below it; at long time controls a faster ramp brings more nodes to the cap and acts together with it (LMR plan, step A3).
 Check of S36 with more games (same trace engine, mini, concurrency 2): 16 games at 10+0.1 on other openings (28437 iterations, 321M nodes) and 8
 games at 30+0.3 (15631 iterations, 453M nodes; about three times the nodes per move, beyond MEMO at 10+0.1):
 

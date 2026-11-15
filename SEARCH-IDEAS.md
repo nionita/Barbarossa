@@ -21,7 +21,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
 - LMR level carried over between iterations: -25.0 +- 13.3, H0 (S33): the restart at level 8 is worth much.
 - Less LMR in three forms, all H0 near -7: start level 6 -8.1, PV 1 -6.7 (MEMO), limit 17000 -6.7 (m3a) (S34).
 - LMR cap 19 at 60+1 (m3b, 192+3.2): about -74 after 283 games, stopped (S40). Running: cap 13 on m3b, cap 17 on m3a, 2000 games each.
-- LMR table growth 1.1 (Grw 110): -0.35 +- 4.30, H0 after 13964 games (S35). Running: Lim 6000 on MEMO.
+- LMR table growth 1.1 (Grw 110): -0.35 +- 4.30, H0 after 13964 games (S35). Lim 6000 (faster ramp): +1.86 +- 3.50 after 20000 games, no
+  decision (S36). Running on MEMO: `chcm` against `dev090` at 60+1 (1000 games).
 - Plan for the LMR after these runs (branches A to D by the outcome): "LMR cap depending on the size of the search", end of the block.
 
 ## Methods
@@ -59,7 +60,7 @@ Check of the screening at the long time control (2026-11-15, step A2 of the LMR 
 `dev090` add up to about +80 at 10+0.1 (qthr +10.8, hpqt +5.8, rfut +17.6, nmlm +13.0, chcm +22.5 against `expo`, the filter step),
 a sum of steps selected for passing, so inflated; parts of it (LMR, pruning margins) were tuned at 10+0.1 only. Question: does the
 gain arrive at 60+1? Prediction (2026-11-15, before the result): +10 to +55, most likely +30; below +15 the short screening misleads
-for the long time control and the cap and ramp results at 60+1 weigh more than the 10+0.1 ones.
+for the long time control and the cap and ramp results at 60+1 weigh more than the 10+0.1 ones. Started on MEMO 2026-11-15.
 
 ## Move ordering
 
@@ -327,6 +328,7 @@ Evidence:
 | Date | Form | Test | Result | Ref | Reading then |
 |---|---|---|---|---|---|
 | 11-15 | Grw 110 on `lmrt` | SPRT [0, 5], 10+0.1, MEMO, 13964 games (resumed twice) | -0.35 +- 4.30, H0 | S35 | the table growth hardly matters; prediction (0) right |
+| 11-15 | Lim 6000 on `lmrt` | SPRT [0, 5], 10+0.1, MEMO, 20000 games (limit) | +1.86 +- 3.50, no decision, LLR -1.00 | S36 | the faster ramp is neutral to slightly positive at 10+0.1; first result above the most likely predicted value (-3) |
 Form `lmrm` 790aca7: `epLmrMax` (15), the cap. S37: at a MEMO-like 0.5 s per move the cap hardly binds (2.7% of the nodes), at 1.5 s a third of
 the nodes run at it and lower caps cost depth (13: -0.76 ply). Cap 13 at 10+0.1 not worth an SPRT; above 15 needs a table extension and a
 longer time control.
@@ -417,7 +419,8 @@ and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEM
   1. validate a box by a replay of a known result (`lmrc`, -25, 600 games); 2. one cap again with a large hash (effect of the 16 MB
   load).
 - Lim 6000 apart: H0 (expected) ends the single ramp steps at 10+0.1; a pass keeps 6000 and checks it at the long time control with
-  the cap.
+  the cap. Result: neither, +1.86 +- 3.50 after 20000 games (S36): no more ramp steps at 10+0.1; Lim 6000 stays a candidate for step
+  A3 (the ramp speed at the long time control with the new cap).
 - Lower priority, independent of A to D, in this order: TT replacement and mate bound fixes, a limit of the check extension (clean
   node statistics, KQKR still solved), time management change A, `pawnEndGame` in the eval phase.
 
