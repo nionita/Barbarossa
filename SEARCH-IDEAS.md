@@ -360,6 +360,10 @@ and w, their fail highs and confirmations, full searches by level and d1; fixed 
 the adaptive caps at 3 s as in S38. M1 later, as the check of a candidate table: root move agreement by draft and by nodes against one
 deep level 8 search per root (needs a root move line per position in `SelfPlay -P`).
 Next: M3 build (trace build on `lmrm`); the cap runs end about 2026-11-17.
+Cap 13 at the short time control (2026-11-15): `lmrm` `epLmrMax=13` against `lmrm` (cap 15, same binary) on MEMO, 10+0.1, SPRT
+no-loss [-3, 2], run `lmrm-m13-lmrm-tc10` (`lm13`). Question: is a fixed cap 13 harmless in short games (where the cap binds in about
+3% of the nodes, S37), so that one cap could serve both time controls? Smoke on mini: 16 games, clean.
+Prediction (2026-11-15, before the result): -3 to +3, most likely 0; H1 (not worse) more likely than H0.
 
 ### History and depth in the LMR (status: rejected in this form)
 Now: the reduction depends only on the level and the move number. Within the same move number the best fifth by sort value cuts 3 to 5 times as often
