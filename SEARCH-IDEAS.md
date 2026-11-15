@@ -21,6 +21,7 @@ are not reviewed here. The user's experience: negative history and squared bonus
 - LMR level carried over between iterations: -25.0 +- 13.3, H0 (S33): the restart at level 8 is worth much.
 - Less LMR in three forms, all H0 near -7: start level 6 -8.1, PV 1 -6.7 (MEMO), limit 17000 -6.7 (m3a) (S34).
 - LMR cap 19 at 60+1 (m3b, 192+3.2): about -74 after 283 games, stopped (S40). Running: cap 13 on m3b, cap 17 on m3a, 2000 games each.
+- LMR table growth 1.1 (Grw 110): -0.35 +- 4.30, H0 after 13964 games (S35). Running: Lim 6000 on MEMO.
 
 ## Methods
 
@@ -298,6 +299,10 @@ Interpretation history: 2026-11-13 (S36): the level is a ramp, not a regulator: 
 (Pen 15 now expected about 0). The ramp is an implicit depth term: large iterations reach high levels.
 Next (2026-11-13): Pen 15 stopped; Lim 6000 on MEMO (faster ramp) against Lim 17000 on m3a (slower); then the cap (13 instead of 15).
 Prediction Lim 6000 (2026-11-13, before the result): -10 to +4, most likely -3, H0 much more likely.
+Evidence:
+| Date | Form | Test | Result | Ref | Reading then |
+|---|---|---|---|---|---|
+| 11-15 | Grw 110 on `lmrt` | SPRT [0, 5], 10+0.1, MEMO, 13964 games (resumed twice) | -0.35 +- 4.30, H0 | S35 | the table growth hardly matters; prediction (0) right |
 Form `lmrm` 790aca7: `epLmrMax` (15), the cap. S37: at a MEMO-like 0.5 s per move the cap hardly binds (2.7% of the nodes), at 1.5 s a third of
 the nodes run at it and lower caps cost depth (13: -0.76 ply). Cap 13 at 10+0.1 not worth an SPRT; above 15 needs a table extension and a
 longer time control.

@@ -773,6 +773,13 @@ First: `lmrt-g110-lmrt-tc10` (`ltg110`, epLmrGrw=110) on MEMO, [0, 5]. Predictio
 much more likely than H1. Basis: at the levels the search uses (6 to 10) a growth of 1.1 changes the reductions only from about the 40th quiet
 move on (one ply more), so few nodes see a difference; the level may settle a little lower in compensation. A weak test of the shape: if it is
 even, growth 1.0 or a table with depth would be the stronger step.
+Result Grw 110 (2026-11-15): H0 after 13964 games, -0.35 +- 4.30 (nElo -0.47 +- 5.76), +4034 -4048 =5882, Ptnml [547, 1692, 2534,
+1646, 563], LLR -2.96. Prediction (-4 to +4, most likely 0, H0) right. The run was interrupted twice: by mistake after 8102 games (its
+config.json overwritten by the other slot, rebuilt from games.pgn with lab `scripts/rebuild_config.py`, 4051 complete pairs, none
+left out), and for the online tournament on 2026-11-14 (fastchess did not stop on Ctrl+C, ended in the task manager; the autosave is
+at most 20 games behind games.pgn). The same SPRT continued both times (same machine, same time control). Reading: the growth of the
+table hardly matters at the levels the search uses; the shape question goes to the cap and the bound by remaining depth (S40, LMR cap
+review). Results in `C:\Learn\Data\results\memo\lmrt-g110-lmrt-tc10` (with `resume-note.txt`).
 Second: `lmrt-p15-lmrt-tc10` (`ltp15`, epLmrPen=15) on MEMO, [0, 5], against `lmrt`. A failed reduction costs the counter 1.5^d instead of 2^d
 (depth 4: 5 instead of 16, depth 8: 25 instead of 256): the level settles higher, most where the search is deep. A crude depth term, but also
 more reduction overall. Prediction (2026-11-13, before the result): -12 to +4, most likely -4, H0 much more likely. Basis: every increase of
