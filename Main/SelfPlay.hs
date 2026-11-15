@@ -17,6 +17,7 @@ import Data.IORef
 import Data.List (intercalate, intersperse, partition)
 import Search.Core (qsValue)
 import qualified Data.Map.Strict as M
+import qualified Data.IntMap.Strict as IM
 import Data.Maybe (catMaybes, fromMaybe, isJust)
 import Foreign hiding (void)
 import System.Console.GetOpt
@@ -785,6 +786,8 @@ perfTestFile opts = do
         when (sBeta st > 0) $
             putStrLn $ "Beta cuts:          " ++ show (sBeta st) ++ " at move 1: " ++ pc (sBM1 st)
                 ++ ", 2: " ++ pc (sBM2 st) ++ ", 3: " ++ pc (sBM3 st) ++ ", 4+: " ++ pc (sBM4p st)
+        -- LMR census (build flag lmrcensus): one line per key, see Search.Core census
+        forM_ (IM.toList (sLmrC st)) $ \(k, n) -> putStrLn $ "census," ++ show k ++ "," ++ show n
         hClose hi
 
 perfLoop :: Handle -> Maybe Handle -> Maybe Handle -> Int -> Int -> PerfAcc -> CtxIO (Bool, PerfAcc)

@@ -11,6 +11,9 @@ import Data.Array.Base (unsafeAt)
 import Data.Array.Unboxed
 import Data.Bits
 import Data.Int
+#ifdef LMR_CENSUS
+import qualified Data.IntMap.Strict as IM
+#endif
 import Data.List
 import Data.Maybe (fromMaybe)
 import Search.CStateMonad
@@ -798,11 +801,15 @@ pvInnerLoopExtenZ b d spec !exd nst = do
     zeroWithLMR d' d1 onemB b nst
 
 zeroWithLMR :: Int -> Int -> Int -> Int -> NodeState -> Search Path
-zeroWithLMR !d' !d1 !onemB !b nst =
+zeroWithLMR !d' !d1 !onemB !b nst = do
+    lv0 <- censusLevel
     if d' == d1
        then do
            moreLMR True 1	-- more LMR
-           pnextlev <$> pvZeroW nst onemB d'
+           !sz <- pnextlev <$> pvZeroW nst onemB d'
+           whenAbort sz $ do
+               census lv0 d' d1 nst 0
+               return sz
        else do
            incRedu
            nds0 <- gets $ sNodes . stats
@@ -813,6 +820,7 @@ zeroWithLMR !d' !d1 !onemB !b nst =
                if pathScore sr < b
                   then do
                     moreLMR True 1	-- more LMR
+                    census lv0 d' d1 nst 1
                     return sr		-- failed low (as expected)
                   else do
                     -- was reduced and didn't fail low: re-search with full depth
@@ -823,7 +831,48 @@ zeroWithLMR !d' !d1 !onemB !b nst =
                     !sf <- pnextlev <$> pvZeroW nst1 onemB d1
                     whenAbort sf $ do
                         when (pathScore sf >= b) $ moreLMR False d1
+                        census lv0 d' d1 nst (if pathScore sf >= b then 3 else 2)
                         return sf
+
+-- LMR census (build flag lmrcensus, SelfPlay only; the search is unchanged): counts of the zero window searches
+-- of zeroWithLMR which were not aborted, by the level at the start, the remaining depth d1, the reduced depth d'
+-- and w = moves since the last capture. Key = kind * 10000 + level * 100 + a * 10 + b, level 0 for levels below 8:
+-- kind 1 (a = d1 class, b = d' class): reduced searches; kind 2, 3, 4 (a = d1 class, b = w class): reduced searches,
+-- of them failed high (re-search), of them confirmed by the re-search; kind 5 (a = d1 class, b = 0): searches not
+-- reduced; kind 6 (a = d1 class, b = 0): sum of the reductions d1 - d'.
+-- Classes: d1 2-3 (and less), 4-6, 7-10, 11+ (0..3); d' 1, 2, 3-6, 7+ (0..3); w 2 (and less), 3-5, 6-10, 11+ (0..3)
+censusLevel :: Search Int
+#ifdef LMR_CENSUS
+censusLevel = gets lmrlv
+#else
+censusLevel = return 0
+#endif
+
+census :: Int -> Int -> Int -> NodeState -> Int -> Search ()
+#ifdef LMR_CENSUS
+census lv d' d1 nst outc = modStat $ \s -> s { sLmrC = foldl' add (sLmrC s) ks }
+    where add m (k, n) = IM.insertWith (+) k n m
+          !lb = if lv < 8 then 0 else lv
+          !w  = movno nst - spcno nst
+          !c1 | d1 <= 3   = 0
+              | d1 <= 6   = 1
+              | d1 <= 10  = 2
+              | otherwise = 3
+          !cr | d' <= 1   = 0
+              | d' == 2   = 1
+              | d' <= 6   = 2
+              | otherwise = 3
+          !cw | w <= 2    = 0
+              | w <= 5    = 1
+              | w <= 10   = 2
+              | otherwise = 3
+          key kd a b = kd * 10000 + lb * 100 + a * 10 + b
+          ks | outc == 0 = [(key 5 c1 0, 1)]
+             | otherwise = [(key 1 c1 cr, 1), (key 2 c1 cw, 1), (key 6 c1 0, fromIntegral (d1 - d'))]
+                           ++ [ (key 3 c1 cw, 1) | outc >= 2 ] ++ [ (key 4 c1 cw, 1) | outc == 3 ]
+#else
+census _ _ _ _ _ = return ()
+#endif
 
 checkFailOrPVLoop :: Int -> Int -> Move -> Path -> NodeState -> Search NodeState
 checkFailOrPVLoop b d e s nst = whenAbort nst $ do
