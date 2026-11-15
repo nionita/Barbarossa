@@ -1015,3 +1015,6 @@ never lowers it. It fits "outside the LMR loop" if the extended lines run in ful
 such subtrees at d <= 2. Why the level changes it so much is open (a different PV and TT at level 19 may send the search into these
 lines). Test, when it comes: nodes of position 362 split by in-check / extended / full window at d <= 2, or the same position with
 the check extension limited (e.g. no extension beyond ply 2 * draft, or only while d1 is below the draft).
+User's reading (2026-11-15): hardly important for the strength (4 pieces); of interest only (1) for what it shows about the self
+regulating LMR, and (2) to keep such explosions out of the node statistics of experiments (totals are dominated by a few positions:
+use per position ratios, geomean or median, as the scan above). The engine must still solve KQKR.
