@@ -296,7 +296,9 @@ dirSortC w o1 o2 h ms = runST $ do
 
 -- We want to alloc a fix amount of memory, and although there are
 -- positions which have more (quiet) moves, they are very rare
--- and we will ignore them for now
+-- and we will ignore them: the quiet moves after the 128th of a sort group are not searched.
+-- Decision (search review 2026-11-15, finding 6): kept as a known limit, more than 128 quiet moves
+-- need about three queens; lifting it costs allocation or a length pass at every sort
 maxMoves :: Int
 maxMoves = 128
 
