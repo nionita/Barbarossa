@@ -1068,3 +1068,45 @@ Readings:
   positions. The ply limit B is the simple form; others: a limit on the number of extensions per line, or no extension in a
   reduced line.
 Data: `C:\Learn\Data\measurements\search\mbnd` (`expl-ceA-*`, `expl-ceB-*`).
+
+**S45.** LMR depth floor, local checks (2026-11-15; design `Search/LMR-DEPTH-BOUND.md`). Branch `lmfl` 5463b64 (from `lmcs`, no mate
+guards): `epLmrFlr` = f, reduced depth `d' = max dmin (d1 - r)`, `dmin = max 1 (d1 * f / 8)`, 0 = off. f = 0: 12086912 nodes on
+tests.fen at depth 10 (identical); f = 4 under the adaptive ramp: 11367370 (-6%). Census as S42 (deterministic perf build with
+`lmrcensus`, roots-500, draft 12, fixed level, one process per run; f = 0 from S42). Prediction (design): share at d' = 1 from 90% to
+55-60% for f = 4 (80-85% for f = 3); `conf / fh` at d1 >= 4, w >= 6 towards level 13; nodes +30 to +100% for f = 4, +10 to +25% for f = 3.
+
+| Level, f | Nodes | Reduced | d' = 1 | Mean red. | Mean red. d1 4-6 / 7-10 | `conf / fh` d1 4-6, w 6-10 / 11+ | `conf / fh` d1 7-10, w 6-10 / 11+ |
+|---|---|---|---|---|---|---|---|
+| 13, 0 | 589M | 34.6M | 78.3% | 1.86 | 2.8 / 3.4 | 67.5 / 31.1 | 75.0 / 31.3 |
+| 15, 0 | 327M | 16.9M | 89.9% | 2.41 | 3.5 / 5.5 | 39.0 / 26.2 | 37.2 / 10.4 |
+| 15, 3 | 386M | 16.6M | 79.8% | 2.29 | 3.3 / 4.6 | 41.0 / 29.2 | 35.8 / 21.3 |
+| 15, 4 | 302M | 16.5M | 57.6% | 1.91 | 2.4 / 3.8 | 58.5 / 50.2 | 44.0 / 34.3 |
+| 15, 5 | 404M | 20.2M | 61.5% | 1.70 | 2.1 / 3.0 | 63.6 / 54.3 | 57.4 / 52.0 |
+| 19, 0 | 619M | 12.5M | 99.2% | 2.78 | 3.8 / 6.5 | 43.2 / 30.1 | 27.9 / 15.4 |
+| 19, 3 | 473M | 13.3M | 82.7% | 2.53 | 3.6 / 5.2 | 45.7 / 33.3 | 40.2 / 29.6 |
+| 19, 4 | 576M | 15.3M | 59.7% | 1.99 | 2.6 / 4.2 | 63.9 / 54.5 | 48.0 / 38.3 |
+| 19, 5 | 882M | 16.7M | 62.3% | 1.78 | 2.2 / 3.2 | 64.6 / 55.0 | 57.9 / 48.4 |
+
+Explosion positions (per position, fixed level, draft 12, nodes; f = 0 at 19 from S43, same build without guards):
+
+| Position | 15: f 0 / 4 / 5 | 19: f 0 / 4 / 5 |
+|---|---|---|
+| 182 (KR against KQ) | 611k / 494k / 299k | 22.0M / 128k / 449k |
+| 362 (KQ against KR) | 384k / 104k / 190k | 428M / 2.30M / 160M |
+| 485 | 438k / 1.55M / 706k | 4.82M / 46.1M / 1.78M |
+
+Readings:
+- Share at d' = 1 and the mean reductions as predicted; f = 3 hardly acts (as predicted).
+- The alarm: f = 4 lifts `conf / fh` at d1 >= 4 and w >= 6 most of the way to level 13 at d1 4-6 (58.5 against 39 and 67.5) and
+  part of the way at d1 7-10 (44 against 37 and 75); at w 11+ above level 13. The same at level 19. `conf / red` hardly moves (0.4 to
+  0.5%): more of the fail highs are real, not more found (the census still cannot count the misses).
+- Nodes: not as predicted, f = 4 costs nothing at level 15 (-8%) and -7% at 19; f = 5 +24% and +43%. The totals of one process
+  over the whole file are chaotic (TT and history carried, f = 3 above f = 4), so read them as "f = 4 cheap, f = 5 not": the floor
+  makes fewer re-searches. Fits the -6% under the ramp at depth 10.
+- The explosions are not removed, they move: at 19 f = 4 takes 182 and 362 from 22M and 428M to 128k and 2.3M, but 485 from 4.8M to
+  46M; f = 5 leaves 362 at 160M. Without the mate guards and with the unlimited check extension (S43, S44) these stay chaotic;
+  the floor is no repair for them.
+- f = 4 is the form for the matches: about level 13's alarm with level 15's width, at no node cost. Next: the floor run on a box
+  (f = 4 at cap 15 against cap 15, plan of 2026-11-15) needs a fast build of `lmfl` and a smoke match; a [-5, 0] screen at 10+0.1 on
+  MEMO when a slot is free.
+Data: `C:\Learn\Data\measurements\search\lmfl` (census outputs and tables, explosion CSVs).

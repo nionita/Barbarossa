@@ -428,6 +428,9 @@ and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEM
   opponent, time control, hash). The rest of the cap curve (cap 11) after the floor is decided. Optional, a few hundred games: cap 19
   with the floor against cap 15 (near 0 instead of about -74: the cap is no longer the sensitive parameter). Before the floor run:
   build with `epLmrFlr`, f = 0 identical (12086912 nodes), census at f = 3, 4, 5 (S42 set), positions 182, 362, 485.
+  Done (S45, branch `lmfl` 5463b64): f = 4 lifts `conf / fh` at d1 >= 4 most of the way to level 13 at no node cost (-8% at
+  fixed level 15, -6% adaptive); f = 3 hardly acts, f = 5 costs 24 to 43% more nodes. The explosions move, they are not removed.
+  f = 4 for the box run.
 - Lim 6000 apart: H0 (expected) ends the single ramp steps at 10+0.1; a pass keeps 6000 and checks it at the long time control with
   the cap. Result: neither, +1.86 +- 3.50 after 20000 games (S36): no more ramp steps at 10+0.1; Lim 6000 stays a candidate for step
   A3 (the ramp speed at the long time control with the new cap).
