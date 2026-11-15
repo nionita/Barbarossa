@@ -401,6 +401,9 @@ Restarted (2026-11-15, after the method review: [-3, 2] passes a true 0 in only 
 4000 games without a decision (0.00 +- 7.90, LLR 0.15; seen only after the restart was decided, not used for it); new run `lmrm-m13-lmrm-tc10b`, same engines and parameter, SPRT [-5, 0] (a loss of up to 5 at 10+0.1 is
 accepted if the long time control gains). Prediction (before the result): -3 to +2, most likely -1; H1 (not worse than -5) much more
 likely.
+Result (2026-11-15): H0, -9.08 +- 6.53, 5664 games (S40). Cap 13 costs at 10+0.1, prediction wrong. A fixed cap 13 cannot serve both
+time controls; if it gains at 60+1 (box run, about 2026-11-17) that is branch C below, and the floor (S45, keeps level 15) is the
+first candidate before a cap by the size of the move.
 M3 census (S42, 2026-11-15, fixed levels on roots-500, draft 12): reductions end at depth 1 in 90% (level 15) and 99% (19) of the
 reduced searches; the confirmation rate at equal d1 and w hardly falls from 15 to 19 near the horizon (no large blind spot shown),
 somewhat for d1 7-10. New: fixed level 19 needs 619M nodes against 327M (15) and 270M (17), the extra nodes outside the LMR loop

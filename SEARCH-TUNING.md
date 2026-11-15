@@ -909,6 +909,15 @@ the ramp reaches the cap at long time controls and the reduction there may alrea
 the same time control, a fixed 2000 games each, read once at the end: cap 13 on m3b (`lmrm-m13-lmrm-tc60`), cap 17 on m3a
 (`lmrm-m17-lmrm-tc60`). Prediction (2026-11-14, before the results): cap 17 -45 to -5, most likely -25; cap 13 -15 to +15, most likely 0.
 Result in `C:\Learn\Data\results\m3b\lmrm-m19-lmrm-tc60`.
+Cap 13 at the short time control (2026-11-15): `lmrm` `epLmrMax=13` (`lm13`) against `lmrm` (cap 15, same binary) on MEMO, 10+0.1,
+SPRT [-5, 0], run `lmrm-m13-lmrm-tc10b` (after a [-3, 2] run stopped at 4000 games, not used). Prediction (before the result): -3 to
++2, most likely -1; H1 much more likely. Result: H0, -9.08 +- 6.53, LOS 0.32%, 5664 games, LLR -2.96, pentanomial [224, 697, 1096,
+633, 182]. Prediction wrong: cap 13 costs about 9 Elo at 10+0.1, although the cap binds in only about 3% of the nodes there (S37) and
+S37's 0.5 s row shows no depth loss. So the level does not act only where it binds at the end of an iteration: a lower cap also
+changes the ramp's earlier course (the level reaches the cap sooner, less room to climb back after penalties) or the moves at the cap
+are the important ones. A fixed lower cap is out as the one setting for all time controls (branch C of the plan if cap 13 gains at
+the long time control); the depth floor (S45), which keeps level 15, is the form to try first. Result in
+`C:\Learn\Data\results\memo\lmrm-m13-lmrm-tc10b`.
 
 **S41.** Time use in games against other engines (2026-11-14): the Barbarossa log of an online tournament (ICS through WinBoard,
 engine `0.8.0 w5`, hash 68 MB from WinBoard, one engine process for all games), 13 games of which 12 played (one ended after one
