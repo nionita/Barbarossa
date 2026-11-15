@@ -364,6 +364,10 @@ Cap 13 at the short time control (2026-11-15): `lmrm` `epLmrMax=13` against `lmr
 no-loss [-3, 2], run `lmrm-m13-lmrm-tc10` (`lm13`). Question: is a fixed cap 13 harmless in short games (where the cap binds in about
 3% of the nodes, S37), so that one cap could serve both time controls? Smoke on mini: 16 games, clean.
 Prediction (2026-11-15, before the result): -3 to +3, most likely 0; H1 (not worse) more likely than H0.
+M3 census (S42, 2026-11-15, fixed levels on roots-500, draft 12): reductions end at depth 1 in 90% (level 15) and 99% (19) of the
+reduced searches; the confirmation rate at equal d1 and w hardly falls from 15 to 19 near the horizon (no large blind spot shown),
+somewhat for d1 7-10. New: fixed level 19 needs 619M nodes against 327M (15) and 270M (17), the extra nodes outside the LMR loop
+(PV or aspiration re-searches?): a possible instability at the top level. Next: nodes per position (15, 17, 19) and re-search counts.
 
 ### History and depth in the LMR (status: rejected in this form)
 Now: the reduction depends only on the level and the move number. Within the same move number the best fifth by sort value cuts 3 to 5 times as often

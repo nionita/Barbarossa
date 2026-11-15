@@ -959,3 +959,39 @@ the game longer (the 184-move game). The clock at the first move under 10% of th
 -136 to -504 in 8 games (all 8 lost by mate later) and +936 / +1124 in the 2 won ones; a score of 1000 or more came 1 to 20 moves
 after that point. So in the lost games the clock was low while the game was still open; whether the low clock made them lost is
 not shown (the score was already negative). Reading (user): the time management fits short time controls (60+1), not longer ones.
+
+**S42.** LMR census at fixed levels (M3 of the LMR cap review, `Search/LMR-CAP-REVIEW.md`; 2026-11-15). Branch `lmcs` 9b76970 (from `lmrm`):
+build flag `lmrcensus` (SelfPlay only) counts the zero window searches of `zeroWithLMR` (not aborted) by the level, the remaining
+depth d1, the reduced depth d' and w (moves since the last capture), with fail highs of the reduced search and confirmations by the
+re-search at d1; `SelfPlay -P` prints them, BarbarossaTuning `lmr_census.py` makes the tables. Search unchanged: 12086912 nodes on
+tests.fen at depth 10. Run: deterministic perf build, roots-500 (real games) at draft 12, `epLmrFix` 13, 15, 17, 19, one process per
+level over the whole file (TT and history carried between positions, deterministic).
+
+| Fixed level | Nodes | Reduced searches | d' = 1 | d' <= 2 | Pulled into the static range (d1 >= 7, d' <= 6) | Mean reduction | Zero window searches (LMR loop) per 1000 nodes |
+|---|---|---|---|---|---|---|---|
+| 13 | 589M | 34.6M | 78.3% | 88.6% | 3.9% | 1.86 | 348 |
+| 15 | 327M | 16.9M | 89.9% | 94.4% | 7.4% | 2.41 | 195 |
+| 17 | 270M | 13.3M | 96.6% | 98.3% | 9.2% | 2.69 | 174 |
+| 19 | 619M | 12.5M | 99.2% | 99.7% | 9.6% | 2.78 | 69 |
+
+Mean reduction by d1 (2-3 / 4-6 / 7-10 / 11+): level 13 1.3 / 2.8 / 3.4 / 2.6, 15 1.4 / 3.5 / 5.5 / 5.1, 17 1.4 / 3.7 / 6.2 / 6.8, 19
+1.4 / 3.8 / 6.5 / 8.4; the share of reduced searches by d1 is about the same from 15 to 19 (18%, 76-77%, 80%, 48%), 13 reduces fewer
+(12%, 63%, 70%, 38%).
+
+Readings:
+- Near the horizon the reductions collapse to depth 1 as the review said: 90% of the reduced searches end at d' = 1 at level 15,
+  99% at 19 (78% at 13). Most reduced searches have d1 <= 6 at every level (the tree is widest there).
+- The alarm does not go blind near the horizon: at equal d1 and w the share of reduced searches that fail high and are confirmed
+  (`conf / red`) is about the same from 15 to 19 for d1 <= 6 (d1 4-6, w 3-5: 1.3%, 1.2%, 1.2%; d1 2-3, w 3-5: 2.3%, 2.7%, 2.8%).
+  For d1 7-10 it falls a little and the alarm gets worse (`conf / fh` at w 3-5: 72% at 15, 56% at 17, 38% at 19; w 6-10: 37%, 27%,
+  28%). So the "moves no longer found" lower bound shows no large loss; mechanism 3 of the review is not supported near the horizon,
+  weakly in the middle of the tree. The census cannot say whether a reduction was wrong (it counts only what the alarm catches).
+- New: fixed level 19 costs 619M nodes at draft 12, more than 15 (327M) and 17 (270M), although it does fewer searches in the LMR
+  loop (42.8M against 63.8M at 15): the extra nodes are outside the reduced and normal zero window searches of the loop, i.e. in
+  PV searches, full window re-searches after a zero window fail high, aspiration re-searches or QS. Not yet located; under the
+  adaptive ramp (S38) cap 19 needed fewer nodes, but the ramp spends little time at the top in a draft 12 search. Possible link to
+  the -74 of cap 19 (S40): an unstable search at the top level (scores jumping, repeated PV re-searches) would cost more than the
+  depth suggests. Next: nodes per position for levels 15, 17, 19 (are a few positions exploding or all of them?) and the count of
+  PV and aspiration re-searches.
+- Level 13 fixed costs 1.8 times the nodes of 15 at the same draft (as S13: fixed 11 and 14 against the ramp).
+Data: `C:\Learn\Data\measurements\search\lmcs` (raw outputs with the census lines, `census-fix-d12.txt` all tables).
