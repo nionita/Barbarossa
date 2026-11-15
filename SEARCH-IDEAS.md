@@ -450,6 +450,16 @@ Next: 10k-node games may be enough (user).
 ### `improving` (status: open)
 Now: not built; `staticScore` two plies back is on `stack`, so cheap. 2026-10-31.
 
+### Check extension without a limit (status: open)
+Now: every check is extended by one ply (`exten`), with no limit by ply or count; repetition is the only stop. In queen endings this
+makes the explosions of the high LMR levels (S42): with the mate guards (S43) and no extension beyond ply 2 * draft position 362
+needs 8.9M nodes at level 19 instead of 252M; without the check extension 474k (S44). 2026-11-15.
+Forms: B: no extension beyond ply 2 * draft (diagnostic build, not committed); a limit on the number of extensions per line; no check
+extension in reduced lines; an extension only while the line is not too far below the draft.
+Measure: roots-500 node scan by stratum (queen endings apart), a set of KQKR and mate by check positions (solved, time to mate), then
+an SPRT with no-loss bounds; on top of `mbnd` (the guards), against `chcm` or `mbnd`.
+Next: after the LMR results; it also cleans the node statistics of the LMR scans.
+
 ### Singular extensions (status: open)
 Now: not built, needs good ordering and TT first. 2026-10-31.
 

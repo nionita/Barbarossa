@@ -1039,3 +1039,26 @@ Readings: the mate bound bugs cause most of the level 19 explosion in two of the
 less than half of it in 362, which still needs 650 times its level 15 count: there the check extension (register) stays the
 candidate. The fixes change the search a little outside mate windows (geomean +1.7%) and find mates earlier or at all. Elo: to
 be played (SPRT with no-loss bounds against `chcm`). Data: `C:\Learn\Data\measurements\search\mbnd`.
+
+**S44.** The check extension in the KQ/KR explosions (2026-11-15; the user's hypothesis of S42). Two diagnostic builds on `lmcs`
+with the mate guards of S43 (none committed): A without the check extension (`exten`: `inCheck p2 = 0`), B without any extension
+beyond ply 2 * draft (in `pvInnerLoop`). Depth 12, `epLmrFix`, one process per position, nodes:
+| Position | Guards only, level 15 / 19 | A: no check extension, 15 / 19 | B: no extension beyond ply 24, 15 / 19 |
+|---|---|---|---|
+| 182 (KR against KQ) | 365k / 2.26M | 214k / 31k | 365k / 2.26M |
+| 362 (KQ against KR) | 2.31M / 252M | 32k / 474k | 3.53M / 8.88M |
+| 485 (KQ against KR) | 438k / 402k | 224k / 11.7k | 438k / 402k |
+Scores at depth 10 to 12 about the same in all variants (362: 248 to 260).
+Readings:
+- The rest of the explosion in 362 is the check extension: without it level 19 needs 474k nodes, with the ply limit 8.9M instead of
+  252M (28 times fewer). In 182 and 485 the ply limit changes nothing: there the mate guards were enough (S43).
+- Mechanism (inference): an extension is added to the reduced depth, so a reduced move that checks is not reduced on the checking
+  line, and in queen endings nearly every move of one side checks. At level 19 almost every reduced search ends at d' = 1 (S42); a
+  check chain keeps that depth, so the LMR cuts the quiet moves and leaves the tree to the checking lines, which only repetition or
+  a ply limit ends. Without the check extension level 19 is cheaper than 15 in all three positions, as the LMR is meant to be.
+- For the LMR statistics: node totals and fixed level scans of positions with a queen and few pieces measure the check chains, not
+  the LMR. Report them apart (stratum, as in the method review) until the extension has a limit.
+- Not measured: whether a limit costs strength (KQKR must still be won, mates by checks found), nor its effect outside these
+  positions. The ply limit B is the simple form; others: a limit on the number of extensions per line, or no extension in a
+  reduced line.
+Data: `C:\Learn\Data\measurements\search\mbnd` (`expl-ceA-*`, `expl-ceB-*`).
