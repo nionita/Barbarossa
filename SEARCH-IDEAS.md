@@ -465,8 +465,15 @@ Review when: the LMR itself changes (start level, PV nodes); the rank in the nod
 - 7 (`insertToPvs`: a mated root move kept in front like a mate): a bug, the rule means mates for the side to move. Costs a full
   window search of the losing move in the next iteration, in lost positions only. Fix: `>= mateScore - 255` instead of
   `pnearmate`. Changes the search there: with the mate guards (`mbnd`) in their [-5, 0] screen.
-- 4 (stalemate not seen in a futility pruned zero window node): a bug; the fix makes moves before pruning until a legal move was
-  seen (a small speed cost everywhere): with `mbnd` in the same screen, as the eval clamp aligned with `nearmate`.
+- 4 (stalemate not seen in a futility pruned zero window node): a bug, one way only (a real stalemate missed, never a false
+  one): the stalemated side gets an upper bound below 0 instead of 0 at remaining depth 1 to 6, the PV search is right. Needs a
+  king without legal moves and only illegal (pinned) other moves. History: the PV loop has "one legal move before pruning" since
+  2018 (1d5b245, "otherwise mates or stalemates missed"); the zero window loop never had it (6244700 unified them with
+  `zw ||`). The user remembers that the condition in zero window nodes cost strength (one quiet move searched in every
+  node); not found in the history, plausible. So not the form of the review. Cheap form: no extra search; only when a node ends
+  with no legal move made and some pruned, test the pruned moves for legality (make and undo, no search) and return 0 if none
+  is legal and the side is not in check. Costs only in nodes where everything was pruned. With `mbnd` in its screen, as the eval
+  clamp aligned with `nearmate`.
 
 ### TT replacement (status: open)
 Now: a bug found by reading the code (review 2026-11-15, `Search/SEARCH-REVIEW-BUGS.md` finding 3), present since the TT
