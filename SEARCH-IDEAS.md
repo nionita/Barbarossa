@@ -302,6 +302,13 @@ Interpretation history: 2026-11-13: the start level 8 looks like a local optimum
 to lose as well; Ini 7 would at best be neutral, not worth an SPRT.
 2026-11-13 (PV 1): every change of the amount of reduction loses, in both directions and also only in PV nodes: the amount is near its optimum
 in this form. Open: the shape (S35) and a depth term.
+2026-11-15 (user): PV 1 deserves a second chance once the other LMR experiments have settled. Reason: the adaptive level has
+counterbalanced almost every LMR change so far, and it may have done so here too: the late moves of PV nodes go through
+`zeroWithLMR` like all others, so with less reduction there fewer of them fail high, the level is penalized less, climbs higher
+and reduces the zero window nodes more (inference, not measured). Measured only at 10+0.1, where PV nodes are a small share, and
+only as one ply less for every late move. Later forms: PV 1 at the long time control; PV reductions kept out of the level credit
+(`moreLMR` only from zero window nodes) with and without PV 1; gentler forms (only at larger remaining depth). After the floor
+and the cap are decided.
 
 ### LMR: mate escape (status: open)
 Idea (user, 2026-11-11): less or no LMR in nodes where alpha is a "being mated" score for the side to move (alpha <= -mate threshold): all
