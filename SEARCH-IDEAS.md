@@ -418,8 +418,16 @@ and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEM
 - D (unexpected): cap 17 neutral or better, or both caps far from their interims. The long results are not trusted as they stand:
   1. validate a box by a replay of a known result (`lmrc`, -25, 600 games); 2. one cap again with a large hash (effect of the 16 MB
   load).
-- Depth bound design (Fable, 2026-11-15, not yet read here): `Search/LMR-DEPTH-BOUND.md`; for branch B and as the alternative to
-  a lower cap in A.
+- Depth bound design (Fable, 2026-11-15): `Search/LMR-DEPTH-BOUND.md`; for branch B and as the alternative to a lower cap in A. Form: a
+  floor of the reduced depth, `d' = max dmin (d1 - r)`, `dmin = max 1 (d1 * f / 8)`, parameter `epLmrFlr` (0 = off), start f = 4 (largest
+  reduction 2-3 at d1 4-6, 4-5 at d1 7-10: about level 13's mean reduction with level 15's width). Reading of S42 corrected: of the 90%
+  at d' = 1 more than half are d1 2-3 (the horizon, not a collapse); the collapse and the lost confirmations are at d1 >= 4, the tail
+  the floor lifts. Floor first, the check extension limit after (its k depends on the floor).
+- Plan change for the boxes (user, 2026-11-15), replacing step A1 when the cap runs end: one box cap 12 against cap 15, the other the
+  floor (f = 4) at cap 15 against cap 15, both 2000 games at 192+3.2, 16 MB hash; the floor is read beside the cap 13 result (same
+  opponent, time control, hash). The rest of the cap curve (cap 11) after the floor is decided. Optional, a few hundred games: cap 19
+  with the floor against cap 15 (near 0 instead of about -74: the cap is no longer the sensitive parameter). Before the floor run:
+  build with `epLmrFlr`, f = 0 identical (12086912 nodes), census at f = 3, 4, 5 (S42 set), positions 182, 362, 485.
 - Lim 6000 apart: H0 (expected) ends the single ramp steps at 10+0.1; a pass keeps 6000 and checks it at the long time control with
   the cap. Result: neither, +1.86 +- 3.50 after 20000 games (S36): no more ramp steps at 10+0.1; Lim 6000 stays a candidate for step
   A3 (the ramp speed at the long time control with the new cap).
