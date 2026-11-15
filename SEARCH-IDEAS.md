@@ -429,6 +429,14 @@ the time use is expected better, not much.
 (the share of the increment), not the engine version. In the 8 lost games the clock went under 10% at moves 21 to 51 with
 scores of -136 to -504, before the game was decided; playing on the increment after a mate is found costs nothing (user: mate
 scores without the distance, on purpose, longer games but no lost mate). The user's reading: right for 60+1, not for longer.
+Review (2026-11-15, read from the code, nothing measured: `TIME-MANAGEMENT-REVIEW.md`): the target is not the cause (at the target
+every time control spends about 2% of the clock per move), the maximum is: the extra above the target is 15 to 18% of the clock,
+9.4 increments at the start of 60+1, 37 at 4+1; the score-drop paths (`exte`, `timeProlongation`) send moves to the maximum move after
+move in sinking games. Change A: compute the extra from the clock capped at 60 increments (identical at 60+1 for every score and
+repetition; 4+1 maximum at the start 16.0 s instead of 43.0 s, 5+3 37.8 s instead of 55.8 s); a first form (flat bound of 9.44
+increments) was not identical at 60+1 for scores of a pawn or more (user's check, corrected). Change B, only if needed after A: the
+losing side divides only the first 60 increments by the short moves to go. Test: asymmetric self-play at 60+1 (constraint: capped
+moves about zero), 4+1 (main, fixed games), 5+3; then a gauntlet at 4+1 against other engines.
 Next: after the search experiments (user).
 Interpretation history: 2026-11-14: first seen in the tournament log of 0.8.0; the same evening confirmed for `chcm` at 4+1,
 not seen at 60+1: a long time control effect of `compTime`, not of the LMR explosion.
