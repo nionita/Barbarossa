@@ -520,6 +520,14 @@ under the last move's (`exte`, no stop before the maximum) takes 36% of all time
 So change A and the score drop rule come first. Second lever, for the decided phase: the search goes on after a mate score (mate
 scores carry no distance, the move cannot change): 174 s, 6% of the time; stopping at a stable mate score is a candidate.
 
+### Standard FEN from `posToFen` (status: open)
+Now: `posToFen` (`Moves/Notation.hs`) ends the board with a '/' (`extline` appends one after every rank) and always writes the full
+move number 1. SelfPlay and the engine accept it; python-chess and other tools do not (BarbarossaTuning `log_roots.py` strips it).
+Found 2026-11-15 in the 4+1 log. Fix: join the ranks with '/' (`intercalate`). Care: `posToFen` also writes the training data
+(SelfPlay `--data`, UCI `-d`) and the log lines `Origin` / `NoEval` read by `Tune/LogScan.hs` and the scripts: old and new files
+then differ in the FEN string, so a dedup or join by FEN over both needs a normalization. Not a search change (node counts equal).
+Next: when there is time (user), with a check of the readers of these files.
+
 ### Threaded search (status: open)
 Now: after the lower fruits (user). Per-thread state arrays would fit. 2026-10-31.
 
