@@ -373,8 +373,8 @@ Cap 13 at the short time control (2026-11-15): `lmrm` `epLmrMax=13` against `lmr
 no-loss [-3, 2], run `lmrm-m13-lmrm-tc10` (`lm13`). Question: is a fixed cap 13 harmless in short games (where the cap binds in about
 3% of the nodes, S37), so that one cap could serve both time controls? Smoke on mini: 16 games, clean.
 Prediction (2026-11-15, before the result): -3 to +3, most likely 0; H1 (not worse) more likely than H0.
-Restarted (2026-11-15, after the method review: [-3, 2] passes a true 0 in only 64% of the runs): the [-3, 2] run stopped after a
-few hours, not read; new run `lmrm-m13-lmrm-tc10b`, same engines and parameter, SPRT [-5, 0] (a loss of up to 5 at 10+0.1 is
+Restarted (2026-11-15, after the method review: [-3, 2] passes a true 0 in only 64% of the runs): the [-3, 2] run stopped after
+4000 games without a decision (0.00 +- 7.90, LLR 0.15; seen only after the restart was decided, not used for it); new run `lmrm-m13-lmrm-tc10b`, same engines and parameter, SPRT [-5, 0] (a loss of up to 5 at 10+0.1 is
 accepted if the long time control gains). Prediction (before the result): -3 to +2, most likely -1; H1 (not worse than -5) much more
 likely.
 M3 census (S42, 2026-11-15, fixed levels on roots-500, draft 12): reductions end at depth 1 in 90% (level 15) and 99% (19) of the
