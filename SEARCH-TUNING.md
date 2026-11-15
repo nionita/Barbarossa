@@ -1007,3 +1007,11 @@ nodes; not yet split). Reading: the higher level is cheaper in almost every posi
 (queen against rook: many checks, long forced lines). In games the explosion would cost time where it happens and could be part
 of the -74 of cap 19; S39 (endings run at lower levels under the ramp) limits how often a game gets there.
 Next: split the nodes of such a position (QS, null move, PV, the LMR loop) to find the part that explodes.
+Hypothesis (user, 2026-11-15): the check extension. In queen against rook the queen side checks almost every move. From the code:
+every check is extended by one ply (`exten`, `Moves/Internal/Base.hs`: `inCheck p2 = 1`), without a limit by ply or by the number
+of extensions, and repetition is the only stop; a check keeps the depth (d1 = d), a check of each side in turn (rook spite checks)
+never lowers it. It fits "outside the LMR loop" if the extended lines run in full window nodes: in a full window node at d <= 2
+(`minPvDepth`) every move is searched by `pvSearch` with the full window (no zero window, not counted by the census), and checks keep
+such subtrees at d <= 2. Why the level changes it so much is open (a different PV and TT at level 19 may send the search into these
+lines). Test, when it comes: nodes of position 362 split by in-check / extended / full window at d <= 2, or the same position with
+the check extension limited (e.g. no extension beyond ply 2 * draft, or only while d1 is below the draft).
