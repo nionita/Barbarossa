@@ -25,7 +25,8 @@ When the clock is lost:
 - The path that costs is the score drop of the time management, not a search bug: a final score 24 to 300 under the last move's
   (`exte`, `stopByChance` returns `mx` and never stops) has 109 moves, 91 at the maximum, 1078 s (36% of all time), used / target
   3.7 (drop 24 to 100) and 2.6 (100 to 300). Without a drop: 461 moves, 31% at the maximum, 1.2. This is finding 1 of
-  `TIME-MANAGEMENT-REVIEW.md`.
+  `TIME-MANAGEMENT-REVIEW.md`. (Corrected in `TIME-SCORE-DROP-REVIEW.md`: these moves are selected by the final score and
+  their whole time is counted; the extra time the drop handling gives is 609 s, 20%, in 124 moves.)
 - Inference: the mate bound bugs do not cause these drops. The bug windows need alpha or beta at a mate bound; with root scores
   within +-250 they occur only deep in the tree, and S43 measured 456 of 500 positions with identical scores at every depth. Not
   proven for these positions (see "missing").
