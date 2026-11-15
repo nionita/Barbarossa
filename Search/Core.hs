@@ -71,6 +71,10 @@ varImp lev w = round $ go 0 lev w
           go !lv !b !i | i <= b    = lv
                        | otherwise = go (lv+1) (b*1.2) (i-b)
 
+-- A fixed LMR level from the parameter epLmrFix: off when < 0, else a valid level
+lmrFixLevel :: Int -> Int
+lmrFixLevel fx = if fx < 0 then -1 else min lmrLevMax fx
+
 -- Parameters for futility pruning:
 maxFutilDepth :: Int
 maxFutilDepth = 6
@@ -291,7 +295,7 @@ alphaBeta abc = do
                             abpol = abortPolicy abc, futmar = futMarginsOf (esEParams est),
                             cmv = epCMov (esEParams est) /= 0,
                             chp = epCHist (esEParams est), chw = epCHistW (esEParams est),
-                            lmrfx = epLmrFix (esEParams est),
+                            lmrfx = lmrFixLevel (epLmrFix (esEParams est)),
                             rfutd = epRFutD (esEParams est), rfuta = epRFutA (esEParams est),
                             rfutm = epRFutM (esEParams est),
                             rfutt = epRFutT (esEParams est) }

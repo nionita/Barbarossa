@@ -455,6 +455,19 @@ Review when: the LMR itself changes (start level, PV nodes); the rank in the nod
 
 ## Other search
 
+### Small findings of the search review (status: partly done)
+`Search/SEARCH-REVIEW-BUGS.md` findings 4 to 8 (2026-11-15). Decided with the user, 2026-11-15:
+- 5 (TT node count past 32 bits into depth and type) and 8 (LMR parameters without range check): fixed without games, the engine
+  is unchanged (12086912 nodes on tests.fen at depth 10, perft right, out of range values run). On `rel090` the node count and
+  `epLmrFix`; on `lmfl` also `epLmrIni`, `epLmrNoD = 0` and the penalty table (the parameters exist only on the LMR branches).
+- 6 (quiet moves after the 128th of a sort group dropped): a known limit, kept by choice (more than 128 quiet moves need about
+  three queens; lifting it costs allocation or a length pass at every sort). No fix.
+- 7 (`insertToPvs`: a mated root move kept in front like a mate): a bug, the rule means mates for the side to move. Costs a full
+  window search of the losing move in the next iteration, in lost positions only. Fix: `>= mateScore - 255` instead of
+  `pnearmate`. Changes the search there: with the mate guards (`mbnd`) in their [-5, 0] screen.
+- 4 (stalemate not seen in a futility pruned zero window node): a bug; the fix makes moves before pruning until a legal move was
+  seen (a small speed cost everywhere): with `mbnd` in the same screen, as the eval clamp aligned with `nearmate`.
+
 ### TT replacement (status: open)
 Now: a bug found by reading the code (review 2026-11-15, `Search/SEARCH-REVIEW-BUGS.md` finding 3), present since the TT
 reorganisation years ago: `scoreReplaceLow` (`Hash/TransTab.hs:242`) masks with `lowc .&. 0xFFFF`, which keeps the move instead of
