@@ -995,3 +995,15 @@ Readings:
   PV and aspiration re-searches.
 - Level 13 fixed costs 1.8 times the nodes of 15 at the same draft (as S13: fixed 11 and 14 against the ramp).
 Data: `C:\Learn\Data\measurements\search\lmcs` (raw outputs with the census lines, `census-fix-d12.txt` all tables).
+Nodes per position (2026-11-15, `node_scan.ps1`, one process per position, fresh TT and history, roots-500, draft 12): totals
+level 15 350M, 17 237M, 19 609M (as in the run over the whole file); per position, against level 15: level 17 geomean 0.81 (median
+0.84), level 19 geomean 0.72 (median 0.76). The total of level 19 comes from a few positions: the 12 largest hold 84% of it, one
+alone 70% (position 362, `8/8/8/8/3Q4/5k2/6r1/4K3 w`, queen against rook: 428M nodes against 384k at level 15, 1117 times; position
+182, also queen against rook, 36 times). Without these 12, level 19 needs 100M against 323M (15) and 214M (17). The score of
+position 362 is stable at both levels (+2.5 at every draft), so it is not an unstable score; the nodes jump at drafts 7 and 11
+(level 19: 5.5k, 331k at 7, 726k at 10, 42.7M at 11, 428M at 12; level 15: 10k at 7, 358k at 11). At draft 11 level 19 does 15M beta
+cuts (99.9% at the first move) but only about 0.1M searches in the LMR loop: the nodes are outside it (null move searches, QS, PV
+nodes; not yet split). Reading: the higher level is cheaper in almost every position, and explodes in a few endings with few pieces
+(queen against rook: many checks, long forced lines). In games the explosion would cost time where it happens and could be part
+of the -74 of cap 19; S39 (endings run at lower levels under the ramp) limits how often a game gets there.
+Next: split the nodes of such a position (QS, null move, PV, the LMR loop) to find the part that explodes.
