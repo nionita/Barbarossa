@@ -1018,3 +1018,24 @@ the check extension limited (e.g. no extension beyond ply 2 * draft, or only whi
 User's reading (2026-11-15): hardly important for the strength (4 pieces); of interest only (1) for what it shows about the self
 regulating LMR, and (2) to keep such explosions out of the node statistics of experiments (totals are dominated by a few positions:
 use per position ratios, geomean or median, as the scan above). The engine must still solve KQKR.
+
+**S43.** Mate bound fixes, local checks (2026-11-15). Branch `mbnd` b7fb86e from `rel090` (search of `chcm`): no null move when
+beta is a mate bound (`nearmate b` in `nullMoveFailsHigh`), no QS delta cut when alpha is a mate bound (findings 2 and 9 of
+`Search/SEARCH-REVIEW-BUGS.md`). Deterministic perf builds of `rel090` (base) and `mbnd`. Perft unchanged (start position d5, Kiwipete
+d4). tests.fen depth 10: 12086912 (base, as `chcm` and `lmcs`) against 12292105 nodes (+1.7%).
+roots-500 at depth 12, one process per position: per position node ratio geomean 1.017, median 1.000, 27% of the positions above
+1; 456 of 500 give the same score at every depth. Total 306M against 340M nodes, mostly from a few positions (one middlegame 4.5M to
+33.5M, a queen ending 0.46M to 12.3M) with no mate score. Six positions show a mate score at some depth: the fix finds the mate one ply
+earlier in two (d 9 to 8, 8 to 7), at the same depth in two, and in two where the base finds none by depth 12 (one of them -19744
+in the base, a score just outside `nearmate`, not explained). In these six the fix needs more nodes (0.9 to 10.6 times): the null
+move no longer cuts at the mate bounds.
+The explosions of S42 (`lmcs` with the same two guards, not committed; depth 12, one process per position, `epLmrFix`):
+| Position | Level 15 base / fix | Level 19 base / fix |
+|---|---|---|
+| 182 `5RK1/8/4k1q1/8/8/8/8/8 w` (KR against KQ) | 611k / 365k | 22.0M / 2.26M |
+| 362 `8/8/8/8/3Q4/5k2/6r1/4K3 w` (KQ against KR) | 384k / 2.31M | 428M / 252M |
+| 485 `1k2Q3/8/8/3K4/8/8/8/1r6 b` (KQ against KR) | 438k / 438k | 4.82M / 0.40M |
+Readings: the mate bound bugs cause most of the level 19 explosion in two of the three positions (10 and 12 times fewer nodes),
+less than half of it in 362, which still needs 650 times its level 15 count: there the check extension (register) stays the
+candidate. The fixes change the search a little outside mate windows (geomean +1.7%) and find mates earlier or at all. Elo: to
+be played (SPRT with no-loss bounds against `chcm`). Data: `C:\Learn\Data\measurements\search\mbnd`.

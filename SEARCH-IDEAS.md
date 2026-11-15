@@ -216,7 +216,7 @@ Next: build, 10k-node games (pruning shows there), then SPRT.
 ### RFP: cut more when an opponent piece hangs (status: open)
 Now: wrong rate 0.3x (S13). User: only after the RFP SPRTs. 2026-10-31.
 
-### Null move and QS delta cut at a mate bound (status: open)
+### Null move and QS delta cut at a mate bound (status: promising)
 Now: bugs found by reading the code (review 2026-11-15, `Search/SEARCH-REVIEW-BUGS.md` findings 2 and 9), not measured. Mate scores
 carry no distance, so windows at the mate bounds are frequent: a node whose moves so far are mated searches the next ones with
 (-20000, -19996), its grandchildren have b = -19996. (1) `nullMoveFailsHigh` has no `nearmate b` guard (RFP and futility have one):
@@ -227,6 +227,10 @@ when alpha = 19996: the QS cannot find a mate by its own capture there ("can you
 Forms: `| nearmate b = return NoNullMove` in `nullMoveFailsHigh`; no delta cut when `nearmate (qsScore qsa)`. Two lines.
 Measure: node counts and the time to the mate on a set of mate positions (mates by quiet moves, found and denied), then an SPRT with
 no-loss bounds [-3, 2] (rare positions, little Elo expected). Not built.
+Built (2026-11-15): `mbnd` b7fb86e from `rel090`, both guards. Local checks (S43): perft unchanged; roots-500 geomean nodes 1.017,
+mates found earlier or at all in 4 of 6 mate positions; the level 19 explosions of S42 shrink 10 and 12 times in two KQ/KR positions,
+less than half in the third (362, check extension still the candidate). Next: SPRT [-5, 0] against `chcm` at 10+0.1 when a slot is
+free (a no-loss test: a bug fix kept unless it loses).
 
 ### Late move pruning (status: rejected in this form)
 Now: loses, more with depth, also on the new ordering and with the count for the LMR level. Without `improving` late moves are not reliably bad. 2026-11-11.
