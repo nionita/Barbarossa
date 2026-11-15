@@ -80,9 +80,14 @@ varImp gf lev w = round $ go 0 lev w
 
 -- Re-search penalty of the adaptive LMR by depth: base^d, base in tenths (20 = 2^d as before), capped against overflow
 lmrPenTable :: Int -> UArray Int Int
-lmrPenTable p = listArray (0, 63) [ min (2^(50::Int)) (penOf d) | d <- [0..63::Int] ]
-    where penOf d | p == 20   = 2^d
-                  | otherwise = floor ((fromIntegral p / 10 :: Double) ^ d)
+lmrPenTable p = listArray (0, 63) [ penOf d | d <- [0..63::Int] ]
+    -- limited to 2^50 before the conversion to Int (overflow from about d = 40 for p = 30, 2^63 for d = 63)
+    where penOf d | p == 20   = 2^(min 50 d)
+                  | otherwise = floor (min (2^(50::Int)) ((fromIntegral p / 10 :: Double) ^ d))
+
+-- A fixed LMR level from the parameter epLmrFix: off when < 0, else a valid level
+lmrFixLevel :: Int -> Int
+lmrFixLevel fx = if fx < 0 then -1 else min lmrLevMax fx
 
 -- Parameters for futility pruning:
 maxFutilDepth :: Int
@@ -312,17 +317,17 @@ alphaBeta abc = do
                             abpol = abortPolicy abc, futmar = futMarginsOf (esEParams est),
                             cmv = epCMov (esEParams est) /= 0,
                             chp = epCHist (esEParams est), chw = epCHistW (esEParams est),
-                            lmrfx = epLmrFix (esEParams est), lmrpv = epLmrPV (esEParams est),
+                            lmrfx = lmrFixLevel (epLmrFix (esEParams est)), lmrpv = epLmrPV (esEParams est),
                             lmrtb = lmrTable (epLmrGrw (esEParams est)),
                             lmrpn = lmrPenTable (epLmrPen (esEParams est)),
-                            lmrnd = epLmrNoD (esEParams est),
+                            lmrnd = max 1 $ epLmrNoD (esEParams est),	-- 0 would reduce d1 = 0 to 1
                             lmrmx = max lmrLevMin $ min lmrLevMax $ epLmrMax (esEParams est),
                             lmrfl = max 0 $ min 7 $ epLmrFlr (esEParams est),
                             rfutd = epRFutD (esEParams est), rfuta = epRFutA (esEParams est),
                             rfutm = epRFutM (esEParams est),
                             rfutt = epRFutT (esEParams est) }
         lv0 | lmrfx pvro >= 0 = lmrfx pvro
-            | otherwise       = epLmrIni (esEParams est)
+            | otherwise       = max lmrLevMin $ min lmrLevMax $ epLmrIni (esEParams est)
         pvs0 = pvsInit { ronly = pvro, lmrlv = lv0, lmrhi = epLmrLim (esEParams est) }	-- :: PVState
     -- We will get a result and a final state:
     (r, s) <- if useAspirWin

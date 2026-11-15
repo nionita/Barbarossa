@@ -248,7 +248,7 @@ quintToCacheEn !tt !zkey !depth !tp !score !(Move move) !nodes = pCE
           w2 = gener tt
              .|. (fromIntegral tp    `unsafeShiftL` 54)
              .|. (fromIntegral depth `unsafeShiftL` 48)
-             .|. (fromIntegral nodes `unsafeShiftL` 16)
+             .|. (fromIntegral (min 0xFFFFFFFF nodes) `unsafeShiftL` 16)	-- 32 bits, not into depth and type
              .|. (fromIntegral move)
           !pCE = PCacheEn { hi = w1, lo = w2 }
 
