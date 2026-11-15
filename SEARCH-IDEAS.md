@@ -515,10 +515,18 @@ Interpretation history: 2026-11-14: first seen in the tournament log of 0.8.0; t
 not seen at 60+1: a long time control effect of `compTime`, not of the LMR explosion.
 2026-11-15 (review `TIME-MATE-EXTENSION-REVIEW.md`, the 4+1 log of S41 read again, 652 searches): the mate bound bugs and the
 check extension do not explain the clock: the 8 lost games reach -500 with 2 to 9% of the clock left, the decided phase is played
-on the increment (2% of the time over target). The time goes in moves 1 to 10 and to the score drop rule: a final score 24 to 300 cp
-under the last move's (`exte`, no stop before the maximum) takes 36% of all time in 109 of 652 moves (used / target 2.6 to 3.7).
-So change A and the score drop rule come first. Second lever, for the decided phase: the search goes on after a mate score (mate
+on the increment (2% of the time over target). The time goes in moves 1 to 10 and to the score drop rule (`exte`, no stop
+before the maximum, and `reds`, a longer target). (Corrected by the next review: the 109 moves / 36% were selected by the final
+score; by the mechanism the drop gives 124 moves 609 s of extra time, 20%.) So change A and the score drop rule come first. Second lever, for the decided phase: the search goes on after a mate score (mate
 scores carry no distance, the move cannot change): 174 s, 6% of the time; stopping at a stable mate score is a candidate.
+2026-11-15 (review `TIME-SCORE-DROP-REVIEW.md`, replay of the logged drafts without the drop handling; 4+1 log and the 60+1 GUI
+logs): the drop gives extra time to 124 of 652 moves at 4+1 (609 s, 20%, 4.9 increments per move) and 196 of 1753 at 60+1 (315 s,
+9.5%, 1.6). The best move changes in one of nine at both; the changes come within 3 to 5 increments, the long extensions (10 or
+more increments: 21 moves, 368 s at 4+1) changed one move. The larger part comes from `reds` (`timeProlongation`), not from `exte`.
+Change A alone saves the same at 4+1 as removing the whole drop handling (604 s) and touches 6 moves at 60+1: A is the first
+score-drop rule. Second rule D, after A in its own run: on a clock above 60 increments the drop gives at most 5 increments over the
+target (`epTmDropIncs`; 4+1: 132 s more, 1 other move; 60+1: 3 moves, 14 s). Last-draft-only and two-draft confirmation act on
+`exte` only: little at 4+1 and they change 60+1, not recommended. Order: A, then D against A, then B.
 
 ### Standard FEN from `posToFen` (status: open)
 Now: `posToFen` (`Moves/Notation.hs`) ends the board with a '/' (`extline` appends one after every rank) and always writes the full
