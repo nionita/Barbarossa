@@ -205,6 +205,18 @@ Next: build, 10k-node games (pruning shows there), then SPRT.
 ### RFP: cut more when an opponent piece hangs (status: open)
 Now: wrong rate 0.3x (S13). User: only after the RFP SPRTs. 2026-10-31.
 
+### Null move and QS delta cut at a mate bound (status: open)
+Now: bugs found by reading the code (review 2026-11-15, `Search/SEARCH-REVIEW-BUGS.md` findings 2 and 9), not measured. Mate scores
+carry no distance, so windows at the mate bounds are frequent: a node whose moves so far are mated searches the next ones with
+(-20000, -19996), its grandchildren have b = -19996. (1) `nullMoveFailsHigh` has no `nearmate b` guard (RFP and futility have one):
+at b = -19996 the null move window lies beyond the mate score and always "fails high", so a mate found by a reduced search is taken
+back in its re-search (node types swapped, now a CutNode with null move): forced mates by quiet moves are seen only through PV
+re-searches, later or at higher cost. (2) The QS delta cut (`qsNormal`, `qsInCheck`) fires before captures or checks are generated
+when alpha = 19996: the QS cannot find a mate by its own capture there ("can you mate?" answered no). Related: "LMR: mate escape".
+Forms: `| nearmate b = return NoNullMove` in `nullMoveFailsHigh`; no delta cut when `nearmate (qsScore qsa)`. Two lines.
+Measure: node counts and the time to the mate on a set of mate positions (mates by quiet moves, found and denied), then an SPRT with
+no-loss bounds [-3, 2] (rare positions, little Elo expected). Not built.
+
 ### Late move pruning (status: rejected in this form)
 Now: loses, more with depth, also on the new ordering and with the count for the LMR level. Without `improving` late moves are not reliably bad. 2026-11-11.
 Forms:
@@ -330,7 +342,19 @@ Forms, if an encoding is needed (preferred first):
 4. The remaining time: not recommended, it mixes the time control with the time already spent (S41: the clock is gone by move
    20 at 4+1), so the time management problem would enter the LMR.
 Choice between 1 and 2 (depth or size of the search): the cap 11/12 run and a trace like S37 of the levels by draft in long games.
-Next: after the cap runs end (about 2026-11-17).
+Review (2026-11-15, read from the code, nothing measured: `Search/LMR-CAP-REVIEW.md`): levels above 15 do not widen the set of
+reduced moves (exhausted at 15: one unreduced quiet move), they add k plies to every reduced move (smallest reduction 1 ply at 15,
+5 at 19); the reduced depth is `max 1 (d1 - r)` without relation to the remaining depth d1, so near the horizon (d1 <= 6) level 19
+sends every reduced move to depth 1, and a depth 1 search rarely fails high (re-searches cannot catch it). Cap 13 against 15 changes
+the width and the size together, cap 17/19 only the size: different dimensions. Preferred form, new here (form 0, before the four
+above): a bound of the reduction by the remaining depth at the node (large reductions only where there is room); it scales with the
+time control by itself and keeps the node ramp (S39). Under this mechanism the bound rises with the depth (form 1 with the opposite
+sign). Recommendation: do not encode the time control now; if cap 13 holds, the cap first, the depth bound second.
+Measure, in this order: M3, a census in `zeroWithLMR` (search unchanged, node totals as check): reduced searches by level, d1, d'
+and w, their fail highs and confirmations, full searches by level and d1; fixed levels 13, 15, 17, 19 on roots-500 at one draft, then
+the adaptive caps at 3 s as in S38. M1 later, as the check of a candidate table: root move agreement by draft and by nodes against one
+deep level 8 search per root (needs a root move line per position in `SelfPlay -P`).
+Next: M3 build (trace build on `lmrm`); the cap runs end about 2026-11-17.
 
 ### History and depth in the LMR (status: rejected in this form)
 Now: the reduction depends only on the level and the move number. Within the same move number the best fifth by sort value cuts 3 to 5 times as often
@@ -349,6 +373,20 @@ Reading: the move number already holds most of the history (sorted by it), the a
 Review when: the LMR itself changes (start level, PV nodes); the rank in the node and depth as a factor were not tried.
 
 ## Other search
+
+### TT replacement (status: open)
+Now: a bug found by reading the code (review 2026-11-15, `Search/SEARCH-REVIEW-BUGS.md` finding 3), present since the TT
+reorganisation years ago: `scoreReplaceLow` (`Hash/TransTab.hs:242`) masks with `lowc .&. 0xFFFF`, which keeps the move instead of
+removing it: in a full cell the entry with the smallest move code is replaced (white moves before black ones), generation, type,
+depth and nodes play no role (except the wrap test of the 8 bit generation). With 16 MB in the matches the table is full, more so at
+long time controls: a candidate for part of the long time control weakness. The minimal fix (`complement 0xFFFF`) would order by
+generation > type > depth > nodes: every entry of the previous move goes before a current depth 1 entry, every upper bound before any
+lower bound whatever the depth (doubtful). Proposed rule (review): replace the entry with the smallest (depth - 4 * age, type, nodes),
+age = generations since the store, modulo 256; 8 per generation as the second value. Related finding 5: the node count is not
+limited to its 32 bits and can run into depth and type at the root (`quintToCacheEn`: `min 0xFFFFFFFF`).
+Measure: only with fastchess (UCI): SelfPlay never calls `posNewSearch`, the generation stays 0 there (the age part is invisible in
+node limited games and perf node counts); a hash size that fills at the time control (16 MB does); the proposed rule directly against
+the current engine, at 10+0.1 and at a long time control. Not built.
 
 ### Aspiration windows (status: open)
 Now: code present, off since 2013 (`useAspirWin`). Not tested in this round. 2026-10-31.
