@@ -441,6 +441,11 @@ and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEM
   Done (S45, branch `lmfl` 5463b64): f = 4 lifts `conf / fh` at d1 >= 4 most of the way to level 13 at no node cost (-8% at
   fixed level 15, -6% adaptive); f = 3 hardly acts, f = 5 costs 24 to 43% more nodes. The explosions move, they are not removed.
   f = 4 for the box run.
+  Screen at the short time control (2026-11-15): `lmfl` da23a27 `epLmrFlr=4` (`lf4`) against `lmfl` (floor off, same binary;
+  off identical to `lmrm`, 12086912 nodes) on MEMO, 10+0.1, SPRT [-5, 0], run `lmfl-f4-lmfl-tc10`. Question: does the floor, which
+  keeps level 15, avoid the cost of cap 13 in short games (-9.1, S40)? Prediction (before the result): -5 to +4, most likely -1;
+  H1 more likely than H0, but not by much (cap 13 lost where the cap rarely binds; the floor acts wherever a reduction exceeds
+  half the remaining depth, at any level, and the level may counterbalance it, as with most LMR changes).
 - Lim 6000 apart: H0 (expected) ends the single ramp steps at 10+0.1; a pass keeps 6000 and checks it at the long time control with
   the cap. Result: neither, +1.86 +- 3.50 after 20000 games (S36): no more ramp steps at 10+0.1; Lim 6000 stays a candidate for step
   A3 (the ramp speed at the long time control with the new cap).
