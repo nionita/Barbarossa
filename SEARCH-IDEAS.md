@@ -418,6 +418,8 @@ and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEM
 - D (unexpected): cap 17 neutral or better, or both caps far from their interims. The long results are not trusted as they stand:
   1. validate a box by a replay of a known result (`lmrc`, -25, 600 games); 2. one cap again with a large hash (effect of the 16 MB
   load).
+- Depth bound design (Fable, 2026-11-15, not yet read here): `Search/LMR-DEPTH-BOUND.md`; for branch B and as the alternative to
+  a lower cap in A.
 - Lim 6000 apart: H0 (expected) ends the single ramp steps at 10+0.1; a pass keeps 6000 and checks it at the long time control with
   the cap. Result: neither, +1.86 +- 3.50 after 20000 games (S36): no more ramp steps at 10+0.1; Lim 6000 stays a candidate for step
   A3 (the ramp speed at the long time control with the new cap).
