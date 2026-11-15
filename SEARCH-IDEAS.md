@@ -54,6 +54,13 @@ time at 10+0.1 for about 1% changed results. Not yet adopted: each point is deci
 
 To review under the current method: the cut numbers of S4 to S7, measured under the adaptive LMR.
 
+Check of the screening at the long time control (2026-11-15, step A2 of the LMR plan, method review point 3): `chcm` against
+`dev090` at 60+1 on MEMO, 1000 games (500 rounds), fixed, read once at the end, run `chcm-dev090-tc60`. The short SPRTs since
+`dev090` add up to about +80 at 10+0.1 (qthr +10.8, hpqt +5.8, rfut +17.6, nmlm +13.0, chcm +22.5 against `expo`, the filter step),
+a sum of steps selected for passing, so inflated; parts of it (LMR, pruning margins) were tuned at 10+0.1 only. Question: does the
+gain arrive at 60+1? Prediction (2026-11-15, before the result): +10 to +55, most likely +30; below +15 the short screening misleads
+for the long time control and the cap and ramp results at 60+1 weigh more than the 10+0.1 ones.
+
 ## Move ordering
 
 ### Threatened pieces first (status: adopted)
