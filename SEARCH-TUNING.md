@@ -1131,3 +1131,16 @@ sum, if anything larger. So the 10+0.1 screening is valid for the long time cont
 single parameters whose effect depends on the size of the search (the LMR cap: cap 13 -9.1 at 10+0.1, S40, box results pending).
 Limits: one batch of openings, the default 16 MB hash on both sides.
 Result in `C:\Learn\Data\results\memo\chcm-dev090-tc60`.
+
+**S47.** Stalemate after pruning and the eval clamp, local checks (2026-11-16). Branch `mbnd` 4708209 (on c2378e8, finding 7).
+(1) Review finding 4 in the cheap form: the zero window loop counts its pruned moves (`prnno`); when a node ends with no legal move
+searched (all pruned or illegal), `hasLegalMove` (`Moves/Core.hs`, pure: make each generated move, test the own king) decides
+between the old fail low and `failHardNoValidMove` (stalemate draw, or mated in check). It runs only in such nodes; the quiet
+filter at generation keeps one prunable quiet, so a node with prunable quiets always counts as pruned and gets the test.
+(2) The eval clamp `matesc = 20000 - 255` (Eval/Core.hs, "also defined in Base.hs") is now `evalMax = 20000 - 256`, exported;
+`nearmate` is `i > evalMax || i < -evalMax`, `isMating` `i > evalMax`: the same sets as before, and the static eval the same after
+the rounding to the grain of 4 (19745 and 19744 both round to 19744). Decision: a clamped eval is an eval score, not a mate.
+Checks (deterministic perf build): perft of the 5 standard positions unchanged; tests.fen depth 10: 12281346 nodes against
+12292105 (c2378e8, -0.09%); 206 mate roots depth 10: 208800383 against 210389355 (-0.76%). The changes come from (1) only, by the
+rounding argument (not checked by a separate build). Smoke `mbnd` against `chcm` at 10+0.1, 16 games: all ended normally.
+Next: the [-5, 0] screen against `chcm` on MEMO (prediction in the register).

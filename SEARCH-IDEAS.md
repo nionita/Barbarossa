@@ -258,6 +258,11 @@ free (a no-loss test: a bug fix kept unless it loses).
 The "-19744" of S43 is the clamp of the static eval (`matesc = 20000 - 255` in `Eval/Core.hs`, rounded to the grain), one grain
 outside `nearmate` (>= 19745): the guards of `mbnd`, RFP and futility do not hold there. Frequent in lost games (151 draft scores,
 5 of the 8 lost games of S41 reach it before -20000). Open: align the two definitions (decision: it is an eval score, not a mate).
+Done (2026-11-16, `mbnd` 4708209, S47): the clamp is `evalMax` (19744) in `Eval/Core.hs`, `nearmate` and `isMating` are defined
+as beyond it (scores unchanged: the rounding brought the old clamp to the same value); with it review finding 4 (stalemate after
+pruning, cheap form). Screen (2026-11-16): `mbnd` against `chcm` on MEMO, 10+0.1, SPRT [-5, 0], run `mbnd-chcm-tc10`, when a slot
+is free. Prediction (before the result): -4 to +3, most likely -1; H1 much more likely (bug fixes in rare positions, small node
+changes; the mate guards cost about 1.7% nodes on roots-500, S43).
 
 ### Late move pruning (status: rejected in this form)
 Now: loses, more with depth, also on the new ordering and with the count for the LMR level. Without `improving` late moves are not reliably bad. 2026-11-11.
@@ -509,7 +514,7 @@ Review when: the LMR itself changes (start level, PV nodes); the rank in the nod
   node); not found in the history, plausible. So not the form of the review. Cheap form: no extra search; only when a node ends
   with no legal move made and some pruned, test the pruned moves for legality (make and undo, no search) and return 0 if none
   is legal and the side is not in check. Costs only in nodes where everything was pruned. With `mbnd` in its screen, as the eval
-  clamp aligned with `nearmate`.
+  clamp aligned with `nearmate`. Done in `mbnd` 4708209 (S47).
 
 ### TT replacement (status: open)
 Now: a bug found by reading the code (review 2026-11-15, `Search/SEARCH-REVIEW-BUGS.md` finding 3), present since the TT
