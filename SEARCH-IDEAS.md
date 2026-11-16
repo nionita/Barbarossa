@@ -22,7 +22,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
 - Less LMR in three forms, all H0 near -7: start level 6 -8.1, PV 1 -6.7 (MEMO), limit 17000 -6.7 (m3a) (S34).
 - LMR cap 19 at 60+1 (m3b, 192+3.2): about -74 after 283 games, stopped (S40). Running: cap 13 on m3b, cap 17 on m3a, 2000 games each.
 - LMR table growth 1.1 (Grw 110): -0.35 +- 4.30, H0 after 13964 games (S35). Lim 6000 (faster ramp): +1.86 +- 3.50 after 20000 games, no
-  decision (S36). Running on MEMO: `chcm` against `dev090` at 60+1 (1000 games).
+  decision (S36). `chcm` against `dev090` at 60+1: +82.5 +- 16.0, 1000 games (S46): the short screening gains arrive at the long
+  time control.
 - Plan for the LMR after these runs (branches A to D by the outcome): "LMR cap depending on the size of the search", end of the block.
 
 ## Methods
@@ -61,6 +62,9 @@ Check of the screening at the long time control (2026-11-15, step A2 of the LMR 
 a sum of steps selected for passing, so inflated; parts of it (LMR, pruning margins) were tuned at 10+0.1 only. Question: does the
 gain arrive at 60+1? Prediction (2026-11-15, before the result): +10 to +55, most likely +30; below +15 the short screening misleads
 for the long time control and the cap and ramp results at 60+1 weigh more than the 10+0.1 ones. Started on MEMO 2026-11-15.
+Result (2026-11-16): +82.5 +- 16.0, LOS 100%, 1000 games (S46). Prediction wrong, too low (above its range): the gain of the
+short SPRTs arrives in full at 60+1, about the sum of the steps. The screening at 10+0.1 does not mislead for the long time
+control in sum; single parameters that depend on the size of the search (the LMR cap, S40) remain the exception to check there.
 
 ## Move ordering
 

@@ -1119,3 +1119,15 @@ Readings:
   (f = 4 at cap 15 against cap 15, plan of 2026-11-15) needs a fast build of `lmfl` and a smoke match; a [-5, 0] screen at 10+0.1 on
   MEMO when a slot is free.
 Data: `C:\Learn\Data\measurements\search\lmfl` (census outputs and tables, explosion CSVs).
+
+**S46.** The screening at the long time control (2026-11-15/16; method review point 3, step A2 of the LMR plan). `chcm` against
+`dev090` on MEMO, 60+1, a fixed 1000 games (500 rounds), read once at the end, run `chcm-dev090-tc60`, 16 MB hash. The short SPRTs
+since `dev090` add up to about +80 at 10+0.1 (qthr +10.8, hpqt +5.8, rfut +17.6, nmlm +13.0, chcm +22.5, the filter step), a sum of
+steps selected for passing. Prediction (before the result): +10 to +55, most likely +30.
+Result: +82.47 +- 16.02, nElo +115.1 +- 21.5, LOS 100%, +413 -180 =407 (61.65%), pentanomial [17, 55, 185, 164, 79]. Interims (trends
+only): +60.8 at 202 games, +73.5 at 398. Prediction wrong, too low, the first prediction since S28 below its result: the expected
+inflation of a sum of selected steps and the expected loss of parameters tuned at 10+0.1 do not show at 60+1; the gain is about the
+sum, if anything larger. So the 10+0.1 screening is valid for the long time control in sum, and the long runs keep their role for
+single parameters whose effect depends on the size of the search (the LMR cap: cap 13 -9.1 at 10+0.1, S40, box results pending).
+Limits: one batch of openings, the default 16 MB hash on both sides.
+Result in `C:\Learn\Data\results\memo\chcm-dev090-tc60`.
