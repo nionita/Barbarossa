@@ -450,6 +450,11 @@ and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEM
   keeps level 15, avoid the cost of cap 13 in short games (-9.1, S40)? Prediction (before the result): -5 to +4, most likely -1;
   H1 more likely than H0, but not by much (cap 13 lost where the cap rarely binds; the floor acts wherever a reduction exceeds
   half the remaining depth, at any level, and the level may counterbalance it, as with most LMR changes).
+  At the long time control (2026-11-16, user's choice for the free MEMO slot, ahead of the box plan): the same engines and
+  parameter at 60+1 on MEMO, a fixed 1000 games (500 rounds), read once at the end, run `lmfl-f4-lmfl-tc60`. Question: does the
+  floor bring the long time control gain that cap 13 showed in its interim (+37 at 798 games, 192+3.2) while keeping level 15?
+  1000 games show effects from about 15 Elo; smaller ones need the box's 2000. Prediction (before the result): -10 to +25, most
+  likely +8 (about 5 below the first guess, by the method review).
 - Lim 6000 apart: H0 (expected) ends the single ramp steps at 10+0.1; a pass keeps 6000 and checks it at the long time control with
   the cap. Result: neither, +1.86 +- 3.50 after 20000 games (S36): no more ramp steps at 10+0.1; Lim 6000 stays a candidate for step
   A3 (the ramp speed at the long time control with the new cap).
