@@ -5,7 +5,7 @@
 
 module Eval.Core (
     initEvalState,
-    posEval,
+    posEval, evalMax,
     posExactEval,
     gamePhase,
     evalTermSum,
@@ -107,8 +107,11 @@ pstTerm p (Just tab) = \acc -> MidEnd (mid acc + side 0) (end acc + side 384)
           side o = sum [ unsafeAt tab (o + t * 64 + own sq) | (t, bb) <- pcs, sq <- bbToSquares (bb .&. me p) ]
                  - sum [ unsafeAt tab (o + t * 64 + opp sq) | (t, bb) <- pcs, sq <- bbToSquares (bb .&. yo p) ]
 
-matesc :: Int
-matesc = 20000 - 255	-- warning, this is also defined in Base.hs!!
+-- The static eval stays within +-evalMax: an eval score, never a mate score (nearmate in Moves.Internal.Base
+-- starts above it); 20000 is mateScore there. A multiple of the grain, so the rounding keeps it (as the old
+-- clamp at 20000 - 255, which the rounding brought to the same value)
+evalMax :: Int
+evalMax = 20000 - 256
 
 useSpecials :: Bool
 useSpecials = True
@@ -118,7 +121,7 @@ posEval :: MyPos -> EvalState -> Int
 posEval p !sti = scc
     where !sce | useSpecials = evalDispatch          p sti
                | otherwise   = normalEval NotMatched p sti
-          !scl = min matesc $ max (-matesc) sce
+          !scl = min evalMax $ max (-evalMax) sce
           !scc = if granCoarse > 0 then (scl + granCoarse2) .&. granCoarseM else scl
 
 -- Don't use specials for tuning

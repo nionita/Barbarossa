@@ -5,7 +5,7 @@
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns -Wno-x-partial #-}
 module Moves.Core (
     Attacks(..), castKingRookOk, castQueenRookOk, checkOk, doFromToMove, gamePhase, genMoveCaptWL,
-    genMoveCast, genMoveFCheck, genMoveNCapt, genMoveNCaptToCheck, genMovePromo, inCheck, initPos,
+    genMoveCast, genMoveFCheck, genMoveNCapt, genMoveNCaptToCheck, genMovePromo, hasLegalMove, inCheck, initPos,
     isCheck, legalMove, legalPrefix, matPiece, matPiece1, materWhite, moveChecks, moveGenAscendent,
     moveIsCapture, movePassed, posFromFen, pstRecompute, reverseMoving, startFen,
     module Moves.Internal.BitBoard,
@@ -652,6 +652,15 @@ clearingCast sdcas cas = (cascl, zobcl)
           bkbb = 0x1000000000000000     -- black king
           bqrb = 0x0100000000000000     -- black queen rook
           bkrb = 0x8000000000000000     -- black king rook
+
+-- Has the side to move any legal move? For the rare nodes where all moves were pruned or illegal
+-- (stalemate test), not for the move loop
+hasLegalMove :: MyPos -> Bool
+hasLegalMove p = any (\m -> checkOk (doFromToMove m p)) ms
+    where ms | inCheck p = genMoveFCheck p
+             | otherwise = genMoveNCapt p ++ cw ++ cl ++ pq ++ pr ++ genMoveCast p
+          (cw, cl) = genMoveCaptWL p
+          (pq, pr) = genMovePromo p
 
 -- This is used to filter the illegal moves coming from killers or hash table
 -- but we must treat special moves (en-passant, castle and promotion) differently,
