@@ -188,6 +188,7 @@ data NodeState
           crtnt  :: !NodeType,	-- parent node type (actually expected)
           nxtnt  :: !NodeType,	-- expected child node type
           movno  :: !Int,	-- current move number
+          prnno  :: !Int,	-- number of pruned moves (zero window)
           spcno  :: !Int,	-- last move number of a special move
           albe   :: !Bool,	-- in alpha/beta search (for small depths)
           rbmch  :: !Int,	-- number of changes in root best move / score type otherwise
@@ -281,7 +282,7 @@ pvsInit = PVState { ronly = pvro00, stats = ssts0, absdp = 0, maxdp = 0, abort =
                     lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
 nst0 :: NodeState
 nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore 0, rbmch = -1,
-             movno = 1, spcno = 1, killer = Killer [], prvmv = Move 0, prvmv2 = Move 0, albe = False, cpos = initPos, pvsl = [] }
+             movno = 1, prnno = 0, spcno = 1, killer = Killer [], prvmv = Move 0, prvmv2 = Move 0, albe = False, cpos = initPos, pvsl = [] }
              -- we start with spcno = 1 as we consider the first move as special
              -- to avoid in any way reducing the tt move
 
@@ -296,7 +297,7 @@ cutCounter nst e = do
         lift $ contCut bits adp (prvmv nst) (prvmv2 nst) e
 
 resetNSt :: Path -> Killer -> NodeState -> NodeState
-resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, rbmch = 0 }
+resetNSt !sc kill nst = nst { cursc = sc, movno = 1, prnno = 0, spcno = 1, killer = kill, rbmch = 0 }
 
 pvro00 :: PVStRO
 pvro00 = PVStRO { draft = 0, tuning = False, abpol = NoAbort, futmar = defaultFutMargins,
@@ -655,7 +656,8 @@ pvZeroW !nst !b !d = do
                         !nstf <- pvSLoop b d True prune nsti edges
                         let s = cursc nstf
                         whenAbort s $
-                            if movno nstf == 1
+                            -- No legal move searched: none at all, or all pruned and none legal (stalemate)
+                            if movno nstf == 1 || prnno nstf == movno nstf - 1 && not (hasLegalMove pos)
                                then return $! failHardNoValidMove bGrain b pos
                                else do
                                    -- let !de = max d $ pathDepth s
@@ -741,7 +743,7 @@ pvInnerLoop :: Int 	-- current beta
             -> Search NodeState
 pvInnerLoop b d zw prune nst e = timeToAbort nst $
     if prune && (zw || movno nst > 1) && canPruneMove (cpos nst) e
-       then return $! nst { movno = movno nst + 1 }
+       then return $! nst { movno = movno nst + 1, prnno = prnno nst + 1 }
        else do
            !exd <- lift $ doMove e	-- do the move
            if legalResult exd

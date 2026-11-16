@@ -29,19 +29,20 @@ import Struct.Context
 import Struct.Status
 import Hash.TransTab
 import Moves.Core
-import Eval.Core (posEval)
+import Eval.Core (posEval, evalMax)
 import Moves.ShowMe
 import Moves.History
 import Moves.Notation
 
+-- A mate score (for either side): beyond the range of the static eval (+-evalMax, Eval.Core)
 {-# INLINE nearmate #-}
 nearmate :: Int -> Bool
-nearmate i = i >= mateScore - 255 || i <= -mateScore + 255
+nearmate i = i > evalMax || i < -evalMax
 
 -- A mate score for the side to move (the mating side), not a mated one
 {-# INLINE isMating #-}
 isMating :: Int -> Bool
-isMating i = i >= mateScore - 255
+isMating i = i > evalMax
 
 -- Some options and parameters:
 printEvalInt :: Int64
