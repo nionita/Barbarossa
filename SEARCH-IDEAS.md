@@ -608,6 +608,35 @@ Found 2026-11-15 in the 4+1 log. Fix: join the ranks with '/' (`intercalate`). C
 then differ in the FEN string, so a dedup or join by FEN over both needs a normalization. Not a search change (node counts equal).
 Next: when there is time (user), with a check of the readers of these files.
 
+### Mistakes in lost games: tracing the refutation through the tree (status: open)
+Now: an idea and a method, nothing built. 2026-11-16 (user's idea, method discussed in the session).
+Idea: learn from games lost against (much) stronger engines. Two extreme trajectories, mixed in real games: an equal game that
+turns at one move (a clear critical position), and a slow loss with ever harder positions (no single move). The first is the one
+to analyse per game; the second only statistically (positions where our score stays too optimistic for many moves against a
+reference: biased eval terms, closer to eval tuning). Games against stronger engines: online tournaments (S41: 8 of 12 games end
+with a mate score against us) or a few dedicated games; our matches are self-play. Time problems excluded.
+Method:
+1. Locate: a reference engine over the game marks our first move after which its score drops sharply (e.g. more than 1 pawn)
+   while ours stays level; the `-d` data or the log gives what we believed there (root and leaf score). The reference only marks
+   the position, it is no label (the SF labels were negative for tuning).
+2. Classify: search the critical position again with one pruning off at a time (LMR, futility, null move, RFP, LMP) and with
+   10 times the nodes: the first that finds the refutation names the culprit (search). If deep search and every switch keep our
+   move, compare our eval with the reference along its line: an eval misjudgement, not search.
+3. Trace (the core, user: "extremely useful"): a debugger-like walk of a given line (our move, their refutation, ...) through
+   our real search, with all reductions and pruning in place. At each ply of the line: was the node reached, at which remaining
+   depth and window, the move's index in the order (and why: TT, killer, counter, history value), its LMR reduction and the level,
+   whether futility, LMP or a null move or RFP cut ended the node before it, and the score it returned against alpha and beta;
+   step by step down, as far as the search went. That turns "why was the counter move not seen" into numbers (e.g. quiet move at
+   index 23, reduced by 4 at depth 7, the re-search never came) and shows the misses the census cannot count (S42). Form to work
+   out: a probe in SelfPlay (FEN and a line in UCI moves; a hook in the search that recognizes the path by its move stack and
+   logs at the nodes on it, behind a build flag like `lmrcensus` so the engine stays unchanged); the deterministic perf build
+   makes the walk repeatable, and the probe can then rerun with a parameter changed to see where the line's fate changes.
+4. Collect: the critical positions with the explanation found by the trace (culprit, ply, numbers, the reference line) into a
+   lasting database of positions where the engine errs, to guide further development: which mechanism fails how often, and as a
+   test set (solve rate at fixed nodes, like mate206). A diagnostic, not adoption evidence: a fix from it still passes the SPRT
+   and the long match, and a solve rate is not Elo.
+Next: after the LMR decisions. First the probe (3); then 3 or 4 lost games through 1 to 3, to see what kind of positions come out.
+
 ### Threaded search (status: open)
 Now: after the lower fruits (user). Per-thread state arrays would fit. 2026-10-31.
 
