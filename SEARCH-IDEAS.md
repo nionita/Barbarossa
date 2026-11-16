@@ -39,6 +39,18 @@ use the default hash of 16 MB (no `option.Hash` in `run_timed`), unlike real use
 interval, one process per position, a placebo, positions with 5 men or fewer apart. Adjudication measured on Grw 110: about 9% of the
 time at 10+0.1 for about 1% changed results. Not yet adopted: each point is decided when it is used.
 
+Time controls (decision, 2026-11-16, user): the target time controls are 60+1 to 4m+1 and a bit longer; they cannot be tested
+at scale. Eval changes: 10+0.1 is a good test (fast, still some search in the games); for very fast eval checks fixed nodes per
+move would do, but they hide speed costs, so an eval change that costs speed still needs a timed check. Search changes: 10+0.1
+screens, fixed matches at 60+1 decide. It held in sum: `chcm` against `dev090` +82.5 at 60+1 for about +80 of summed short SPRTs
+(S46). Exceptions are parameters that act with the size of the search (LMR cap and ramp, S37, S40), and 10+0.1 has its own
+distortions (0.2 to 0.3 s per move: fixed overheads and the time rules act differently; 16 MB hash fills differently). Rule: a
+search setting that wins clearly at 60+1 and loses a little at 10+0.1 is kept, if no better one is found with reasonable
+effort. Clearly: LOS >= 95% at the planned number of games, read once at the end (1000 games show about 15 Elo, 2000 about 10).
+A little: a loss of up to about 10 at 10+0.1; a larger one points more to an instability than to a time control dependence.
+A middle step when needed: 30+0.3 on MEMO, for parameters that depend on the size of the search, once a trace shows they act
+there. Online tournaments give diagnostics (time use, real opponents, as S41), not tuning evidence.
+
 | Method | For | Status | Why | Ref |
 |---|---|---|---|---|
 | Move 4+ cuts at fixed LMR level 11, two position sets, against a placebo floor | ordering | current | a proven change shows clearly; floor +-0.03 openings, +-0.065 real | S20, S21 |
