@@ -557,7 +557,7 @@ Review when: the LMR itself changes (start level, PV nodes); the rank in the nod
   is legal and the side is not in check. Costs only in nodes where everything was pruned. With `mbnd` in its screen, as the eval
   clamp aligned with `nearmate`. Done in `mbnd` 4708209 (S47).
 
-### TT replacement (status: open)
+### TT replacement (status: running)
 Now: a bug found by reading the code (review 2026-11-15, `Search/SEARCH-REVIEW-BUGS.md` finding 3), present since the TT
 reorganisation years ago: `scoreReplaceLow` (`Hash/TransTab.hs:242`) masks with `lowc .&. 0xFFFF`, which keeps the move instead of
 removing it: in a full cell the entry with the smallest move code is replaced (white moves before black ones), generation, type,
@@ -570,6 +570,31 @@ limited to its 32 bits and can run into depth and type at the root (`quintToCach
 Measure: only with fastchess (UCI): SelfPlay never calls `posNewSearch`, the generation stays 0 there (the age part is invisible in
 node limited games and perf node counts); a hash size that fills at the time control (4 MB does); the proposed rule directly against
 the current engine, at 10+0.1 and at a long time control. Not built.
+Forms (2026-11-18, branch `ttrp` c64ad37 from `r90a`, parameter `epTTRep`, compiled 0; the rule is a field of the table, set
+by `posToState`, kept by `resizeCache`; `writeCache` chooses the score function once per store):
+| Form | Branch, commit | Parameters | Differs by |
+|---|---|---|---|
+| 0 | `ttrp` c64ad37 | `epTTRep=0` (compiled) | none: the old rule (smallest move code replaced) |
+| 1 | `ttrp` c64ad37 | `epTTRep=1` | minimal fix: move masked away, generation > type > depth > nodes |
+| 2 | `ttrp` c64ad37 | `epTTRep=2` | review rule: smallest (depth - 4 * age, type, nodes), age = generations since the store mod 256 |
+Checks (2026-11-18): the three rules on hand built entries of one cell through `writeCache` (throwaway test, not committed):
+replaced as intended (0: the smallest move code; 1: an older generation first, then type 0; 2: depth - 4 * age, an entry of the
+previous search with depth 10 survives a current depth 1 one). Deterministic perf build, `SelfPlay -P -d 10` (generation always 0
+there, so only depth, type, nodes act; anomaly detector, not a selector): tests.fen r90a 11367370, form 0 11367370, form 1 11050559
+(-2.8%), form 2 11671539 (+2.7%); roots-500 r90a 87385187, form 0 87385187, form 1 81932525 (-6.2%), form 2 79218664 (-9.3%).
+Perft of the 5 standard positions unchanged. Speed of form 0 against `r90a` (alternating perf builds, identical nodes, 9 pairs):
+median nodes/s ratio 1.008 (pairs 0.86 to 1.75, this PC throttled; the middle pairs 0.98 to 1.04): no measurable cost. fastchess
+smoke `ttrp` `epTTRep=2` against `r90a`, 4 MB, 10+0.1, 16 games: all normal endings, no time losses (posNewSearch at every go:
+the generation advances in UCI games).
+Chosen for the games: form 2 (the review's rule; form 1 carries the type over depth dominance and would say little).
+Run plan (MEMO, prepared 2026-11-18, both default hash 4 MB, no `-Hash`; the boxes are busy until about 2026-11-19):
+a) `ttrp-f2-r90a-tc10`: 10+0.1, SPRT [0, 5] (explicit bounds).
+b) `ttrp-f2-r90a-tc60`: 60+1, 1000 games fixed (500 rounds, openings 2001 to 2500; earlier 60+1 runs: 1 to 500, 1001 to 1250),
+read once at the end, LOS >= 95% to adopt.
+Prediction (2026-11-18, before any result): the old rule is a replacement by move code, close to random with respect to depth
+and blind to age, so deep and current entries are lost in full cells; a depth and age rule should gain, more at the long time
+control where the table is fuller. a) 10+0.1: -3 to +12, most likely +5; H1 slightly more likely than H0 (about 55%).
+b) 60+1: -5 to +25, most likely +10 (LOS >= 95% needs about +14 in 1000 games: adoption by b alone about one in three).
 
 ### Hash option of the engine (status: done)
 Now: both issues fixed on branch `hfix`, merged into `rel090` 2026-11-17 (S50); engine play unchanged (same nodes, perft).
