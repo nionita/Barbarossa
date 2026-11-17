@@ -29,6 +29,7 @@ import Struct.Status
 import Struct.Config
 import Struct.MidEnd
 import Moves.Core
+import Eval.KPK (kpkProbe)
 
 ------------------------------------------------------------------
 -- Parameters of this module ------------
@@ -142,7 +143,8 @@ specialsOf p = enp ++ peg
           enp  | pawns p == 0 = [evalNoPawns]
                | otherwise    = []
           -- Pawns end game
-          peg  | kings p .|. pawns p == occup p = [pawnEndGame]
+          -- KPK first: the bitbase is exact, the race is not
+          peg  | kings p .|. pawns p == occup p = [kpkEval | popCount (pawns p) == 1] ++ [pawnEndGame]
                | otherwise    = []
 
 -- The score of a special eval, when one applies (then posEval returns it instead of the normal eval)
@@ -1151,6 +1153,24 @@ advPawns p !ew = mad (ewAdvPawn6 ew) ap6 .
           !yap6 = popCount $ yapbb .&. yo6
           !ap5  = map5 - yap5
           !ap6  = map6 - yap6
+
+-- King and pawn against king: the bitbase decides; a win scores the win bonus plus a term for the
+-- relative rank of the pawn (progress), anything else is a draw
+kpkEval :: SpecialEval
+kpkEval p
+    | kpkProbe pwhite smoves sk wk psq = Score (if smoves then sc else -sc)
+    | otherwise                        = Score 0
+    where !psq    = firstOne (pawns p)
+          !smoves = pawns p .&. me p /= 0               -- the side with the pawn moves
+          !pwhite = smoves == (moving p == White)
+          !sk     = kingSquare (kings p) (if smoves then me p else yo p)
+          !wk     = kingSquare (kings p) (if smoves then yo p else me p)
+          !rrank  | pwhite    = psq `unsafeShiftR` 3
+                  | otherwise = 7 - psq `unsafeShiftR` 3
+          !sc     = kpkWinScore + 10 * rrank
+
+kpkWinScore :: Int
+kpkWinScore = 1000
 
 -- Pawn end games are treated specially
 -- We consider escaped passed pawns in 2 situations:
