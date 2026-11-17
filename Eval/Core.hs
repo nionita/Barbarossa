@@ -19,10 +19,9 @@ module Eval.Core (
 import Data.Array.Base (unsafeAt)
 import Data.Bits
 import Data.Char (ord)
-import Data.List (elemIndex, minimumBy, stripPrefix)
+import Data.List (elemIndex, stripPrefix)
 import Data.Maybe (mapMaybe)
 import Data.Array.Unboxed
-import Data.Ord (comparing)
 import Data.Int
 
 import Struct.Struct
@@ -1187,8 +1186,8 @@ pawnEndGame p
               | mim > miy + 1 = yorace
               | otherwise     = withQueens     -- Here: this is more complex, e.g. if check while promoting
                                                -- or direct after promotion + queen capture?
-          mim = fst $ minimumBy (comparing snd) mescds      -- who is promoting first?
-          miy = fst $ minimumBy (comparing snd) yescds
+          mim = minimum $ map snd mescds      -- who is promoting first? (the distance)
+          miy = minimum $ map snd yescds
           myrace =  promoBonus - distMalus mim
           yorace = -promoBonus + distMalus miy
           promoBonus = 1000     -- i.e. almost a queen (here the unit is 1 cp)
