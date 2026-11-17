@@ -70,6 +70,17 @@ Refactorings of the eval, the search or the position state must not change the e
   every ucinewgame into `barbarossa-<version>-<branch>-<start second>-<pid>.data` in the working directory;
   BarbarossaTuning `uci_data.py` joins it with the fastchess PGN.
 
+## Branches and Pushing
+
+- Feature and experiment branches stay local: commit there, do not push them. `rel090` (the 0.9.0 record and
+  integration branch) is the one that gets pushed.
+- Exception: a branch that plays on a Linux box (m3a, m3b, ...) is pushed before the run, because the boxes build
+  from GitHub. MEMO gets packed binaries and needs no push.
+- Merging into `rel090` only on the user's request, after the branch's tests passed; then reset `progVerSuff` to
+  `rel090` (the merged branch brings its own identity), commit, and push `rel090`.
+- A rejected experiment branch is not deleted while `SEARCH-IDEAS.md` or `SEARCH-TUNING.md` cite its commits (a local
+  branch has no other copy; the history bundle is only refreshed now and then).
+
 ## Cutting a Release
 
 A release is made on `master`; the development branch keeps its identity and logging.
