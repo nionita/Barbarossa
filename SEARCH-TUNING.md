@@ -1168,3 +1168,11 @@ wins at 60+1 (LOS >= 95% at the planned number of games); it is kept if its 10+0
 running) loses no more than about 10. It keeps level 15 and lifts the confirmations at d1 >= 4 (S45): the gain cap 13 promised at
 the long time control without lowering the cap. Limits: one batch of openings, 16 MB hash, the error (+-15.5) still wide.
 Result in `C:\Learn\Data\results\memo\lmfl-f4-lmfl-tc60`.
+
+**S49.** Hash size of the matches and the engine's hash option (2026-11-17, main session; lab 49a0f82 added `run_timed -Hash <MB>`).
+The engine starts with 4 MB (`newCache 1`, floor 2^18 entries x 16 bytes), not the 16 its UCI option announces: every match so far
+played with 4 MB on both sides; "16 MB" in the entries above means 4 MB (the register is corrected). fastchess (trace log, 4 games, `option.Hash=64`)
+sends `ucinewgame`, `isready`, `setoption name Hash value 64` before every game and keeps the engine processes. The engine applies
+each one and does not free the old table: piped UCI test, 4 games of 2 searches at 300 ms, `setoption Hash 256` before each game,
+all 4 applied ("Cache was set on 256 MB"), memory 261, 488, 725, 957 MB. Runs without `-Hash` are not affected (nothing is sent).
+`-Hash` is usable only when both engines free the old table (register "Hash option of the engine").

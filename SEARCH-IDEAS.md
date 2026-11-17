@@ -24,6 +24,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
 - Rejected in this form at 10+0.1: late move pruning D3 M1 C1 -7.6 (S28); root overflow fixes (S29); history in the LMR (S32); LMR level
   carried over -25.0 (S33); less LMR in three forms near -7 (S34); table growth 1.1 -0.35 (S35). Lim 6000 +1.86 +- 3.50 after 20000
   games, no decision (S36).
+- Hash: every match so far played with 4 MB, not 16; `-Hash` waits for the engine fix of its hash option (block "Hash option of the
+  engine", S49).
 - Designs for later (2026-11-17, nothing built): `SPEED-IDEAS.md` (speed and simplification), `Search/TB-SYZYGY.md` (Syzygy probes),
   `Eval/KPK-BITBASE.md` (KPK bitbase); blocks below.
 - Plan for the LMR after the box runs: the branches A to D of 2026-11-15 in "LMR cap depending on the size of the search" (outcome C).
@@ -37,7 +39,8 @@ of [0, 5] fixes the estimate by the number of games (about 2.5 - 38000 / games),
 passes a true 0 in only 64% of the runs (for "harmless" put 0 at the upper bound: [-5, 0] or [-8, 0]); the most likely value of the
 predictions was above the result in all 11 cases S28-S40 (a tuned search starts near -5); 2000 long games decide only effects from
 about 15 Elo; early looks: loser stops at fixed looks are safe, winner stops only by a rule fixed before the start; the long runs
-use the default hash of 16 MB (no `option.Hash` in `run_timed`), unlike real use; node scans: per position ratios with a bootstrap
+use the engine's start hash of 4 MB (until 2026-11-17 written as 16: the engine announces 16 and starts with 4, S49), unlike real
+use; fixed in lab 49a0f82 (`run_timed -Hash <MB>`), usable only with engines that free the old table ("Hash option of the engine"); node scans: per position ratios with a bootstrap
 interval, one process per position, a placebo, positions with 5 men or fewer apart. Adjudication measured on Grw 110: about 9% of the
 time at 10+0.1 for about 1% changed results. Not yet adopted: each point is decided when it is used.
 
@@ -46,7 +49,7 @@ at scale. Eval changes: 10+0.1 is a good test (fast, still some search in the ga
 move would do, but they hide speed costs, so an eval change that costs speed still needs a timed check. Search changes: 10+0.1
 screens, fixed matches at 60+1 decide. It held in sum: `chcm` against `dev090` +82.5 at 60+1 for about +80 of summed short SPRTs
 (S46). Exceptions are parameters that act with the size of the search (LMR cap and ramp, S37, S40), and 10+0.1 has its own
-distortions (0.2 to 0.3 s per move: fixed overheads and the time rules act differently; 16 MB hash fills differently). Rule: a
+distortions (0.2 to 0.3 s per move: fixed overheads and the time rules act differently; 4 MB hash fills differently). Rule: a
 search setting that wins clearly at 60+1 and loses a little at 10+0.1 is kept, if no better one is found with reasonable
 effort. Clearly: LOS >= 95% at the planned number of games, read once at the end (1000 games show about 15 Elo, 2000 about 10).
 A little: a loss of up to about 10 at 10+0.1; a larger one points more to an instability than to a time control dependence.
@@ -445,7 +448,7 @@ and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEM
 -24.4 +- 17.5, cap 13 +36.7 +- 17.1; they point to A. Branches, by the outcome:
 - A (most expected): cap 13 gains at 60+1, cap 17 loses, cap 13 passes [-5, 0] at 10+0.1. Lower is better where the cap binds and
   harmless where it does not: no time control encoding yet. 1. The bottom of the curve: cap 11 (m3a) and cap 12 (m3b) against cap
-  15 at 192+3.2, 2000 games each, still with 16 MB hash so that the four points compare. 2. MEMO, after Lim 6000: `chcm` against
+  15 at 192+3.2, 2000 games each, still with 4 MB hash so that the four points compare. 2. MEMO, after Lim 6000: `chcm` against
   `dev090` at 60+1, 1000 games (does the gain of the short SPRTs arrive at the long time control). 3. The best cap against 15 with
   a realistic hash (size to settle, 64 to 128 MB), then the speed of the ramp (Lim) at the long time control with the new cap.
 - B: cap 13 neutral at 60+1 (the interim a lucky start), cap 17 loses. Flat optimum between 13 and 15, only higher hurts. 1. Cap 13
@@ -456,12 +459,12 @@ and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEM
   planned size of the move (form 2 above: node budget; 15 below a threshold, 13 above). 2. Screen at 30+0.3 on MEMO (40% of 60+1)
   after eight trace games show that the cap binds there. 3. Confirm at 10+0.1 and 60+1.
 - D (unexpected): cap 17 neutral or better, or both caps far from their interims. The long results are not trusted as they stand:
-  1. validate a box by a replay of a known result (`lmrc`, -25, 600 games); 2. one cap again with a large hash (effect of the 16 MB
+  1. validate a box by a replay of a known result (`lmrc`, -25, 600 games); 2. one cap again with a large hash (effect of the 4 MB
   load).
   Outcome (2026-11-17, S40): C. Cap 17 -23.5 +- 11.0 (prediction -25, right), cap 13 +40.7 +- 10.9 (prediction 0, wrong), at
   10+0.1 cap 13 -9.1. Cap 13 qualifies under the time control decision as it is; still open before adopting: the floor on top
   of cap 13, and the bottom of the cap curve (12, 11) at the long time control.
-  Next box runs (2026-11-17, user's go): `lmfl` da23a27, one binary per run, 192+3.2, 16 MB hash, concurrency 8 (calibrated:
+  Next box runs (2026-11-17, user's go): `lmfl` da23a27, one binary per run, 192+3.2, 4 MB hash, concurrency 8 (calibrated:
   factor 3.2 stays), a fixed 2000 games each, read once at the end (LOS >= 95% to adopt).
   1. m3a, `lmfl-m13f4-m13`: floor f = 4 on cap 13 (`epLmrMax=13,epLmrFlr=4`, `l13f`) against cap 13 (`epLmrMax=13`). Question:
   does the floor add to cap 13? Prediction (before the result): -12 to +18, most likely +3 (both act on the same deep
@@ -475,7 +478,7 @@ and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEM
   at d' = 1 more than half are d1 2-3 (the horizon, not a collapse); the collapse and the lost confirmations are at d1 >= 4, the tail
   the floor lifts. Floor first, the check extension limit after (its k depends on the floor).
 - Plan change for the boxes (user, 2026-11-15), replacing step A1 when the cap runs end: one box cap 12 against cap 15, the other the
-  floor (f = 4) at cap 15 against cap 15, both 2000 games at 192+3.2, 16 MB hash; the floor is read beside the cap 13 result (same
+  floor (f = 4) at cap 15 against cap 15, both 2000 games at 192+3.2, 4 MB hash; the floor is read beside the cap 13 result (same
   opponent, time control, hash). The rest of the cap curve (cap 11) after the floor is decided. Optional, a few hundred games: cap 19
   with the floor against cap 15 (near 0 instead of about -74: the cap is no longer the sensitive parameter). Before the floor run:
   build with `epLmrFlr`, f = 0 identical (12086912 nodes), census at f = 3, 4, 5 (S42 set), positions 182, 362, 485.
@@ -543,15 +546,32 @@ Review when: the LMR itself changes (start level, PV nodes); the rank in the nod
 Now: a bug found by reading the code (review 2026-11-15, `Search/SEARCH-REVIEW-BUGS.md` finding 3), present since the TT
 reorganisation years ago: `scoreReplaceLow` (`Hash/TransTab.hs:242`) masks with `lowc .&. 0xFFFF`, which keeps the move instead of
 removing it: in a full cell the entry with the smallest move code is replaced (white moves before black ones), generation, type,
-depth and nodes play no role (except the wrap test of the 8 bit generation). With 16 MB in the matches the table is full, more so at
+depth and nodes play no role (except the wrap test of the 8 bit generation). With 4 MB in the matches the table is full, more so at
 long time controls: a candidate for part of the long time control weakness. The minimal fix (`complement 0xFFFF`) would order by
 generation > type > depth > nodes: every entry of the previous move goes before a current depth 1 entry, every upper bound before any
 lower bound whatever the depth (doubtful). Proposed rule (review): replace the entry with the smallest (depth - 4 * age, type, nodes),
 age = generations since the store, modulo 256; 8 per generation as the second value. Related finding 5: the node count is not
 limited to its 32 bits and can run into depth and type at the root (`quintToCacheEn`: `min 0xFFFFFFFF`).
 Measure: only with fastchess (UCI): SelfPlay never calls `posNewSearch`, the generation stays 0 there (the age part is invisible in
-node limited games and perf node counts); a hash size that fills at the time control (16 MB does); the proposed rule directly against
+node limited games and perf node counts); a hash size that fills at the time control (4 MB does); the proposed rule directly against
 the current engine, at 10+0.1 and at a long time control. Not built.
+
+### Hash option of the engine (status: open)
+Now: two small engine issues, found 2026-11-17 by the lab hash option (lab 49a0f82) and checked in the main session (S49); the
+engine is unchanged so far.
+(1) Start size: the engine starts with `newCache 1`, which the floor of 2^18 entries x 16 bytes makes 4 MB, but its UCI option
+list announces `Hash` default 16, minimum 16 (`guiUciOptions`, `Main/Barbarossa.hs`). All matches so far played with 4 MB (the
+records said 16). Fix: announce what it does (default 4, minimum 4): play unchanged. Starting with 16 instead would change every run
+without `-Hash` and break the comparison with the earlier runs.
+(2) Leak: `setOptionHash` allocates a new table and never frees the old one. fastchess sends `setoption name Hash` after
+`ucinewgame` before every game and the engine applies it every time (refused only during a search, which is right): in a piped
+test with 256 MB the process grew 261, 488, 725, 957 MB over 4 games. With `-Hash 64` a 2000 game run at concurrency 8 (about
+250 games per engine process) would need about 16 GB per process. Fix: free the old table before allocating the new one, keep it
+when the size is unchanged. Every build before the fix leaks: `-Hash` only when both engines of a run have the fix.
+Measure: the piped test (memory flat over the games), node counts unchanged (12086912 on tests.fen, depth 10), perft.
+Interpretation history: 2026-11-17: the lab session read "the engine applies the first setoption and ignores the later ones (still
+working), no leak"; its test harness sent `go` without a time limit and never `stop`, so the engine was still searching when the
+next game began. Corrected the same day (S49).
 
 ### Aspiration windows (status: open)
 Now: code present, off since 2013 (`useAspirWin`). Not tested in this round. 2026-10-31.

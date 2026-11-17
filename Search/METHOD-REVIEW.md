@@ -13,7 +13,7 @@ simulation of the tests: normal approximation, standard deviation 177 Elo per ga
 - 2000 long games decide only effects from about 15 Elo. An early look may always plan other runs, may stop a loser by a loose
   rule, and may stop a winner only at looks fixed before the start, by a strict rule.
 - Node scans: per position ratios with an interval, one process per position, a node limit instead of dropped outliers, a placebo.
-- Missing in the records: the gain of the short games checked at the long time control, the hash size of the long runs (16 MB),
+- Missing in the records: the gain of the short games checked at the long time control, the hash size of the long runs (16 MB; corrected 2026-11-17: 4 MB),
   adjudication of decided games.
 
 ## What we misread
@@ -29,7 +29,9 @@ simulation of the tests: normal approximation, standard deviation 177 Elo per ga
    that, not 6. A change of a search tuned as a whole starts at about -5, not at 0.
 3. The time control. S37/S38 predicted the cap by depth, S40 answered -74. Likewise nothing recorded shows that the +80 or so of
    the short SPRTs since `dev090` (a sum of steps selected for passing, so inflated) arrives at 60+1.
-4. The long runs use the default hash of 16 MB (`run_timed` passes no `option.Hash`) at about 0.8M nodes per move on the boxes:
+4. The long runs use the default hash of 16 MB (`run_timed` passes no `option.Hash`; corrected 2026-11-17: the engine starts with
+   4 MB and only announces 16; `run_timed -Hash <MB>` since lab 49a0f82, usable only with engines that free the old table,
+   register "Hash option of the engine", S49) at about 0.8M nodes per move on the boxes:
    a table that fills (register, "TT replacement"), unlike real use (S41: 68 to 516 MB). Every long result so far, the caps
    included, is measured under that load; it may favour the smaller tree (a guess).
 
