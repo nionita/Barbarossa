@@ -628,7 +628,7 @@ score-drop rule. Second rule D, after A in its own run: on a clock above 60 incr
 target (`epTmDropIncs`; 4+1: 132 s more, 1 other move; 60+1: 3 moves, 14 s). Last-draft-only and two-draft confirmation act on
 `exte` only: little at 4+1 and they change 60+1, not recommended. Order: A, then D against A, then B.
 
-### Standard FEN from `posToFen` (status: done, not merged)
+### Standard FEN from `posToFen` (status: done)
 Was: `posToFen` (`Moves/Notation.hs`) ended the board with a '/' (`extline` appended one after every rank); python-chess and
 other tools reject that (BarbarossaTuning `log_roots.py` stripped it). Found 2026-11-15 in the 4+1 log.
 Done 2026-11-17 on branch `sfen` (from `rel090`): the ranks are joined with '/' (`intercalate`); the move number stays 1 (`MyPos`
@@ -642,7 +642,7 @@ Checks: deterministic perf build, `SelfPlay -P -i tests/data/tests.fen -d 10`: 1
 after; perft of the 5 standard positions: known counts; round trip parse -> `posToFen` -> parse on 1528 positions (tests.fen and
 the Origin root/leaf FENs of 2 old logs, 1479 with the old trailing '/'): same position (bitboards, ep/castle/50-move, zobrist,
 PST sums), no slash written, python-chess accepts all; a SelfPlay `--data` file (437 FENs) and a UCI `-d` file (239 FENs, 2 games)
-read by python-chess without a reject. Not a search change. Next: merge in the main session.
+read by python-chess without a reject. Not a search change. Merged into `rel090` 2026-11-17.
 
 ### Mistakes in lost games: tracing the refutation through the tree (status: open)
 Now: an idea and a method, nothing built. 2026-11-16 (user's idea, method discussed in the session).
