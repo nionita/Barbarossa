@@ -3,7 +3,7 @@
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE CPP #-}
 module Hash.TransTab (
-    Cache, newCache, freeCache, retrieveEntry, readCache, writeCache, newGener,
+    Cache, newCache, freeCache, resizeCache, retrieveEntry, readCache, writeCache, newGener,
     -- checkProp
     ) where
 
@@ -97,22 +97,36 @@ part3Mask = 0x03 :: Mask	-- the cell has 4 entries (other option: 8)
 minEntries :: Int
 minEntries = 0x40000	-- 2 ^ 18
 
+-- Number of entries of a table with the given (integral) number of MB:
+-- a power of 2 (rounded down), at least minEntries (sizes below 1 MB count as 1 MB)
+cacheEntries :: Int -> Int
+cacheEntries mb = max minEntries $ nextPowOf2 $ max 1 mb * 1024 * 1024 `div` pCacheEnSize
+
 -- Create a new transposition table with a number of entries
 -- corresponding to the given (integral) number of MB
--- The number of entries will be rounded up to the next power of 2
+-- The memory is zeroed, so that the content does not depend on memory reuse
 newCache :: Int -> IO Cache
 newCache mb = do
-    let c = mb * 1024 * 1024 `div` pCacheEnSize
-        nentries = max minEntries $ nextPowOf2 c
+    let nentries = cacheEntries mb
         ncells   = nentries `div` 4	-- 4 entries per cell
         lom      = fromIntegral $ nentries - 1
         mim      = lom .&. cellMask
-    memc <- mallocArray ncells
+    memc <- callocArray ncells
     return Cache { mem = memc, lomask = lom, mimask = mim, zemask = complement mim, gener = 0 }
     where cellMask = complement part3Mask	-- for speed we keep both masks
 
 freeCache :: Cache -> IO ()
 freeCache = free . mem
+
+-- Table for a new size in MB: the same table when the number of entries does not change,
+-- otherwise the old table is freed and a new one allocated
+-- The old table must not be used any more by anyone when the size changes
+resizeCache :: Cache -> Int -> IO Cache
+resizeCache tt mb
+    | cacheEntries mb == fromIntegral (lomask tt) + 1 = return tt
+    | otherwise = do
+        freeCache tt
+        newCache mb
 
 generInc, generMsk :: Word64
 generInc = 0x0100000000000000	-- 1 in first byte

@@ -24,8 +24,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
 - Rejected in this form at 10+0.1: late move pruning D3 M1 C1 -7.6 (S28); root overflow fixes (S29); history in the LMR (S32); LMR level
   carried over -25.0 (S33); less LMR in three forms near -7 (S34); table growth 1.1 -0.35 (S35). Lim 6000 +1.86 +- 3.50 after 20000
   games, no decision (S36).
-- Hash: every match so far played with 4 MB, not 16; `-Hash` waits for the engine fix of its hash option (block "Hash option of the
-  engine", S49).
+- Hash: every match so far played with 4 MB, not 16; the engine fix of its hash option is done on `hfix`, not merged; `-Hash`
+  waits for the merge (block "Hash option of the engine", S49).
 - Designs for later (2026-11-17, nothing built): `SPEED-IDEAS.md` (speed and simplification), `Search/TB-SYZYGY.md` (Syzygy probes),
   `Eval/KPK-BITBASE.md` (KPK bitbase); blocks below.
 - Plan for the LMR after the box runs: the branches A to D of 2026-11-15 in "LMR cap depending on the size of the search" (outcome C).
@@ -556,19 +556,31 @@ Measure: only with fastchess (UCI): SelfPlay never calls `posNewSearch`, the gen
 node limited games and perf node counts); a hash size that fills at the time control (4 MB does); the proposed rule directly against
 the current engine, at 10+0.1 and at a long time control. Not built.
 
-### Hash option of the engine (status: open)
-Now: two small engine issues, found 2026-11-17 by the lab hash option (lab 49a0f82) and checked in the main session (S49); the
-engine is unchanged so far.
+### Hash option of the engine (status: done, not merged)
+Now: both issues fixed on branch `hfix` (from `rel090`, 2026-11-17), not merged; engine play unchanged (same nodes, perft).
 (1) Start size: the engine starts with `newCache 1`, which the floor of 2^18 entries x 16 bytes makes 4 MB, but its UCI option
-list announces `Hash` default 16, minimum 16 (`guiUciOptions`, `Main/Barbarossa.hs`). All matches so far played with 4 MB (the
-records said 16). Fix: announce what it does (default 4, minimum 4): play unchanged. Starting with 16 instead would change every run
-without `-Hash` and break the comparison with the earlier runs.
-(2) Leak: `setOptionHash` allocates a new table and never frees the old one. fastchess sends `setoption name Hash` after
+list announced `Hash` default 16, minimum 16 (`guiUciOptions`, `Main/Barbarossa.hs`). All matches so far played with 4 MB (the
+records said 16). Fix on `hfix`: it announces what it does, `option name Hash type spin default 4 min 4 max 1024`; the start size
+is unchanged (16 would change every run without `-Hash` and break the comparison with the earlier runs).
+(2) Leak: `setOptionHash` allocated a new table and never freed the old one. fastchess sends `setoption name Hash` after
 `ucinewgame` before every game and the engine applies it every time (refused only during a search, which is right): in a piped
 test with 256 MB the process grew 261, 488, 725, 957 MB over 4 games. With `-Hash 64` a 2000 game run at concurrency 8 (about
-250 games per engine process) would need about 16 GB per process. Fix: free the old table before allocating the new one, keep it
-when the size is unchanged. Every build before the fix leaks: `-Hash` only when both engines of a run have the fix.
-Measure: the piped test (memory flat over the games), node counts unchanged (12086912 on tests.fen, depth 10), perft.
+250 games per engine process) would need about 16 GB per process. Fix on `hfix`: `resizeCache` (`Hash/TransTab.hs`) keeps the
+table when the new size gives the same number of entries, otherwise frees the old table and allocates the new one. Safe: setoption
+is applied only when not `working`; then the search thread has ended (`finishSearch` comes after its last table access, the
+bestmove report reads no table) or was killed (`doStop`: `stopSearch`, then the synchronous `killThread`); the snapshots
+(`forGui`, the status in `finishSearch`/`stopSearch`) are used only for the bestmove report; table reads are strict IO (`peek`).
+A kept table keeps its content into the next game, as without `-Hash` (`ucinewgame` does not clear it).
+(3) New tables are zeroed (`callocArray` instead of `mallocArray`): the content no longer depends on memory reuse after a free.
+Every build before the fix leaks: `-Hash` only when both engines of a run have the fix.
+Checks (2026-11-17): deterministic perf build, `SelfPlay -P -i tests/data/tests.fen -d 10`: 12086912 total nodes on `rel090` and
+on `hfix`; perft of the 5 standard positions unchanged (4865609 d5, 4085603 d4, 11030083 d6, 15833292 d5, 2103487 d4). Piped UCI
+test, 6 games of 2 searches at 300 ms, setoption before each game (working set after each game): 256 MB each time: 273, 287,
+289, 289, 289, 289 MB (`sfen` build as the leaking reference: 268, 481, 677, 862, 1056, 1267 MB); sizes 64/256 alternating: 97,
+246, 92, 242, 92, 246 MB; 12 bestmoves in each run. fastchess smoke, `hfix` against `hfix`, 2+0.02, `option.Hash=64`, `-l 5`,
+20 games, concurrency 2: 4 engine processes, each flat at 95 to 101 MB over the run (sampled every 3 s); 19 games ended normally,
+1 time forfeit (move 24, the engine spent 0.3 to 0.5 s on early moves of a 2 s game: time management at this time control,
+no setoption during a game).
 Interpretation history: 2026-11-17: the lab session read "the engine applies the first setoption and ignores the later ones (still
 working), no leak"; its test harness sent `go` without a time limit and never `stop`, so the engine was still searching when the
 next game began. Corrected the same day (S49).
