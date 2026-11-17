@@ -260,7 +260,7 @@ outside `nearmate` (>= 19745): the guards of `mbnd`, RFP and futility do not hol
 5 of the 8 lost games of S41 reach it before -20000). Open: align the two definitions (decision: it is an eval score, not a mate).
 Done (2026-11-16, `mbnd` 4708209, S47): the clamp is `evalMax` (19744) in `Eval/Core.hs`, `nearmate` and `isMating` are defined
 as beyond it (scores unchanged: the rounding brought the old clamp to the same value); with it review finding 4 (stalemate after
-pruning, cheap form). Screen (2026-11-16): `mbnd` against `chcm` on MEMO, 10+0.1, SPRT [-5, 0], run `mbnd-chcm-tc10`, when a slot
+pruning, cheap form). Screen (2026-11-16): `mbnd` against `chcm` on MEMO, 10+0.1, SPRT [-5, 0], run `mbnd-chcm-tc10`, started 2026-11-17 in the free slot
 is free. Prediction (before the result): -4 to +3, most likely -1; H1 much more likely (bug fixes in rare positions, small node
 changes; the mate guards cost about 1.7% nodes on roots-500, S43).
 
@@ -472,6 +472,9 @@ and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEM
   floor bring the long time control gain that cap 13 showed in its interim (+37 at 798 games, 192+3.2) while keeping level 15?
   1000 games show effects from about 15 Elo; smaller ones need the box's 2000. Prediction (before the result): -10 to +25, most
   likely +8 (about 5 below the first guess, by the method review).
+  Result (S48): +16.69 +- 15.54, LOS 98.3%, 1000 games: a clear win at 60+1 by the decision rule (LOS >= 95%); prediction right
+  (in the range, above the most likely value). Adopted if the 10+0.1 screen loses no more than about 10 (time control decision,
+  Methods); a box run of the floor is no longer needed.
 - Lim 6000 apart: H0 (expected) ends the single ramp steps at 10+0.1; a pass keeps 6000 and checks it at the long time control with
   the cap. Result: neither, +1.86 +- 3.50 after 20000 games (S36): no more ramp steps at 10+0.1; Lim 6000 stays a candidate for step
   A3 (the ramp speed at the long time control with the new cap).

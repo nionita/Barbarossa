@@ -1144,3 +1144,13 @@ Checks (deterministic perf build): perft of the 5 standard positions unchanged; 
 12292105 (c2378e8, -0.09%); 206 mate roots depth 10: 208800383 against 210389355 (-0.76%). The changes come from (1) only, by the
 rounding argument (not checked by a separate build). Smoke `mbnd` against `chcm` at 10+0.1, 16 games: all ended normally.
 Next: the [-5, 0] screen against `chcm` on MEMO (prediction in the register).
+
+**S48.** LMR depth floor at the long time control (2026-11-16/17). `lmfl` da23a27 `epLmrFlr=4` (`lf4`) against `lmfl` (floor off,
+same binary) on MEMO, 60+1, a fixed 1000 games (500 rounds), read once at the end, run `lmfl-f4-lmfl-tc60`, 16 MB hash.
+Prediction (register, before the result): -10 to +25, most likely +8.
+Result: +16.69 +- 15.54, nElo +23.2 +- 21.5, LOS 98.3%, +295 -247 =458 (52.4%), pentanomial [32, 98, 203, 124, 43]. Interim (trend
+only): +13.2 at 502 games. Prediction right, in the range and above the most likely value. By the time control decision the floor
+wins at 60+1 (LOS >= 95% at the planned number of games); it is kept if its 10+0.1 screen (`lmfl-f4-lmfl-tc10`, SPRT [-5, 0],
+running) loses no more than about 10. It keeps level 15 and lifts the confirmations at d1 >= 4 (S45): the gain cap 13 promised at
+the long time control without lowering the cap. Limits: one batch of openings, 16 MB hash, the error (+-15.5) still wide.
+Result in `C:\Learn\Data\results\memo\lmfl-f4-lmfl-tc60`.
