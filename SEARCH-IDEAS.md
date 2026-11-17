@@ -732,13 +732,13 @@ Forms: `fsrt` 696882e, `epQFilt=1`. 2026-11-01: non-regression SPRT [-5, 0] agai
 Now: checked against the code of `lmfl` (2026-11-17, `SPEED-IDEAS.md`): open are per-colour constant records, move generation directly
 into vectors, the move coding and generation pipeline (one-step move building first, special moves by a table of 208 entries) and
 information from earlier plies; three older ideas dropped with reasons. Speed work comes before a release (search unchanged, node
-counts identical); nothing measured. 2026-11-17: the one-step move building done on `spdg`, not merged; +5.5% nodes/s here,
+counts identical); nothing measured. 2026-11-17: the one-step move building done on `spdg`, merged (S51); +5.5% nodes/s here,
 +4.5% on MEMO (`PROFILING.md`, "Move generation without lists of pairs"); the others still open.
 
 ### Other speed candidates (status: open)
 Now: each small, `PROFILING.md` lists them: search state in mutable arrays by depth (user; half of the allocation is in the search itself), quiet generation
 without pairs, insertion sort for captures, pawn check in `genMovePromo`, lazy selection in `dirSort`. A realistic total of maybe 10-20% speed. 2026-10-31.
-2026-11-17: quiet generation without pairs, insertion sort for captures and the `genMovePromo` test done on `spdg`, not merged.
+2026-11-17: quiet generation without pairs, insertion sort for captures and the `genMovePromo` test done on `spdg`, merged (S51).
 Engine unchanged (12086912 nodes, perft), allocation -6.2%, +5.5% nodes/s on this PC (median of 7 pairs, +4.4% to
 +7.9%); MEMO +4.5% (7 pairs, +2.9% to +6.0%). Open: search state in mutable arrays, `dirSort`.
 

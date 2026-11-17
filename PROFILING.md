@@ -232,7 +232,7 @@ Measured with `scripts/speed_bench.ps1` (perf builds, alternating, the first of 
 ## Candidates, not tested
 
 By expected gain. Except 5 and 6 without changing the search (same node counts), so no games are needed. 2, 3 and 4: done
-on `spdg` (above), not merged; +5.5% here, +4.5% on MEMO.
+on `spdg` (above), merged into `rel090` (SEARCH-TUNING S51); +5.5% here, +4.5% on MEMO.
 
 1. Search state: counters and the small fields (`absdp`, `maxdp`, LMR counters) in a mutable unboxed array instead of
    a record copied at every change. Up to several percent of allocation per field group; the statistics alone gave 4.6%.

@@ -1183,3 +1183,9 @@ default 4, min 4 (the start size, unchanged). Checks on `hfix` (register block "
 tests.fen depth 10 as on `rel090`, perft unchanged; piped UCI test with 256 MB before each of 6 games: 273 to 289 MB, flat (the
 `sfen` build grew to 1267 MB); 64/256 alternating follows the size; fastchess smoke with `option.Hash=64`, 20 games: each engine
 flat at 95 to 101 MB. `-Hash` is usable for builds from `rel090` on; branches made before (e.g. `lmfl`) need the fix merged in.
+
+**S51.** Speed of the move generation, merged (2026-11-17). Branch `spdg` (a0a4575, 5c8afe4, 685161c), merged into `rel090`:
+moves built in one step from the bitboards (no lists of pairs), a quick test in `genMovePromo`, insertion sort of the capture
+keys in `genMoveCaptWL`. Engine unchanged: 12086912 nodes on tests.fen depth 10, 14 endgame positions 3445174, perft. Allocation
+-6.2% per node; nodes/s +5.5% on mini (median of 7 alternating pairs, +4.4% to +7.9%), +4.5% on MEMO (7 pairs, +2.9% to +6.0%).
+Details in `PROFILING.md` "Move generation without lists of pairs"; bench `scripts/speed_bench.ps1`. No games needed (same trees).
