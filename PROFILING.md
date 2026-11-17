@@ -186,9 +186,51 @@ the test for no valid moves and the best move of a fail low stay as they were), 
   gains only 0.5%. Whether the extra nodes are worth anything only games can tell.
 - Compare builds also against the parent build, not only by a parameter in one binary.
 
+## Move generation without lists of pairs (spdg)
+
+Branch `spdg` from `rel090` (2026-11-17), candidates 2, 4 and 3 below, one commit each, the engine unchanged after every
+step: perf build `tests.fen -d 10` 12086912 nodes, 14 endgame positions `-d 14` 3445174 nodes (a local set with promotions
+and en passant), perft on the 5 standard positions right.
+
+1. **Moves in one step** (`pieceMoves`, `pieceMovesFilt`, `pawnTargetMoves` in `Moves/Core.hs`): the tag colour + piece
+   once per piece type, each move `Move (tag .|. from<<6 .|. to)` directly from the bitboards, the next piece type as the
+   tail (no `++`). In `genMoveNCapt`, `genMoveNCaptDirCheck` (the SEE filter now on the squares), `defendAt`, the king
+   moves of `genMoveFCheck`, the pawn moves of `pawnBeatAt` / `pawnBlockAt`. Same order: from squares ascending, per from
+   square the to squares ascending, pawns one step then two steps.
+2. **`genMovePromo`**: first a test whether a pawn on the 7th rank has a free square in front, else `([], [])`.
+3. **`genMoveCaptWL`**: the capture keys (`LMove`, the move is part of the key) sorted by insertion into an unboxed
+   `STUArray` (`sortLMoves`), lists of 0 or 1 without the buffer, instead of `map f . Data.List.sort`. Same list.
+
+Core before (rel090): the outer `concatMap`, `map` and `++` were already fused, but per piece the destination squares
+were built as a list of boxed `I#`, every move element was a lazy thunk with `case c of` (the colour) inside, and the
+pawn moves went through a list of `(from, to)` tuples. After: no `I#`, no tuples, the colour case is outside the loops
+(one loop per colour); per move remain a cons cell, a `W16#` box and a thunk for the tail (the list is lazy). The
+insertion sort compiles to a worker `$wplaceLMove` on the unboxed buffer.
+
+Measured with `scripts/speed_bench.ps1` (perf builds, alternating, the first of a pair alternates). This PC, GHC 9.10.3:
+
+| Step | Bytes per node | Allocation | Nodes/s, median of the pairs | Spread (min, max) |
+|---|---|---|---|---|
+| rel090 | 6516 | | | |
+| 1 one step, against rel090 | 6231 | -4.4% | +3.0% (5 pairs) | +1.8%, +12.0% |
+| 2 promo test, against 1 | 6165 | -1.1% | +0.75% (5 pairs) | -9.2%, +1.7% |
+| 3 insertion sort, against 2 | 6113 | -0.8% | +3.2% (5 pairs) | +0.8%, +50.6% |
+| **spdg (1-3) against rel090** | **6113** | **-6.2%** | **+5.5% (7 pairs)** | **+4.4%, +7.9%** |
+
+- The step runs fell partly into throttling changes (the extreme pairs: one build at 400k nodes/s, the other at 600k); only
+  the total was measured in a quiet period (all 14 runs between 597k and 644k nodes/s). The steps are rough: by
+  allocation and the total, step 3 is rather +1.5 to 2% than +3%.
+- The total +5.5% is near the allocation saved (-6.2%) and more than the time shares of the changed functions would
+  suggest: less allocation also means fewer cache misses (see "Nursery size").
+- MEMO measurement pending (the same two exes and `tests.fen`).
+- For idea 2 of `SPEED-IDEAS.md` (generation into vectors): after step 1 a generated move still costs a cons, a `W16#`
+  and a tail thunk (about 5 words, 40 bytes, against about 250 bytes before), then it is copied into the sort vector.
+  Generating into the vector would save these and the copy, but the remaining gain is now smaller than estimated there.
+
 ## Candidates, not tested
 
-By expected gain. Except 5 and 6 without changing the search (same node counts), so no games are needed:
+By expected gain. Except 5 and 6 without changing the search (same node counts), so no games are needed. 2, 3 and 4: done
+on `spdg` (above), not merged; MEMO measurement pending.
 
 1. Search state: counters and the small fields (`absdp`, `maxdp`, LMR counters) in a mutable unboxed array instead of
    a record copied at every change. Up to several percent of allocation per field group; the statistics alone gave 4.6%.

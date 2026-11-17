@@ -17,6 +17,8 @@ timers, not with the GHC profiler (PROFILING.md).
    vector. Generating directly into a (mutable) unboxed vector would save the list allocations. Largest
    expected gain of this list, also the largest change (all generators in `Moves/Core.hs`). Idea 3 is the
    cheap first step.
+   Status (2026-11-17, `spdg`): after the one step building of idea 3 a generated move costs only a cons, a `W16#` and a
+   tail thunk (about 40 bytes, before about 250), so the remaining gain is smaller than expected; still open.
 
 3. **Move coding and the generation pipeline** (narrower look at the old "simple moves + table for the rest"
    idea). Where the cost really is:
@@ -30,6 +32,10 @@ timers, not with the GHC profiler (PROFILING.md).
      one step, `Move (tag .|. from<<6 .|. to)`, directly from the destination bitboard (no tuples, no
      second `map`). Check in GHC Core (`-ddump-simpl`) which lists are fused today, and measure
      allocation (`+RTS -s`) and nodes/second before and after.
+     Status: done on `spdg`, not merged; MEMO measurement pending. Engine unchanged, allocation -4.4%, +3.0% nodes/s
+     on this PC; with the `genMovePromo` test and the insertion sort of the captures +5.5% (PROFILING.md, "Move
+     generation without lists of pairs").
+   - The table for the special moves below: still open.
    - Keep colour and piece in normal moves: they are needed by the history address (`moveHisAdr`,
      `moveHisOfs`), `moveChecksDirect`, the threat classification and the legality check of TT and killer
      moves (protection against hash collisions); without them each would need a board lookup.
