@@ -216,13 +216,15 @@ Measured with `scripts/speed_bench.ps1` (perf builds, alternating, the first of 
 | 2 promo test, against 1 | 6165 | -1.1% | +0.75% (5 pairs) | -9.2%, +1.7% |
 | 3 insertion sort, against 2 | 6113 | -0.8% | +3.2% (5 pairs) | +0.8%, +50.6% |
 | **spdg (1-3) against rel090** | **6113** | **-6.2%** | **+5.5% (7 pairs)** | **+4.4%, +7.9%** |
+| spdg against rel090 on MEMO | | | +4.5% (7 pairs) | +2.9%, +6.0% |
 
 - The step runs fell partly into throttling changes (the extreme pairs: one build at 400k nodes/s, the other at 600k); only
   the total was measured in a quiet period (all 14 runs between 597k and 644k nodes/s). The steps are rough: by
   allocation and the total, step 3 is rather +1.5 to 2% than +3%.
 - The total +5.5% is near the allocation saved (-6.2%) and more than the time shares of the changed functions would
   suggest: less allocation also means fewer cache misses (see "Nursery size").
-- MEMO measurement pending (the same two exes and `tests.fen`).
+- MEMO (Ryzen 7 8700F, the same two exes and `tests.fen`, 2026-11-17): +4.5% nodes/s (median of 7 pairs, +2.9% to
+  +6.0%; ratios 1.049 1.057 1.060 1.045 1.029 1.032 1.031).
 - For idea 2 of `SPEED-IDEAS.md` (generation into vectors): after step 1 a generated move still costs a cons, a `W16#`
   and a tail thunk (about 5 words, 40 bytes, against about 250 bytes before), then it is copied into the sort vector.
   Generating into the vector would save these and the copy, but the remaining gain is now smaller than estimated there.
@@ -230,7 +232,7 @@ Measured with `scripts/speed_bench.ps1` (perf builds, alternating, the first of 
 ## Candidates, not tested
 
 By expected gain. Except 5 and 6 without changing the search (same node counts), so no games are needed. 2, 3 and 4: done
-on `spdg` (above), not merged; MEMO measurement pending.
+on `spdg` (above), not merged; +5.5% here, +4.5% on MEMO.
 
 1. Search state: counters and the small fields (`absdp`, `maxdp`, LMR counters) in a mutable unboxed array instead of
    a record copied at every change. Up to several percent of allocation per field group; the statistics alone gave 4.6%.

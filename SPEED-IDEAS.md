@@ -32,8 +32,8 @@ timers, not with the GHC profiler (PROFILING.md).
      one step, `Move (tag .|. from<<6 .|. to)`, directly from the destination bitboard (no tuples, no
      second `map`). Check in GHC Core (`-ddump-simpl`) which lists are fused today, and measure
      allocation (`+RTS -s`) and nodes/second before and after.
-     Status: done on `spdg`, not merged; MEMO measurement pending. Engine unchanged, allocation -4.4%, +3.0% nodes/s
-     on this PC; with the `genMovePromo` test and the insertion sort of the captures +5.5% (PROFILING.md, "Move
+     Status: done on `spdg`, not merged. Engine unchanged, allocation -4.4%, +3.0% nodes/s
+     on this PC; with the `genMovePromo` test and the insertion sort of the captures +5.5% (MEMO +4.5%; PROFILING.md, "Move
      generation without lists of pairs").
    - The table for the special moves below: still open.
    - Keep colour and piece in normal moves: they are needed by the history address (`moveHisAdr`,
