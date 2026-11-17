@@ -74,8 +74,8 @@ params = [
         -- moves level 15 reduces by k plies more)
         ("epLmrMax",           15),
         -- late move reduction: floor of the reduced depth in eighths of the remaining depth, d' >= max 1 (d * f / 8)
-        -- (0 = off, as before: d' >= 1; Search/LMR-DEPTH-BOUND.md)
-        ("epLmrFlr",            0),
+        -- (0 = off: d' >= 1; Search/LMR-DEPTH-BOUND.md); 4 since 2026-11-17 (SEARCH-TUNING S48, S52)
+        ("epLmrFlr",            4),
         -- drawishness scale of the whole eval (Eval.Core.normalParts), instead of the heuristic rules of
         -- scaleFactor when epScaleNew = 1 (default: compiled in, scale-c-lin, TUNING-HISTORY finding 37;
         -- epScaleNew = 0 is the old scaling); factors in 1/64 (64 = 1), fitted by hv_scale.py --constrained
