@@ -51,9 +51,12 @@ placebo when the method changes. Controls with known outcome: `epQThr=0` (threat
 - Depth matters by itself: caps, rescaling, aging, the LMR level act more in deep search (user).
 - Time controls (user, 2026-11-13; the user's machines repository, `MATCHES.md`): search changes are screened at 10+0.1 and decided
   at 60+1 (later 5m+1s) by a fixed number of games read once at the end (LOS >= 95%); changes acting with the time control (LMR ramp
-  and cap, S36-S38) need the long one. Eval changes stay short: long games let the search hide a weaker eval.
+  and cap, S36-S38) need the long one. Eval changes stay short: long games let the search hide a weaker eval. Rule (user,
+  2026-11-16, register Methods): a search setting that wins clearly at 60+1 and loses up to about 10 at 10+0.1 is kept, if no
+  better one is found with reasonable effort.
 - Timed SPRT on MEMO at 10+0.1 screens: `run_timed.ps1` (watchdog against the fastchess hang). `[0, 5]` for changes worth it, D3 M1 took 8
-  hours for a -9; `[0, 10]` needs about a quarter and may lose a +3; non-regression `[-5, 0]` when the aim is speed or allocation. Play against
+  hours for a -9; `[0, 10]` needs about a quarter and may lose a +3; non-regression `[-5, 0]` when the aim is speed, allocation or a bug fix (not `[-3, 2]`: passes a true 0 in only 64%, method
+  review). Give the bounds explicitly (`-Elo0`, `-Elo1`): the scripts default to `[0, 5]`. Play against
   the parent build when a parameter read could favour one side.
 - Prior experience (user): negative history and squared bonuses lost Elo each time.
 
