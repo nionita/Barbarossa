@@ -453,6 +453,14 @@ and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEM
   Outcome (2026-11-17, S40): C. Cap 17 -23.5 +- 11.0 (prediction -25, right), cap 13 +40.7 +- 10.9 (prediction 0, wrong), at
   10+0.1 cap 13 -9.1. Cap 13 qualifies under the time control decision as it is; still open before adopting: the floor on top
   of cap 13, and the bottom of the cap curve (12, 11) at the long time control.
+  Next box runs (2026-11-17, user's go): `lmfl` da23a27, one binary per run, 192+3.2, 16 MB hash, concurrency 8 (calibrated:
+  factor 3.2 stays), a fixed 2000 games each, read once at the end (LOS >= 95% to adopt).
+  1. m3a, `lmfl-m13f4-m13`: floor f = 4 on cap 13 (`epLmrMax=13,epLmrFlr=4`, `l13f`) against cap 13 (`epLmrMax=13`). Question:
+  does the floor add to cap 13? Prediction (before the result): -12 to +18, most likely +3 (both act on the same deep
+  reductions; cap 13 already reduces less, so less is left for the floor than its +16.7 at cap 15).
+  2. m3b, `lmfl-m12-m13`: cap 12 (`epLmrMax=12`, `lm12`) against cap 13. Question: is the bottom of the curve below 13?
+  Prediction (before the result): -15 to +20, most likely +3 (the steps were 23 and 41 Elo per 2 levels above 13, but a
+  curve that steep does not go on forever, and 12 already costs more at short time controls).
 - Depth bound design (Fable, 2026-11-15): `Search/LMR-DEPTH-BOUND.md`; for branch B and as the alternative to a lower cap in A. Form: a
   floor of the reduced depth, `d' = max dmin (d1 - r)`, `dmin = max 1 (d1 * f / 8)`, parameter `epLmrFlr` (0 = off), start f = 4 (largest
   reduction 2-3 at d1 4-6, 4-5 at d1 7-10: about level 13's mean reduction with level 15's width). Reading of S42 corrected: of the 90%
