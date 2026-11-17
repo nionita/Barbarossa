@@ -11,6 +11,9 @@ import Data.Array.Base (unsafeAt)
 import Data.Array.Unboxed
 import Data.Bits
 import Data.Int
+#ifdef LMR_CENSUS
+import qualified Data.IntMap.Strict as IM
+#endif
 import Data.List
 import Data.Maybe (fromMaybe)
 import Search.CStateMonad
@@ -50,26 +53,37 @@ maxKillers :: Int
 maxKillers = 3
 
 -- Parameters for late move reduction:
-lmrInitLv, lmrInitLim, lmrLevMin, lmrLevMax, lmrNoDepth :: Int
+lmrInitLv, lmrInitLim, lmrLevMin, lmrLevTop, lmrLevDef, lmrLevMax :: Int
 lmrInitLv  = 8
 lmrInitLim = 8500
 lmrLevMin  = 0
-lmrLevMax  = 15
-lmrNoDepth = 1
+lmrLevTop  = 15	-- highest level of the table formula (its first step is 1 move wide)
+lmrLevDef  = 15	-- default cap of the adaptive level (as before)
+lmrLevMax  = 19	-- levels above lmrLevTop: k more plies for the moves level lmrLevTop reduces
 
 -- The late move reduction is variable and regulated by the number of re-searches
 -- Lower levels (towards 0) means less reductions, higher - more
-lmrArr :: UArray (Int, Int) Int
-lmrArr = array ((lmrLevMin, 0), (lmrLevMax, 255))
-               [ ((l, i), varImp (fromIntegral (1+lmrLevMax-l)) (fromIntegral i))
-                    | l <- [lmrLevMin..lmrLevMax], i <- [0..255]]
+-- The table grows with the move number by the factor g (hundredths, 120 = 1.2)
+lmrTable :: Int -> UArray (Int, Int) Int
+lmrTable g = array ((lmrLevMin, 0), (lmrLevMax, 255))
+               [ ((l, i), red l i) | l <- [lmrLevMin..lmrLevMax], i <- [0..255]]
+    where gf = fromIntegral g / 100
+          red l i | l <= lmrLevTop = varImp gf (fromIntegral (1+lmrLevTop-l)) (fromIntegral i)
+                  | otherwise      = let r = red lmrLevTop i in if r > 0 then r + l - lmrLevTop else 0
 
 -- Here b == 1 is not good, too sharp
-varImp :: Double -> Double -> Int
-varImp lev w = round $ go 0 lev w
+varImp :: Double -> Double -> Double -> Int
+varImp gf lev w = round $ go 0 lev w
     where go :: Double -> Double -> Double -> Double
           go !lv !b !i | i <= b    = lv
-                       | otherwise = go (lv+1) (b*1.2) (i-b)
+                       | otherwise = go (lv+1) (b*gf) (i-b)
+
+-- Re-search penalty of the adaptive LMR by depth: base^d, base in tenths (20 = 2^d as before), capped against overflow
+lmrPenTable :: Int -> UArray Int Int
+lmrPenTable p = listArray (0, 63) [ penOf d | d <- [0..63::Int] ]
+    -- limited to 2^50 before the conversion to Int (overflow from about d = 40 for p = 30, 2^63 for d = 63)
+    where penOf d | p == 20   = 2^(min 50 d)
+                  | otherwise = floor (min (2^(50::Int)) ((fromIntegral p / 10 :: Double) ^ d))
 
 -- A fixed LMR level from the parameter epLmrFix: off when < 0, else a valid level
 lmrFixLevel :: Int -> Int
@@ -145,6 +159,12 @@ data PVStRO
           chw    :: !Int,	-- continuation history: weight in quarters
           rfutd  :: !Int,	-- reverse futility pruning: maximum depth (0 = off)
           lmrfx  :: !Int,	-- late move reduction: fixed level, < 0 = adaptive
+          lmrpv  :: !Int,	-- late move reduction: so many plies less in PV nodes
+          lmrtb  :: !(UArray (Int, Int) Int),	-- late move reduction: reductions by level and move number
+          lmrpn  :: !(UArray Int Int),	-- late move reduction: re-search penalty by depth (0 .. 63)
+          lmrnd  :: !Int,	-- late move reduction: none up to this depth
+          lmrmx  :: !Int,	-- late move reduction: highest level of the adaptive LMR
+          lmrfl  :: !Int,	-- late move reduction: floor of the reduced depth in eighths of the depth (0 = off)
           rfuta  :: !Int,	-- reverse futility pruning: constant margin (cp)
           rfutm  :: !Int,	-- reverse futility pruning: margin per depth (cp)
           rfutt  :: !Int	-- reverse futility pruning: extra margin with own pieces hanging (cp, 0 = off)
@@ -280,7 +300,9 @@ resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, r
 
 pvro00 :: PVStRO
 pvro00 = PVStRO { draft = 0, tuning = False, abpol = NoAbort, futmar = defaultFutMargins,
-                  cmv = False, chp = 0, chw = 4, lmrfx = -1, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
+                  cmv = False, chp = 0, chw = 4, lmrfx = -1, lmrpv = 0,
+                  lmrtb = lmrTable 120, lmrpn = lmrPenTable 20, lmrnd = 1,
+                  lmrmx = lmrLevDef, lmrfl = 0, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
 
 alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int, Int)
 alphaBeta abc = do
@@ -295,11 +317,18 @@ alphaBeta abc = do
                             abpol = abortPolicy abc, futmar = futMarginsOf (esEParams est),
                             cmv = epCMov (esEParams est) /= 0,
                             chp = epCHist (esEParams est), chw = epCHistW (esEParams est),
-                            lmrfx = lmrFixLevel (epLmrFix (esEParams est)),
+                            lmrfx = lmrFixLevel (epLmrFix (esEParams est)), lmrpv = epLmrPV (esEParams est),
+                            lmrtb = lmrTable (epLmrGrw (esEParams est)),
+                            lmrpn = lmrPenTable (epLmrPen (esEParams est)),
+                            lmrnd = max 1 $ epLmrNoD (esEParams est),	-- 0 would reduce d1 = 0 to 1
+                            lmrmx = max lmrLevMin $ min lmrLevMax $ epLmrMax (esEParams est),
+                            lmrfl = max 0 $ min 7 $ epLmrFlr (esEParams est),
                             rfutd = epRFutD (esEParams est), rfuta = epRFutA (esEParams est),
                             rfutm = epRFutM (esEParams est),
                             rfutt = epRFutT (esEParams est) }
-        pvs0 = pvsInit { ronly = pvro, lmrlv = if lmrfx pvro >= 0 then lmrfx pvro else lmrInitLv }	-- :: PVState
+        lv0 | lmrfx pvro >= 0 = lmrfx pvro
+            | otherwise       = max lmrLevMin $ min lmrLevMax $ epLmrIni (esEParams est)
+        pvs0 = pvsInit { ronly = pvro, lmrlv = lv0, lmrhi = epLmrLim (esEParams est) }	-- :: PVState
     -- We will get a result and a final state:
     (r, s) <- if useAspirWin
                  then case lastscore abc of
@@ -758,7 +787,7 @@ pvInnerLoopExten b d spec !exd nst = do
            -- Here we must be in a Cut node (will fail low)
            -- and we should have: crtnt = CutNode, nxtnt = AllNode
            old <- get
-           let d' = reduceLmr spec d1 (lmrlv old) (movno nst - spcno nst)
+           let d' = min d1 $ reduceLmr (ronly old) spec d1 (lmrlv old) (movno nst - spcno nst) + lmrpv (ronly old)
            !s1 <- zeroWithLMR d' d1 (-a) (a+scoreGrain) nst
            whenAbort s1 $
                if pathScore s1 <= a
@@ -774,16 +803,20 @@ pvInnerLoopExtenZ b d spec !exd nst = do
     old  <- get
     -- late move reduction
     let !d1 = d + exd - 1	-- this is the normal (unreduced) depth for next search
-        d' = reduceLmr spec d1 (lmrlv old) (movno nst - spcno nst)
+        d' = reduceLmr (ronly old) spec d1 (lmrlv old) (movno nst - spcno nst)
         !onemB = scoreGrain - b
     zeroWithLMR d' d1 onemB b nst
 
 zeroWithLMR :: Int -> Int -> Int -> Int -> NodeState -> Search Path
-zeroWithLMR !d' !d1 !onemB !b nst =
+zeroWithLMR !d' !d1 !onemB !b nst = do
+    lv0 <- censusLevel
     if d' == d1
        then do
            moreLMR True 1	-- more LMR
-           pnextlev <$> pvZeroW nst onemB d'
+           !sz <- pnextlev <$> pvZeroW nst onemB d'
+           whenAbort sz $ do
+               census lv0 d' d1 nst 0
+               return sz
        else do
            incRedu
            nds0 <- gets $ sNodes . stats
@@ -794,6 +827,7 @@ zeroWithLMR !d' !d1 !onemB !b nst =
                if pathScore sr < b
                   then do
                     moreLMR True 1	-- more LMR
+                    census lv0 d' d1 nst 1
                     return sr		-- failed low (as expected)
                   else do
                     -- was reduced and didn't fail low: re-search with full depth
@@ -804,7 +838,48 @@ zeroWithLMR !d' !d1 !onemB !b nst =
                     !sf <- pnextlev <$> pvZeroW nst1 onemB d1
                     whenAbort sf $ do
                         when (pathScore sf >= b) $ moreLMR False d1
+                        census lv0 d' d1 nst (if pathScore sf >= b then 3 else 2)
                         return sf
+
+-- LMR census (build flag lmrcensus, SelfPlay only; the search is unchanged): counts of the zero window searches
+-- of zeroWithLMR which were not aborted, by the level at the start, the remaining depth d1, the reduced depth d'
+-- and w = moves since the last capture. Key = kind * 10000 + level * 100 + a * 10 + b, level 0 for levels below 8:
+-- kind 1 (a = d1 class, b = d' class): reduced searches; kind 2, 3, 4 (a = d1 class, b = w class): reduced searches,
+-- of them failed high (re-search), of them confirmed by the re-search; kind 5 (a = d1 class, b = 0): searches not
+-- reduced; kind 6 (a = d1 class, b = 0): sum of the reductions d1 - d'.
+-- Classes: d1 2-3 (and less), 4-6, 7-10, 11+ (0..3); d' 1, 2, 3-6, 7+ (0..3); w 2 (and less), 3-5, 6-10, 11+ (0..3)
+censusLevel :: Search Int
+#ifdef LMR_CENSUS
+censusLevel = gets lmrlv
+#else
+censusLevel = return 0
+#endif
+
+census :: Int -> Int -> Int -> NodeState -> Int -> Search ()
+#ifdef LMR_CENSUS
+census lv d' d1 nst outc = modStat $ \s -> s { sLmrC = foldl' add (sLmrC s) ks }
+    where add m (k, n) = IM.insertWith (+) k n m
+          !lb = if lv < 8 then 0 else lv
+          !w  = movno nst - spcno nst
+          !c1 | d1 <= 3   = 0
+              | d1 <= 6   = 1
+              | d1 <= 10  = 2
+              | otherwise = 3
+          !cr | d' <= 1   = 0
+              | d' == 2   = 1
+              | d' <= 6   = 2
+              | otherwise = 3
+          !cw | w <= 2    = 0
+              | w <= 5    = 1
+              | w <= 10   = 2
+              | otherwise = 3
+          key kd a b = kd * 10000 + lb * 100 + a * 10 + b
+          ks | outc == 0 = [(key 5 c1 0, 1)]
+             | otherwise = [(key 1 c1 cr, 1), (key 2 c1 cw, 1), (key 6 c1 0, fromIntegral (d1 - d'))]
+                           ++ [ (key 3 c1 cw, 1) | outc >= 2 ] ++ [ (key 4 c1 cw, 1) | outc == 3 ]
+#else
+census _ _ _ _ _ = return ()
+#endif
 
 checkFailOrPVLoop :: Int -> Int -> Move -> Path -> NodeState -> Search NodeState
 checkFailOrPVLoop b d e s nst = whenAbort nst $ do
@@ -885,29 +960,39 @@ genAndPick !flt !nst mttmv !a !b !d = do
 -- With a variable lmrlev the reduction should stay in a region
 -- where the number of researches has an acceptable level
 {-# INLINE reduceLmr #-}
-reduceLmr :: Bool -> Int -> Int -> Int -> Int
-reduceLmr spec d lmrlev w
-    | spec || d <= lmrNoDepth = d
-    | otherwise               = max 1 $ d - lmrArr!(lmrlev, w)
+reduceLmr :: PVStRO -> Bool -> Int -> Int -> Int -> Int
+reduceLmr ro spec d lmrlev w
+    | spec || d <= lmrnd ro = d
+    | otherwise             = max dmin $ d - lmrtb ro ! (lmrlev, w)
+    where dmin = max 1 $ (d * lmrfl ro) `unsafeShiftR` 3
 
 -- Adjust the LMR related parameters in the state
 moreLMR :: Bool -> Int -> Search ()
 moreLMR more !d = do
     s <- get
     let !i  | more      = 1
-            | otherwise = - (1 `unsafeShiftL` d)
+            | otherwise = - (lmrpn (ronly s) ! min 63 d)
         !i1 = lmrrs s + i
     if lmrfx (ronly s) >= 0 then return () else
      if i1 < 0
        then if lmrlv s <= lmrLevMin
-               then put s { lmrhi = findir (lmrhi s), lmrrs = 0 }
-               else put s { lmrlv = lmrlv s - 1, lmrrs = 0 }
+               then change s s { lmrhi = findir (lmrhi s), lmrrs = 0 }
+               else change s s { lmrlv = lmrlv s - 1, lmrrs = 0 }
        else if i1 > lmrhi s
-               then if lmrlv s >= lmrLevMax
-                       then put s { lmrhi = fdir (lmrhi s), lmrrs = 0 }
-                       else put s { lmrlv = lmrlv s + 1, lmrrs = 0 }
+               then if lmrlv s >= lmrmx (ronly s)
+                       then change s s { lmrhi = fdir (lmrhi s), lmrrs = 0 }
+                       else change s s { lmrlv = lmrlv s + 1, lmrrs = 0 }
                else put s { lmrrs = i1 }
-    where fdir x = x `unsafeShiftL` 2
+    where change :: PVState -> PVState -> Search ()
+          change s0 s1 = do
+              put s1
+              -- trace of the adaptive level (log level info; rare: one step up needs lmrhi nodes)
+              lift $ logmes $ "LMR change: draft " ++ show (draft $ ronly s0)
+                  ++ " nodes " ++ show (sNodes $ stats s0) ++ " ply " ++ show (absdp s0)
+                  ++ " pen " ++ (if more then "0" else show d)
+                  ++ " lv " ++ show (lmrlv s0) ++ " " ++ show (lmrlv s1)
+                  ++ " hi " ++ show (lmrhi s0) ++ " " ++ show (lmrhi s1)
+          fdir x = x `unsafeShiftL` 2
           findir x = max 1 $ x `unsafeShiftR` 1
 
 -- This is a kind of monadic fold optimized for (beta) cut
