@@ -24,8 +24,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
 - Rejected in this form at 10+0.1: late move pruning D3 M1 C1 -7.6 (S28); root overflow fixes (S29); history in the LMR (S32); LMR level
   carried over -25.0 (S33); less LMR in three forms near -7 (S34); table growth 1.1 -0.35 (S35). Lim 6000 +1.86 +- 3.50 after 20000
   games, no decision (S36).
-- Hash: every match so far played with 4 MB, not 16; the engine fix of its hash option is done on `hfix`, not merged; `-Hash`
-  waits for the merge (block "Hash option of the engine", S49).
+- Hash: every match so far played with 4 MB, not 16; the engine fix of its hash option is in `rel090` (merged 2026-11-17,
+  S50); `-Hash` only for builds that contain it, older branches (e.g. `lmfl`) leak (block "Hash option of the engine").
 - Designs for later (2026-11-17, nothing built): `SPEED-IDEAS.md` (speed and simplification), `Search/TB-SYZYGY.md` (Syzygy probes),
   `Eval/KPK-BITBASE.md` (KPK bitbase); blocks below.
 - Plan for the LMR after the box runs: the branches A to D of 2026-11-15 in "LMR cap depending on the size of the search" (outcome C).
@@ -556,8 +556,8 @@ Measure: only with fastchess (UCI): SelfPlay never calls `posNewSearch`, the gen
 node limited games and perf node counts); a hash size that fills at the time control (4 MB does); the proposed rule directly against
 the current engine, at 10+0.1 and at a long time control. Not built.
 
-### Hash option of the engine (status: done, not merged)
-Now: both issues fixed on branch `hfix` (from `rel090`, 2026-11-17), not merged; engine play unchanged (same nodes, perft).
+### Hash option of the engine (status: done)
+Now: both issues fixed on branch `hfix`, merged into `rel090` 2026-11-17 (S50); engine play unchanged (same nodes, perft).
 (1) Start size: the engine starts with `newCache 1`, which the floor of 2^18 entries x 16 bytes makes 4 MB, but its UCI option
 list announced `Hash` default 16, minimum 16 (`guiUciOptions`, `Main/Barbarossa.hs`). All matches so far played with 4 MB (the
 records said 16). Fix on `hfix`: it announces what it does, `option name Hash type spin default 4 min 4 max 1024`; the start size

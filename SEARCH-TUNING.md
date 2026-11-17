@@ -1176,3 +1176,10 @@ sends `ucinewgame`, `isready`, `setoption name Hash value 64` before every game 
 each one and does not free the old table: piped UCI test, 4 games of 2 searches at 300 ms, `setoption Hash 256` before each game,
 all 4 applied ("Cache was set on 256 MB"), memory 261, 488, 725, 957 MB. Runs without `-Hash` are not affected (nothing is sent).
 `-Hash` is usable only when both engines free the old table (register "Hash option of the engine").
+
+**S50.** Fix of the hash option, merged (2026-11-17). Branch `hfix` 7bb0aee, merged into `rel090`: `setoption Hash` frees the old
+table (kept when the number of entries is unchanged, `resizeCache`), new tables are zeroed (`callocArray`), the UCI option announces
+default 4, min 4 (the start size, unchanged). Checks on `hfix` (register block "Hash option of the engine"): 12086912 nodes on
+tests.fen depth 10 as on `rel090`, perft unchanged; piped UCI test with 256 MB before each of 6 games: 273 to 289 MB, flat (the
+`sfen` build grew to 1267 MB); 64/256 alternating follows the size; fastchess smoke with `option.Hash=64`, 20 games: each engine
+flat at 95 to 101 MB. `-Hash` is usable for builds from `rel090` on; branches made before (e.g. `lmfl`) need the fix merged in.
