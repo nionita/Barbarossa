@@ -17,9 +17,10 @@ are not reviewed here. The user's experience: negative history and squared bonus
   screening gains arrive at the long time control.
 - LMR, the main line (blocks "Retune of the adaptive LMR" and "LMR cap depending on the size of the search"): at 192+3.2 (boxes, = 60+1)
   against cap 15: cap 13 +40.7 +- 10.9, cap 17 -23.5 +- 11.0 (2000 games each), cap 19 about -74 (283 games, stopped) (S40). Cap 13 at
-  10+0.1: -9.1, H0 [-5, 0]. Depth floor f = 4 at cap 15 (`lmfl`): +16.7 +- 15.5, LOS 98.3% at 60+1 (S48); its 10+0.1 screen is running.
+  10+0.1: -9.1, H0 [-5, 0]. Depth floor f = 4 at cap 15 (`lmfl`): +16.7 +- 15.5, LOS 98.3% at 60+1 (S48); at 10+0.1 +1.2 +- 3.5
+  after 20000 games (S52): it costs nothing in short games, it qualifies for adoption.
   Running on the boxes: floor on cap 13 against cap 13 (m3a) and cap 12 against cap 13 (m3b), 2000 games each, end about 2026-11-19.
-  Then the decision: cap 13, the floor or both, by the time control rule (Methods).
+  Then the decision: the floor at cap 15, or cap 13 with or without the floor, by the time control rule (Methods).
 - Mate bounds, stalemate after pruning, eval clamp (`mbnd`): [-5, 0] screen against `chcm` running on MEMO.
 - Rejected in this form at 10+0.1: late move pruning D3 M1 C1 -7.6 (S28); root overflow fixes (S29); history in the LMR (S32); LMR level
   carried over -25.0 (S33); less LMR in three forms near -7 (S34); table growth 1.1 -0.35 (S35). Lim 6000 +1.86 +- 3.50 after 20000
@@ -394,7 +395,7 @@ Now: evidence so far: the start and the ramp at 10+0.1 are near their optimum in
 it is measured at long time controls: cap 19 about -74 (S40); caps 13 and 17 running (2000 games each). A lower cap was never
 played at 10+0.1.
 2026-11-17 (supersedes the line above): cap 13 +40.7, cap 17 -23.5 at 192+3.2; cap 13 -9.1 at 10+0.1; floor f = 4 +16.7 at 60+1
-(S40, S48): outcome C of the plan below. Running: floor on cap 13 against cap 13, cap 12 against cap 13 (boxes, predictions at the
+(S40, S48); floor f = 4 +1.2 +- 3.5 at 10+0.1 (S52): outcome C of the plan below. Running: floor on cap 13 against cap 13, cap 12 against cap 13 (boxes, predictions at the
 end of the plan).
 First, before any encoding: if cap 13 holds at the long time control and is neutral at 10+0.1, a fixed cap serves both (it hardly
 binds in short games). An encoding is needed only if the best cap at short time controls is higher than at long ones.
@@ -498,6 +499,11 @@ and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEM
   Result (S48): +16.69 +- 15.54, LOS 98.3%, 1000 games: a clear win at 60+1 by the decision rule (LOS >= 95%); prediction right
   (in the range, above the most likely value). Adopted if the 10+0.1 screen loses no more than about 10 (time control decision,
   Methods); a box run of the floor is no longer needed.
+  Result of the screen (S52): +1.22 +- 3.51, LOS 75%, 20000 games; it ran SPRT [0, 5] instead of the planned [-5, 0] (started
+  without bounds) and ended undecided at the game cap (LLR -2.01). Prediction right (in the range, 2 above the most likely -1).
+  The 95% interval (-2.3, +4.7) excludes a loss of 5: the planned [-5, 0] would have passed. The floor at cap 15 qualifies under
+  the time control decision (+16.7 at 60+1, about 0 at 10+0.1), unlike cap 13 (-9.1 at 10+0.1). Not merged yet: the box runs
+  (floor on cap 13, cap 12) decide between the floor at cap 15 and cap 13 with or without it.
 - Lim 6000 apart: H0 (expected) ends the single ramp steps at 10+0.1; a pass keeps 6000 and checks it at the long time control with
   the cap. Result: neither, +1.86 +- 3.50 after 20000 games (S36): no more ramp steps at 10+0.1; Lim 6000 stays a candidate for step
   A3 (the ramp speed at the long time control with the new cap).

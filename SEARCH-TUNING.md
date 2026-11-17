@@ -1189,3 +1189,13 @@ moves built in one step from the bitboards (no lists of pairs), a quick test in 
 keys in `genMoveCaptWL`. Engine unchanged: 12086912 nodes on tests.fen depth 10, 14 endgame positions 3445174, perft. Allocation
 -6.2% per node; nodes/s +5.5% on mini (median of 7 alternating pairs, +4.4% to +7.9%), +4.5% on MEMO (7 pairs, +2.9% to +6.0%).
 Details in `PROFILING.md` "Move generation without lists of pairs"; bench `scripts/speed_bench.ps1`. No games needed (same trees).
+
+**S52.** LMR depth floor at the short time control (2026-11-15/17). `lmfl` da23a27 `epLmrFlr=4` (`lf4`) against `lmfl` (floor off,
+same binary) on MEMO, 10+0.1, 4 MB hash (the header says 16MB: old `run_timed` text, S49), run `lmfl-f4-lmfl-tc10`. Planned as
+SPRT [-5, 0], started without bounds, so it ran [0, 5] and ended undecided at the 20000 game cap.
+Prediction (register, before the result): -5 to +4, most likely -1.
+Result: +1.22 +- 3.51, nElo +1.67 +- 4.82, LOS 75.2%, +5772 -5702 =8526 (50.2%), pentanomial [701, 2407, 3770, 2365, 757],
+LLR -2.01 on [0, 5]. Interim (trend only): +4.55 at 11600 games. Prediction right. The floor costs nothing at 10+0.1 (95% interval
+-2.3 to +4.7; a [-5, 0] SPRT would have passed): with +16.7 at 60+1 (S48) it qualifies by the time control decision, unlike cap 13
+(-9.1 at 10+0.1, S40). Which form is adopted waits for the box runs (floor on cap 13, cap 12 against cap 13).
+Result in `C:\Learn\Data\results\memo\lmfl-f4-lmfl-tc10`.
