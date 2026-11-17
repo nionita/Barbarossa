@@ -134,7 +134,7 @@ Side effects:
 
 - Tuning unchanged: `posExactEval` (TuneSGD) does not use the specials.
 - The engine changes only where a search reaches KPK: the node counts of `tests.fen` most probably stay
-  12086912 (to check), those of the endgame set change; new references there.
+  12086912 (to check; 11367370 since the floor, S53), those of the endgame set change; new references there.
 - The self-play data generation changes in those games (better endgame play); record it with the round.
 
 ## 6. Checks (when implemented)

@@ -1199,3 +1199,11 @@ LLR -2.01 on [0, 5]. Interim (trend only): +4.55 at 11600 games. Prediction righ
 -2.3 to +4.7; a [-5, 0] SPRT would have passed): with +16.7 at 60+1 (S48) it qualifies by the time control decision, unlike cap 13
 (-9.1 at 10+0.1, S40). Which form is adopted waits for the box runs (floor on cap 13, cap 12 against cap 13).
 Result in `C:\Learn\Data\results\memo\lmfl-f4-lmfl-tc10`.
+
+**S53.** LMR depth floor adopted (2026-11-17, user's go). `lmfl` (da23a27) merged into `rel090`: the LMR parameters (`epLmrIni`,
+`epLmrLim`, `epLmrPV`, `epLmrGrw`, `epLmrPen`, `epLmrNoD`, `epLmrMax` up to 19), the level trace, the census build flag, the floor
+`epLmrFlr`, review findings 5 and 8. Conflicts only in the identity and in `Search/Core.hs` (`lmrFixLevel` came twice). Merge with the
+floor off: 12086912 nodes on tests.fen depth 10, perft right. Then `epLmrFlr = 4` compiled in (S48 +16.7 at 60+1, S52 +1.2 at
+10+0.1): new perf reference 11367370 nodes (-6.0%, as in S45), 12086912 with `-p epLmrFlr=0`. Cap stays 15; the box runs (floor on
+cap 13 against cap 13, cap 12 against cap 13, `lmfl` with explicit parameters) can still change it. Runs against the old base use
+`epLmrFlr=0` on the new build or an older binary.

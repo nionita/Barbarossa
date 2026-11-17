@@ -15,7 +15,7 @@ is; B is only worth it if a pure Haskell build is a goal in itself. The engine s
 a1 = 0 (as Fathom and Syzygy), separate piece bitboards (`rooks` without queens), side to move, 50 move counter,
 castle rights and the en passant square all in `MyPos`, the `Game` monad is IO based (`liftIO` already used).
 
-Off by default (no `SyzygyPath`): the engine stays unchanged, the perf node count (12086912) must not move.
+Off by default (no `SyzygyPath`): the engine stays unchanged, the perf node count (12086912; 11367370 since the floor, S53) must not move.
 
 ## 2. What a probe needs (both ways)
 
