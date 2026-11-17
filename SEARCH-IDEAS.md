@@ -628,13 +628,21 @@ score-drop rule. Second rule D, after A in its own run: on a clock above 60 incr
 target (`epTmDropIncs`; 4+1: 132 s more, 1 other move; 60+1: 3 moves, 14 s). Last-draft-only and two-draft confirmation act on
 `exte` only: little at 4+1 and they change 60+1, not recommended. Order: A, then D against A, then B.
 
-### Standard FEN from `posToFen` (status: open)
-Now: `posToFen` (`Moves/Notation.hs`) ends the board with a '/' (`extline` appends one after every rank) and always writes the full
-move number 1. SelfPlay and the engine accept it; python-chess and other tools do not (BarbarossaTuning `log_roots.py` strips it).
-Found 2026-11-15 in the 4+1 log. Fix: join the ranks with '/' (`intercalate`). Care: `posToFen` also writes the training data
-(SelfPlay `--data`, UCI `-d`) and the log lines `Origin` / `NoEval` read by `Tune/LogScan.hs` and the scripts: old and new files
-then differ in the FEN string, so a dedup or join by FEN over both needs a normalization. Not a search change (node counts equal).
-Next: when there is time (user), with a check of the readers of these files.
+### Standard FEN from `posToFen` (status: done, not merged)
+Was: `posToFen` (`Moves/Notation.hs`) ended the board with a '/' (`extline` appended one after every rank); python-chess and
+other tools reject that (BarbarossaTuning `log_roots.py` stripped it). Found 2026-11-15 in the 4+1 log.
+Done 2026-11-17 on branch `sfen` (from `rel090`): the ranks are joined with '/' (`intercalate`); the move number stays 1 (`MyPos`
+does not keep it, 1 is valid), the halfmove clock was already written. Old data and logs will not be reused (user decision), so
+the written files need not match old ones. Readers: the parser (`fenToAssocs`, `Moves/Core.hs`) stops at the end of the string or
+below a1 and takes both forms, no change; `Tune/LogScan.hs` `sameReplayFen` compares log FENs with fresh `posToFen` output and
+now drops a trailing '/' of the board (old logs still match); the other comparisons there are between log FENs of one engine.
+BarbarossaTuning: `log_roots.py`, `uci_data.py`, `sample_roots.py` strip the slash (now a no-op), the `hv_*` parsers walk the
+board char by char: no code change needed (only the comments about the trailing '/' updated).
+Checks: deterministic perf build, `SelfPlay -P -i tests/data/tests.fen -d 10`: 12086912 nodes before (rel090 + identity) and
+after; perft of the 5 standard positions: known counts; round trip parse -> `posToFen` -> parse on 1528 positions (tests.fen and
+the Origin root/leaf FENs of 2 old logs, 1479 with the old trailing '/'): same position (bitboards, ep/castle/50-move, zobrist,
+PST sums), no slash written, python-chess accepts all; a SelfPlay `--data` file (437 FENs) and a UCI `-d` file (239 FENs, 2 games)
+read by python-chess without a reject. Not a search change. Next: merge in the main session.
 
 ### Mistakes in lost games: tracing the refutation through the tree (status: open)
 Now: an idea and a method, nothing built. 2026-11-16 (user's idea, method discussed in the session).

@@ -9,6 +9,7 @@ module Moves.Notation (
 
 import Data.Bits
 import Data.Char (ord, chr, toLower)
+import Data.List (intercalate)
 
 import Struct.Struct
 import Moves.Core
@@ -408,15 +409,15 @@ colRowToSquare x y = y*8 + x
 posToFen :: MyPos -> String
 posToFen pos = unwords [lns, tmv, correct cast, ep, halb, rest]
     where lns :: String
-          lns = concat $ map (extline . foldl tra ("", 0))
+          lns = intercalate "/" $ map (extline . foldl tra ("", 0))
                        $ map (\s -> map (tabla pos) [s..s+7]) $ reverse [0, 8 .. 56]
           tra :: (String, Int) -> TabCont -> (String, Int)
           tra (s, n) Empty      = (s, n+1)
           tra (s, n) (Busy c f) = let zw = if n > 0 then show n else "" in (s ++ zw ++ trasq c f, 0)
           trasq White f = pcToCh True f
           trasq Black f = map toLower $ pcToCh True f
-          extline (s, 0) = s ++ "/"
-          extline (s, k) = s ++ show k ++ "/"
+          extline (s, 0) = s
+          extline (s, k) = s ++ show k
           tmv = if moving pos == White then "w" else "b"
           cast = [ckw, cqw, ckb, cqb]
           ckw = if castKingRookOk  pos White then 'K' else '-'
