@@ -200,13 +200,19 @@ pawnDestMoves !tag !delta = go
 
 -- Generate only non capture promotions
 -- The promotion captures are generated together with the other captures
+-- Nearly always no pawn can promote: a quick test first (a pawn on the 7th rank with a free square in front)
 genMovePromo :: MyPos -> ([Move], [Move])
-genMovePromo !p = (toQueen, toRook ++ toBishop ++ toKnight)
-    where toQueen  = map (uncurry (makePromo Queen))  ftlist
+genMovePromo !p
+    | canPromo  = (toQueen, toRook ++ toBishop ++ toKnight)
+    | otherwise = ([], [])
+    where !mypws = pawns p .&. me p
+          !canPromo | moving p == White = (mypws .&. row7) `unsafeShiftL` 8 .&. complement (occup p) /= 0
+                    | otherwise         = (mypws .&. row2) `unsafeShiftR` 8 .&. complement (occup p) /= 0
+          toQueen  = map (uncurry (makePromo Queen))  ftlist
           toRook   = map (uncurry (makePromo Rook))   ftlist
           toBishop = map (uncurry (makePromo Bishop)) ftlist
           toKnight = map (uncurry (makePromo Knight)) ftlist
-          ftlist   = targetPawnMoves (moving p) (pawns p .&. me p) (occup p) promoline
+          ftlist   = targetPawnMoves (moving p) mypws (occup p) promoline
           !promoline | moving p == White = row8
                      | otherwise         = row1
 
