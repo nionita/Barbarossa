@@ -918,6 +918,20 @@ changes the ramp's earlier course (the level reaches the cap sooner, less room t
 are the important ones. A fixed lower cap is out as the one setting for all time controls (branch C of the plan if cap 13 gains at
 the long time control); the depth floor (S45), which keeps level 15, is the form to try first. Result in
 `C:\Learn\Data\results\memo\lmrm-m13-lmrm-tc10b`.
+Results of the two caps at 192+3.2 (2026-11-17, 2000 games each, 16 MB hash, read once at the end; about 72 hours each at
+concurrency 6):
+- Cap 17 (m3a, `lmrm-m17-lmrm-tc60`): -23.49 +- 10.96, nElo -32.7 +- 15.2, LOS 0.00%, +485 -620 =895 (46.6%), pentanomial
+  [91, 266, 381, 211, 51]. Prediction (-25, range -45 to -5) right.
+- Cap 13 (m3b, `lmrm-m13-lmrm-tc60`): +40.66 +- 10.85, nElo +57.6 +- 15.2, LOS 100%, +631 -398 =971 (55.8%), pentanomial
+  [41, 182, 379, 299, 99]. Prediction (0, range -15 to +15) wrong, far too low (the interim of +36.7 at 798 games was not used
+  for it, the prediction was written before).
+Reading: the level curve at the long time control falls steeply from 13 over 15 (-41) to 17 (-64) and 19 (about -115, stopped):
+about 20 to 30 Elo per level step of 2, and no flattening seen below 15. At 10+0.1 cap 13 costs 9 (above): the time control
+dependence of branch C of the plan, not A. By the time control decision (Methods) cap 13 could be kept as it is (wins clearly at
+the long time control, loses less than 10 at the short one). The floor f = 4 at cap 15 (S48: +16.7 at 60+1 on MEMO, the short
+screen running near +4.6) gets less at the long time control but nothing lost at the short one; the two are measured on
+different machines and hash loads, so the comparison is rough. Open: does the floor add to cap 13, and where is the bottom of
+the cap curve. Results in `C:\Learn\Data\results\m3a\lmrm-m17-lmrm-tc60` and `C:\Learn\Data\results\m3b\lmrm-m13-lmrm-tc60`.
 
 **S41.** Time use in games against other engines (2026-11-14): the Barbarossa log of an online tournament (ICS through WinBoard,
 engine `0.8.0 w5`, hash 68 MB from WinBoard, one engine process for all games), 13 games of which 12 played (one ended after one

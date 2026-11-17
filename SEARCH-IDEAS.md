@@ -20,7 +20,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
 - History in the LMR on `chcm`: G24 B1 -3.6 +- 6.3, G24 alone -9.9 +- 9.0, B1 alone -2.6 +- 5.7, all H0 (S32).
 - LMR level carried over between iterations: -25.0 +- 13.3, H0 (S33): the restart at level 8 is worth much.
 - Less LMR in three forms, all H0 near -7: start level 6 -8.1, PV 1 -6.7 (MEMO), limit 17000 -6.7 (m3a) (S34).
-- LMR cap 19 at 60+1 (m3b, 192+3.2): about -74 after 283 games, stopped (S40). Running: cap 13 on m3b, cap 17 on m3a, 2000 games each.
+- LMR cap at 60+1 (boxes, 192+3.2), against cap 15: cap 19 about -74 after 283 games, stopped; cap 17 -23.5 +- 11.0; cap 13
+  +40.7 +- 10.9, 2000 games each (S40). Cap 13 at 10+0.1: -9.1, H0 [-5, 0]. Floor f = 4 at cap 15: +16.7 +- 15.5 at 60+1 (S48).
 - LMR table growth 1.1 (Grw 110): -0.35 +- 4.30, H0 after 13964 games (S35). Lim 6000 (faster ramp): +1.86 +- 3.50 after 20000 games, no
   decision (S36). `chcm` against `dev090` at 60+1: +82.5 +- 16.0, 1000 games (S46): the short screening gains arrive at the long
   time control.
@@ -449,6 +450,9 @@ and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEM
 - D (unexpected): cap 17 neutral or better, or both caps far from their interims. The long results are not trusted as they stand:
   1. validate a box by a replay of a known result (`lmrc`, -25, 600 games); 2. one cap again with a large hash (effect of the 16 MB
   load).
+  Outcome (2026-11-17, S40): C. Cap 17 -23.5 +- 11.0 (prediction -25, right), cap 13 +40.7 +- 10.9 (prediction 0, wrong), at
+  10+0.1 cap 13 -9.1. Cap 13 qualifies under the time control decision as it is; still open before adopting: the floor on top
+  of cap 13, and the bottom of the cap curve (12, 11) at the long time control.
 - Depth bound design (Fable, 2026-11-15): `Search/LMR-DEPTH-BOUND.md`; for branch B and as the alternative to a lower cap in A. Form: a
   floor of the reduced depth, `d' = max dmin (d1 - r)`, `dmin = max 1 (d1 * f / 8)`, parameter `epLmrFlr` (0 = off), start f = 4 (largest
   reduction 2-3 at d1 4-6, 4-5 at d1 7-10: about level 13's mean reduction with level 15's width). Reading of S42 corrected: of the 90%
