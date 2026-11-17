@@ -260,8 +260,8 @@ outside `nearmate` (>= 19745): the guards of `mbnd`, RFP and futility do not hol
 5 of the 8 lost games of S41 reach it before -20000). Open: align the two definitions (decision: it is an eval score, not a mate).
 Done (2026-11-16, `mbnd` 4708209, S47): the clamp is `evalMax` (19744) in `Eval/Core.hs`, `nearmate` and `isMating` are defined
 as beyond it (scores unchanged: the rounding brought the old clamp to the same value); with it review finding 4 (stalemate after
-pruning, cheap form). Screen (2026-11-16): `mbnd` against `chcm` on MEMO, 10+0.1, SPRT [-5, 0], run `mbnd-chcm-tc10`, started 2026-11-17 in the free slot
-is free. Prediction (before the result): -4 to +3, most likely -1; H1 much more likely (bug fixes in rare positions, small node
+pruning, cheap form). Screen (2026-11-16): `mbnd` against `chcm` on MEMO, 10+0.1, SPRT [-5, 0], run `mbnd-chcm-tc10b`, started 2026-11-17 (a first start
+without the bounds ran [0, 5] and was stopped at once). Prediction (before the result): -4 to +3, most likely -1; H1 much more likely (bug fixes in rare positions, small node
 changes; the mate guards cost about 1.7% nodes on roots-500, S43).
 
 ### Late move pruning (status: rejected in this form)
