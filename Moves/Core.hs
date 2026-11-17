@@ -12,7 +12,9 @@ module Moves.Core (
     module Moves.Internal.Pattern,
     module Moves.Internal.Moves
 ) where
-import Data.Array.Base (unsafeAt)
+import Control.Monad.ST (ST, runST)
+import Data.Array.Base (unsafeAt, unsafeRead, unsafeWrite)
+import Data.Array.ST (STUArray, newArray_)
 import qualified Data.Array.Unboxed as A
 import Data.Bits
 import Data.Char
@@ -1034,7 +1036,7 @@ seeMoveValue !pos !attacks !sqfirstmv !sqto !gain0 = v
 
 -- This function can produce illegal captures with the king!
 genMoveCaptWL :: MyPos -> ([Move], [Move])
-genMoveCaptWL !pos = (map f $ sort ws, map f $ sort ls)
+genMoveCaptWL !pos = (sortLMoves f ws, sortLMoves f ls)
     where !capts = myAttacs pos .&. yo pos
           epcs  = genEPCapts pos
           c     = moving pos
@@ -1043,6 +1045,41 @@ genMoveCaptWL !pos = (map f $ sort ws, map f $ sort ls)
           f = moveAddColor c . lmoveToMove
 
 type LMove = Word32
+
+-- Ascending sort of the (few) capture keys by insertion into an unboxed buffer, f applied to every element of
+-- the result: the same list as map f . sort (the keys contain the move, equal keys are equal moves)
+sortLMoves :: (LMove -> Move) -> [LMove] -> [Move]
+sortLMoves _ []  = []
+sortLMoves f [x] = [f x]
+sortLMoves f xs  = runST $ do
+    let !n = length xs
+    arr <- newArray_ (0, n - 1)
+    insLMoves arr 0 xs
+    outLMoves f arr (n - 1) []
+
+-- Insert the keys one by one into the sorted prefix of the buffer (i: its length)
+insLMoves :: STUArray s Int LMove -> Int -> [LMove] -> ST s ()
+insLMoves _   !_ []     = return ()
+insLMoves arr !i (y:ys) = placeLMove arr y i >> insLMoves arr (i + 1) ys
+
+-- Shift the greater keys of the prefix up by one and put y in the gap (j: the first free index)
+placeLMove :: STUArray s Int LMove -> LMove -> Int -> ST s ()
+placeLMove arr !y !j
+    | j > 0 = do
+        z <- unsafeRead arr (j - 1)
+        if z > y
+           then unsafeWrite arr j z >> placeLMove arr y (j - 1)
+           else unsafeWrite arr j y
+    | otherwise = unsafeWrite arr 0 y
+
+-- The moves of the buffer up to index i, in ascending order, in front of acc
+outLMoves :: (LMove -> Move) -> STUArray s Int LMove -> Int -> [Move] -> ST s [Move]
+outLMoves f arr !i acc
+    | i < 0     = return acc
+    | otherwise = do
+        z <- unsafeRead arr i
+        let !m = f z
+        outLMoves f arr (i - 1) (m : acc)
 
 -- We want to sort MVVLVA, which means first victim, then attacker
 -- Victim is "negate" so that the normal sort will pick higher victims first
