@@ -506,6 +506,13 @@ and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEM
   the time control decision (+16.7 at 60+1, about 0 at 10+0.1), unlike cap 13 (-9.1 at 10+0.1). Not merged yet: the box runs
   (floor on cap 13, cap 12) decide between the floor at cap 15 and cap 13 with or without it.
   2026-11-17 (user): merged now, `epLmrFlr = 4` compiled in at cap 15 (S53); the box runs can still change the cap.
+  Confirmation at the long time control (2026-11-17, user): `r90a` (frozen `rel090` cf00634, identity commit 771f656: `chcm` +
+  floor f = 4 + the `spdg` speed, +4.5% nodes/s) against `chcm` on MEMO, 60+1, a fixed 500 games (250 rounds), openings from
+  start 1001 (disjoint from the 500 openings of `lmfl-f4-lmfl-tc60`: `order=random` uses the same fastchess seed every run),
+  read once at the end, run `r90a-chcm-tc60`. Questions: is `rel090` better than `chcm` at 60+1, and by how much? Pooled
+  with the 1000 games of S48 (floor alone) the 1500 games estimate the gain conservatively for `r90a` (S48 lacks the speed),
+  but S48 is the batch that led to the adoption (selection bias upwards). Prediction (before the result): -10 to +35, most
+  likely +12 (floor about +8 to +10 after the regression of S48, speed +2 to +4); 500 games alone +- about 22.
 - Lim 6000 apart: H0 (expected) ends the single ramp steps at 10+0.1; a pass keeps 6000 and checks it at the long time control with
   the cap. Result: neither, +1.86 +- 3.50 after 20000 games (S36): no more ramp steps at 10+0.1; Lim 6000 stays a candidate for step
   A3 (the ramp speed at the long time control with the new cap).
