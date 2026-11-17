@@ -1,5 +1,8 @@
 # A depth bound for the LMR (2026-11-15, design only)
 
+State (2026-11-17): built as `epLmrFlr` on `lmfl` (S45); f = 4 at cap 15: +16.7 +- 15.5 at 60+1 (S48), the 10+0.1 screen running; the
+final cap results (192+3.2, 2000 games): cap 13 +40.7, cap 17 -23.5 (S40). Running: the floor on cap 13 (register).
+
 Read only: `Search/Core.hs` on `lmcs` 9b76970, `Search/LMR-CAP-REVIEW.md`, S36 to S44 and the LMR entries of the register (`rel090`),
 `TIME-MATE-EXTENSION-REVIEW.md`, the census file `census-fix-d12.txt` (S42). Nothing built or run. "Inference" marks what is
 concluded, not measured; the interim match values (cap 13 +37, 17 -24, 19 about -74) are trends, not results.

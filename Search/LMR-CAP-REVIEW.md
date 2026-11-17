@@ -1,5 +1,8 @@
 # LMR cap review: why cap 19 searches deeper and loses (2026-11-15)
 
+State (2026-11-17): M3 done (census, S42); final cap results at 192+3.2, 2000 games: cap 13 +40.7, cap 17 -23.5 (S40); the depth
+bound of this review is built as the floor `epLmrFlr` (S45, S48). Current state: register.
+
 Basis: `Search/Core.hs` on `lmrm` e908bd8; S36 to S40 in `SEARCH-TUNING.md` and the register entries "Retune of the adaptive LMR after
 ordering changes" and "LMR cap depending on the size of the search" in `SEARCH-IDEAS.md` (`rel090`). Everything below is read from the code
 and the recorded results; nothing was run except the reduction table. Statements about the cause are inferences, marked as such.

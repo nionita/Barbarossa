@@ -10,22 +10,23 @@ the idea. Elo from the candidate's side with 95% error bars. "Adopted" means in 
 Older branches (before 0.8.0, e.g. `lmrfix`, `lmrfix14`, `hlmr`, `slmr`, `ttlmr`, `hiss`, `mpru`) hold earlier tries of some of these ideas; they
 are not reviewed here. The user's experience: negative history and squared bonuses lost Elo each time.
 
-## Now (2026-11-01)
+## Now (2026-11-17)
 
-- Current base: `chcm` (S26) = `fbas` + counter moves + continuation history, +22.5 +- 8.0 against `expo` (S27, 4000 games). `fbas` (S24) = `expo` (`nmlm` with cleanups,
-  +13.0 vs `hprf`) + filter + T100.
-- Continuation history on top of counter moves passed: +10.5 +- 7.2 (S25); counter moves alone +1.5 +- 6.8, stopped (S26). Both compiled in `chcm`.
-- Late move pruning D3 M1 C1 on `chcm`: -7.6 +- 8.1, H0 (S28).
-- Root overflow fix on `chcm`: root as depth 1 -4.1 +- 6.5, H0; no root update -3.4 +- 8.7, stopped; neither is neutral, overflow kept (S29).
-- History in the LMR on `chcm`: G24 B1 -3.6 +- 6.3, G24 alone -9.9 +- 9.0, B1 alone -2.6 +- 5.7, all H0 (S32).
-- LMR level carried over between iterations: -25.0 +- 13.3, H0 (S33): the restart at level 8 is worth much.
-- Less LMR in three forms, all H0 near -7: start level 6 -8.1, PV 1 -6.7 (MEMO), limit 17000 -6.7 (m3a) (S34).
-- LMR cap at 60+1 (boxes, 192+3.2), against cap 15: cap 19 about -74 after 283 games, stopped; cap 17 -23.5 +- 11.0; cap 13
-  +40.7 +- 10.9, 2000 games each (S40). Cap 13 at 10+0.1: -9.1, H0 [-5, 0]. Floor f = 4 at cap 15: +16.7 +- 15.5 at 60+1 (S48).
-- LMR table growth 1.1 (Grw 110): -0.35 +- 4.30, H0 after 13964 games (S35). Lim 6000 (faster ramp): +1.86 +- 3.50 after 20000 games, no
-  decision (S36). `chcm` against `dev090` at 60+1: +82.5 +- 16.0, 1000 games (S46): the short screening gains arrive at the long
-  time control.
-- Plan for the LMR after these runs (branches A to D by the outcome): "LMR cap depending on the size of the search", end of the block.
+- Base: `chcm` (S26) = `fbas` + counter moves + continuation history, +22.5 +- 8.0 against `expo` (S27, 4000 games). `fbas` (S24) = `expo`
+  (`nmlm` with cleanups, +13.0 vs `hprf`) + filter + T100. At 60+1 `chcm` against `dev090` +82.5 +- 16.0, 1000 games (S46): the short
+  screening gains arrive at the long time control.
+- LMR, the main line (blocks "Retune of the adaptive LMR" and "LMR cap depending on the size of the search"): at 192+3.2 (boxes, = 60+1)
+  against cap 15: cap 13 +40.7 +- 10.9, cap 17 -23.5 +- 11.0 (2000 games each), cap 19 about -74 (283 games, stopped) (S40). Cap 13 at
+  10+0.1: -9.1, H0 [-5, 0]. Depth floor f = 4 at cap 15 (`lmfl`): +16.7 +- 15.5, LOS 98.3% at 60+1 (S48); its 10+0.1 screen is running.
+  Running on the boxes: floor on cap 13 against cap 13 (m3a) and cap 12 against cap 13 (m3b), 2000 games each, end about 2026-11-19.
+  Then the decision: cap 13, the floor or both, by the time control rule (Methods).
+- Mate bounds, stalemate after pruning, eval clamp (`mbnd`): [-5, 0] screen against `chcm` running on MEMO.
+- Rejected in this form at 10+0.1: late move pruning D3 M1 C1 -7.6 (S28); root overflow fixes (S29); history in the LMR (S32); LMR level
+  carried over -25.0 (S33); less LMR in three forms near -7 (S34); table growth 1.1 -0.35 (S35). Lim 6000 +1.86 +- 3.50 after 20000
+  games, no decision (S36).
+- Designs for later (2026-11-17, nothing built): `SPEED-IDEAS.md` (speed and simplification), `Search/TB-SYZYGY.md` (Syzygy probes),
+  `Eval/KPK-BITBASE.md` (KPK bitbase); blocks below.
+- Plan for the LMR after the box runs: the branches A to D of 2026-11-15 in "LMR cap depending on the size of the search" (outcome C).
 
 ## Methods
 
@@ -63,7 +64,8 @@ there. Online tournaments give diagnostics (time use, real opponents, as S41), n
 | Overlap of the top 1% roots | anomalies | useful | 79% with the guard, 9-12% without | S13 |
 | 10k-node games | large effects, pruning | limited | depth 4-5 only; threat sort +3.5 against +10.8; agreed on RFP | S3, S5, S8 |
 | 1000 games, one batch of openings | anything | too weak | +18.8 then -6.3 | S18 |
-| Timed SPRT on MEMO, 10+0.1 | strength | decides | still shallower than rating list time controls | |
+| Timed SPRT on MEMO, 10+0.1 | strength | screens | search changes: decided at 60+1 since 2026-11-16 (time control decision above); eval changes: decides | |
+| Fixed matches at 60+1 (MEMO) or 192+3.2 (boxes), read once at the end | strength, search | decides | LOS >= 95% at the planned games; 1000 games show about 15 Elo, 2000 about 10 | S40, S46, S48 |
 | GHC profiler | time shares | counts only | 3x slower, sort 30% against 7% | S16, `PROFILING.md` |
 | Direct timers in the optimized build | time, allocation | current | | `PROFILING.md` |
 
@@ -241,7 +243,7 @@ Next: build, 10k-node games (pruning shows there), then SPRT.
 ### RFP: cut more when an opponent piece hangs (status: open)
 Now: wrong rate 0.3x (S13). User: only after the RFP SPRTs. 2026-10-31.
 
-### Null move and QS delta cut at a mate bound (status: promising)
+### Null move and QS delta cut at a mate bound (status: running)
 Now: bugs found by reading the code (review 2026-11-15, `Search/SEARCH-REVIEW-BUGS.md` findings 2 and 9), not measured. Mate scores
 carry no distance, so windows at the mate bounds are frequent: a node whose moves so far are mated searches the next ones with
 (-20000, -19996), its grandchildren have b = -19996. (1) `nullMoveFailsHigh` has no `nearmate b` guard (RFP and futility have one):
@@ -306,7 +308,7 @@ Evidence:
 |---|---|---|---|---|---|
 | 11-13 | Carry 1 on `chcm` | SPRT [0, 5], 10+0.1, 1366 games | -24.97 +- 13.28, H0 | S33 | the restart at level 8 is worth about 25 Elo; prediction (-1) right in direction only |
 
-### Lower LMR start level, less LMR in PV nodes (status: running)
+### Lower LMR start level, less LMR in PV nodes (status: parked)
 Now: from S33 (carrying the level over -25), S13 (fixed 11 -8.6, 14 -36.4) and S32 (G24 -9.9): every change that raises the reduction where an
 iteration starts loses. The other direction was never tried: each iteration starts lower than 8 (`lmrInitLv` 6, 7) or the level climbs slower
 (`lmrInitLim` higher); or one ply less reduction in PV nodes (now the same table for PV and zero window). 2026-11-13.
@@ -331,6 +333,7 @@ and reduces the zero window nodes more (inference, not measured). Measured only 
 only as one ply less for every late move. Later forms: PV 1 at the long time control; PV reductions kept out of the level credit
 (`moreLMR` only from zero window nodes) with and without PV 1; gentler forms (only at larger remaining depth). After the floor
 and the cap are decided.
+2026-11-17: all three runs ended H0 (table); parked, the PV 1 second chance after the floor and the cap.
 
 ### LMR: mate escape (status: open)
 Idea (user, 2026-11-11): less or no LMR in nodes where alpha is a "being mated" score for the side to move (alpha <= -mate threshold): all
@@ -341,7 +344,9 @@ Forms: only the losing side (not +-mate); one ply less reduction instead of none
 Measure: not by node totals. A mate-escape test set, compare the time or depth to the correct escape; then an SPRT against the current base
 with no-loss bounds [-3, 2] (a gain from rare escapes will hardly show). Not built, for later.
 
-### Retune of the adaptive LMR after ordering changes (status: running)
+### Retune of the adaptive LMR after ordering changes (status: parked)
+2026-11-17: Grw 110 H0, Pen 15 stopped, Lim 6000 no decision at 10+0.1; the cap moved on to the block "LMR cap depending on the size
+of the search" (results there); the speed of the ramp at the long time control (Lim) is step A3 of that plan, after the cap.
 Now: user's point: the adaptive parameters (`lmrInitLim`, weight 2^d of a re-search) were set for the old ordering. No data. 2026-10-31.
 2026-11-13: the start level is a local optimum (S33 higher -25, S34 lower -8.1); the other constants are now parameters, tuned one at a time.
 Forms: `lmrb` 5092839: `epLmrIni` (8), `epLmrLim` (8500), `epLmrPV` (0); `lmrt` dea4035: `epLmrGrw` (120), `epLmrPen` (20), `epLmrNoD` (1).
@@ -376,7 +381,7 @@ Prediction (2026-11-14, before the results): cap 17 -45 to -5, most likely -25; 
 S39: in games the endgame runs at lower levels at equal draft (10+0.1, d13+: 10.0 against 12-13), not in searches from scratch: the phase
 reaches the level through the iteration size (TT, time), not by itself. A depth ramp would need the phase or the move count to keep it.
 
-### LMR cap depending on the size of the search (status: open)
+### LMR cap depending on the size of the search (status: running)
 Idea (user, 2026-11-14): the mechanism of the adaptive LMR: every iteration starts at level 8 and collects the important moves
 (history), then the level rises and the less promising moves are searched less hard (corrected only by re-searches). Two
 questions: how high (the cap) and how fast (Lim). The time control acts together with the LMR, so the cap may need a measure of
@@ -385,6 +390,9 @@ Now: evidence so far: the start and the ramp at 10+0.1 are near their optimum in
 -25, Lim 17000 -6.7; Lim 6000 running). The cap binds only in large iterations (S37: 2.7% of the nodes at 0.5 s per move), so
 it is measured at long time controls: cap 19 about -74 (S40); caps 13 and 17 running (2000 games each). A lower cap was never
 played at 10+0.1.
+2026-11-17 (supersedes the line above): cap 13 +40.7, cap 17 -23.5 at 192+3.2; cap 13 -9.1 at 10+0.1; floor f = 4 +16.7 at 60+1
+(S40, S48): outcome C of the plan below. Running: floor on cap 13 against cap 13, cap 12 against cap 13 (boxes, predictions at the
+end of the plan).
 First, before any encoding: if cap 13 holds at the long time control and is neutral at 10+0.1, a fixed cap serves both (it hardly
 binds in short games). An encoding is needed only if the best cap at short time controls is higher than at long ones.
 Measure: cap 13 at 10+0.1 (SPRT with no-loss bounds, e.g. [-3, 2]); cap 11 or 12 at 192+3.2 to find the bottom; the speed of
@@ -657,6 +665,11 @@ Method:
    and the long match, and a solve rate is not Elo.
 Next: after the LMR decisions. First the probe (3); then 3 or 4 lost games through 1 to 3, to see what kind of positions come out.
 
+### Syzygy tablebase probes (status: open)
+Now: design only (2026-11-17, `Search/TB-SYZYGY.md`): WDL in the tree, DTZ at the root; Fathom (C, MIT) by FFI recommended over a Haskell
+port (2-4 days against 3-5 weeks); off by default, so the engine stays unchanged without `SyzygyPath`. Not built. For after the search
+work; a match needs the tables on every match machine.
+
 ### Threaded search (status: open)
 Now: after the lower fruits (user). Per-thread state arrays would fit. 2026-10-31.
 
@@ -674,6 +687,12 @@ Now: -2.2% time, -4.6% allocation measured in SelfPlay, same nodes; on `expo` 1e
 Now: +3.0% nodes/s against `expo`, 8% less allocation per node, but 2.5% more nodes (LMR move numbers), time to depth -0.5%. Games decide. 2026-10-31.
 Forms: `fsrt` 696882e, `epQFilt=1`. 2026-11-01: non-regression SPRT [-5, 0] against `expo` passed: +6.68 +- 7.72, 4422 games (S22).
 2026-11-01: always on in `fbas`, parameter removed.
+
+### Older speed and simplification ideas (status: open)
+Now: checked against the code of `lmfl` (2026-11-17, `SPEED-IDEAS.md`): open are per-colour constant records, move generation directly
+into vectors, the move coding and generation pipeline (one-step move building first, special moves by a table of 208 entries) and
+information from earlier plies; three older ideas dropped with reasons. Speed work comes before a release (search unchanged, node
+counts identical); nothing measured.
 
 ### Other speed candidates (status: open)
 Now: each small, `PROFILING.md` lists them: search state in mutable arrays by depth (user; half of the allocation is in the search itself), quiet generation
@@ -698,6 +717,11 @@ for both colours), a set of pawn endings with known results; a match hardly show
 measurable by a match of normal size. Not built.
 Next: fix it in the eval phase, after the search work (user, 2026-11-14: to be corrected, but little strength expected).
 Interpretation history: 2026-11-14: found in the eval review, confirmed by reading `Eval/Core.hs` lines 1186-1195.
+
+### KPK bitbase (status: open)
+Now: design only (2026-11-17, `Eval/KPK-BITBASE.md`): an exact KPK table of 24 KB, generated by retrograde passes (lazily at run
+time or as a generated module), used in `specialsOf` before `pawnEndGame` with exactly one pawn; checked against Syzygy. About one
+day. Today the engine cannot tell a won from a drawn KPK. Eval phase, with the `pawnEndGame` fix above.
 
 ### Threat features in the HCE (status: open)
 Now: after the search work (user). S14.
