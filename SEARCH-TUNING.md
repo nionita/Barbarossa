@@ -1261,3 +1261,15 @@ gain is too small for a match of normal size). Result: +3.47 +- 45.94, +27 -26 =
 losses, no crashes: clean. Merged into `rel090` (305043d), identity reset (550e38a); the merged code equals `pegk` apart from the
 identity, so the perf reference stays 11367370 on tests.fen depth 10 (eval changes act only in the endings). Result in
 `C:\Learn\Data\results\memo\pegk-r90a-tc60s`.
+
+**S58.** `mbsp` sanity run (2026-11-18). `mbsp` 01a4667 (`r90a` + review findings 7 and 4 with the clamp `evalMax`, no mate
+guards; register block "Null move and QS delta cut at a mate bound") against `r90a` on MEMO, 60+1, 100 games (openings from
+3101), 4 MB, a sanity run only (user).
+Prediction (register, before any game): -1 to +1, most likely 0.
+Result: -20.87 +- 44.15, LOS 17.5%, +21 -27 =52, pentanomial [3, 13, 23, 9, 2]; no time losses, no crashes, all terminations
+normal (34 repetitions, 48 mates, 13 insufficient material, 5 fifty moves). A true 0 scores this low or lower about once in 6.
+Checks of the games (the user found the number not good): depth per move at the same time 14.094 against 14.080 (+0.014 +- 0.13:
+no slowdown; 100 games resolve only about 0.13 ply); no move with a 0.00 of `mbsp` next to a score of 1.5 or more of `r90a`
+(the sign a wrong stalemate draw would leave); the 27 losses turn gradually, both engines' scores agreeing (no sudden
+misjudgement). Reading: noise, as the node counts (36 nodes on tests.fen) leave no room for an effect of this size; nothing odd.
+Data: `C:\Learn\Data\results\memo\mbsp-r90a-tc60s` (`games.pgn`, `depths.txt`, `odd.txt`).
