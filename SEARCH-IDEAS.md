@@ -843,6 +843,11 @@ same, `pegk` 3cdb421 against `r90a`. Prediction again, before any result: defaul
 H1 very likely (lone king endings are rare from the openings, and `r90a` mates most of them with time). Endgame starts
 (`endg-rm-2000.epd`, 4000 games fixed): +3 to +15, most likely +6: the pawn endings as before, and the wins after a promotion
 (KQK, KQRK, KRBK) that `r90a` scores flat, KBNK to the right corner (rare there).
+Prediction revised (2026-11-18, before any result, with the frequency of the lone king draws above): default openings -1 to +3,
+most likely +1 = about +0.3 from the lone king endings (measured frequency) and the rest from the pawn endings (KPK, race; not
+measured, smaller than +1 by the rarity); H1 very likely, a gain not measurable at this size. Endgame starts: +3 to +15, most
+likely +6 = the lone king share some times larger than with the openings (more promotions from these starts: estimate +1 to +2)
+and the pawn endings, which arise there often (the larger part).
 Runs packed for MEMO (2026-11-18): `pegk-r90a-tc10` (SPRT [-5, 0]) and `pegk-r90a-endg-tc10` (the endgame starts, sequential, 2000
 rounds = 4000 games fixed; `run_timed.ps1` got `-Openings` and `-Order` in lab); smokes again: 16 + 8 games, no time losses or crashes.
 
@@ -880,6 +885,10 @@ choice) the engine reports a mate in 2 or 3 at every move and plays a check that
 KQQK mated on the 50th move in 4 of 6 random starts, KQK up to 45 moves, KQRK 30: no mate lost in 80 play-outs, but none with a
 margin when the clock of the 50 move rule does not start at 0. Review when: the mate distance or the time after a mate score
 is looked at again.
+Frequency (2026-11-18, main session, MEMO run `lmfl-f4-lmfl-tc10`, 10+0.1, 20000 games, both engines with the bug): 69 games
+drawn by the 50 move rule with the eval at the clamp (197.44 in the comments), 0.35% of the games, 0.6% of the decisive ones; the
+reading of that run unchanged (dilution about 0.6%). Expected gain of the fix with the default openings at 10+0.1 about +0.3 Elo
+(half of these games won, half a point each); more with the endgame starts.
 
 ### Threat features in the HCE (status: open)
 Now: after the search work (user). S14.
