@@ -1253,3 +1253,11 @@ right. Pooled with S48 (`lf4` against `lmfl`, the floor alone, 1000 games, penta
 (not in S48). Reading: the current base beats `chcm` at 60+1 by about +12 to +15; alone not significant. The header's
 "4MB - 16MB" is the Hash option default as each engine reports it (`r90a` has the hash fix); both play with 4 MB.
 Result in `C:\Learn\Data\results\memo\r90a-chcm-tc60`.
+
+**S57.** Eval package `pegk` adopted (2026-11-18). `pegk` 3cdb421 (`r90a` + the `pawnEndGame` fix bf8d52b, the KPK bitbase
+e04a604, the lone king endings below the eval clamp with KBNK to the bishop's corner 3cdb421; checks in the register: Syzygy,
+play-outs, symmetry, node counts) against `r90a` on MEMO, 60+1, 100 games (openings from 3001), 4 MB, a sanity run only (user: the
+gain is too small for a match of normal size). Result: +3.47 +- 45.94, +27 -26 =47, pentanomial [4, 9, 20, 16, 1], no time
+losses, no crashes: clean. Merged into `rel090` (305043d), identity reset (550e38a); the merged code equals `pegk` apart from the
+identity, so the perf reference stays 11367370 on tests.fen depth 10 (eval changes act only in the endings). Result in
+`C:\Learn\Data\results\memo\pegk-r90a-tc60s`.
