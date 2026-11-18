@@ -1322,3 +1322,10 @@ game on time (in favour of `mbsp`), no crashes. Pooled with S58 (pentanomial [3,
 Reading: the prediction (-1 to +1, most likely 0) lies inside the interval; 300 games cannot tell 0 from -13 or from +13. The
 node counts leave room for no effect of this size (36 nodes on tests.fen, one mate root changed), so the trend is read as noise,
 as S58; nothing in the games was odd (S58). Result in `C:\Learn\Data\results\memo\mbsp-r90a-tc60b`.
+Depths (2026-11-18, the user asked whether `mbsp` searches the same tree slower): `depths.py` on the 200 games and on all 300
+(with S58), at the same time per move (1.721 s against 1.719 s): 300 games 13.959 against 13.975, -0.016 +- 0.073 ply (200 games:
+-0.031 +- 0.089); below a score of 1 -0.085 +- 0.089, with a mate score +0.52 +- 0.29 (`mbsp` deeper there: finding 7 no longer
+searches a mated root move in front). A 5 to 10% slower search would show as about 0.1 to 0.15 ply less; the interval reaches
+-0.09, so a small slowdown is not excluded, a large one is. Oddities (`odd.py`, 200 games): no 0.00 of `mbsp` next to a clear
+score of `r90a`, 50 losses all with a gradual turn, one time forfeit (`r90a`, 491 ms over). Data: `depths.txt`, `depths300.txt`,
+`odd.txt` in the result folder.
