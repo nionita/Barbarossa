@@ -35,6 +35,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
   Plan (user, 2026-11-18), after the 10+0.1 run decides: every earlier match is judged on whether the crippled table could have
   favoured or hurt one setup (e.g. the LMR caps, the floor, the long time control results): a replay or just a sanity check on
   the fixed base. Matches stay at 4 MB with the right rule; larger hashes as a further check.
+- PV node type after a fail low (S60, 2026-11-18): found while measuring aspiration (`aspw`); `epPvsNt=1` -12% to -16% nodes
+  at depth 10; a game candidate on the fixed TT base. Aspiration itself saves no nodes (parked).
 - Designs for later (2026-11-17, nothing built): `SPEED-IDEAS.md` (speed and simplification), `Search/TB-SYZYGY.md` (Syzygy probes),
   `Eval/KPK-BITBASE.md` (KPK bitbase); blocks below.
 - Eval (2026-11-18): `pegk` (`pawnEndGame` fix, KPK bitbase, lone king endings below the eval clamp, KBNK corner) adopted:
@@ -678,9 +680,40 @@ Interpretation history: 2026-11-17: the lab session read "the engine applies the
 working), no leak"; its test harness sent `go` without a time limit and never `stop`, so the engine was still searching when the
 next game began. Corrected the same day (S49).
 
-### Aspiration windows (status: open)
-Now: code present, off since 2013 (`useAspirWin`). Not tested in this round. 2026-10-31.
-Next: 10k-node games may be enough (user).
+### Aspiration windows (status: parked)
+Now: built as parameters on `aspw` 0e52350 (from `ttrp`), measured by node counts only (S60, `Search/ASPIRATION.md`): with the
+PV node fix (`epPvsNt=1`) no window saves nodes (36 to 75 within about +-2% at depth 10 and 12, narrower ones cost 7 to 19%);
+without it every window cost much (the defect, block "PV node type after a fail low"). Moderately sure for the nodes;
+games are not measured. 2026-11-18.
+Forms:
+| Form | Branch, commit | Parameters | Differs by |
+|---|---|---|---|
+| old | `useAspirWin` (off since 2013) | window 24 (`Uci/UciGlue.hs`; 36 in the dead `Search/Thread.hs`) | one try, then full window |
+| A | `aspw` 0e52350 | `epAspW=w`, `epAspGrow=0` | as old, window as parameter, no aspiration at mate or clamp scores |
+| B | `aspw` 0e52350 | `epAspW=w`, `epAspGrow=4` | the failing side widened by 4, up to 2 more tries, then full window |
+Evidence:
+| Date | Form | Test (method, conditions) | Result | S<n> | Reading then |
+|---|---|---|---|---|---|
+| 2026-11-18 | A, B, w 15 to 75 | node counts, perf build, epTTRep=2, roots-500 and tests.fen depth 10, 100 roots depth 12 | with epPvsNt=1: w 36-75 about 0 (+-2%), 25 +7%, 15 +19%; with epPvsNt=0: +4% to +340% | S60 | no node gain; the defect hid it before |
+Review when: `epPvsNt` adopted; then possibly a game test of w 50 or 75 with growth 4 (TT bounds, order after a fail and the
+fallback move on timeout are not node questions). Low priority.
+Next: nothing before the PV node type is decided.
+
+### PV node type after a fail low (status: promising)
+Now: found while measuring aspiration (S60, 2026-11-18): a PV node whose first move fails low searched all its moves as PV
+nodes (full window, no LMR, no null move), recursively; `epPvsNt=1` moves to zero window after the first move, as in PVS.
+-12% nodes on tests.fen, -16% on roots-500 (depth 10, epTTRep=2). Fewer nodes are not Elo: the extra effort sat in the
+unstable nodes. Not tested in games.
+Forms:
+| Form | Branch, commit | Parameters | Differs by |
+|---|---|---|---|
+| 1 | `aspw` b54d34d | `epPvsNt=1` (compiled 0) | `checkFailOrPVLoop`, `checkFailOrPVRoot`: `nxtnt` moves on also after a fail low |
+Evidence:
+| Date | Form | Test (method, conditions) | Result | S<n> | Reading then |
+|---|---|---|---|---|---|
+| 2026-11-18 | 1 | node counts, deterministic perf build, depth 10, epTTRep=2 | tests.fen 11671539 -> 10251160, roots-500 83.2M -> 69.7M | S60 | an efficiency defect; games decide |
+Next: a branch with `epPvsNt=1` compiled in, its own identity, against the parent build (one change at a time), on the base with
+the TT fix (after `ttrp` is merged); screen at 10+0.1, decide at 60+1. Prediction before the games.
 
 ### `improving` (status: open)
 Now: not built; `staticScore` two plies back is on `stack`, so cheap. 2026-10-31.

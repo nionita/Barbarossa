@@ -1290,3 +1290,26 @@ about 1.1 to 1.9M writes per move against 16.8M entries with 256 MB (0.07 to 0.1
 little there, comparable to or less than 10+0.1 at 4 MB; filling 256 MB in one move needs 75 to 120 s per move. So the bug
 distorted mainly our own long time control matches at 4 MB, and GUI games only where no Hash was set (engine default 4 MB).
 Result in `C:\Learn\Data\results\memo\ttrp-f2-r90a-tc10`; the interim in `...\ttrp-f2-r90a-tc60\interim-500.txt`.
+
+**S60.** Aspiration windows at the root by node counts, and the PV node type after a fail low (2026-11-18, own session).
+Branch `aspw` from `ttrp` c64ad37: 4fa3916 identity, 0e52350 aspiration as parameters (`epAspW` half window, 0 = off;
+`epAspGrow` widening factor of the failing side, up to 2 more tries; `epAspMinD` first draft, 4; no aspiration at mate or
+clamp scores; diagnostic counters), b54d34d `epPvsNt` (below); all compiled off, off identical to `ttrp` (11367370 nodes with
+epTTRep=0, 11671539 with 2, tests.fen depth 10), perft unchanged. Report `Search/ASPIRATION.md` (copied to `rel090`; line
+links there point into `aspw`). Found on the way: the window in use was 24 (`Uci/UciGlue.hs`), not 36 (`Search/Thread.hs`
+is not in the cabal file, dead code).
+Defect: a PV node moved its later moves to zero window only after a move raised alpha; when its first move failed low, all
+moves were searched as PV nodes (full window, no LMR, no null move), recursively. With the full window it fires in PV
+re-searches after a zero window fail high whose first move then fails low (search instability), with a narrow window in
+every PV node of the first line below the window (tests.fen position 47, window 25: 3.2x the nodes without a root fail).
+`epPvsNt=1` moves the node type on after the first move, as in PVS. Deterministic perf build, epTTRep=2, depth 10:
+tests.fen 11671539 -> 10251160 (-12%), roots-500 83.2M -> 69.7M (-16%). Not a wrong score: the effort goes into the
+unstable nodes; fewer nodes are not Elo, games decide.
+Aspiration with epPvsNt=1 (roots-500, depth 10, chunks of 25 positions, geomean of the per-position ratios against off,
+bootstrap 95%): window 15 +18.7% [16.1, 21.5], 25 +7.3% [5.1, 9.6], 36 +0.1 / -0.2 (growth 0 / 4), 50 +1.4 [-0.3, 3.3],
+75 +0.4 / +0.5; tests.fen 50/4 -2.4% [-5.5, 0.5]; first 100 roots at depth 12: 36/4 +0.9, 50/4 -2.0 [-4.8, 0.9], 75/4 -1.1.
+Without the fix every window cost (window 36: +67% total). Growth 4 against 0: no clear difference. The positions that fail
+are those with large score swings (median swing 208 against 76); per draft 10-15% of the positions fail at depth 10, 4-10% at
+depth 12. The per-position log ratio has an sd of about 0.2 even without a fail, so +-2% is no effect.
+Reading: aspiration saves no nodes in any form here; `epPvsNt=1` is the find, a candidate for games on its own (against the
+parent build, screened at 10+0.1, decided at 60+1). Raw data: `C:\Learn\Data\measurements\search\aspw`.
