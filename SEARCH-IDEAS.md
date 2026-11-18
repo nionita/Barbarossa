@@ -591,6 +591,9 @@ Run plan (MEMO, prepared 2026-11-18, both default hash 4 MB, no `-Hash`; the box
 a) `ttrp-f2-r90a-tc10`: 10+0.1, SPRT [0, 5] (explicit bounds).
 b) `ttrp-f2-r90a-tc60`: 60+1, 1000 games fixed (500 rounds, openings 2001 to 2500; earlier 60+1 runs: 1 to 500, 1001 to 1250),
 read once at the end, LOS >= 95% to adopt.
+Plan changed (user, 2026-11-18): b first (it decides); then a as a fixed 2000 games (1000 rounds, about 4.5 hours on MEMO), read
+once at the end: under the time control decision it only has to show no loss beyond about 10 (+- about 12), an SPRT [0, 5] could
+take a day or two. The predictions stand.
 Prediction (2026-11-18, before any result): the old rule is a replacement by move code, close to random with respect to depth
 and blind to age, so deep and current entries are lost in full cells; a depth and age rule should gain, more at the long time
 control where the table is fuller. a) 10+0.1: -3 to +12, most likely +5; H1 slightly more likely than H0 (about 55%).
