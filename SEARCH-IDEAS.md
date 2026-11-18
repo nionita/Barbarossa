@@ -843,6 +843,8 @@ same, `pegk` 3cdb421 against `r90a`. Prediction again, before any result: defaul
 H1 very likely (lone king endings are rare from the openings, and `r90a` mates most of them with time). Endgame starts
 (`endg-rm-2000.epd`, 4000 games fixed): +3 to +15, most likely +6: the pawn endings as before, and the wins after a promotion
 (KQK, KQRK, KRBK) that `r90a` scores flat, KBNK to the right corner (rare there).
+Runs packed for MEMO (2026-11-18): `pegk-r90a-tc10` (SPRT [-5, 0]) and `pegk-r90a-endg-tc10` (the endgame starts, sequential, 2000
+rounds = 4000 games fixed; `run_timed.ps1` got `-Openings` and `-Order` in lab); smokes again: 16 + 8 games, no time losses or crashes.
 
 ### Lone king endings above the eval clamp (KQK and the family; status: open)
 Now: found 2026-11-18 in the `pegk` smoke (in `r90a` too, so in `chcm` and `rel090`): `scoreToMate` (`Eval/Core.hs`) gives KQK
