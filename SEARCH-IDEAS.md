@@ -31,7 +31,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
 - Designs for later (2026-11-17, nothing built): `SPEED-IDEAS.md` (speed and simplification), `Search/TB-SYZYGY.md` (Syzygy probes),
   `Eval/KPK-BITBASE.md` (KPK bitbase); blocks below.
 - Eval (2026-11-18): `pegk` (the `pawnEndGame` fix + the KPK bitbase, from `r90a`) built and checked, run [-5, 0] against `r90a`
-  at 10+0.1 prepared for MEMO; found with it: KQK is scored above the eval clamp (block "KQK eval above the clamp").
+  at 10+0.1 prepared for MEMO; found with it: KQK is scored above the eval clamp (block "Lone king endings above the eval clamp").
+  2026-11-18: the lone king endings (KQK and the family, KBNK corner) fixed as the third commit of `pegk` (3cdb421), same run.
 - Plan for the LMR after the box runs: the branches A to D of 2026-11-15 in "LMR cap depending on the size of the search" (outcome C).
 
 ## Methods
@@ -829,7 +830,7 @@ classical positions (opposition, king on the 6th, pawn on the 7th with stalemate
 front, key squares) right. Perf nodes: tests.fen d10 11367370 (unchanged), endgames d14 6327940 -> 2844303 (per position small
 changes, the total also by the table and history carried between positions), pawn endings d12 2747418 -> 2762456; perft unchanged.
 Smoke on mini (16 games 10+0.1, default hash, against `r90a`): no time losses, no crashes, 1-7-8 (no strength); the one game with
-KPK (pegk White) was won by the bitbase as Syzygy says, then drawn in KQK by the 50 move rule: block "KQK eval above the clamp".
+KPK (pegk White) was won by the bitbase as Syzygy says, then drawn in KQK by the 50 move rule: block "Lone king endings above the eval clamp".
 Run plan (prepared, not started; MEMO by the user): `pegk-r90a-tc10`, `pegk` against `r90a`, 10+0.1, non-regression SPRT [-5, 0]
 (a correctness fix of rare positions; a gain is not measurable at a normal size), default openings, 4 MB. Optional second run,
 more sensitive: the 2000 endgame starts `endg-rm-2000.epd` (data catalog: K, pawns and one piece each, R-R or minor-minor, balanced,
@@ -837,8 +838,13 @@ from self-play leaves), 4000 games fixed (each start with both colours), read on
 `run_timed.ps1` (lab), not built.
 Prediction (2026-11-18, before any result): default openings -1 to +3, most likely +1, H1 (no regression) very likely; endgame
 starts +2 to +12, most likely +5 (pawn endings and the trades into them are frequent there; KQK unchanged in both engines).
+2026-11-18, with the third commit (lone king endings, 3cdb421; block "Lone king endings above the eval clamp"): the run is the
+same, `pegk` 3cdb421 against `r90a`. Prediction again, before any result: default openings unchanged, -1 to +3, most likely +1,
+H1 very likely (lone king endings are rare from the openings, and `r90a` mates most of them with time). Endgame starts
+(`endg-rm-2000.epd`, 4000 games fixed): +3 to +15, most likely +6: the pawn endings as before, and the wins after a promotion
+(KQK, KQRK, KRBK) that `r90a` scores flat, KBNK to the right corner (rare there).
 
-### KQK eval above the clamp (status: open)
+### Lone king endings above the eval clamp (KQK and the family; status: open)
 Now: found 2026-11-18 in the `pegk` smoke (in `r90a` too, so in `chcm` and `rel090`): `scoreToMate` (`Eval/Core.hs`) gives KQK
 21440 to 22370 (`TuneSGD -X` special score, e.g. `8/7K/8/3k4/8/8/1Q6/8 w` 21440), above the clamp of the static eval (19744,
 `matesc` / `evalMax`): `posEval` clamps every KQK position to 19744, the drive to the edge and the king distance are lost. In
@@ -847,6 +853,31 @@ reach the mate); `r90a` shows the same flat 19744 on that position (UCI, depth 1
 keeps its gradient. Fix: keep `scoreToMate` below the clamp for the queen (e.g. without the material term or a smaller scale), a
 separate branch from `r90a`; check: KQK and KRK mates from a set of positions within the 50 moves, special scores below 19744 with
 the gradient. Not built.
+2026-11-18, review of the main session: the whole family goes through `scoreToMate` (`mateKMajxK`, KBBK, KBNK). Measured
+(`TuneSGD -X` special score from the strong side, 6000 random legal positions each, both sides to move): KRK 16760-17690, KBNK
+17750-18690, KBBK 18080-19010 below the clamp; above it, so flat: KRBK and KRNK 19880-20810, KQK 21440-22370, KRRK 21680-22610,
+KQBK 24560-25490, KQRK 26360-27290, KQQK 31040-31970. A plain cap is no fix (KQRK and KQK both at the cap: losing the rook free).
+Found with it: `lightSquares` and `darkSquares` (`Moves/Internal/Pattern.hs`) are swapped (bit 0 = a1 is dark), so `mateKBNK`
+drove the weak king to the corner of the wrong colour (dark bishop on c1: highest score with the king on a8); the other uses
+(bishop pair, opposite bishops, bishop and pawns of its colour) pair the masks with each other and do not change.
+Built (2026-11-18): `pegk` 3cdb421 (third commit of the package, same run against `r90a`): `scoreToMate` = 10000 + 9250 * m /
+(m + 2000) + 5 * (edge^2 - kingdist^2), m the material of the strong side in 2^shift2Cp units: strictly increasing in the material,
+at most 19650 for any material, the progress span 5 * 126 (was 10 * 126); the clamp and its name unchanged (`mbnd` renames it:
+the merge touches other lines). The masks swapped back to the right colours. Checks: the special scores now KRK 16496-16961, KBNK
+16759-17229, KBBK 16924-17389, KRBK = KRNK 17327-17792, KQK 17575-18040, KRRK 17607-18072, KQBK 17913-18378, KQRK 18050-18515,
+KQQK 18297-18762 (all below 19744, ordered by the material; KRBK = KRNK as bishop = knight in the material); in each: edge above
+centre, kings near above far; KBNK highest in the corner of the bishop's colour (dark bishop h8, light a8, before the reverse);
+the `TuneSGD -X` export of 100000 data positions identical after the mask swap. Play-outs (one engine on both sides, 100 ms per
+move, both colours): 20 fixed starts (the smoke position, centre starts of the 10 endings): `pegk` 20 mates of 20, `r90a` 14
+(KRBK and both KBNK drawn by the 50 move rule); 60 random centre starts: `pegk` 60 of 60. Perf nodes: tests.fen d10 11367370
+(unchanged), endgames d14 2844303 -> 1952007 (1925265 with the compression alone), pawn endings d12 2762456 -> 2789257; perft
+unchanged.
+Seen in the play-outs (search, not changed here): with mate scores without the distance (block "Time management", the user's
+choice) the engine reports a mate in 2 or 3 at every move and plays a check that keeps it, missing mates in 1 (`Qee3#` in
+`8/8/8/8/3k4/1Q6/8/K3Q3 w`, also in `r90a` and `mbnd`); the mate comes when the 50 move rule makes the delaying lines draws.
+KQQK mated on the 50th move in 4 of 6 random starts, KQK up to 45 moves, KQRK 30: no mate lost in 80 play-outs, but none with a
+margin when the clock of the 50 move rule does not start at 0. Review when: the mate distance or the time after a mate score
+is looked at again.
 
 ### Threat features in the HCE (status: open)
 Now: after the search work (user). S14.
