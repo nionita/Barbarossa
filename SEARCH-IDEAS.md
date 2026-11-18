@@ -299,6 +299,9 @@ The search is the same as `r90a` except in the rare nodes where every move was p
 Prediction (before any game): -1 to +1, most likely 0; a [-5, 0] SPRT passes with high probability.
 Plan (user, 2026-11-18): no SPRT (nothing left to measure at these node counts); a sanity run `mbsp-r90a-tc60s` against `r90a`,
 60+1, 100 games (openings from 3101), on MEMO after the `pegk` one; then merge `mbsp` into `rel090`.
+Sanity result (2026-11-18, S58): -20.9 +- 44.2, nothing odd in the games (depth equal, no false stalemate zeros, gradual losses).
+Parked (user, 2026-11-18): not merged; when MEMO has nothing else waiting, a few more games at 60+1 against `r90a` (openings
+from 3151) to see the trend, then the decision.
 
 ### Late move pruning (status: rejected in this form)
 Now: loses, more with depth, also on the new ordering and with the count for the LMR level. Without `improving` late moves are not reliably bad. 2026-11-11.
