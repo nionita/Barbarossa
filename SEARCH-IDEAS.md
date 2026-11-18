@@ -30,6 +30,10 @@ are not reviewed here. The user's experience: negative history and squared bonus
   games, no decision (S36).
 - Hash: every match so far played with 4 MB, not 16; the engine fix of its hash option is in `rel090` (merged 2026-11-17,
   S50); `-Hash` only for builds that contain it, older branches (e.g. `lmfl`) leak (block "Hash option of the engine").
+- TT replacement bug (block "TT replacement"): `ttrp` +145 at 60+1 after 220 games (interim), 1.65 ply deeper at the same time.
+  Plan (user, 2026-11-18), after the 10+0.1 run decides: every earlier match is judged on whether the crippled table could have
+  favoured or hurt one setup (e.g. the LMR caps, the floor, the long time control results): a replay or just a sanity check on
+  the fixed base. Matches stay at 4 MB with the right rule; larger hashes as a further check.
 - Designs for later (2026-11-17, nothing built): `SPEED-IDEAS.md` (speed and simplification), `Search/TB-SYZYGY.md` (Syzygy probes),
   `Eval/KPK-BITBASE.md` (KPK bitbase); blocks below.
 - Eval (2026-11-18): `pegk` (`pawnEndGame` fix, KPK bitbase, lone king endings below the eval clamp, KBNK corner) adopted:
