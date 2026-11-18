@@ -1273,3 +1273,20 @@ no slowdown; 100 games resolve only about 0.13 ply); no move with a 0.00 of `mbs
 (the sign a wrong stalemate draw would leave); the 27 losses turn gradually, both engines' scores agreeing (no sudden
 misjudgement). Reading: noise, as the node counts (36 nodes on tests.fen) leave no room for an effect of this size; nothing odd.
 Data: `C:\Learn\Data\results\memo\mbsp-r90a-tc60s` (`games.pgn`, `depths.txt`, `odd.txt`).
+
+**S59.** TT replacement fix at 10+0.1 (2026-11-18). `ttrp` c64ad37 `epTTRep=2` (review rule: replace the smallest
+(depth - 4 * age, type, nodes)) against `r90a` 771f656 (the old rule: smallest move code), MEMO, 10+0.1, 2000 games fixed (1000
+rounds), 4 MB (engine default, no `-Hash`), read once at the end.
+Prediction (register, before any result): -3 to +12, most likely +5.
+Result: +11.99 +- 10.99, nElo +16.64 +- 15.23, LOS 98.4%, +604 -535 =861 (51.7%), pentanomial [63, 217, 389, 250, 81].
+Prediction: direction right, the number at the upper edge of the range. Interim of the 60+1 run at the same time (500 of 1000
+games, trend only): +128.6 +- 22.3, pentanomial [4, 13, 86, 96, 51].
+Reading: the fix gains at both time controls, about ten times more at 60+1. That is the fill of the table: writes per move
+(every node outside QS stores, an estimated 30 to 50% of the nodes; MEMO about 450k nodes per second, 3.2 times the boxes, S40)
+against 262k entries in 4 MB are about 0.2 to 0.3 at 10+0.1 and 1.3 to 2 at 60+1, where the old rule throws out current deep
+entries within the same move (register block "TT replacement": 1.65 ply deeper at 60+1). Under the time control rule
+the 10+0.1 result only had to show no loss beyond about 10; it shows a gain. Estimate (not measured) for GUI games at 5m+1s:
+about 1.1 to 1.9M writes per move against 16.8M entries with 256 MB (0.07 to 0.11) or 33.5M with 512 MB: the old rule probably cost
+little there, comparable to or less than 10+0.1 at 4 MB; filling 256 MB in one move needs 75 to 120 s per move. So the bug
+distorted mainly our own long time control matches at 4 MB, and GUI games only where no Hash was set (engine default 4 MB).
+Result in `C:\Learn\Data\results\memo\ttrp-f2-r90a-tc10`; the interim in `...\ttrp-f2-r90a-tc60\interim-500.txt`.
