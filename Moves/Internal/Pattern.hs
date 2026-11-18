@@ -39,8 +39,8 @@ notFileA = complement fileA
 notFileH = complement fileH
 
 lightSquares, darkSquares :: BBoard
-lightSquares = 0xAA55AA55AA55AA55
-darkSquares  = 0x55AA55AA55AA55AA
+lightSquares = 0x55AA55AA55AA55AA    -- a1 = bit 0 is dark
+darkSquares  = 0xAA55AA55AA55AA55
 
 -- Arrays of rows and files
 rowArray, fileArray :: UArray Int BBoard

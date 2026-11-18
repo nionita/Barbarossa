@@ -35,13 +35,14 @@ import Moves.History
 import Search.CStateMonad (execCState)
 import Search.AlbetaTypes (formatStats)
 import Eval.FileParams (makeEvalState)
+import Eval.KPK (kpkInit)
 
 -- Name, author, version and suffix:
 progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.9.0"
-progVerSuff = "rel090"
+progVerSuff = "pegk"
 
 data Options = Options {
         optConfFile :: Maybe String,    -- config file
@@ -316,6 +317,7 @@ doUci = do
 doIsReady :: CtxIO ()
 doIsReady = do
     when (movesInit == 0) $ return ()
+    _ <- liftIO $ evaluate kpkInit      -- the KPK bitbase is computed here, not in the first search
     answer readyOk
 
 doSetOption :: Option -> CtxIO ()
