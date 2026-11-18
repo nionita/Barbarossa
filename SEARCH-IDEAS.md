@@ -632,6 +632,13 @@ Prediction (2026-11-18, before any result): the old rule is a replacement by mov
 and blind to age, so deep and current entries are lost in full cells; a depth and age rule should gain, more at the long time
 control where the table is fuller. a) 10+0.1: -3 to +12, most likely +5; H1 slightly more likely than H0 (about 55%).
 b) 60+1: -5 to +25, most likely +10 (LOS >= 95% needs about +14 in 1000 games: adoption by b alone about one in three).
+Interim of b (2026-11-18, trend only, the run is read at its end): +145.3 +- 35.8 after 220 games, far outside the prediction.
+Mechanism checked in the partial PGN (226 games, `C:\Learn\Data\results\memo\ttrp-f2-r90a-tc60`, `depths-part.txt`): at the same
+time per move (1.68 s against 1.72 s) `ttrp` reaches 1.65 +- 0.09 ply deeper, growing with the game (0.76 below ply 20, 2.1 from
+ply 120: the table fills) and with the score (3.7 at 10 pawns or more); no time losses, all terminations normal. So the old rule
+makes the 4 MB table almost useless at 60+1. If it holds: every 60+1 result so far (LMR caps S40, floor S48, `r90a` S56) was
+measured with a crippled table; the important ones need a check on the fixed base, and the gain with a bigger hash (GUI) is
+smaller.
 
 ### Hash option of the engine (status: done)
 Now: both issues fixed on branch `hfix`, merged into `rel090` 2026-11-17 (S50); engine play unchanged (same nodes, perft).
