@@ -167,7 +167,8 @@ data PVStRO
           lmrfl  :: !Int,	-- late move reduction: floor of the reduced depth in eighths of the depth (0 = off)
           rfuta  :: !Int,	-- reverse futility pruning: constant margin (cp)
           rfutm  :: !Int,	-- reverse futility pruning: margin per depth (cp)
-          rfutt  :: !Int	-- reverse futility pruning: extra margin with own pieces hanging (cp, 0 = off)
+          rfutt  :: !Int,	-- reverse futility pruning: extra margin with own pieces hanging (cp, 0 = off)
+          pvsnt  :: !Bool	-- PV nodes: the moves after the first one are zero window also when it failed low
     } deriving Show
 
 data PVState
@@ -302,7 +303,8 @@ pvro00 :: PVStRO
 pvro00 = PVStRO { draft = 0, tuning = False, abpol = NoAbort, futmar = defaultFutMargins,
                   cmv = False, chp = 0, chw = 4, lmrfx = -1, lmrpv = 0,
                   lmrtb = lmrTable 120, lmrpn = lmrPenTable 20, lmrnd = 1,
-                  lmrmx = lmrLevDef, lmrfl = 0, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0 }
+                  lmrmx = lmrLevDef, lmrfl = 0, rfutd = 0, rfuta = 0, rfutm = 0, rfutt = 0,
+                  pvsnt = False }
 
 alphaBeta :: ABControl -> Game (Int, [Move], [Move], Bool, Int, Int)
 alphaBeta abc = do
@@ -325,7 +327,8 @@ alphaBeta abc = do
                             lmrfl = max 0 $ min 7 $ epLmrFlr (esEParams est),
                             rfutd = epRFutD (esEParams est), rfuta = epRFutA (esEParams est),
                             rfutm = epRFutM (esEParams est),
-                            rfutt = epRFutT (esEParams est) }
+                            rfutt = epRFutT (esEParams est),
+                            pvsnt = epPvsNt (esEParams est) /= 0 }
         lv0 | lmrfx pvro >= 0 = lmrfx pvro
             | otherwise       = max lmrLevMin $ min lmrLevMax $ epLmrIni (esEParams est)
         pvs0 = pvsInit { ronly = pvro, lmrlv = lv0, lmrhi = epLmrLim (esEParams est) }	-- :: PVState
@@ -492,7 +495,9 @@ checkFailOrPVRoot xstats b d e s nst = whenAbort (True, nst) $ do
     if pathScore s <= a
        then do	-- failed low
            let xpvslb = insertToPvs d pvg (pvsl nst)
-               nst1   = nst { movno = mn + 1, pvsl = xpvslb, killer = newKiller d s nst }
+               nnt | pvsnt (ronly sst) = nextNodeType (nxtnt nst)
+                   | otherwise         = nxtnt nst
+               nst1   = nst { movno = mn + 1, pvsl = xpvslb, killer = newKiller d s nst, nxtnt = nnt }
            return (False, nst1)
        else if pathScore s >= b
                then do
@@ -886,7 +891,9 @@ checkFailOrPVLoop b d e s nst = whenAbort nst $ do
     sst <- get
     let mn = movno nst
     if pathScore s <= pathScore (cursc nst)
-       then return $! nst { movno = mn+1, killer = newKiller d s nst }
+       then if pvsnt (ronly sst)
+               then return $! nst { movno = mn+1, killer = newKiller d s nst, nxtnt = nextNodeType (nxtnt nst) }
+               else return $! nst { movno = mn+1, killer = newKiller d s nst }
        else if pathScore s >= b
                then do
                  lift $ betaCut (absdp sst) e -- anounce a beta move (for example, update history)

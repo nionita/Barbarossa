@@ -81,6 +81,11 @@ params = [
         -- depth > nodes (the move masked away), 2 = the smallest (depth - 4 * age, type, nodes), age = generations
         -- since the store (SEARCH-REVIEW-BUGS finding 3)
         ("epTTRep",             0),
+        -- PV nodes (Search.Core.checkFailOrPVLoop, checkFailOrPVRoot): 1 = the moves after the first one are searched
+        -- with zero window also when the first one failed low; 0 = before 2026-11-18: only after a move raised alpha, so
+        -- a PV node whose first move fails low (a PV re-search after a zero window fail high, or an aspiration window)
+        -- searches its moves as PV nodes until one raises alpha (Search/ASPIRATION.md on aspw)
+        ("epPvsNt",             1),
         -- drawishness scale of the whole eval (Eval.Core.normalParts), instead of the heuristic rules of
         -- scaleFactor when epScaleNew = 1 (default: compiled in, scale-c-lin, TUNING-HISTORY finding 37;
         -- epScaleNew = 0 is the old scaling); factors in 1/64 (64 = 1), fitted by hv_scale.py --constrained
