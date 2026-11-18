@@ -1242,3 +1242,14 @@ explained by the search cost, without assuming that a found mate does harm. The 
 7 left them unchanged, so the cost is the mate guards' (b7fb86e), by elimination, not by a separate build. The +- ignores the
 correlation of the moves within a game; the differences are many times larger. Data: `C:\Learn\Data\results\memo\mbnd-chcm-tc10b`
 (`games.pgn`, `depths.py`, `depths.txt`).
+
+**S56.** `rel090` against `chcm` at the long time control (2026-11-17/18). `r90a` 771f656 (frozen `rel090` cf00634: `chcm` + LMR
+depth floor f = 4 + the `spdg` speed) against `chcm` on MEMO, 60+1, 500 games fixed (250 rounds, openings from 1001, disjoint from
+S48), 4 MB, read once at the end.
+Prediction (register, before the result): -10 to +35, most likely +12.
+Result: +11.82 +- 22.76, nElo +15.85 +- 30.45, LOS 84.6%, +143 -126 =231 (51.7%), pentanomial [17, 58, 88, 65, 22]. Prediction
+right. Pooled with S48 (`lf4` against `lmfl`, the floor alone, 1000 games, pentanomial [32, 98, 203, 124, 43]): 1500 games,
++15.1 +- 12.8, LOS 98.9%; an upper estimate, because S48 is the batch that led to the adoption, and a lower one for the speed
+(not in S48). Reading: the current base beats `chcm` at 60+1 by about +12 to +15; alone not significant. The header's
+"4MB - 16MB" is the Hash option default as each engine reports it (`r90a` has the hash fix); both play with 4 MB.
+Result in `C:\Learn\Data\results\memo\r90a-chcm-tc60`.

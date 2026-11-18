@@ -19,7 +19,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
   against cap 15: cap 13 +40.7 +- 10.9, cap 17 -23.5 +- 11.0 (2000 games each), cap 19 about -74 (283 games, stopped) (S40). Cap 13 at
   10+0.1: -9.1, H0 [-5, 0]. Depth floor f = 4 at cap 15 (`lmfl`): +16.7 +- 15.5, LOS 98.3% at 60+1 (S48); at 10+0.1 +1.2 +- 3.5
   after 20000 games (S52): it costs nothing in short games. Adopted: `lmfl` merged into `rel090`, `epLmrFlr = 4` compiled in
-  (S53; new perf reference 11367370 nodes on tests.fen depth 10, 12086912 with `epLmrFlr=0`).
+  (S53; new perf reference 11367370 nodes on tests.fen depth 10, 12086912 with `epLmrFlr=0`). `r90a` (frozen `rel090` cf00634)
+  against `chcm` at 60+1: +11.8 +- 22.8, 500 games; pooled with S48 +15.1 +- 12.8, LOS 98.9% (S56).
   Running on the boxes: floor on cap 13 against cap 13 (m3a) and cap 12 against cap 13 (m3b), 2000 games each, end about 2026-11-19.
   Then the decision: keep cap 15 with the floor (now compiled), or cap 13 with or without it, by the time control rule (Methods).
 - Mate bounds, stalemate after pruning, eval clamp (`mbnd`): -5.5 +- 4.4 at 10+0.1, H0 of [-5, 0] (S54); not merged. Next: split
@@ -533,6 +534,9 @@ and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEM
   with the 1000 games of S48 (floor alone) the 1500 games estimate the gain conservatively for `r90a` (S48 lacks the speed),
   but S48 is the batch that led to the adoption (selection bias upwards). Prediction (before the result): -10 to +35, most
   likely +12 (floor about +8 to +10 after the regression of S48, speed +2 to +4); 500 games alone +- about 22.
+  Result (2026-11-18, S56): +11.8 +- 22.8, LOS 84.6%, 500 games; prediction right (at the most likely value). Pooled with S48
+  (pentanomial, 1500 games): +15.1 +- 12.8, LOS 98.9%, an upper estimate (S48 chose the adoption). `rel090` as of cf00634 is
+  better than `chcm` at 60+1 by about +12 (this batch alone, unbiased) to +15 (pooled).
 - Lim 6000 apart: H0 (expected) ends the single ramp steps at 10+0.1; a pass keeps 6000 and checks it at the long time control with
   the cap. Result: neither, +1.86 +- 3.50 after 20000 games (S36): no more ramp steps at 10+0.1; Lim 6000 stays a candidate for step
   A3 (the ramp speed at the long time control with the new cap).
