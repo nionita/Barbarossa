@@ -1313,3 +1313,12 @@ are those with large score swings (median swing 208 against 76); per draft 10-15
 depth 12. The per-position log ratio has an sd of about 0.2 even without a fail, so +-2% is no effect.
 Reading: aspiration saves no nodes in any form here; `epPvsNt=1` is the find, a candidate for games on its own (against the
 parent build, screened at 10+0.1, decided at 60+1). Raw data: `C:\Learn\Data\measurements\search\aspw`.
+
+**S61.** `mbsp` trend games (2026-11-18). `mbsp` 01a4667 against `r90a` 771f656 on MEMO, 60+1, 200 games fixed (100 rounds,
+openings from 3151, disjoint from S58), 4 MB (both the old TT rule).
+Result: -8.69 +- 32.55, nElo -12.89 +- 48.15, LOS 30.0%, +45 -50 =105 (48.75%), pentanomial [4, 29, 42, 18, 7]; `r90a` lost one
+game on time (in favour of `mbsp`), no crashes. Pooled with S58 (pentanomial [3, 13, 23, 9, 2]): 300 games, [7, 42, 65, 27, 9],
+-12.8 +- 26.2, LOS 16.9%.
+Reading: the prediction (-1 to +1, most likely 0) lies inside the interval; 300 games cannot tell 0 from -13 or from +13. The
+node counts leave room for no effect of this size (36 nodes on tests.fen, one mate root changed), so the trend is read as noise,
+as S58; nothing in the games was odd (S58). Result in `C:\Learn\Data\results\memo\mbsp-r90a-tc60b`.

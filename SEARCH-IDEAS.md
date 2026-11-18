@@ -309,6 +309,8 @@ Plan (user, 2026-11-18): no SPRT (nothing left to measure at these node counts);
 Sanity result (2026-11-18, S58): -20.9 +- 44.2, nothing odd in the games (depth equal, no false stalemate zeros, gradual losses).
 Parked (user, 2026-11-18): not merged; when MEMO has nothing else waiting, a few more games at 60+1 against `r90a` (openings
 from 3151) to see the trend, then the decision.
+Trend (2026-11-18, S61): 200 more games -8.7 +- 32.6 (`r90a` lost one on time); pooled with S58 300 games -12.8 +- 26.2,
+LOS 16.9%: the prediction is inside the interval, read as noise by the node counts. Decision (merge or not) is the user's.
 
 ### Late move pruning (status: rejected in this form)
 Now: loses, more with depth, also on the new ordering and with the count for the LMR level. Without `improving` late moves are not reliably bad. 2026-11-11.
