@@ -393,8 +393,14 @@ kingAlone mywin p
           minorcnt = popCount $ bishops p .|. knights p
           majorcnt = popCount $ queens  p .|. rooks   p
 
-winBonus :: Int
-winBonus = 1200	-- known win
+-- Won endings against the lone king (scoreToMate): base, material compressed into [0, lkMatMax), progress
+-- The total stays below the clamp of the static eval for any material:
+-- lkBase + lkMatMax + lkProg * 80 = 19650 < 19744
+lkBase, lkMatMax, lkMatC, lkProg :: Int
+lkBase   = 10000	-- known win
+lkMatMax = 9250		-- the material part tends to this (but stays below)
+lkMatC   = 2000		-- material (2^shift2Cp units per cp) at half of lkMatMax
+lkProg   = 5		-- per unit of edge^2 - kingdist^2
 
 mateKBBK :: Bool -> SpecialEval
 mateKBBK = scoreToMate pushToEdge
@@ -421,10 +427,12 @@ scoreToMate f mywin p = Score msc
           !ky = kingSquare (kings p) (yo p)
           !distk = squareDistance km ky	-- distance between kings - drive to low
           !distc = f kweak	-- driving function: drive to high
-          !sc  = (winBonus + distc * distc - distk * distk) * 10
-          !mtr = if moving p == White then materWhite p else - materWhite p
-          !wsc = if mywin then sc else -sc
-          !msc = (mtr `unsafeShiftL` shift2Cp) + wsc	-- here the score is in centipawns
+          -- The material of the strong side, compressed: strictly increasing, below lkMatMax
+          -- (a plain cap would make the loss of a piece free when both ends are capped)
+          !mat = abs (materWhite p) `unsafeShiftL` shift2Cp
+          !mtc = lkMatMax * mat `quot` (mat + lkMatC)
+          !sc  = lkBase + mtc + lkProg * (distc * distc - distk * distk)
+          !msc = if mywin then sc else -sc	-- here the score is in centipawns
 
 {-
 squareDistArr :: UArray Int Int32
@@ -460,7 +468,7 @@ pushToEdge sq = 9 - md * md
           fd = edgeDistance f
           md = min rd fd
 
--- pushToLightCorner: for KBNK end games with light color bishop
+-- pushToDarkCorner: for KBNK end games with dark color bishop
 -- push the weak king to A1 or H8
 -- Values: 0 (on diagonale A8H1) to 7 (on A1 or H8)
 pushToDarkCorner :: Square -> Int
