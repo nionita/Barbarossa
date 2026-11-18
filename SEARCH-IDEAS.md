@@ -298,6 +298,8 @@ possible rescue). Deterministic perf, depth 10: tests.fen 11367370 -> 11367334 (
 identical, one -920 nodes (sum -0.0006%; batched +0.98%, the shared TT and history spread the one change); perft unchanged.
 The search is the same as `r90a` except in the rare nodes where every move was pruned and in the order of mated root moves.
 Prediction (before any game): -1 to +1, most likely 0; a [-5, 0] SPRT passes with high probability.
+Plan (user, 2026-11-18): no SPRT (nothing left to measure at these node counts); a sanity run `mbsp-r90a-tc60s` against `r90a`,
+60+1, 100 games (openings from 3101), on MEMO after the `pegk` one; then merge `mbsp` into `rel090`.
 
 ### Late move pruning (status: rejected in this form)
 Now: loses, more with depth, also on the new ordering and with the count for the LMR level. Without `improving` late moves are not reliably bad. 2026-11-11.
