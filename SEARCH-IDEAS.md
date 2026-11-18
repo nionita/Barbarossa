@@ -292,6 +292,12 @@ score of its own, or only in the QS delta cut); or after the check extension lim
 Next: split. Form 1: c2378e8 (finding 7) + 4708209 (stalemate test, clamp `evalMax`) without b7fb86e, from the current `rel090`,
 [-5, 0] at 10+0.1 against the current base (prediction before the start). The guards alone only in a narrower form. The plan of
 `TIME-MATE-EXTENSION-REVIEW.md` (limit on top of `mbnd`) needs a new base: the current `rel090` or form 1.
+Form 1 built (2026-11-18): `mbsp` 01a4667 from `rel090` 7dfca9b (code = `r90a`), findings 7 (64a1b49) and 4 with the clamp
+`evalMax` (c584205), no guards; comments at `nullMoveFailsHigh` and `qsDeltaCut` (the inexactness, S54/S55, mate distance as the
+possible rescue). Deterministic perf, depth 10: tests.fen 11367370 -> 11367334 (-36 nodes); 206 mate roots one process each: 205
+identical, one -920 nodes (sum -0.0006%; batched +0.98%, the shared TT and history spread the one change); perft unchanged.
+The search is the same as `r90a` except in the rare nodes where every move was pruned and in the order of mated root moves.
+Prediction (before any game): -1 to +1, most likely 0; a [-5, 0] SPRT passes with high probability.
 
 ### Late move pruning (status: rejected in this form)
 Now: loses, more with depth, also on the new ordering and with the count for the LMR level. Without `improving` late moves are not reliably bad. 2026-11-11.
