@@ -674,6 +674,9 @@ pvZeroW !nst !b !d = do
 
 data NullMoveResult = NoNullMove | NullMoveHigh | NullMoveLow | NullMoveThreat Path
 
+-- At a mate bound b the null move answers from a reduced search ("not mated within d-R"), a known
+-- inexactness; a guard cost about 5 Elo at 10+0.1 (SEARCH-TUNING S54, S55): mate scores carry no distance,
+-- so mate bound windows cover whole subtrees. Possible rescue: mate distance scores (and pruning), then the guard
 nullMoveFailsHigh :: MyPos -> NodeState -> Int -> Int -> Search NullMoveResult
 nullMoveFailsHigh pos nst b d
     | not useNullMove = return NoNullMove
@@ -1139,7 +1142,9 @@ qSearchLims !qsa !qsb front = do
        then qsInCheck qsa qsb pos
        else qsNormal  qsa qsb pos front
 
--- The delta cut of the QS (switched by useQsDelta)
+-- The delta cut of the QS (switched by useQsDelta). At a mate bound alpha it answers from no search
+-- ("cannot mate here"), a known inexactness; a guard cost about 5 Elo at 10+0.1 (SEARCH-TUNING S54, S55),
+-- see nullMoveFailsHigh
 qsDeltaCut :: Int -> Search Bool
 qsDeltaCut a
     | useQsDelta = lift $ qsDelta a
