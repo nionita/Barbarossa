@@ -1220,3 +1220,25 @@ at most 1 to 2 Elo; the rest must come from a change of the search, and the mate
 windows (S43: geomean +1.7%, single positions up to 7 and 27 times the nodes, with no mate score), while the stalemate test changes
 tests.fen by -0.09% (S47). Not separated by this run. Rejected in this form; the fixes are not merged.
 Result in `C:\Learn\Data\results\memo\mbnd-chcm-tc10b`.
+
+**S55.** Depth of `mbnd` in its games (2026-11-18). The PGN of `mbnd-chcm-tc10b` (S54, 12822 games, 921k moves per engine):
+depth and time per move from the move comments, grouped by the engine's own score and by ply. Question: does `mbnd` search less
+deep in real games, as the +11% total nodes on roots-500 (S43, geomean only +1.7%) suggest? Both use the same time per move
+(0.226 s on average, also in every group), so a lower depth means more nodes per iteration.
+| Group | moves per engine | depth `chcm` | depth `mbnd` | difference (+- 2 sigma, moves taken as independent) |
+|---|---|---|---|---|
+| all | 921k | 10.281 | 10.194 | 0.087 +- 0.009 |
+| score < 1 | 483k | 10.950 | 10.901 | 0.049 +- 0.012 |
+| score 1-3 | 171k | 10.614 | 10.563 | 0.051 +- 0.014 |
+| score 3-10 | 95k | 10.735 | 10.668 | 0.067 +- 0.020 |
+| score >= 10 | 32k | 10.036 | 9.970 | 0.066 +- 0.036 |
+| score at the clamp (197.44) | 18k | 10.194 | 10.247 | -0.053 +- 0.054 |
+| mate score | 122k | 6.908 | 6.542 | 0.366 +- 0.019 |
+| ply 60-119 | 307k | 10.799 | 10.677 | 0.122 +- 0.014 |
+Readings: `mbnd` is shallower in every group but the clamp, also in balanced positions (0.05 ply below a score of 1: the mate
+windows come from single mated moves, not from decided games), and most where a mate is on the board (0.37 ply, 13% of the moves:
+the games are played out). 0.09 ply at depth 10 is roughly 5 to 6% nodes and of the order of the -5.5 Elo: the loss of S54 is
+explained by the search cost, without assuming that a found mate does harm. The stalemate test lowered the nodes (S47) and finding
+7 left them unchanged, so the cost is the mate guards' (b7fb86e), by elimination, not by a separate build. The +- ignores the
+correlation of the moves within a game; the differences are many times larger. Data: `C:\Learn\Data\results\memo\mbnd-chcm-tc10b`
+(`games.pgn`, `depths.py`, `depths.txt`).

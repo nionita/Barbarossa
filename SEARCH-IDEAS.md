@@ -280,6 +280,12 @@ optimistic). Reading: the 1.7% nodes explain at most 1 to 2 Elo; the mate guards
 windows (S43: geomean +1.7%, single positions 7 and 27 times the nodes with no mate score), the stalemate test changes tests.fen by
 -0.09% (S47), finding 7 not at all. Most likely the guards cost, not shown by this run. Rejected: the three commits of `mbnd` as one
 package; nothing merged. The bugs stay (findings 2, 4, 7, 9 open in `rel090`).
+2026-11-18 (S55, user's question): "1.7%" was the geomean; the total on roots-500 was +11% (S43), and the clock pays the total. The
+games confirm it: same time per move, `mbnd` 0.087 ply shallower on average (0.05 in balanced positions, 0.37 with a mate score on
+the board), of the order of the -5.5. The loss is the search cost of the guards (by elimination). Cause: mate scores carry no
+distance, so a single mated move puts the whole subtree of each alternative into mate bound windows, where the guards switch off
+the null move and the delta cut. The narrower form to try: mate distance scores (with mate distance pruning), then the guards; or
+the guards only in PV nodes.
 Review when: a form of the guards that does not change the search outside true mate windows (e.g. only when the node has a mate
 score of its own, or only in the QS delta cut); or after the check extension limit, which acts on the same KQ/KR explosions.
 Next: split. Form 1: c2378e8 (finding 7) + 4708209 (stalemate test, clamp `evalMax`) without b7fb86e, from the current `rel090`,
