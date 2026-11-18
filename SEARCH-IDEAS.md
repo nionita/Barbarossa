@@ -22,7 +22,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
   (S53; new perf reference 11367370 nodes on tests.fen depth 10, 12086912 with `epLmrFlr=0`).
   Running on the boxes: floor on cap 13 against cap 13 (m3a) and cap 12 against cap 13 (m3b), 2000 games each, end about 2026-11-19.
   Then the decision: keep cap 15 with the floor (now compiled), or cap 13 with or without it, by the time control rule (Methods).
-- Mate bounds, stalemate after pruning, eval clamp (`mbnd`): [-5, 0] screen against `chcm` running on MEMO.
+- Mate bounds, stalemate after pruning, eval clamp (`mbnd`): -5.5 +- 4.4 at 10+0.1, H0 of [-5, 0] (S54); not merged. Next: split
+  (stalemate test, clamp and finding 7 without the mate guards).
 - Rejected in this form at 10+0.1: late move pruning D3 M1 C1 -7.6 (S28); root overflow fixes (S29); history in the LMR (S32); LMR level
   carried over -25.0 (S33); less LMR in three forms near -7 (S34); table growth 1.1 -0.35 (S35). Lim 6000 +1.86 +- 3.50 after 20000
   games, no decision (S36).
@@ -251,7 +252,7 @@ Next: build, 10k-node games (pruning shows there), then SPRT.
 ### RFP: cut more when an opponent piece hangs (status: open)
 Now: wrong rate 0.3x (S13). User: only after the RFP SPRTs. 2026-10-31.
 
-### Null move and QS delta cut at a mate bound (status: running)
+### Null move and QS delta cut at a mate bound (status: rejected in this form)
 Now: bugs found by reading the code (review 2026-11-15, `Search/SEARCH-REVIEW-BUGS.md` findings 2 and 9), not measured. Mate scores
 carry no distance, so windows at the mate bounds are frequent: a node whose moves so far are mated searches the next ones with
 (-20000, -19996), its grandchildren have b = -19996. (1) `nullMoveFailsHigh` has no `nearmate b` guard (RFP and futility have one):
@@ -274,6 +275,16 @@ as beyond it (scores unchanged: the rounding brought the old clamp to the same v
 pruning, cheap form). Screen (2026-11-16): `mbnd` against `chcm` on MEMO, 10+0.1, SPRT [-5, 0], run `mbnd-chcm-tc10b`, started 2026-11-17 (a first start
 without the bounds ran [0, 5] and was stopped at once). Prediction (before the result): -4 to +3, most likely -1; H1 much more likely (bug fixes in rare positions, small node
 changes; the mate guards cost about 1.7% nodes on roots-500, S43).
+Result (2026-11-18, S54): -5.47 +- 4.40 after 12822 games, LOS 0.74%, H0 accepted; 1 time loss, no crash. Prediction wrong (too
+optimistic). Reading: the 1.7% nodes explain at most 1 to 2 Elo; the mate guards are the part that changes the search outside mate
+windows (S43: geomean +1.7%, single positions 7 and 27 times the nodes with no mate score), the stalemate test changes tests.fen by
+-0.09% (S47), finding 7 not at all. Most likely the guards cost, not shown by this run. Rejected: the three commits of `mbnd` as one
+package; nothing merged. The bugs stay (findings 2, 4, 7, 9 open in `rel090`).
+Review when: a form of the guards that does not change the search outside true mate windows (e.g. only when the node has a mate
+score of its own, or only in the QS delta cut); or after the check extension limit, which acts on the same KQ/KR explosions.
+Next: split. Form 1: c2378e8 (finding 7) + 4708209 (stalemate test, clamp `evalMax`) without b7fb86e, from the current `rel090`,
+[-5, 0] at 10+0.1 against the current base (prediction before the start). The guards alone only in a narrower form. The plan of
+`TIME-MATE-EXTENSION-REVIEW.md` (limit on top of `mbnd`) needs a new base: the current `rel090` or form 1.
 
 ### Late move pruning (status: rejected in this form)
 Now: loses, more with depth, also on the new ordering and with the count for the LMR level. Without `improving` late moves are not reliably bad. 2026-11-11.

@@ -1207,3 +1207,16 @@ floor off: 12086912 nodes on tests.fen depth 10, perft right. Then `epLmrFlr = 4
 10+0.1): new perf reference 11367370 nodes (-6.0%, as in S45), 12086912 with `-p epLmrFlr=0`. Cap stays 15; the box runs (floor on
 cap 13 against cap 13, cap 12 against cap 13, `lmfl` with explicit parameters) can still change it. Runs against the old base use
 `epLmrFlr=0` on the new build or an older binary.
+
+**S54.** Mate bound fixes at the short time control (2026-11-17/18). `mbnd` 4708209 against `chcm` on MEMO, 10+0.1, SPRT
+[-5, 0], 4 MB, `open-moves-uniq-fm1.fen`. `mbnd` = `rel090` 7afc8b6 (search of `chcm`; the only other code is `go movetime`, not
+used by fastchess) + three commits: no null move and no QS delta cut at a mate bound (b7fb86e, S43), mated root moves no longer in
+front (c2378e8, finding 7, nodes unchanged), stalemate test after pruning and the clamp as `evalMax` (4708209, S47).
+Prediction (register, before the result): -4 to +3, most likely -1; H1 much more likely.
+Result: -5.47 +- 4.40, nElo -7.48 +- 6.01, LOS 0.74%, +3572 -3774 =5476 (49.2%), pentanomial [489, 1588, 2449, 1406, 479],
+LLR -2.95: H0 accepted after 12822 games. 1 time loss of `mbnd`, no crash. Interim (trend only): -7.41 at 3000 games.
+Prediction wrong: the loss is larger than predicted (95% interval -9.9 to -1.1). The node cost (+1.7% on tests.fen, S43) explains
+at most 1 to 2 Elo; the rest must come from a change of the search, and the mate guards are the one that changes it outside mate
+windows (S43: geomean +1.7%, single positions up to 7 and 27 times the nodes, with no mate score), while the stalemate test changes
+tests.fen by -0.09% (S47). Not separated by this run. Rejected in this form; the fixes are not merged.
+Result in `C:\Learn\Data\results\memo\mbnd-chcm-tc10b`.

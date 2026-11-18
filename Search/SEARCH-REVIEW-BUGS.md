@@ -17,7 +17,7 @@ code, none is measured. Style and ideas are left out.
 | 9 | `Search/Core.hs:1095, 1110` | QS delta cut always fires when alpha is mate - grain: the QS cannot mate there | low to medium |
 
 State (2026-11-17; the register `SEARCH-IDEAS.md` is current, this review is not updated otherwise): 2, 9 (mate guards), 7
-and 4 (cheap form, with the eval clamp aligned to `nearmate`) are in `mbnd` 4708209, in its [-5, 0] screen against `chcm`; 5
+and 4 (cheap form, with the eval clamp aligned to `nearmate`) are in `mbnd` 4708209, which lost its [-5, 0] screen against `chcm` (-5.5, S54, 2026-11-18): open, to be split; 5
 and 8 fixed without games (`rel090`, `lmfl`); 6 kept by choice; 3 (TT replacement) open; 1 known, not adopted.
 
 ## 1. History bonus of root moves overflows (wrong sign)
