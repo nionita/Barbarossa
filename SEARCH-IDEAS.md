@@ -312,6 +312,7 @@ from 3151) to see the trend, then the decision.
 Trend (2026-11-18, S61): 200 more games -8.7 +- 32.6 (`r90a` lost one on time); pooled with S58 300 games -12.8 +- 26.2,
 LOS 16.9%: the prediction is inside the interval, read as noise by the node counts. Decision (merge or not) is the user's.
 Depth at the same time over the 300 games: -0.016 +- 0.073 ply (S61): no large slowdown; nothing odd in the games.
+Parked (user, 2026-11-18): until a MEMO slot is free for a further match; then the merge decision.
 
 ### Late move pruning (status: rejected in this form)
 Now: loses, more with depth, also on the new ordering and with the count for the LMR level. Without `improving` late moves are not reliably bad. 2026-11-11.
