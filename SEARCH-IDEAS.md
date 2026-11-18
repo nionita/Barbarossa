@@ -850,6 +850,9 @@ likely +6 = the lone king share some times larger than with the openings (more p
 and the pawn endings, which arise there often (the larger part).
 Runs packed for MEMO (2026-11-18): `pegk-r90a-tc10` (SPRT [-5, 0]) and `pegk-r90a-endg-tc10` (the endgame starts, sequential, 2000
 rounds = 4000 games fixed; `run_timed.ps1` got `-Openings` and `-Order` in lab); smokes again: 16 + 8 games, no time losses or crashes.
+Plan changed (user, 2026-11-18): both runs dropped. The fixes are proved by their checks (Syzygy, play-outs, symmetry); the gain is
+too small for a match of normal size. Instead a sanity run `pegk-r90a-tc60s`, 60+1, 100 games (50 rounds, openings from 3001),
+next on MEMO: only crashes, time losses or anything odd count. After it: merge `pegk` into `rel090`.
 
 ### Lone king endings above the eval clamp (KQK and the family; status: open)
 Now: found 2026-11-18 in the `pegk` smoke (in `r90a` too, so in `chcm` and `rel090`): `scoreToMate` (`Eval/Core.hs`) gives KQK
