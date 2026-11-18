@@ -699,7 +699,7 @@ Review when: `epPvsNt` adopted; then possibly a game test of w 50 or 75 with gro
 fallback move on timeout are not node questions). Low priority.
 Next: nothing before the PV node type is decided.
 
-### PV node type after a fail low (status: promising)
+### PV node type after a fail low (status: running)
 Now: found while measuring aspiration (S60, 2026-11-18): a PV node whose first move fails low searched all its moves as PV
 nodes (full window, no LMR, no null move), recursively; `epPvsNt=1` moves to zero window after the first move, as in PVS.
 -12% nodes on tests.fen, -16% on roots-500 (depth 10, epTTRep=2). Fewer nodes are not Elo: the extra effort sat in the
@@ -712,8 +712,18 @@ Evidence:
 | Date | Form | Test (method, conditions) | Result | S<n> | Reading then |
 |---|---|---|---|---|---|
 | 2026-11-18 | 1 | node counts, deterministic perf build, depth 10, epTTRep=2 | tests.fen 11671539 -> 10251160, roots-500 83.2M -> 69.7M | S60 | an efficiency defect; games decide |
-Next: a branch with `epPvsNt=1` compiled in, its own identity, against the parent build (one change at a time), on the base with
-the TT fix (after `ttrp` is merged); screen at 10+0.1, decide at 60+1. Prediction before the games.
+Branch `pvnt` (2026-11-18, from `ttrp` c64ad37): 8ad4922 identity, 8c61267 `epPvsNt = 1` compiled in (the parameter stays,
+`epPvsNt=0` is `ttrp`). Checks (feature session): `epPvsNt=0` identical to `ttrp` (11367370; 11671539 with epTTRep=2); new perf
+reference tests.fen depth 10: 10606600 (-6.7% with the compiled epTTRep=0; -12.2% with epTTRep=2); roots-500 depth 10 with
+epTTRep=0: 81.4M -> 71.0M (-12.7%). Data `C:\Learn\Data\measurements\search\pvnt`. Fast build (integration session) `id name
+Barbarossa 0.9.0 pvnt`; smoke on mini against `ttrp`, both `-p epTTRep=2`, 10+0.1, 16 games: normal endings, no time losses.
+Run plan (2026-11-18): MEMO `pvnt-t2-ttrp-tc10`, `pvnt` against `ttrp`, both with `epTTRep=2` (the fixed TT rule, on which
+the saving is about twice as large; the only difference is the fix), 10+0.1, 2000 games fixed (1000 rounds), 4 MB, read
+once at the end; then 60+1 by the result.
+Prediction (2026-11-18, before any game): about 12% fewer nodes at the same depth act like a speedup of 0.18 doublings, an
+upper estimate of 8 to 14 Elo if the search quality stays; the saved nodes are the unstable ones (a zero window fail high not
+confirmed), which the old code searched more thoroughly, so the quality may go either way. 10+0.1: -5 to +15, most likely +6.
+60+1: -5 to +15, most likely +5.
 
 ### `improving` (status: open)
 Now: not built; `staticScore` two plies back is on `stack`, so cheap. 2026-10-31.
