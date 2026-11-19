@@ -1352,3 +1352,10 @@ entries at 10+0.1, 1.3 to 2 at 60+1). Adoption by the time control rule (LOS >= 
 every earlier 60+1 match (and less so the 10+0.1 ones) was played with a crippled table; review of those matches as planned
 (register summary), first the LMR floor replay `ttrp-f4-f0-tc60` (started 2026-11-19). Result in
 `C:\Learn\Data\results\memo\ttrp-f2-r90a-tc60`.
+
+**S64.** TT replacement merged (2026-11-19). `ttrp` merged into `rel090` (dc3fb20; the only conflict was the identity, reset to
+`rel090`), `epTTRep = 2` compiled in. Checks, deterministic perf build of the merge: tests.fen depth 10 11671539 nodes (new
+reference; with `epTTRep=0` 11367370, the previous `rel090`, so the merge brings nothing but the rule), perft of the 5 standard
+positions right. The other 4 MB results of `rel090` are now measured with the old table; their review is the plan in the register
+summary (first the floor replay `ttrp-f4-f0-tc60`, then cap 13 against 15). Matches against `rel090` from now on need a new
+frozen build (the `r90a` builds have the old rule).
