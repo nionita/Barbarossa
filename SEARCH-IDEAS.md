@@ -36,7 +36,7 @@ are not reviewed here. The user's experience: negative history and squared bonus
   favoured or hurt one setup (e.g. the LMR caps, the floor, the long time control results): a replay or just a sanity check on
   the fixed base. Matches stay at 4 MB with the right rule; larger hashes as a further check.
 - PV node type after a fail low (S60, 2026-11-18): found while measuring aspiration (`aspw`); `epPvsNt=1` -12% to -16% nodes
-  at depth 10; a game candidate on the fixed TT base. Aspiration itself saves no nodes (parked).
+  at depth 10; `pvnt` at 10+0.1 +2.8 +- 11.1 (S62), 60+1 running. Aspiration itself saves no nodes (parked).
 - Designs for later (2026-11-17, nothing built): `SPEED-IDEAS.md` (speed and simplification), `Search/TB-SYZYGY.md` (Syzygy probes),
   `Eval/KPK-BITBASE.md` (KPK bitbase); blocks below.
 - Eval (2026-11-18): `pegk` (`pawnEndGame` fix, KPK bitbase, lone king endings below the eval clamp, KBNK corner) adopted:
@@ -728,6 +728,9 @@ Prediction (2026-11-18, before any game): about 12% fewer nodes at the same dept
 upper estimate of 8 to 14 Elo if the search quality stays; the saved nodes are the unstable ones (a zero window fail high not
 confirmed), which the old code searched more thoroughly, so the quality may go either way. 10+0.1: -5 to +15, most likely +6.
 60+1: -5 to +15, most likely +5.
+Result at 10+0.1 (2026-11-19, S62): +2.8 +- 11.1, 2000 games, LOS 68.8% (prediction +6): no loss, no clear gain; the node
+saving does not arrive as a speedup. 60+1 decides: `pvnt-t2-ttrp-tc60` on MEMO, 1000 games, openings from 4001, read once
+at the end (prediction above: +5).
 
 ### `improving` (status: open)
 Now: not built; `staticScore` two plies back is on `stack`, so cheap. 2026-10-31.

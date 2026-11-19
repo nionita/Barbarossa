@@ -1329,3 +1329,13 @@ searches a mated root move in front). A 5 to 10% slower search would show as abo
 -0.09, so a small slowdown is not excluded, a large one is. Oddities (`odd.py`, 200 games): no 0.00 of `mbsp` next to a clear
 score of `r90a`, 50 losses all with a gradual turn, one time forfeit (`r90a`, 491 ms over). Data: `depths.txt`, `depths300.txt`,
 `odd.txt` in the result folder.
+
+**S62.** PV node type after a fail low at 10+0.1 (2026-11-18/19). `pvnt` 8c61267 (`epPvsNt = 1` compiled in) against `ttrp`
+c64ad37, both `-p epTTRep=2` (the fixed TT rule; the only difference is the fix), MEMO, 10+0.1, 2000 games fixed (1000 rounds),
+4 MB, read once at the end.
+Prediction (register, before any game): -5 to +15, most likely +6.
+Result: +2.78 +- 11.12, nElo +3.81 +- 15.23, LOS 68.8%, +566 -550 =884 (50.4%), pentanomial [76, 227, 372, 255, 70].
+Prediction right (inside the range, below the most likely value, as most predictions so far).
+Reading: about 12% fewer nodes at the same depth do not show as the 8 to 14 Elo of a speedup; the saved search in the unstable
+nodes seems to have been worth part of its cost. No loss beyond about 10, so by the time control rule the 60+1 run decides:
+`pvnt-t2-ttrp-tc60` started on MEMO (1000 games, openings from 4001). Result in `C:\Learn\Data\results\memo\pvnt-t2-ttrp-tc10`.
