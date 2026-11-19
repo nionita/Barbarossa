@@ -105,6 +105,8 @@ control in sum; single parameters that depend on the size of the search (the LMR
 Rule (user, 2026-11-19; lab `MATCHES.md` "Players"): matches never use a moving branch. A player is a frozen build plus `-p`
 settings as differences from its compiled values, named `<build>[-<short>]`; when a setting is adopted, the next frozen build has
 it compiled in and the table records the equality by the perf node count (tests.fen depth 10, deterministic perf build).
+Names `r<version><letters>` (`r90a` ... `r90z`, `r90aa`, ...; `r91a` after a release); the newest base is reused while only
+documents changed on `rel090` since its commit (skill `match-runs`, "Frozen base").
 
 Frozen builds:
 | Build | From | Identity commit | Contains | Compiled (LMR cap, floor, TT rule) | Perf nodes |

@@ -88,6 +88,11 @@ All on rel090 (the release collector; before 2026-11-13 dev090) in document-only
 code. Raw results to
 `C:\Learn\Data\measurements\search\<idea>` or `C:\Learn\Data\results\<machine>\<run>\result.txt`.
 
+- Players (from 2026-11-19, lab `MATCHES.md` "Players"): a match result names both players as `<frozen build>[-<short>]`
+  (`r90b-m13` against `r90b`) with their commits and parameters, taken from the run's manifest (`manifest.txt`, or the
+  manifest lines of a pasted MEMO result); then a row in the register's player comparisons table ("Match builds and
+  players"). A run under a recorded exception (lab `RUNS.md`) is recorded as its note says, and the note is then marked
+  obsolete.
 - `SEARCH-TUNING.md`: the log. A finding S<n>: what was done, branch and commit, conditions, numbers. Facts stay; a later correction is added
   as a dated note, not by rewriting.
 - `SEARCH-IDEAS.md`: the register, one block per idea, always current. Update it with every result; revise the interpretation there, with the

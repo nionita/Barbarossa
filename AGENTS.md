@@ -78,6 +78,10 @@ Refactorings of the eval, the search or the position state must not change the e
   from GitHub. MEMO gets packed binaries and needs no push.
 - Merging into `rel090` only on the user's request, after the branch's tests passed; then reset `progVerSuff` to
   `rel090` (the merged branch brings its own identity), commit, and push `rel090`.
+- Frozen match bases `r<version><letters>` (`r90a`, `r90b`, ...): copies of `rel090` at a named commit with their own
+  identity, the builds that matches are played and named with (never `rel090` itself, it changes with every merge).
+  Pushed when they play on a box, never deleted; listed in `SEARCH-IDEAS.md` "Match builds and players"; how to
+  reuse or cut one: the user's `match-runs` skill, "Frozen base".
 - A rejected experiment branch is not deleted while `SEARCH-IDEAS.md` or `SEARCH-TUNING.md` cite its commits (a local
   branch has no other copy; the history bundle is only refreshed now and then).
 
