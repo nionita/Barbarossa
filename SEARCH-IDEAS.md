@@ -99,6 +99,27 @@ Result (2026-11-16): +82.5 +- 16.0, LOS 100%, 1000 games (S46). Prediction wrong
 short SPRTs arrives in full at 60+1, about the sum of the steps. The screening at 10+0.1 does not mislead for the long time
 control in sum; single parameters that depend on the size of the search (the LMR cap, S40) remain the exception to check there.
 
+## Match builds and players
+
+Rule (user, 2026-11-19; lab `MATCHES.md` "Players"): matches never use a moving branch. A player is a frozen build plus `-p`
+settings as differences from its compiled values, named `<build>[-<short>]`; when a setting is adopted, the next frozen build has
+it compiled in and the table records the equality by the perf node count (tests.fen depth 10, deterministic perf build).
+
+Frozen builds:
+| Build | From | Identity commit | Contains | Compiled (LMR cap, floor, TT rule) | Perf nodes |
+|---|---|---|---|---|---|
+| `r90a` | `rel090` cf00634 | 771f656 | `chcm` + floor f = 4 + `spdg` speed | `epLmrMax` 15, `epLmrFlr` 4, old TT rule (smallest move code; no `epTTRep`) | 11367370 |
+| `r90b` | `rel090` b00f14a | ace64a7 | `r90a` + TT replacement (`ttrp`, S64) | `epLmrMax` 15, `epLmrFlr` 4, `epTTRep` 2 | 11671539 (S64; 11367370 with `epTTRep=0` = `r90a`) |
+
+Player comparisons from 2026-11-19 (earlier ones: the log, by their S numbers):
+| Player A | Player B | Conditions | Result (A's side) | S |
+|---|---|---|---|---|
+
+Exception (2026-11-19, user; to correct, then mark obsolete): batch 1 of cap 13 against 15 on m3a (`rel090-m13-m15-b1`) was
+started before this rule with the moving branch: `rel090` a96b702 (code = b00f14a = `r90b` without its identity commit), names in
+the games `m13` and `rel090`. It is not restarted. When it is done: record it as `r90b-m13` against `r90b` (the code is the same),
+with this note in its S entry and in `RUNS.md`, then mark this exception obsolete.
+
 ## Move ordering
 
 ### Threatened pieces first (status: adopted)
@@ -574,7 +595,8 @@ and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEM
   about -10) would reopen the floor.
 - Cap 13 against 15 on the fixed TT (2026-11-19, user's go, boxes): S40 (+40.7 for cap 13, no floor) and the box runs of
   2026-11-17 (floor on cap 13, cap 12) were played with the old TT rule. Run: `rel090` b00f14a (floor 4 and `epTTRep = 2`
-  compiled) on both sides, `epLmrMax=13` (`m13`) against the compiled cap 15, 192+3.2 (= 60+1), 64 MB (see Hash below),
+  compiled; = `r90b`, see "Match builds and players") on both sides, `epLmrMax=13` (`r90b-m13`) against the compiled cap 15
+  (`r90b`), 192+3.2 (= 60+1), 64 MB (see Hash below); batch 1 (m3a) under the exception noted there,
   concurrency 8. The boxes are near their shutdown (user): batches of a fixed 400 games (200 rounds) each (user, 2026-11-19;
   first plan 200), m3a and m3b in parallel on disjoint openings (`-Start` 7001 m3a, 7201 m3b, then 7401, 7601), as many
   batches as end before the shutdown, pooled and read once after the last one. The MEMO run `ttrp-m13-m15-tc60` (queued) asks the same question and can be pooled.
