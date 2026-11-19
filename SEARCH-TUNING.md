@@ -1377,3 +1377,15 @@ Result: +6.43 +- 10.30, nElo +9.51 +- 15.23, LOS 89.0%, +518 -481 =1001 (50.93%)
 Prediction right (in the range, 3 above the most likely value). Not shown (LOS < 95%): the curve is flat between 12 and 13 at
 this time control, possibly still falling a little. Old TT rule (4 MB full at this time control, S63): limited to the old engine.
 Result in `C:\Learn\Data\results\m3b\lmfl-m12-m13`.
+
+**S67.** PV node type after a fail low at 60+1 (2026-11-19). `pvnt` 8c61267 (`epPvsNt = 1` compiled in) against `ttrp`
+c64ad37, both `epTTRep=2` (the only difference is the fix), MEMO, 60+1, 1000 games fixed (500 rounds, openings from 4001),
+4 MB (engine default), read once at the end.
+Prediction (register, before any game): -5 to +15, most likely +5.
+Result: +56.78 +- 13.67, nElo +91.12 +- 21.53, LOS 100%, +318 -156 =526 (58.10%), pentanomial [6, 77, 207, 169, 41], 16.0 hours.
+Prediction wrong, far above its range (by the method of the time: node saving as a speedup, about 0.18 doublings). Together
+with S62 (+2.8 +- 11.1 at 10+0.1): the gain appears only in long searches, as with the TT fix (S59, S63). Reading: the old code
+searched every move of a PV node whose first move failed low as a PV node, recursively (full window, no LMR, no null move); the
+cost of such a cascade grows with the depth, so it eats little of a 10+0.1 search and much of a 60+1 one. Qualifies under the
+time control decision (LOS >= 95% at 60+1, no loss at 10+0.1). Not checked yet: depth at the same time in the games (needs the
+PGN). Result in `C:\Learn\Data\results\memo\pvnt-t2-ttrp-tc60`.

@@ -39,7 +39,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
   2026-11-19 (user): new runs use a hash by the time control (16 MB at 10+0.1, 64 MB at 60+1, 256 MB at 5m+1s, about the
   table use of real games); 4 MB only for replays of 4 MB results.
 - PV node type after a fail low (S60, 2026-11-18): found while measuring aspiration (`aspw`); `epPvsNt=1` -12% to -16% nodes
-  at depth 10; `pvnt` at 10+0.1 +2.8 +- 11.1 (S62), 60+1 running. Aspiration itself saves no nodes (parked).
+  at depth 10; `pvnt` at 10+0.1 +2.8 +- 11.1 (S62), at 60+1 +56.8 +- 13.7 (S67): adopted, merge on the user's request.
+  Aspiration itself saves no nodes (parked).
 - Designs for later (2026-11-17, nothing built): `SPEED-IDEAS.md` (speed and simplification), `Search/TB-SYZYGY.md` (Syzygy probes),
   `Eval/KPK-BITBASE.md` (KPK bitbase); blocks below.
 - Eval (2026-11-18): `pegk` (`pawnEndGame` fix, KPK bitbase, lone king endings below the eval clamp, KBNK corner) adopted:
@@ -777,7 +778,7 @@ Review when: `epPvsNt` adopted; then possibly a game test of w 50 or 75 with gro
 fallback move on timeout are not node questions). Low priority.
 Next: nothing before the PV node type is decided.
 
-### PV node type after a fail low (status: running)
+### PV node type after a fail low (status: adopted)
 Now: found while measuring aspiration (S60, 2026-11-18): a PV node whose first move fails low searched all its moves as PV
 nodes (full window, no LMR, no null move), recursively; `epPvsNt=1` moves to zero window after the first move, as in PVS.
 -12% nodes on tests.fen, -16% on roots-500 (depth 10, epTTRep=2). Fewer nodes are not Elo: the extra effort sat in the
@@ -805,6 +806,10 @@ confirmed), which the old code searched more thoroughly, so the quality may go e
 Result at 10+0.1 (2026-11-19, S62): +2.8 +- 11.1, 2000 games, LOS 68.8% (prediction +6): no loss, no clear gain; the node
 saving does not arrive as a speedup. 60+1 decides: `pvnt-t2-ttrp-tc60` on MEMO, 1000 games, openings from 4001, read once
 at the end (prediction above: +5).
+Result at 60+1 (2026-11-19, S67): +56.8 +- 13.7, 1000 games, LOS 100%; prediction wrong, far too low. The gain appears in long
+searches only (S62 at 10+0.1: +2.8), like the TT fix: the cost of the PV cascade after a fail low grows with the depth.
+Adopted by the time control decision; merge into `rel090` on the user's request (then a new frozen base, `r90c` = `r90b` +
+`pvnt`). Open: the depth at the same time from the PGN (as S59), a sanity check of the mechanism.
 
 ### `improving` (status: open)
 Now: not built; `staticScore` two plies back is on `stack`, so cheap. 2026-10-31.
