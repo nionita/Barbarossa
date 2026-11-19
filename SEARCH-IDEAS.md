@@ -605,7 +605,7 @@ and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEM
   (`r90b`), 192+3.2 (= 60+1), 64 MB (see Hash below); batch 1 (m3a) under the exception noted there,
   concurrency 8. The boxes are near their shutdown (user): batches of a fixed 400 games (200 rounds) each (user, 2026-11-19;
   first plan 200), m3a and m3b in parallel on disjoint openings (`-Start` 7001 m3a, 7201 m3b, then 7401, 7601), as many
-  batches as end before the shutdown, pooled and read once after the last one. The MEMO run `ttrp-m13-m15-tc60` (queued) asks the same question and can be pooled.
+  batches as end before the shutdown, pooled and read once after the last one. The MEMO run `r90b-m13-r90b-tc60` (queued; first planned as `ttrp-m13-m15-tc60`) asks the same question and can be pooled.
   Prediction (before any game): -15 to +35, most likely +10. Reasons: with the old table both sides together give about +29 for
   floor on 13 against floor on 15 (+40.7 cap alone, +5 interim of the floor on cap 13, +16.7 floor on 15); regression of the
   selected +40.7, and the floor already takes part of the deep reductions cap 13 removes; with a working table re-searches are
