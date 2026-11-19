@@ -19,7 +19,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
   against cap 15: cap 13 +40.7 +- 10.9, cap 17 -23.5 +- 11.0 (2000 games each), cap 19 about -74 (283 games, stopped) (S40). Cap 13 at
   10+0.1: -9.1, H0 [-5, 0]. Depth floor f = 4 at cap 15 (`lmfl`): +16.7 +- 15.5, LOS 98.3% at 60+1 (S48); at 10+0.1 +1.2 +- 3.5
   after 20000 games (S52): it costs nothing in short games. Adopted: `lmfl` merged into `rel090`, `epLmrFlr = 4` compiled in
-  (S53; new perf reference 11367370 nodes on tests.fen depth 10, 12086912 with `epLmrFlr=0`).
+  (S53; new perf reference 11367370 nodes on tests.fen depth 10, 12086912 with `epLmrFlr=0`). `r90a` (frozen `rel090` cf00634)
+  against `chcm` at 60+1: +11.8 +- 22.8, 500 games; pooled with S48 +15.1 +- 12.8, LOS 98.9% (S56).
   Running on the boxes: floor on cap 13 against cap 13 (m3a) and cap 12 against cap 13 (m3b), 2000 games each, end about 2026-11-19.
   Then the decision: keep cap 15 with the floor (now compiled), or cap 13 with or without it, by the time control rule (Methods).
 - Mate bounds, stalemate after pruning, eval clamp (`mbnd`): -5.5 +- 4.4 at 10+0.1, H0 of [-5, 0] (S54); not merged. Next: split
@@ -29,11 +30,17 @@ are not reviewed here. The user's experience: negative history and squared bonus
   games, no decision (S36).
 - Hash: every match so far played with 4 MB, not 16; the engine fix of its hash option is in `rel090` (merged 2026-11-17,
   S50); `-Hash` only for builds that contain it, older branches (e.g. `lmfl`) leak (block "Hash option of the engine").
+- TT replacement bug (block "TT replacement"): `ttrp` +12.0 +- 11.0 at 10+0.1 (2000 games, S59), +121.1 +- 15.6 at 60+1
+  (1000 games, S63), 1.65 ply deeper at the same time: merged into `rel090` (S64, new perf reference 11671539).
+  Plan (user, 2026-11-18), after the 10+0.1 run decides: every earlier match is judged on whether the crippled table could have
+  favoured or hurt one setup (e.g. the LMR caps, the floor, the long time control results): a replay or just a sanity check on
+  the fixed base. Matches stay at 4 MB with the right rule; larger hashes as a further check.
+- PV node type after a fail low (S60, 2026-11-18): found while measuring aspiration (`aspw`); `epPvsNt=1` -12% to -16% nodes
+  at depth 10; `pvnt` at 10+0.1 +2.8 +- 11.1 (S62), 60+1 running. Aspiration itself saves no nodes (parked).
 - Designs for later (2026-11-17, nothing built): `SPEED-IDEAS.md` (speed and simplification), `Search/TB-SYZYGY.md` (Syzygy probes),
   `Eval/KPK-BITBASE.md` (KPK bitbase); blocks below.
-- Eval (2026-11-18): `pegk` (the `pawnEndGame` fix + the KPK bitbase, from `r90a`) built and checked, run [-5, 0] against `r90a`
-  at 10+0.1 prepared for MEMO; found with it: KQK is scored above the eval clamp (block "Lone king endings above the eval clamp").
-  2026-11-18: the lone king endings (KQK and the family, KBNK corner) fixed as the third commit of `pegk` (3cdb421), same run.
+- Eval (2026-11-18): `pegk` (`pawnEndGame` fix, KPK bitbase, lone king endings below the eval clamp, KBNK corner) adopted:
+  sanity run at 60+1 clean (+3.5 +- 45.9, 100 games, no time losses or crashes; S57), merged into `rel090` (S57).
 - Plan for the LMR after the box runs: the branches A to D of 2026-11-15 in "LMR cap depending on the size of the search" (outcome C).
 
 ## Methods
@@ -291,6 +298,21 @@ score of its own, or only in the QS delta cut); or after the check extension lim
 Next: split. Form 1: c2378e8 (finding 7) + 4708209 (stalemate test, clamp `evalMax`) without b7fb86e, from the current `rel090`,
 [-5, 0] at 10+0.1 against the current base (prediction before the start). The guards alone only in a narrower form. The plan of
 `TIME-MATE-EXTENSION-REVIEW.md` (limit on top of `mbnd`) needs a new base: the current `rel090` or form 1.
+Form 1 built (2026-11-18): `mbsp` 01a4667 from `rel090` 7dfca9b (code = `r90a`), findings 7 (64a1b49) and 4 with the clamp
+`evalMax` (c584205), no guards; comments at `nullMoveFailsHigh` and `qsDeltaCut` (the inexactness, S54/S55, mate distance as the
+possible rescue). Deterministic perf, depth 10: tests.fen 11367370 -> 11367334 (-36 nodes); 206 mate roots one process each: 205
+identical, one -920 nodes (sum -0.0006%; batched +0.98%, the shared TT and history spread the one change); perft unchanged.
+The search is the same as `r90a` except in the rare nodes where every move was pruned and in the order of mated root moves.
+Prediction (before any game): -1 to +1, most likely 0; a [-5, 0] SPRT passes with high probability.
+Plan (user, 2026-11-18): no SPRT (nothing left to measure at these node counts); a sanity run `mbsp-r90a-tc60s` against `r90a`,
+60+1, 100 games (openings from 3101), on MEMO after the `pegk` one; then merge `mbsp` into `rel090`.
+Sanity result (2026-11-18, S58): -20.9 +- 44.2, nothing odd in the games (depth equal, no false stalemate zeros, gradual losses).
+Parked (user, 2026-11-18): not merged; when MEMO has nothing else waiting, a few more games at 60+1 against `r90a` (openings
+from 3151) to see the trend, then the decision.
+Trend (2026-11-18, S61): 200 more games -8.7 +- 32.6 (`r90a` lost one on time); pooled with S58 300 games -12.8 +- 26.2,
+LOS 16.9%: the prediction is inside the interval, read as noise by the node counts. Decision (merge or not) is the user's.
+Depth at the same time over the 300 games: -0.016 +- 0.073 ply (S61): no large slowdown; nothing odd in the games.
+Parked (user, 2026-11-18): until a MEMO slot is free for a further match; then the merge decision.
 
 ### Late move pruning (status: rejected in this form)
 Now: loses, more with depth, also on the new ordering and with the count for the LMR level. Without `improving` late moves are not reliably bad. 2026-11-11.
@@ -533,6 +555,19 @@ and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEM
   with the 1000 games of S48 (floor alone) the 1500 games estimate the gain conservatively for `r90a` (S48 lacks the speed),
   but S48 is the batch that led to the adoption (selection bias upwards). Prediction (before the result): -10 to +35, most
   likely +12 (floor about +8 to +10 after the regression of S48, speed +2 to +4); 500 games alone +- about 22.
+  Result (2026-11-18, S56): +11.8 +- 22.8, LOS 84.6%, 500 games; prediction right (at the most likely value). Pooled with S48
+  (pentanomial, 1500 games): +15.1 +- 12.8, LOS 98.9%, an upper estimate (S48 chose the adoption). `rel090` as of cf00634 is
+  better than `chcm` at 60+1 by about +12 (this batch alone, unbiased) to +15 (pooled).
+- Floor replay on the fixed TT (2026-11-19, review after the TT replacement bug): S48 (+16.7 at 60+1, the batch that led to
+  the adoption) was played with the old TT rule, under which the 4 MB table is almost useless at 60+1. Run `ttrp-f4-f0-tc60`:
+  the same `ttrp` binary on both sides with `epTTRep=2`, floor 4 (compiled) against `epLmrFlr=0`, MEMO, 60+1, 1000 games fixed
+  (500 rounds, openings from 5001), 4 MB, read once at the end. Smoke on mini (10+0.1, 16 games, the exact parameters): normal
+  endings, no time losses, both parameter sets passed.
+  Prediction (before any game): -10 to +20, most likely +6. Reasons: S48 is selected (regression towards about +10); with a
+  working table the search is about 1.65 ply deeper at 60+1 (S59), and part of what the floor gave may have been a lower cost of
+  re-searches that the old table did not keep; the floor still limits the deepest reductions, which should matter more, not
+  less, in deeper searches. LOS >= 95% needs about +14 in 1000 games: confirmation alone about one in four; a clear loss (below
+  about -10) would reopen the floor.
 - Lim 6000 apart: H0 (expected) ends the single ramp steps at 10+0.1; a pass keeps 6000 and checks it at the long time control with
   the cap. Result: neither, +1.86 +- 3.50 after 20000 games (S36): no more ramp steps at 10+0.1; Lim 6000 stays a candidate for step
   A3 (the ramp speed at the long time control with the new cap).
@@ -577,7 +612,7 @@ Review when: the LMR itself changes (start level, PV nodes); the rank in the nod
   is legal and the side is not in check. Costs only in nodes where everything was pruned. With `mbnd` in its screen, as the eval
   clamp aligned with `nearmate`. Done in `mbnd` 4708209 (S47).
 
-### TT replacement (status: running)
+### TT replacement (status: adopted)
 Now: a bug found by reading the code (review 2026-11-15, `Search/SEARCH-REVIEW-BUGS.md` finding 3), present since the TT
 reorganisation years ago: `scoreReplaceLow` (`Hash/TransTab.hs:242`) masks with `lowc .&. 0xFFFF`, which keeps the move instead of
 removing it: in a full cell the entry with the smallest move code is replaced (white moves before black ones), generation, type,
@@ -618,6 +653,21 @@ Prediction (2026-11-18, before any result): the old rule is a replacement by mov
 and blind to age, so deep and current entries are lost in full cells; a depth and age rule should gain, more at the long time
 control where the table is fuller. a) 10+0.1: -3 to +12, most likely +5; H1 slightly more likely than H0 (about 55%).
 b) 60+1: -5 to +25, most likely +10 (LOS >= 95% needs about +14 in 1000 games: adoption by b alone about one in three).
+Interim of b (2026-11-18, trend only, the run is read at its end): +145.3 +- 35.8 after 220 games, far outside the prediction.
+Mechanism checked in the partial PGN (226 games, `C:\Learn\Data\results\memo\ttrp-f2-r90a-tc60`, `depths-part.txt`): at the same
+time per move (1.68 s against 1.72 s) `ttrp` reaches 1.65 +- 0.09 ply deeper, growing with the game (0.76 below ply 20, 2.1 from
+ply 120: the table fills) and with the score (3.7 at 10 pawns or more); no time losses, all terminations normal. So the old rule
+makes the 4 MB table almost useless at 60+1. If it holds: every 60+1 result so far (LMR caps S40, floor S48, `r90a` S56) was
+measured with a crippled table; the important ones need a check on the fixed base, and the gain with a bigger hash (GUI) is
+smaller.
+Result of a (2026-11-18, S59): +11.99 +- 10.99, LOS 98.4%, 2000 games: a gain also at 10+0.1 (prediction +5, at the upper
+edge). Interim of b at 500 games (trend only): +128.6 +- 22.3. Fill of the 4 MB table (estimate, S59): writes per move about
+0.2 to 0.3 of the entries at 10+0.1, 1.3 to 2 at 60+1, which explains the factor of about ten. GUI games at 5m+1s with 256 or
+512 MB: about 0.03 to 0.1, the bug probably cost little there (unless no Hash was set: 4 MB).
+Result of b (2026-11-19, S63): +121.1 +- 15.6, LOS 100%, 1000 games (prediction +10: wrong by an order of magnitude).
+Adopted by the time control rule (60+1 decides, 10+0.1 no loss: +12.0). Merge of `ttrp` with `epTTRep = 2` compiled in on the
+user's request (new perf reference then 11671539 on tests.fen depth 10).
+Merged into `rel090` 2026-11-19 (dc3fb20, S64): `epTTRep = 2` compiled in, perf reference 11671539 (tests.fen depth 10).
 
 ### Hash option of the engine (status: done)
 Now: both issues fixed on branch `hfix`, merged into `rel090` 2026-11-17 (S50); engine play unchanged (same nodes, perft).
@@ -648,9 +698,53 @@ Interpretation history: 2026-11-17: the lab session read "the engine applies the
 working), no leak"; its test harness sent `go` without a time limit and never `stop`, so the engine was still searching when the
 next game began. Corrected the same day (S49).
 
-### Aspiration windows (status: open)
-Now: code present, off since 2013 (`useAspirWin`). Not tested in this round. 2026-10-31.
-Next: 10k-node games may be enough (user).
+### Aspiration windows (status: parked)
+Now: built as parameters on `aspw` 0e52350 (from `ttrp`), measured by node counts only (S60, `Search/ASPIRATION.md`): with the
+PV node fix (`epPvsNt=1`) no window saves nodes (36 to 75 within about +-2% at depth 10 and 12, narrower ones cost 7 to 19%);
+without it every window cost much (the defect, block "PV node type after a fail low"). Moderately sure for the nodes;
+games are not measured. 2026-11-18.
+Forms:
+| Form | Branch, commit | Parameters | Differs by |
+|---|---|---|---|
+| old | `useAspirWin` (off since 2013) | window 24 (`Uci/UciGlue.hs`; 36 in the dead `Search/Thread.hs`) | one try, then full window |
+| A | `aspw` 0e52350 | `epAspW=w`, `epAspGrow=0` | as old, window as parameter, no aspiration at mate or clamp scores |
+| B | `aspw` 0e52350 | `epAspW=w`, `epAspGrow=4` | the failing side widened by 4, up to 2 more tries, then full window |
+Evidence:
+| Date | Form | Test (method, conditions) | Result | S<n> | Reading then |
+|---|---|---|---|---|---|
+| 2026-11-18 | A, B, w 15 to 75 | node counts, perf build, epTTRep=2, roots-500 and tests.fen depth 10, 100 roots depth 12 | with epPvsNt=1: w 36-75 about 0 (+-2%), 25 +7%, 15 +19%; with epPvsNt=0: +4% to +340% | S60 | no node gain; the defect hid it before |
+Review when: `epPvsNt` adopted; then possibly a game test of w 50 or 75 with growth 4 (TT bounds, order after a fail and the
+fallback move on timeout are not node questions). Low priority.
+Next: nothing before the PV node type is decided.
+
+### PV node type after a fail low (status: running)
+Now: found while measuring aspiration (S60, 2026-11-18): a PV node whose first move fails low searched all its moves as PV
+nodes (full window, no LMR, no null move), recursively; `epPvsNt=1` moves to zero window after the first move, as in PVS.
+-12% nodes on tests.fen, -16% on roots-500 (depth 10, epTTRep=2). Fewer nodes are not Elo: the extra effort sat in the
+unstable nodes. Not tested in games.
+Forms:
+| Form | Branch, commit | Parameters | Differs by |
+|---|---|---|---|
+| 1 | `aspw` b54d34d | `epPvsNt=1` (compiled 0) | `checkFailOrPVLoop`, `checkFailOrPVRoot`: `nxtnt` moves on also after a fail low |
+Evidence:
+| Date | Form | Test (method, conditions) | Result | S<n> | Reading then |
+|---|---|---|---|---|---|
+| 2026-11-18 | 1 | node counts, deterministic perf build, depth 10, epTTRep=2 | tests.fen 11671539 -> 10251160, roots-500 83.2M -> 69.7M | S60 | an efficiency defect; games decide |
+Branch `pvnt` (2026-11-18, from `ttrp` c64ad37): 8ad4922 identity, 8c61267 `epPvsNt = 1` compiled in (the parameter stays,
+`epPvsNt=0` is `ttrp`). Checks (feature session): `epPvsNt=0` identical to `ttrp` (11367370; 11671539 with epTTRep=2); new perf
+reference tests.fen depth 10: 10606600 (-6.7% with the compiled epTTRep=0; -12.2% with epTTRep=2); roots-500 depth 10 with
+epTTRep=0: 81.4M -> 71.0M (-12.7%). Data `C:\Learn\Data\measurements\search\pvnt`. Fast build (integration session) `id name
+Barbarossa 0.9.0 pvnt`; smoke on mini against `ttrp`, both `-p epTTRep=2`, 10+0.1, 16 games: normal endings, no time losses.
+Run plan (2026-11-18): MEMO `pvnt-t2-ttrp-tc10`, `pvnt` against `ttrp`, both with `epTTRep=2` (the fixed TT rule, on which
+the saving is about twice as large; the only difference is the fix), 10+0.1, 2000 games fixed (1000 rounds), 4 MB, read
+once at the end; then 60+1 by the result.
+Prediction (2026-11-18, before any game): about 12% fewer nodes at the same depth act like a speedup of 0.18 doublings, an
+upper estimate of 8 to 14 Elo if the search quality stays; the saved nodes are the unstable ones (a zero window fail high not
+confirmed), which the old code searched more thoroughly, so the quality may go either way. 10+0.1: -5 to +15, most likely +6.
+60+1: -5 to +15, most likely +5.
+Result at 10+0.1 (2026-11-19, S62): +2.8 +- 11.1, 2000 games, LOS 68.8% (prediction +6): no loss, no clear gain; the node
+saving does not arrive as a speedup. 60+1 decides: `pvnt-t2-ttrp-tc60` on MEMO, 1000 games, openings from 4001, read once
+at the end (prediction above: +5).
 
 ### `improving` (status: open)
 Now: not built; `staticScore` two plies back is on `stack`, so cheap. 2026-10-31.
@@ -811,7 +905,7 @@ Reviews of the eval and of the tuning method from reading the code (2026-11-14, 
 after the search work: `Eval/EVAL-REVIEW-EXISTING.md` (king attack, passed pawns), `Eval/EVAL-REVIEW-MISSING.md` (safe checks,
 pawn shelter and storm), `Eval/FORK-TERMS.md`, `Eval/TUNING-REVIEW.md`, `Eval/PAWN-ENDGAME-BUG.md`.
 
-### `pawnEndGame`: square used as the distance to promotion (status: open)
+### `pawnEndGame`: square used as the distance to promotion (status: adopted)
 Now: a bug, in the engine since before 0.8.0 and in `chcm`: in `pawnEndGame` (`Eval/Core.hs`, the special eval for kings and pawns
 only) `mim`/`miy` take the square of the escaped pawn nearest to promotion (`fst`) instead of its distance (`snd`). Read from the
 code (`Eval/PAWN-ENDGAME-BUG.md`): with one escaped pawn the score falls 64 cp per step for White (rises 64 for Black, 8 meant);
@@ -832,7 +926,7 @@ step); perft unchanged; perf nodes tests.fen d10 11367370 (unchanged), the 14 en
 `endgames.fen`) d14 6327943 -> 6327940, 40 pawn endings from self-play (r2-gen2) d12 2588328 -> 2747418.
 Run: together with the KPK bitbase below (one branch, one run), see there.
 
-### KPK bitbase (status: open)
+### KPK bitbase (status: adopted)
 Now: design only (2026-11-17, `Eval/KPK-BITBASE.md`): an exact KPK table of 24 KB, generated by retrograde passes (lazily at run
 time or as a generated module), used in `specialsOf` before `pawnEndGame` with exactly one pawn; checked against Syzygy. About one
 day. Today the engine cannot tell a won from a drawn KPK. Eval phase, with the `pawnEndGame` fix above.
@@ -870,8 +964,10 @@ rounds = 4000 games fixed; `run_timed.ps1` got `-Openings` and `-Order` in lab);
 Plan changed (user, 2026-11-18): both runs dropped. The fixes are proved by their checks (Syzygy, play-outs, symmetry); the gain is
 too small for a match of normal size. Instead a sanity run `pegk-r90a-tc60s`, 60+1, 100 games (50 rounds, openings from 3001),
 next on MEMO: only crashes, time losses or anything odd count. After it: merge `pegk` into `rel090`.
+Result (2026-11-18, S57): +3.5 +- 45.9, 100 games, 27-26-47, no time losses, no crashes: clean. Merged into `rel090`
+(305043d, identity 550e38a); the code is `pegk` 3cdb421 apart from the identity, so its checks stand (tests.fen d10 11367370).
 
-### Lone king endings above the eval clamp (KQK and the family; status: open)
+### Lone king endings above the eval clamp (KQK and the family; status: adopted)
 Now: found 2026-11-18 in the `pegk` smoke (in `r90a` too, so in `chcm` and `rel090`): `scoreToMate` (`Eval/Core.hs`) gives KQK
 21440 to 22370 (`TuneSGD -X` special score, e.g. `8/7K/8/3k4/8/8/1Q6/8 w` 21440), above the clamp of the static eval (19744,
 `matesc` / `evalMax`): `posEval` clamps every KQK position to 19744, the drive to the edge and the king distance are lost. In

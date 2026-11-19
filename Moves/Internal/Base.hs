@@ -66,7 +66,7 @@ informCtx = lift . talkToContext
 posToState :: MyPos -> Cache -> History -> EvalState -> MyState
 posToState p c h e = MyState {
                        stack = [p''],
-                       hash = c,
+                       hash = setReplRule (epTTRep (esEParams e)) c,
                        hist = h,
                        mstats = ssts0,
                        evalst = e,

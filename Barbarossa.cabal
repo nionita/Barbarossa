@@ -46,6 +46,7 @@ Executable Barbarossa
       template-haskell
   Other-modules:
       Eval.Core,
+      Eval.KPK,
       Eval.FileParams,
       Hash.TransTab,
       Hash.Zobrist,
@@ -114,6 +115,7 @@ Executable SelfPlay
   Other-modules:
       SelfPlay.SPRT,
       Eval.Core,
+      Eval.KPK,
       Eval.FileParams,
       Hash.TransTab,
       Hash.Zobrist,
@@ -187,6 +189,7 @@ Executable TuneSGD
       Tune.EvalAccum,
       Tune.Utils,
       Eval.Core,
+      Eval.KPK,
       Eval.FileParams,
       Hash.TransTab,
       Hash.Zobrist,

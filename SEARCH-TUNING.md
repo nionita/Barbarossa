@@ -1242,3 +1242,120 @@ explained by the search cost, without assuming that a found mate does harm. The 
 7 left them unchanged, so the cost is the mate guards' (b7fb86e), by elimination, not by a separate build. The +- ignores the
 correlation of the moves within a game; the differences are many times larger. Data: `C:\Learn\Data\results\memo\mbnd-chcm-tc10b`
 (`games.pgn`, `depths.py`, `depths.txt`).
+
+**S56.** `rel090` against `chcm` at the long time control (2026-11-17/18). `r90a` 771f656 (frozen `rel090` cf00634: `chcm` + LMR
+depth floor f = 4 + the `spdg` speed) against `chcm` on MEMO, 60+1, 500 games fixed (250 rounds, openings from 1001, disjoint from
+S48), 4 MB, read once at the end.
+Prediction (register, before the result): -10 to +35, most likely +12.
+Result: +11.82 +- 22.76, nElo +15.85 +- 30.45, LOS 84.6%, +143 -126 =231 (51.7%), pentanomial [17, 58, 88, 65, 22]. Prediction
+right. Pooled with S48 (`lf4` against `lmfl`, the floor alone, 1000 games, pentanomial [32, 98, 203, 124, 43]): 1500 games,
++15.1 +- 12.8, LOS 98.9%; an upper estimate, because S48 is the batch that led to the adoption, and a lower one for the speed
+(not in S48). Reading: the current base beats `chcm` at 60+1 by about +12 to +15; alone not significant. The header's
+"4MB - 16MB" is the Hash option default as each engine reports it (`r90a` has the hash fix); both play with 4 MB.
+Result in `C:\Learn\Data\results\memo\r90a-chcm-tc60`.
+
+**S57.** Eval package `pegk` adopted (2026-11-18). `pegk` 3cdb421 (`r90a` + the `pawnEndGame` fix bf8d52b, the KPK bitbase
+e04a604, the lone king endings below the eval clamp with KBNK to the bishop's corner 3cdb421; checks in the register: Syzygy,
+play-outs, symmetry, node counts) against `r90a` on MEMO, 60+1, 100 games (openings from 3001), 4 MB, a sanity run only (user: the
+gain is too small for a match of normal size). Result: +3.47 +- 45.94, +27 -26 =47, pentanomial [4, 9, 20, 16, 1], no time
+losses, no crashes: clean. Merged into `rel090` (305043d), identity reset (550e38a); the merged code equals `pegk` apart from the
+identity, so the perf reference stays 11367370 on tests.fen depth 10 (eval changes act only in the endings). Result in
+`C:\Learn\Data\results\memo\pegk-r90a-tc60s`.
+
+**S58.** `mbsp` sanity run (2026-11-18). `mbsp` 01a4667 (`r90a` + review findings 7 and 4 with the clamp `evalMax`, no mate
+guards; register block "Null move and QS delta cut at a mate bound") against `r90a` on MEMO, 60+1, 100 games (openings from
+3101), 4 MB, a sanity run only (user).
+Prediction (register, before any game): -1 to +1, most likely 0.
+Result: -20.87 +- 44.15, LOS 17.5%, +21 -27 =52, pentanomial [3, 13, 23, 9, 2]; no time losses, no crashes, all terminations
+normal (34 repetitions, 48 mates, 13 insufficient material, 5 fifty moves). A true 0 scores this low or lower about once in 6.
+Checks of the games (the user found the number not good): depth per move at the same time 14.094 against 14.080 (+0.014 +- 0.13:
+no slowdown; 100 games resolve only about 0.13 ply); no move with a 0.00 of `mbsp` next to a score of 1.5 or more of `r90a`
+(the sign a wrong stalemate draw would leave); the 27 losses turn gradually, both engines' scores agreeing (no sudden
+misjudgement). Reading: noise, as the node counts (36 nodes on tests.fen) leave no room for an effect of this size; nothing odd.
+Data: `C:\Learn\Data\results\memo\mbsp-r90a-tc60s` (`games.pgn`, `depths.txt`, `odd.txt`).
+
+**S59.** TT replacement fix at 10+0.1 (2026-11-18). `ttrp` c64ad37 `epTTRep=2` (review rule: replace the smallest
+(depth - 4 * age, type, nodes)) against `r90a` 771f656 (the old rule: smallest move code), MEMO, 10+0.1, 2000 games fixed (1000
+rounds), 4 MB (engine default, no `-Hash`), read once at the end.
+Prediction (register, before any result): -3 to +12, most likely +5.
+Result: +11.99 +- 10.99, nElo +16.64 +- 15.23, LOS 98.4%, +604 -535 =861 (51.7%), pentanomial [63, 217, 389, 250, 81].
+Prediction: direction right, the number at the upper edge of the range. Interim of the 60+1 run at the same time (500 of 1000
+games, trend only): +128.6 +- 22.3, pentanomial [4, 13, 86, 96, 51].
+Reading: the fix gains at both time controls, about ten times more at 60+1. That is the fill of the table: writes per move
+(every node outside QS stores, an estimated 30 to 50% of the nodes; MEMO about 450k nodes per second, 3.2 times the boxes, S40)
+against 262k entries in 4 MB are about 0.2 to 0.3 at 10+0.1 and 1.3 to 2 at 60+1, where the old rule throws out current deep
+entries within the same move (register block "TT replacement": 1.65 ply deeper at 60+1). Under the time control rule
+the 10+0.1 result only had to show no loss beyond about 10; it shows a gain. Estimate (not measured) for GUI games at 5m+1s:
+about 1.1 to 1.9M writes per move against 16.8M entries with 256 MB (0.07 to 0.11) or 33.5M with 512 MB: the old rule probably cost
+little there, comparable to or less than 10+0.1 at 4 MB; filling 256 MB in one move needs 75 to 120 s per move. So the bug
+distorted mainly our own long time control matches at 4 MB, and GUI games only where no Hash was set (engine default 4 MB).
+Result in `C:\Learn\Data\results\memo\ttrp-f2-r90a-tc10`; the interim in `...\ttrp-f2-r90a-tc60\interim-500.txt`.
+
+**S60.** Aspiration windows at the root by node counts, and the PV node type after a fail low (2026-11-18, own session).
+Branch `aspw` from `ttrp` c64ad37: 4fa3916 identity, 0e52350 aspiration as parameters (`epAspW` half window, 0 = off;
+`epAspGrow` widening factor of the failing side, up to 2 more tries; `epAspMinD` first draft, 4; no aspiration at mate or
+clamp scores; diagnostic counters), b54d34d `epPvsNt` (below); all compiled off, off identical to `ttrp` (11367370 nodes with
+epTTRep=0, 11671539 with 2, tests.fen depth 10), perft unchanged. Report `Search/ASPIRATION.md` (copied to `rel090`; line
+links there point into `aspw`). Found on the way: the window in use was 24 (`Uci/UciGlue.hs`), not 36 (`Search/Thread.hs`
+is not in the cabal file, dead code).
+Defect: a PV node moved its later moves to zero window only after a move raised alpha; when its first move failed low, all
+moves were searched as PV nodes (full window, no LMR, no null move), recursively. With the full window it fires in PV
+re-searches after a zero window fail high whose first move then fails low (search instability), with a narrow window in
+every PV node of the first line below the window (tests.fen position 47, window 25: 3.2x the nodes without a root fail).
+`epPvsNt=1` moves the node type on after the first move, as in PVS. Deterministic perf build, epTTRep=2, depth 10:
+tests.fen 11671539 -> 10251160 (-12%), roots-500 83.2M -> 69.7M (-16%). Not a wrong score: the effort goes into the
+unstable nodes; fewer nodes are not Elo, games decide.
+Aspiration with epPvsNt=1 (roots-500, depth 10, chunks of 25 positions, geomean of the per-position ratios against off,
+bootstrap 95%): window 15 +18.7% [16.1, 21.5], 25 +7.3% [5.1, 9.6], 36 +0.1 / -0.2 (growth 0 / 4), 50 +1.4 [-0.3, 3.3],
+75 +0.4 / +0.5; tests.fen 50/4 -2.4% [-5.5, 0.5]; first 100 roots at depth 12: 36/4 +0.9, 50/4 -2.0 [-4.8, 0.9], 75/4 -1.1.
+Without the fix every window cost (window 36: +67% total). Growth 4 against 0: no clear difference. The positions that fail
+are those with large score swings (median swing 208 against 76); per draft 10-15% of the positions fail at depth 10, 4-10% at
+depth 12. The per-position log ratio has an sd of about 0.2 even without a fail, so +-2% is no effect.
+Reading: aspiration saves no nodes in any form here; `epPvsNt=1` is the find, a candidate for games on its own (against the
+parent build, screened at 10+0.1, decided at 60+1). Raw data: `C:\Learn\Data\measurements\search\aspw`.
+
+**S61.** `mbsp` trend games (2026-11-18). `mbsp` 01a4667 against `r90a` 771f656 on MEMO, 60+1, 200 games fixed (100 rounds,
+openings from 3151, disjoint from S58), 4 MB (both the old TT rule).
+Result: -8.69 +- 32.55, nElo -12.89 +- 48.15, LOS 30.0%, +45 -50 =105 (48.75%), pentanomial [4, 29, 42, 18, 7]; `r90a` lost one
+game on time (in favour of `mbsp`), no crashes. Pooled with S58 (pentanomial [3, 13, 23, 9, 2]): 300 games, [7, 42, 65, 27, 9],
+-12.8 +- 26.2, LOS 16.9%.
+Reading: the prediction (-1 to +1, most likely 0) lies inside the interval; 300 games cannot tell 0 from -13 or from +13. The
+node counts leave room for no effect of this size (36 nodes on tests.fen, one mate root changed), so the trend is read as noise,
+as S58; nothing in the games was odd (S58). Result in `C:\Learn\Data\results\memo\mbsp-r90a-tc60b`.
+Depths (2026-11-18, the user asked whether `mbsp` searches the same tree slower): `depths.py` on the 200 games and on all 300
+(with S58), at the same time per move (1.721 s against 1.719 s): 300 games 13.959 against 13.975, -0.016 +- 0.073 ply (200 games:
+-0.031 +- 0.089); below a score of 1 -0.085 +- 0.089, with a mate score +0.52 +- 0.29 (`mbsp` deeper there: finding 7 no longer
+searches a mated root move in front). A 5 to 10% slower search would show as about 0.1 to 0.15 ply less; the interval reaches
+-0.09, so a small slowdown is not excluded, a large one is. Oddities (`odd.py`, 200 games): no 0.00 of `mbsp` next to a clear
+score of `r90a`, 50 losses all with a gradual turn, one time forfeit (`r90a`, 491 ms over). Data: `depths.txt`, `depths300.txt`,
+`odd.txt` in the result folder.
+
+**S62.** PV node type after a fail low at 10+0.1 (2026-11-18/19). `pvnt` 8c61267 (`epPvsNt = 1` compiled in) against `ttrp`
+c64ad37, both `-p epTTRep=2` (the fixed TT rule; the only difference is the fix), MEMO, 10+0.1, 2000 games fixed (1000 rounds),
+4 MB, read once at the end.
+Prediction (register, before any game): -5 to +15, most likely +6.
+Result: +2.78 +- 11.12, nElo +3.81 +- 15.23, LOS 68.8%, +566 -550 =884 (50.4%), pentanomial [76, 227, 372, 255, 70].
+Prediction right (inside the range, below the most likely value, as most predictions so far).
+Reading: about 12% fewer nodes at the same depth do not show as the 8 to 14 Elo of a speedup; the saved search in the unstable
+nodes seems to have been worth part of its cost. No loss beyond about 10, so by the time control rule the 60+1 run decides:
+`pvnt-t2-ttrp-tc60` started on MEMO (1000 games, openings from 4001). Result in `C:\Learn\Data\results\memo\pvnt-t2-ttrp-tc10`.
+
+**S63.** TT replacement fix at 60+1 (2026-11-18/19). `ttrp` c64ad37 `epTTRep=2` (replace the smallest (depth - 4 * age, type,
+nodes)) against `r90a` 771f656 (old rule: smallest move code), MEMO, 60+1, 1000 games fixed (500 rounds, openings from 2001),
+4 MB (engine default), read once at the end.
+Prediction (register, before any result): -5 to +25, most likely +10.
+Result: +121.06 +- 15.63, nElo +180.77 +- 21.53, LOS 100%, +442 -107 =451 (66.75%), pentanomial [7, 37, 164, 198, 94].
+Prediction wrong by an order of magnitude: the old rule was taken as close to random replacement, its cost at a full table was
+not estimated. Mechanism (partial PGN, register block "TT replacement"): 1.65 ply deeper at the same time, growing with the game.
+Together with S59 (+12.0 at 10+0.1): the gain grows with the fill of the 4 MB table (writes per move about 0.2 to 0.3 of the
+entries at 10+0.1, 1.3 to 2 at 60+1). Adoption by the time control rule (LOS >= 95% at 60+1, no loss at 10+0.1). Consequence:
+every earlier 60+1 match (and less so the 10+0.1 ones) was played with a crippled table; review of those matches as planned
+(register summary), first the LMR floor replay `ttrp-f4-f0-tc60` (started 2026-11-19). Result in
+`C:\Learn\Data\results\memo\ttrp-f2-r90a-tc60`.
+
+**S64.** TT replacement merged (2026-11-19). `ttrp` merged into `rel090` (dc3fb20; the only conflict was the identity, reset to
+`rel090`), `epTTRep = 2` compiled in. Checks, deterministic perf build of the merge: tests.fen depth 10 11671539 nodes (new
+reference; with `epTTRep=0` 11367370, the previous `rel090`, so the merge brings nothing but the rule), perft of the 5 standard
+positions right. The other 4 MB results of `rel090` are now measured with the old table; their review is the plan in the register
+summary (first the floor replay `ttrp-f4-f0-tc60`, then cap 13 against 15). Matches against `rel090` from now on need a new
+frozen build (the `r90a` builds have the old rule).
