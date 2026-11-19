@@ -20,6 +20,8 @@
 
 ## Post-Build Deployment
 
+- Match builds are different: a fast build for timed matches is installed with the user's `install_fast.ps1` (skill
+  `match-runs`), not with `deploy_exes.py`; feature sessions do not deploy at all, the integration session does.
 - After a successful build, deploy executables with:
   - `python scripts/deploy_exes.py`
 - The script renames and copies:

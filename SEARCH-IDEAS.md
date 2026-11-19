@@ -10,7 +10,7 @@ the idea. Elo from the candidate's side with 95% error bars. "Adopted" means in 
 Older branches (before 0.8.0, e.g. `lmrfix`, `lmrfix14`, `hlmr`, `slmr`, `ttlmr`, `hiss`, `mpru`) hold earlier tries of some of these ideas; they
 are not reviewed here. The user's experience: negative history and squared bonuses lost Elo each time.
 
-## Now (2026-11-17)
+## Now (2026-11-17, last added 2026-11-19)
 
 - Base: `chcm` (S26) = `fbas` + counter moves + continuation history, +22.5 +- 8.0 against `expo` (S27, 4000 games). `fbas` (S24) = `expo`
   (`nmlm` with cleanups, +13.0 vs `hprf`) + filter + T100. At 60+1 `chcm` against `dev090` +82.5 +- 16.0, 1000 games (S46): the short
@@ -120,8 +120,9 @@ Player comparisons from 2026-11-19 (earlier ones: the log, by their S numbers):
 
 Exception (2026-11-19, user; to correct, then mark obsolete): batch 1 of cap 13 against 15 on m3a (`rel090-m13-m15-b1`) was
 started before this rule with the moving branch: `rel090` a96b702 (code = b00f14a = `r90b` without its identity commit), names in
-the games `m13` and `rel090`. It is not restarted. When it is done: record it as `r90b-m13` against `r90b` (the code is the same),
-with this note in its S entry and in `RUNS.md`, then mark this exception obsolete.
+the games `m13` and `rel090`. It is not restarted. When it is done: it counts as `r90b-m13` against `r90b` (the code is the same) and is pooled
+with the other batches (no reading of its own); the pooled S entry carries this note; then mark this exception obsolete
+here and in `RUNS.md`.
 
 ## Move ordering
 
