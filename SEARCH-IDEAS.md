@@ -281,7 +281,15 @@ Evidence:
 ### RFP: no cut with an opponent passer on rank 6/7 (status: open)
 Now: the sharpest signal of the shadow diagnostic, never played; wrong cuts can be cheap. 2026-10-31.
 Evidence: wrong rate 5.3x, 10.4x in endgames; gives up 10% of the decisions for 38% of the wrong cuts (S13).
-Next: build, 10k-node games (pruning shows there), then SPRT.
+Built (2026-11-19, feature session): `rfpp` a3bc06b (identity 0a00424) from `r90b` ace64a7, parameter `epRFutP` (cp, compiled
+0 = off; 10000 = no RFP cut there): when the base margin would cut and the opponent has a passed pawn on its 6th or 7th rank
+(`yoAdvPassed`: the passed bitboard, ranks 2/3 for a black opponent), the margin grows by `epRFutP`; added to `epRFutT`.
+Deterministic perf, tests.fen depth 10: off 11671539 (= `r90b`), P50 10906095, P100 10582632, P10000 11237441 (less pruning,
+fewer nodes in all three: the chaotic tree, node totals do not select). Census (build flag `lmrcensus`) at off: 2.7% of the
+RFP cuts have such a passer (28526 of 1055253), mostly at depth 1-2 (19646, 5874, 2105, 582, 230, 89 for d1..d6). Perft
+right, no warnings. The S13 rate on today's engine would need `rfpdiag` ported (not done).
+Forms to play: P100 (the analogue of `epRFutT`, S22) and P10000 (no cut, the S13 form; for hanging pieces this lost, S12).
+Next: 10k-node games (pruning shows there), then an SPRT at 10+0.1 of the better form against `r90b`.
 
 ### RFP: cut more when an opponent piece hangs (status: open)
 Now: wrong rate 0.3x (S13). User: only after the RFP SPRTs. 2026-10-31.
