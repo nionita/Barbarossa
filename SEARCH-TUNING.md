@@ -1359,3 +1359,12 @@ reference; with `epTTRep=0` 11367370, the previous `rel090`, so the merge brings
 positions right. The other 4 MB results of `rel090` are now measured with the old table; their review is the plan in the register
 summary (first the floor replay `ttrp-f4-f0-tc60`, then cap 13 against 15). Matches against `rel090` from now on need a new
 frozen build (the `r90a` builds have the old rule).
+
+**S65.** Floor on cap 13 at the long time control, old TT (2026-11-17/19). `l13f` = `lmfl` da23a27 `epLmrMax=13,epLmrFlr=4`
+against `lmfl` `epLmrMax=13` (same binary), m3a, 192+3.2 (= 60+1 on MEMO), 4 MB (engine default), concurrency 8, 2000 games
+fixed, read at the end (interim at 1800 seen as a trend only).
+Prediction (register, before the result): -12 to +18, most likely +3.
+Result: +5.21 +- 10.28, nElo +7.72 +- 15.23, LOS 84.0%, +497 -467 =1036 (50.75%), pentanomial [43, 251, 400, 245, 61], 53.9 hours.
+Prediction right (in the range, 2 above the most likely value). Not shown (LOS < 95%): the floor adds little or nothing to
+cap 13, as expected (both act on the same deep reductions). Played with the old TT rule (4 MB full at this time control, S63):
+its reading is limited to the old engine. Result in `C:\Learn\Data\results\m3a\lmfl-m13f4-m13`.

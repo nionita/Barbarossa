@@ -35,6 +35,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
   Plan (user, 2026-11-18), after the 10+0.1 run decides: every earlier match is judged on whether the crippled table could have
   favoured or hurt one setup (e.g. the LMR caps, the floor, the long time control results): a replay or just a sanity check on
   the fixed base. Matches stay at 4 MB with the right rule; larger hashes as a further check.
+  2026-11-19 (user): new runs use a hash by the time control (16 MB at 10+0.1, 64 MB at 60+1, 256 MB at 5m+1s, about the
+  table use of real games); 4 MB only for replays of 4 MB results.
 - PV node type after a fail low (S60, 2026-11-18): found while measuring aspiration (`aspw`); `epPvsNt=1` -12% to -16% nodes
   at depth 10; `pvnt` at 10+0.1 +2.8 +- 11.1 (S62), 60+1 running. Aspiration itself saves no nodes (parked).
 - Designs for later (2026-11-17, nothing built): `SPEED-IDEAS.md` (speed and simplification), `Search/TB-SYZYGY.md` (Syzygy probes),
@@ -513,6 +515,8 @@ and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEM
   1. m3a, `lmfl-m13f4-m13`: floor f = 4 on cap 13 (`epLmrMax=13,epLmrFlr=4`, `l13f`) against cap 13 (`epLmrMax=13`). Question:
   does the floor add to cap 13? Prediction (before the result): -12 to +18, most likely +3 (both act on the same deep
   reductions; cap 13 already reduces less, so less is left for the floor than its +16.7 at cap 15).
+  Result (S65, 2026-11-19): +5.2 +- 10.3, LOS 84%, 2000 games; prediction right (in the range, near +3). Not shown; old
+  TT rule, so limited to the old engine. The fixed-TT question is now cap 13 against 15 with the floor on both sides.
   2. m3b, `lmfl-m12-m13`: cap 12 (`epLmrMax=12`, `lm12`) against cap 13. Question: is the bottom of the curve below 13?
   Prediction (before the result): -15 to +20, most likely +3 (the steps were 23 and 41 Elo per 2 levels above 13, but a
   curve that steep does not go on forever, and 12 already costs more at short time controls).
@@ -571,9 +575,9 @@ and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEM
 - Cap 13 against 15 on the fixed TT (2026-11-19, user's go, boxes): S40 (+40.7 for cap 13, no floor) and the box runs of
   2026-11-17 (floor on cap 13, cap 12) were played with the old TT rule. Run: `rel090` b00f14a (floor 4 and `epTTRep = 2`
   compiled) on both sides, `epLmrMax=13` (`m13`) against the compiled cap 15, 192+3.2 (= 60+1), 64 MB (see Hash below),
-  concurrency 8. The boxes are near their shutdown (user): batches of a fixed 200 games (100 rounds) each, m3a and m3b in
-  parallel on disjoint openings (`-Start` 7001, 7101, then 7201, 7301, ...), as many batches as end before the shutdown, pooled
-  and read once after the last one. The MEMO run `ttrp-m13-m15-tc60` (queued) asks the same question and can be pooled.
+  concurrency 8. The boxes are near their shutdown (user): batches of a fixed 400 games (200 rounds) each (user, 2026-11-19;
+  first plan 200), m3a and m3b in parallel on disjoint openings (`-Start` 7001 m3a, 7201 m3b, then 7401, 7601), as many
+  batches as end before the shutdown, pooled and read once after the last one. The MEMO run `ttrp-m13-m15-tc60` (queued) asks the same question and can be pooled.
   Prediction (before any game): -15 to +35, most likely +10. Reasons: with the old table both sides together give about +29 for
   floor on 13 against floor on 15 (+40.7 cap alone, +5 interim of the floor on cap 13, +16.7 floor on 15); regression of the
   selected +40.7, and the floor already takes part of the deep reductions cap 13 removes; with a working table re-searches are
