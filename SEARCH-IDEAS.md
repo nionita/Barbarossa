@@ -30,8 +30,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
   games, no decision (S36).
 - Hash: every match so far played with 4 MB, not 16; the engine fix of its hash option is in `rel090` (merged 2026-11-17,
   S50); `-Hash` only for builds that contain it, older branches (e.g. `lmfl`) leak (block "Hash option of the engine").
-- TT replacement bug (block "TT replacement"): `ttrp` +12.0 +- 11.0 at 10+0.1 (2000 games, S59), +128.6 at 60+1 after 500 of
-  1000 games (interim), 1.65 ply deeper at the same time.
+- TT replacement bug (block "TT replacement"): `ttrp` +12.0 +- 11.0 at 10+0.1 (2000 games, S59), +121.1 +- 15.6 at 60+1
+  (1000 games, S63), 1.65 ply deeper at the same time: adopted, merge on the user's request.
   Plan (user, 2026-11-18), after the 10+0.1 run decides: every earlier match is judged on whether the crippled table could have
   favoured or hurt one setup (e.g. the LMR caps, the floor, the long time control results): a replay or just a sanity check on
   the fixed base. Matches stay at 4 MB with the right rule; larger hashes as a further check.
@@ -612,7 +612,7 @@ Review when: the LMR itself changes (start level, PV nodes); the rank in the nod
   is legal and the side is not in check. Costs only in nodes where everything was pruned. With `mbnd` in its screen, as the eval
   clamp aligned with `nearmate`. Done in `mbnd` 4708209 (S47).
 
-### TT replacement (status: running)
+### TT replacement (status: adopted)
 Now: a bug found by reading the code (review 2026-11-15, `Search/SEARCH-REVIEW-BUGS.md` finding 3), present since the TT
 reorganisation years ago: `scoreReplaceLow` (`Hash/TransTab.hs:242`) masks with `lowc .&. 0xFFFF`, which keeps the move instead of
 removing it: in a full cell the entry with the smallest move code is replaced (white moves before black ones), generation, type,
@@ -664,6 +664,9 @@ Result of a (2026-11-18, S59): +11.99 +- 10.99, LOS 98.4%, 2000 games: a gain al
 edge). Interim of b at 500 games (trend only): +128.6 +- 22.3. Fill of the 4 MB table (estimate, S59): writes per move about
 0.2 to 0.3 of the entries at 10+0.1, 1.3 to 2 at 60+1, which explains the factor of about ten. GUI games at 5m+1s with 256 or
 512 MB: about 0.03 to 0.1, the bug probably cost little there (unless no Hash was set: 4 MB).
+Result of b (2026-11-19, S63): +121.1 +- 15.6, LOS 100%, 1000 games (prediction +10: wrong by an order of magnitude).
+Adopted by the time control rule (60+1 decides, 10+0.1 no loss: +12.0). Merge of `ttrp` with `epTTRep = 2` compiled in on the
+user's request (new perf reference then 11671539 on tests.fen depth 10).
 
 ### Hash option of the engine (status: done)
 Now: both issues fixed on branch `hfix`, merged into `rel090` 2026-11-17 (S50); engine play unchanged (same nodes, perft).

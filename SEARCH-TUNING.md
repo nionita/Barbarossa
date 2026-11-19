@@ -1339,3 +1339,16 @@ Prediction right (inside the range, below the most likely value, as most predict
 Reading: about 12% fewer nodes at the same depth do not show as the 8 to 14 Elo of a speedup; the saved search in the unstable
 nodes seems to have been worth part of its cost. No loss beyond about 10, so by the time control rule the 60+1 run decides:
 `pvnt-t2-ttrp-tc60` started on MEMO (1000 games, openings from 4001). Result in `C:\Learn\Data\results\memo\pvnt-t2-ttrp-tc10`.
+
+**S63.** TT replacement fix at 60+1 (2026-11-18/19). `ttrp` c64ad37 `epTTRep=2` (replace the smallest (depth - 4 * age, type,
+nodes)) against `r90a` 771f656 (old rule: smallest move code), MEMO, 60+1, 1000 games fixed (500 rounds, openings from 2001),
+4 MB (engine default), read once at the end.
+Prediction (register, before any result): -5 to +25, most likely +10.
+Result: +121.06 +- 15.63, nElo +180.77 +- 21.53, LOS 100%, +442 -107 =451 (66.75%), pentanomial [7, 37, 164, 198, 94].
+Prediction wrong by an order of magnitude: the old rule was taken as close to random replacement, its cost at a full table was
+not estimated. Mechanism (partial PGN, register block "TT replacement"): 1.65 ply deeper at the same time, growing with the game.
+Together with S59 (+12.0 at 10+0.1): the gain grows with the fill of the 4 MB table (writes per move about 0.2 to 0.3 of the
+entries at 10+0.1, 1.3 to 2 at 60+1). Adoption by the time control rule (LOS >= 95% at 60+1, no loss at 10+0.1). Consequence:
+every earlier 60+1 match (and less so the 10+0.1 ones) was played with a crippled table; review of those matches as planned
+(register summary), first the LMR floor replay `ttrp-f4-f0-tc60` (started 2026-11-19). Result in
+`C:\Learn\Data\results\memo\ttrp-f2-r90a-tc60`.
