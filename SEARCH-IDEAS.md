@@ -558,6 +558,16 @@ and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEM
   Result (2026-11-18, S56): +11.8 +- 22.8, LOS 84.6%, 500 games; prediction right (at the most likely value). Pooled with S48
   (pentanomial, 1500 games): +15.1 +- 12.8, LOS 98.9%, an upper estimate (S48 chose the adoption). `rel090` as of cf00634 is
   better than `chcm` at 60+1 by about +12 (this batch alone, unbiased) to +15 (pooled).
+- Floor replay on the fixed TT (2026-11-19, review after the TT replacement bug): S48 (+16.7 at 60+1, the batch that led to
+  the adoption) was played with the old TT rule, under which the 4 MB table is almost useless at 60+1. Run `ttrp-f4-f0-tc60`:
+  the same `ttrp` binary on both sides with `epTTRep=2`, floor 4 (compiled) against `epLmrFlr=0`, MEMO, 60+1, 1000 games fixed
+  (500 rounds, openings from 5001), 4 MB, read once at the end. Smoke on mini (10+0.1, 16 games, the exact parameters): normal
+  endings, no time losses, both parameter sets passed.
+  Prediction (before any game): -10 to +20, most likely +6. Reasons: S48 is selected (regression towards about +10); with a
+  working table the search is about 1.65 ply deeper at 60+1 (S59), and part of what the floor gave may have been a lower cost of
+  re-searches that the old table did not keep; the floor still limits the deepest reductions, which should matter more, not
+  less, in deeper searches. LOS >= 95% needs about +14 in 1000 games: confirmation alone about one in four; a clear loss (below
+  about -10) would reopen the floor.
 - Lim 6000 apart: H0 (expected) ends the single ramp steps at 10+0.1; a pass keeps 6000 and checks it at the long time control with
   the cap. Result: neither, +1.86 +- 3.50 after 20000 games (S36): no more ramp steps at 10+0.1; Lim 6000 stays a candidate for step
   A3 (the ramp speed at the long time control with the new cap).
