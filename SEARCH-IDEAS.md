@@ -618,7 +618,8 @@ and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEM
   2026-11-17 (floor on cap 13, cap 12) were played with the old TT rule. Run: `rel090` b00f14a (floor 4 and `epTTRep = 2`
   compiled; = `r90b`, see "Match builds and players") on both sides, `epLmrMax=13` (`r90b-m13`) against the compiled cap 15
   (`r90b`), 192+3.2 (= 60+1), 64 MB (see Hash below); batch 1 (m3a) under the exception noted there,
-  concurrency 8. The boxes are near their shutdown (user): batches of a fixed 400 games (200 rounds) each (user, 2026-11-19;
+  concurrency 8. The boxes are near their shutdown (user): b1, b2 400 games, b3, b4 300 games (chained, to end before the
+  shutdown; 1400 in all); planned as batches of a fixed 400 games (200 rounds) each (user, 2026-11-19;
   first plan 200), m3a and m3b in parallel on disjoint openings (`-Start` 7001 m3a, 7201 m3b, then 7401, 7601), as many
   batches as end before the shutdown, pooled and read once after the last one. The MEMO run `r90b-m13-r90b-tc60` (queued; first planned as `ttrp-m13-m15-tc60`) asks the same question and can be pooled.
   Prediction (before any game): -15 to +35, most likely +10. Reasons: with the old table both sides together give about +29 for
