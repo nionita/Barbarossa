@@ -809,7 +809,8 @@ at the end (prediction above: +5).
 Result at 60+1 (2026-11-19, S67): +56.8 +- 13.7, 1000 games, LOS 100%; prediction wrong, far too low. The gain appears in long
 searches only (S62 at 10+0.1: +2.8), like the TT fix: the cost of the PV cascade after a fail low grows with the depth.
 Adopted by the time control decision; merge into `rel090` on the user's request (then a new frozen base, `r90c` = `r90b` +
-`pvnt`). Open: the depth at the same time from the PGN (as S59), a sanity check of the mechanism.
+`pvnt`). Depth at the same time (S67): +0.93 +- 0.05 ply, growing with the game (+0.33 to +1.19) and the |score| (up to +2.1):
+the mechanism confirmed. Merge (user, 2026-11-19): after the box runs (cap 13 against 15 on `r90b`), for the same comparisons.
 
 ### `improving` (status: open)
 Now: not built; `staticScore` two plies back is on `stack`, so cheap. 2026-10-31.

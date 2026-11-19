@@ -1387,5 +1387,10 @@ Prediction wrong, far above its range (by the method of the time: node saving as
 with S62 (+2.8 +- 11.1 at 10+0.1): the gain appears only in long searches, as with the TT fix (S59, S63). Reading: the old code
 searched every move of a PV node whose first move failed low as a PV node, recursively (full window, no LMR, no null move); the
 cost of such a cascade grows with the depth, so it eats little of a 10+0.1 search and much of a 60+1 one. Qualifies under the
-time control decision (LOS >= 95% at 60+1, no loss at 10+0.1). Not checked yet: depth at the same time in the games (needs the
-PGN). Result in `C:\Learn\Data\results\memo\pvnt-t2-ttrp-tc60`.
+time control decision (LOS >= 95% at 60+1, no loss at 10+0.1).
+Depth at the same time (2026-11-19, PGN, `depths.py` of S61; expectation stated before: about +1 ply, growing with the game and
+largest where PV moves fail low): `pvnt` +0.93 +- 0.05 ply over 71.7k moves each, at slightly less time per move (1.55 s against
+1.62 s); by game phase +0.33 (ply < 20), +0.75 (20-59), +1.14 (60-119), +1.19 (>= 120); by |score| +0.62 below 1 pawn, +1.23 at
+1-3, +2.14 at 3-10, +1.56 at 10 and more. The mechanism as expected: the cascade cost most where the score is unbalanced (more
+fail lows of PV moves) and in deeper (later) searches. Merge (user, 2026-11-19): only after the box runs, for the same
+comparisons. Result in `C:\Learn\Data\results\memo\pvnt-t2-ttrp-tc60` (`depths.txt`).
