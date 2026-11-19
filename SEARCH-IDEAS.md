@@ -340,6 +340,11 @@ Trend (2026-11-18, S61): 200 more games -8.7 +- 32.6 (`r90a` lost one on time); 
 LOS 16.9%: the prediction is inside the interval, read as noise by the node counts. Decision (merge or not) is the user's.
 Depth at the same time over the 300 games: -0.016 +- 0.073 ply (S61): no large slowdown; nothing odd in the games.
 Parked (user, 2026-11-18): until a MEMO slot is free for a further match; then the merge decision.
+On the fixed base (2026-11-19): `mbsp` 2b28e1a = merge of `rel090` b00f14a (code of `r90b`) into 01a4667, made by a
+feature session (no conflicts: the KPK changes in `Eval/Core.hs` leave the clamp alone, and special evals, KPK included,
+pass the `evalMax` clamp in `posEval`). Deterministic perf, tests.fen depth 10: 11671538 (`r90b` 11671539, -1 node);
+perft unchanged, no warnings. Ready for the further match against `r90b` (players `mbsp` against `r90b`, 60+1, 64 MB;
+size and slot by the user). Prediction unchanged: -1 to +1, most likely 0.
 
 ### Late move pruning (status: rejected in this form)
 Now: loses, more with depth, also on the new ordering and with the count for the LMR level. Without `improving` late moves are not reliably bad. 2026-11-11.
