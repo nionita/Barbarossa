@@ -76,6 +76,11 @@ params = [
         -- late move reduction: floor of the reduced depth in eighths of the remaining depth, d' >= max 1 (d * f / 8)
         -- (0 = off: d' >= 1; Search/LMR-DEPTH-BOUND.md); 4 since 2026-11-17 (SEARCH-TUNING S48, S52)
         ("epLmrFlr",            4),
+        -- replacement rule of the transposition table in a full cell (Hash.TransTab.writeCache), fixed in the table
+        -- by posToState: 0 = as before (by mistake the entry with the smallest move code), 1 = generation > type >
+        -- depth > nodes (the move masked away), 2 = the smallest (depth - 4 * age, type, nodes), age = generations
+        -- since the store (SEARCH-REVIEW-BUGS finding 3); compiled 2 since 2026-11-19 (SEARCH-TUNING S59, S63)
+        ("epTTRep",             2),
         -- drawishness scale of the whole eval (Eval.Core.normalParts), instead of the heuristic rules of
         -- scaleFactor when epScaleNew = 1 (default: compiled in, scale-c-lin, TUNING-HISTORY finding 37;
         -- epScaleNew = 0 is the old scaling); factors in 1/64 (64 = 1), fitted by hv_scale.py --constrained
