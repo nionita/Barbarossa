@@ -1368,3 +1368,12 @@ Result: +5.21 +- 10.28, nElo +7.72 +- 15.23, LOS 84.0%, +497 -467 =1036 (50.75%)
 Prediction right (in the range, 2 above the most likely value). Not shown (LOS < 95%): the floor adds little or nothing to
 cap 13, as expected (both act on the same deep reductions). Played with the old TT rule (4 MB full at this time control, S63):
 its reading is limited to the old engine. Result in `C:\Learn\Data\results\m3a\lmfl-m13f4-m13`.
+
+**S66.** Cap 12 against cap 13 at the long time control, old TT (2026-11-17/19). `lm12` = `lmfl` da23a27 `epLmrMax=12` against
+`lmfl` `epLmrMax=13` (same binary, floor off), m3b, 192+3.2 (= 60+1 on MEMO), 4 MB (engine default), concurrency 8, 2000 games
+fixed, read at the end (interim at 1786 seen as a trend only).
+Prediction (register, before the result): -15 to +20, most likely +3.
+Result: +6.43 +- 10.30, nElo +9.51 +- 15.23, LOS 89.0%, +518 -481 =1001 (50.93%), pentanomial [47, 241, 397, 258, 57], 54.4 hours.
+Prediction right (in the range, 3 above the most likely value). Not shown (LOS < 95%): the curve is flat between 12 and 13 at
+this time control, possibly still falling a little. Old TT rule (4 MB full at this time control, S63): limited to the old engine.
+Result in `C:\Learn\Data\results\m3b\lmfl-m12-m13`.

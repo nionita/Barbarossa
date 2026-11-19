@@ -21,7 +21,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
   after 20000 games (S52): it costs nothing in short games. Adopted: `lmfl` merged into `rel090`, `epLmrFlr = 4` compiled in
   (S53; new perf reference 11367370 nodes on tests.fen depth 10, 12086912 with `epLmrFlr=0`). `r90a` (frozen `rel090` cf00634)
   against `chcm` at 60+1: +11.8 +- 22.8, 500 games; pooled with S48 +15.1 +- 12.8, LOS 98.9% (S56).
-  Running on the boxes: floor on cap 13 against cap 13 (m3a) and cap 12 against cap 13 (m3b), 2000 games each, end about 2026-11-19.
+  Box runs on the old TT (2026-11-19): floor on cap 13 against cap 13 +5.2 +- 10.3 (S65), cap 12 against 13 +6.4 +- 10.3 (S66),
+  neither shown. Running: cap 13 against 15 on the fixed TT, `r90b`, 64 MB, batches of 400 games on the boxes.
   Then the decision: keep cap 15 with the floor (now compiled), or cap 13 with or without it, by the time control rule (Methods).
 - Mate bounds, stalemate after pruning, eval clamp (`mbnd`): -5.5 +- 4.4 at 10+0.1, H0 of [-5, 0] (S54); not merged. Next: split
   (stalemate test, clamp and finding 7 without the mate guards).
@@ -541,6 +542,9 @@ and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEM
   2. m3b, `lmfl-m12-m13`: cap 12 (`epLmrMax=12`, `lm12`) against cap 13. Question: is the bottom of the curve below 13?
   Prediction (before the result): -15 to +20, most likely +3 (the steps were 23 and 41 Elo per 2 levels above 13, but a
   curve that steep does not go on forever, and 12 already costs more at short time controls).
+  Result (S66, 2026-11-19): +6.4 +- 10.3, LOS 89%, 2000 games; prediction right (in the range, near +3). Not shown; old TT
+  rule. With S65: on the old engine neither the floor on cap 13 nor cap 12 adds clearly to cap 13. On the fixed TT the
+  question is first cap 13 against 15 (both with the floor, batches running); cap 12 only if cap 13 wins there.
 - Depth bound design (Fable, 2026-11-15): `Search/LMR-DEPTH-BOUND.md`; for branch B and as the alternative to a lower cap in A. Form: a
   floor of the reduced depth, `d' = max dmin (d1 - r)`, `dmin = max 1 (d1 * f / 8)`, parameter `epLmrFlr` (0 = off), start f = 4 (largest
   reduction 2-3 at d1 4-6, 4-5 at d1 7-10: about level 13's mean reduction with level 15's width). Reading of S42 corrected: of the 90%
