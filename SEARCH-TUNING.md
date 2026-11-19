@@ -1394,3 +1394,13 @@ largest where PV moves fail low): `pvnt` +0.93 +- 0.05 ply over 71.7k moves each
 1-3, +2.14 at 3-10, +1.56 at 10 and more. The mechanism as expected: the cascade cost most where the score is unbalanced (more
 fail lows of PV moves) and in deeper (later) searches. Merge (user, 2026-11-19): only after the box runs, for the same
 comparisons. Result in `C:\Learn\Data\results\memo\pvnt-t2-ttrp-tc60` (`depths.txt`).
+
+**S68.** LMR depth floor replayed on the fixed TT at 60+1 (2026-11-19). The same `ttrp` c64ad37 binary on both sides with
+`epTTRep=2`: floor f = 4 (compiled, `f4`) against `epLmrFlr=0`, MEMO, 60+1, 1000 games fixed (500 rounds, openings from 5001),
+4 MB (engine default, as S48), read once at the end. Question: does the S48 gain (+16.7, played with the old TT rule, under which
+the 4 MB table was almost useless at 60+1) hold with a working table?
+Prediction (register, before any game): -10 to +20, most likely +6.
+Result: +16.34 +- 14.17, nElo +24.89 +- 21.53, LOS 98.8%, +250 -203 =547 (52.35%), pentanomial [23, 95, 224, 128, 30], 16.3 hours.
+Prediction right (in the range, 10 above the most likely value: the regression expected from the selected S48 did not come).
+The floor holds on the fixed TT, with nearly the same size as S48 (+16.7); it passes the decision rule (LOS >= 95%) on its own.
+The floor stays compiled in. Result in `C:\Learn\Data\results\memo\ttrp-f4-f0-tc60`.

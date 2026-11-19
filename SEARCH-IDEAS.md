@@ -614,6 +614,8 @@ and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEM
   re-searches that the old table did not keep; the floor still limits the deepest reductions, which should matter more, not
   less, in deeper searches. LOS >= 95% needs about +14 in 1000 games: confirmation alone about one in four; a clear loss (below
   about -10) would reopen the floor.
+  Result (2026-11-19, S68): +16.3 +- 14.2, LOS 98.8%, 1000 games; prediction right (in the range, above the most likely +6).
+  The floor holds on the fixed TT at the size of S48 and passes the decision rule again; it stays compiled in.
 - Cap 13 against 15 on the fixed TT (2026-11-19, user's go, boxes): S40 (+40.7 for cap 13, no floor) and the box runs of
   2026-11-17 (floor on cap 13, cap 12) were played with the old TT rule. Run: `rel090` b00f14a (floor 4 and `epTTRep = 2`
   compiled; = `r90b`, see "Match builds and players") on both sides, `epLmrMax=13` (`r90b-m13`) against the compiled cap 15
