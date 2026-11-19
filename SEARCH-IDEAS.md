@@ -290,7 +290,13 @@ fewer nodes in all three: the chaotic tree, node totals do not select). Census (
 RFP cuts have such a passer (28526 of 1055253), mostly at depth 1-2 (19646, 5874, 2105, 582, 230, 89 for d1..d6). Perft
 right, no warnings. The S13 rate on today's engine would need `rfpdiag` ported (not done).
 Forms to play: P100 (the analogue of `epRFutT`, S22) and P10000 (no cut, the S13 form; for hanging pieces this lost, S12).
-Next: 10k-node games (pruning shows there), then an SPRT at 10+0.1 of the better form against `r90b`.
+Next (user, 2026-11-19): no 10k-node games; MEMO directly. Run `rfpp-p100-r90b-tc10`: `rfpp` a3bc06b with `epRFutP=100`
+(`rfpp-p100`) against `r90b` ace64a7, 10+0.1, 16 MB, SPRT [0, 5] with a cap of 4000 games (2000 rounds, openings from 8301;
+user: a tiny effect is not worth the usual 20000, a clear one decides early anyway). At the cap without a decision: read
+the estimate (+- about 7.5) and decide with the user. The no-cut form (P10000) only if P100 looks positive.
+Prediction (2026-11-19, before any game): -4 to +6, most likely +1. Reasons: the condition is in 2.7% of the RFP cuts
+(census), far rarer than hanging pieces (41% of the correct cuts in S11), whose margin gave +4.8 +- 4.6 (S22); the S13 wrong
+rate was measured on an older engine; the extra nodes are few. Most likely outcome: no SPRT decision at 4000 games.
 
 ### RFP: cut more when an opponent piece hangs (status: open)
 Now: wrong rate 0.3x (S13). User: only after the RFP SPRTs. 2026-10-31.
