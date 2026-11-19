@@ -568,6 +568,17 @@ and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEM
   re-searches that the old table did not keep; the floor still limits the deepest reductions, which should matter more, not
   less, in deeper searches. LOS >= 95% needs about +14 in 1000 games: confirmation alone about one in four; a clear loss (below
   about -10) would reopen the floor.
+- Cap 13 against 15 on the fixed TT (2026-11-19, user's go, boxes): S40 (+40.7 for cap 13, no floor) and the box runs of
+  2026-11-17 (floor on cap 13, cap 12) were played with the old TT rule. Run: `rel090` b00f14a (floor 4 and `epTTRep = 2`
+  compiled) on both sides, `epLmrMax=13` (`m13`) against the compiled cap 15, 192+3.2 (= 60+1), 4 MB (engine default),
+  concurrency 8. The boxes are near their shutdown (user): batches of a fixed 200 games (100 rounds) each, m3a and m3b in
+  parallel on disjoint openings (`-Start` 7001, 7101, then 7201, 7301, ...), as many batches as end before the shutdown, pooled
+  and read once after the last one. The MEMO run `ttrp-m13-m15-tc60` (queued) asks the same question and can be pooled.
+  Prediction (before any game): -15 to +35, most likely +10. Reasons: with the old table both sides together give about +29 for
+  floor on 13 against floor on 15 (+40.7 cap alone, +5 interim of the floor on cap 13, +16.7 floor on 15); regression of the
+  selected +40.7, and the floor already takes part of the deep reductions cap 13 removes; with a working table re-searches are
+  cheaper, so part of the cost of cap 15's deep reductions may be gone. 400 games +- about 27, 800 +- 19: a pass (LOS >= 95%)
+  needs about +30 at 400, +20 at 800.
 - Lim 6000 apart: H0 (expected) ends the single ramp steps at 10+0.1; a pass keeps 6000 and checks it at the long time control with
   the cap. Result: neither, +1.86 +- 3.50 after 20000 games (S36): no more ramp steps at 10+0.1; Lim 6000 stays a candidate for step
   A3 (the ramp speed at the long time control with the new cap).
