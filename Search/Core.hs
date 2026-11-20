@@ -189,6 +189,7 @@ data NodeState
           crtnt  :: !NodeType,	-- parent node type (actually expected)
           nxtnt  :: !NodeType,	-- expected child node type
           movno  :: !Int,	-- current move number
+          prnno  :: !Int,	-- number of pruned moves (zero window)
           spcno  :: !Int,	-- last move number of a special move
           albe   :: !Bool,	-- in alpha/beta search (for small depths)
           rbmch  :: !Int,	-- number of changes in root best move / score type otherwise
@@ -248,8 +249,8 @@ pathFromScorePos s mp = Path { pathScore = s, pathDepth = 0, pathMoves = Seq [],
 addToPath :: Move -> Path -> Path
 addToPath e p = p { pathDepth = pathDepth p + 1, pathMoves = Seq $ e : unseq (pathMoves p) }
 
-pnearmate :: Path -> Bool
-pnearmate = nearmate . pathScore
+pmating :: Path -> Bool
+pmating = isMating . pathScore
 
 pnextlev :: Path -> Path
 pnextlev p = p { pathScore = - pathScore p }
@@ -282,7 +283,7 @@ pvsInit = PVState { ronly = pvro00, stats = ssts0, absdp = 0, maxdp = 0, abort =
                     lmrhi = lmrInitLim, lmrlv = lmrInitLv, lmrrs = 0 }
 nst0 :: NodeState
 nst0 = NSt { crtnt = PVNode, nxtnt = PVNode, cursc = pathFromScore 0, rbmch = -1,
-             movno = 1, spcno = 1, killer = Killer [], prvmv = Move 0, prvmv2 = Move 0, albe = False, cpos = initPos, pvsl = [] }
+             movno = 1, prnno = 0, spcno = 1, killer = Killer [], prvmv = Move 0, prvmv2 = Move 0, albe = False, cpos = initPos, pvsl = [] }
              -- we start with spcno = 1 as we consider the first move as special
              -- to avoid in any way reducing the tt move
 
@@ -297,7 +298,7 @@ cutCounter nst e = do
         lift $ contCut bits adp (prvmv nst) (prvmv2 nst) e
 
 resetNSt :: Path -> Killer -> NodeState -> NodeState
-resetNSt !sc kill nst = nst { cursc = sc, movno = 1, spcno = 1, killer = kill, rbmch = 0 }
+resetNSt !sc kill nst = nst { cursc = sc, movno = 1, prnno = 0, spcno = 1, killer = kill, rbmch = 0 }
 
 pvro00 :: PVStRO
 pvro00 = PVStRO { draft = 0, tuning = False, abpol = NoAbort, futmar = defaultFutMargins,
@@ -535,8 +536,8 @@ insertToPvs d p ps@(q:qs)
     where betters = pathScore (pvPath p) >  pathScore (pvPath q)
           equaln  = pvNodes p == pvNodes q
           bettern = pvNodes p > pvNodes q
-          pmate   = pnearmate $ pvPath p
-          qmate   = pnearmate $ pvPath q
+          pmate   = pmating $ pvPath p	-- only mates for us go first, a mated move stays behind
+          qmate   = pmating $ pvPath q
           dscore  = 1
 
 -- PV Search
@@ -660,7 +661,8 @@ pvZeroW !nst !b !d = do
                         !nstf <- pvSLoop b d True prune nsti edges
                         let s = cursc nstf
                         whenAbort s $
-                            if movno nstf == 1
+                            -- No legal move searched: none at all, or all pruned and none legal (stalemate)
+                            if movno nstf == 1 || prnno nstf == movno nstf - 1 && not (hasLegalMove pos)
                                then return $! failHardNoValidMove bGrain b pos
                                else do
                                    -- let !de = max d $ pathDepth s
@@ -677,6 +679,9 @@ pvZeroW !nst !b !d = do
 
 data NullMoveResult = NoNullMove | NullMoveHigh | NullMoveLow | NullMoveThreat Path
 
+-- At a mate bound b the null move answers from a reduced search ("not mated within d-R"), a known
+-- inexactness; a guard cost about 5 Elo at 10+0.1 (SEARCH-TUNING S54, S55): mate scores carry no distance,
+-- so mate bound windows cover whole subtrees. Possible rescue: mate distance scores (and pruning), then the guard
 nullMoveFailsHigh :: MyPos -> NodeState -> Int -> Int -> Search NullMoveResult
 nullMoveFailsHigh pos nst b d
     | not useNullMove = return NoNullMove
@@ -746,7 +751,7 @@ pvInnerLoop :: Int 	-- current beta
             -> Search NodeState
 pvInnerLoop b d zw prune nst e = timeToAbort nst $
     if prune && (zw || movno nst > 1) && canPruneMove (cpos nst) e
-       then return $! nst { movno = movno nst + 1 }
+       then return $! nst { movno = movno nst + 1, prnno = prnno nst + 1 }
        else do
            !exd <- lift $ doMove e	-- do the move
            if legalResult exd
@@ -1144,7 +1149,9 @@ qSearchLims !qsa !qsb front = do
        then qsInCheck qsa qsb pos
        else qsNormal  qsa qsb pos front
 
--- The delta cut of the QS (switched by useQsDelta)
+-- The delta cut of the QS (switched by useQsDelta). At a mate bound alpha it answers from no search
+-- ("cannot mate here"), a known inexactness; a guard cost about 5 Elo at 10+0.1 (SEARCH-TUNING S54, S55),
+-- see nullMoveFailsHigh
 qsDeltaCut :: Int -> Search Bool
 qsDeltaCut a
     | useQsDelta = lift $ qsDelta a
