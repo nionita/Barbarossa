@@ -123,8 +123,9 @@ Frozen builds:
 Player comparisons from 2026-11-19 (earlier ones: the log, by their S numbers):
 | Player A | Player B | Conditions | Result (A's side) | S |
 |---|---|---|---|---|
+| `r90b-m13` | `r90b` | m3a, m3b, 192+3.2 (= 60+1), 64 MB, 1400 games in 4 pooled batches | +8.2 +- 12.6, LOS 89.9% | S71 |
 
-Exception (2026-11-19, user; to correct, then mark obsolete): batch 1 of cap 13 against 15 on m3a (`rel090-m13-m15-b1`) was
+Obsolete (2026-11-20: done, recorded in S71 as `r90b-m13` against `r90b`, pooled). Exception (2026-11-19, user; to correct, then mark obsolete): batch 1 of cap 13 against 15 on m3a (`rel090-m13-m15-b1`) was
 started before this rule with the moving branch: `rel090` a96b702 (code = b00f14a = `r90b` without its identity commit), names in
 the games `m13` and `rel090`. It is not restarted. When it is done: it counts as `r90b-m13` against `r90b` (the code is the same) and is pooled
 with the other batches (no reading of its own); the pooled S entry carries this note; then mark this exception obsolete
@@ -660,6 +661,7 @@ and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEM
   above; `pvnt` deepens the search (+0.9 ply at 60+1), so the 0.76 ply that cap 13 costs (S37) weighs a little less, and
   part of the cost of deep reductions (fail low cascades after a re-search) is gone with it: a little smaller than on `r90b`.
   1000 games +- about 15: a pass needs about +15.
+  Result on `r90b` (2026-11-20, S71): +8.2 +- 12.6, LOS 89.9%, 1400 games pooled; prediction +10 right; not decided.
   Box batches on `r90c` (2026-11-20; boxes on until 2026-11-21 09:00, user: small batches so that other small experiments
   can get a box): `r90c-m13-r90c-b<k>`, the same players, 192+3.2 (= 60+1), 64 MB, 300 games each (150 rounds), disjoint
   openings (b1 m3a from 20801, b2 m3b from 20951, chained after the `r90b` batches), pooled with the MEMO run and read once

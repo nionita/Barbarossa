@@ -1425,3 +1425,17 @@ Prediction right in its reading (0 inside the interval; a range of +-1 cannot be
 against `r90a`, -12.8 +- 26.2, other base, not pooled): no sign of a loss; the node counts say the search is the same except in
 rare nodes. The fixes are correctness fixes (findings 7 and 4); merge decision with the user.
 Result in `C:\Learn\Data\results\memo\mbsp-r90b-tc60`.
+
+**S71.** LMR cap 13 against 15 on the fixed TT, with the floor on both sides (2026-11-19/20). `r90b` ace64a7 (`rel090` b00f14a:
+floor 4, `epTTRep = 2`, cap 15 compiled) with `epLmrMax=13` (`r90b-m13`) against `r90b`, boxes m3a and m3b, 192+3.2 (= 60+1),
+64 MB, concurrency 8, four fixed batches on disjoint openings, pooled and read once after the last: b1 m3a 400 games (from 7001),
+b2 m3b 400 (7201), b3 m3a 300 (7401), b4 m3b 300 (7601); b3 and b4 started by `chain_after.sh`. Batch 1 ran under the exception of
+2026-11-19: the moving branch `rel090` a96b702 (the code of `r90b` without its identity commit, games named `m13` and `rel090`),
+counted as `r90b-m13` against `r90b`.
+Prediction (register, before any game): -15 to +35, most likely +10.
+Result: +8.19 +- 12.60, LOS 89.9%, 1400 games, pentanomial [39, 160, 272, 187, 42] (batches: [12, 40, 83, 50, 15],
+[10, 50, 74, 57, 9], [10, 29, 65, 34, 12], [7, 41, 50, 46, 6]); no time losses.
+Prediction right (in the range, 2 below the most likely value). Not decided: below the decision rule (LOS 95%). With the fixed TT
+and the floor on both sides, cap 13 keeps a small edge, far below the +40.7 of S40 (old TT, no floor). The question goes on
+on `r90c` (with `pvnt`, 0.9 ply deeper): MEMO `r90c-m13-r90c-tc60` and box batches, pooled (not with this one: other base).
+Result in `C:\Learn\Data\results\boxes\r90b-m13-r90b-pooled` (the batches under `m3a`, `m3b`).
