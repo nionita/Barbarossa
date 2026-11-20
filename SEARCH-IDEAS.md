@@ -42,6 +42,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
   at depth 10; `pvnt` at 10+0.1 +2.8 +- 11.1 (S62), at 60+1 +56.8 +- 13.7 (S67): adopted, merged into `rel090` 2026-11-20
   (55c9bac, user: before the box runs ended, which play the frozen `r90b`); new perf reference 10251160 (11671539 with
   `epPvsNt=0`); frozen base `r90c`.
+- Mate bound fixes without the guards (`mbsp`, findings 7 and 4 with the `evalMax` clamp): +4.5 +- 14.0 at 60+1 (S70), merged
+  into `rel090` 2026-11-20 (user); perf reference unchanged (10251160). Not in `r90c`; the next base has it.
   Aspiration itself saves no nodes (parked).
 - Designs for later (2026-11-17, nothing built): `SPEED-IDEAS.md` (speed and simplification), `Search/TB-SYZYGY.md` (Syzygy probes),
   `Eval/KPK-BITBASE.md` (KPK bitbase); blocks below.
@@ -370,6 +372,9 @@ perft unchanged, no warnings. Ready for the further match against `r90b` (player
 size and slot by the user). Prediction unchanged: -1 to +1, most likely 0.
 Result (2026-11-20, S70): +4.5 +- 14.0, 1000 games at 60+1 against `r90b`, LOS 73.6%; prediction right (0 inside). No sign of a
 loss on the fixed base; the earlier -12.8 +- 26.2 (300 games, `r90a`) reads as noise. Merge decision with the user.
+Merged into `rel090` (user, 2026-11-20, after S70): no conflicts; identity reset to `rel090`. Perf tests.fen depth 10:
+10251160 (= `r90c`, the fixes change no node there), 11671538 with `epPvsNt=0` (= `mbsp`); perft right. The next frozen base
+contains it; `r90c` does not (the runs on `r90c` are not affected).
 
 ### Late move pruning (status: rejected in this form)
 Now: loses, more with depth, also on the new ordering and with the count for the LMR level. Without `improving` late moves are not reliably bad. 2026-11-11.
