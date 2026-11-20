@@ -653,6 +653,10 @@ and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEM
   above; `pvnt` deepens the search (+0.9 ply at 60+1), so the 0.76 ply that cap 13 costs (S37) weighs a little less, and
   part of the cost of deep reductions (fail low cascades after a re-search) is gone with it: a little smaller than on `r90b`.
   1000 games +- about 15: a pass needs about +15.
+  Box batches on `r90c` (2026-11-20; boxes on until 2026-11-21 09:00, user: small batches so that other small experiments
+  can get a box): `r90c-m13-r90c-b<k>`, the same players, 192+3.2 (= 60+1), 64 MB, 300 games each (150 rounds), disjoint
+  openings (b1 m3a from 20801, b2 m3b from 20951, chained after the `r90b` batches), pooled with the MEMO run and read once
+  when the last one is done (same build and question, same prediction +7).
 - Lim 6000 apart: H0 (expected) ends the single ramp steps at 10+0.1; a pass keeps 6000 and checks it at the long time control with
   the cap. Result: neither, +1.86 +- 3.50 after 20000 games (S36): no more ramp steps at 10+0.1; Lim 6000 stays a candidate for step
   A3 (the ramp speed at the long time control with the new cap).
