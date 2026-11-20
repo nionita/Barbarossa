@@ -77,6 +77,12 @@ are not reviewed here. The user's experience: negative history and squared bonus
      ply per game (19.4 against 18.0); 2-3-3. Found there: the depth cap of 25 plies (`md` in `doGo`) is reached often at
      60+1 (1858 info lines at depth 25; 86 ponder searches ended at the cap): a candidate fix for the release list (a
      higher cap), to check that a search at the cap does not just stop early in endgames where more depth would help.
+     Strength run prepared (user, 2026-11-20) for MEMO slot 1 after the cap run: `pond-P-N-tc60`, `pond` ca8824a with ponder
+     (`pond-P`) against the same build without (`pond-N`), cutechess-cli 1.3.1 (lab `run_ponder.ps1`), 60+1, 64 MB, 600 games
+     fixed (300 rounds), concurrency 4 (a pondering side uses a second core), openings from 21676, read once at the end.
+     It measures what pondering is worth against an engine that does not ponder (the opponent loses its thinking time),
+     not a change of the search. Smoke (4 games, 10+0.1) clean; a debug game: 55 `go ponder`, 41 `ponderhit`.
+     Prediction (before any game): +35, range +15 to +60 (+1.3 to +1.4 ply measured; a doubling of time is worth more).
      User (2026-11-20): 25 may be too low now that the search is faster; an independent feature before the release.
      Places that know 25 (read, not changed): `md` in `doGo` (`Main/Barbarossa.hs`), `drawPath` / `matedPath` with
      `pathDepth = 25` (`Search/Core.hs`: their depth then means "exact at any draft", it must follow the cap), the null
