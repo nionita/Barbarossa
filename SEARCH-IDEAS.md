@@ -76,6 +76,10 @@ are not reviewed here. The user's experience: negative history and squared bonus
      Places that know 25 (read, not changed): `md` in `doGo` (`Main/Barbarossa.hs`), `drawPath` / `matedPath` with
      `pathDepth = 25` (`Search/Core.hs`: their depth then means "exact at any draft", it must follow the cap), the null
      move depth table index clamp `nmDMaxIx = 25` (clamped, safe), `maxDepthAtThisRate`; depth indexed tables (LMR) to check.
+     History (checked 2026-11-20 after the user's concern about 2^d and Int32): the bonus is `histw ply = 2^(31 - ply)`
+     (`Moves/History.hs`), by the ply from the root, not by the draft, clamped to 1 from ply 31; every caller passes `absdp`.
+     A higher cap gives no ply a larger bonus and no new overflow (the only overflow is ply 0, bug 1, independent of the cap);
+     it only adds more updates at deep plies with tiny weights. No damped update needed for the cap; games at 60+1 decide.
   Larger changes (time management change A, `improving`, singular extensions) wait for that decision.
 
 ## Methods
