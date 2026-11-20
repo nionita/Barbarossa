@@ -82,6 +82,12 @@ are not reviewed here. The user's experience: negative history and squared bonus
      it only adds more updates at deep plies with tiny weights. No damped update needed for the cap; games at 60+1 decide.
      Feature session started (user, 2026-11-20): branch `dcap` from `rel090` d4365c6, cap 40 as one shared constant (also
      the path depth); checks: tests.fen nodes = 10251160, perft, deep runs past 25 on the queen ending and mate roots.
+     Built (2026-11-20): `dcap` dee182e (identity 362f04e), `maxSearchDepth = 40` in `Search.AlbetaTypes`, used by `doGo`
+     and the path depth (written, never read: no search decision changes). Unchanged and safe: TT depth field 6 bits,
+     `ttStore` already clamps `min 40` (every stored draft is 1 .. root draft: extensions 0/1 with `d + ext - 1`, qsearch
+     stores nothing); `nmDMaxIx` clamped; `lmrPenTable` 0..63; `maxDepthAtThisRate` has no bound at 25. Perf tests.fen
+     depth 10: 10251160 (= `rel090`), perft right; 7 mate roots to depth 32: legal PVs, mate scores match; UCI
+     `go infinite` KRK passes 25, `go depth 40` accepted, stop clean. Next: a fixed match at 60+1 (strength at the cap).
   Larger changes (time management change A, `improving`, singular extensions) wait for that decision.
 
 ## Methods
