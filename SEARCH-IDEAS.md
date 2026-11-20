@@ -279,9 +279,9 @@ Evidence:
 | 2026-11 | T100 | SPRT [0, 5], 10+0.1, 12000 games | +4.75 +- 4.58 | S22 | likely small gain, no decision |
 2026-11-01: compiled in `fbas` on this evidence (user), without a passed SPRT.
 
-### RFP: no cut with an opponent passer on rank 6/7 (status: open)
+### RFP: no cut with an opponent passer on rank 6/7 (status: parked)
 Now: P100 played (S69): -0.4 +- 7.9 in 4000 games at 10+0.1, no effect shown; the strong diagnostic signal does not turn
-into Elo at this frequency (2.7% of the cuts). Proposal: park in this form; decision with the user. 2026-11-20.
+into Elo at this frequency (2.7% of the cuts). Parked in this form (P100; user, 2026-11-20).
 Before (2026-10-31): the sharpest signal of the shadow diagnostic, never played; wrong cuts can be cheap.
 Evidence: wrong rate 5.3x, 10.4x in endgames; gives up 10% of the decisions for 38% of the wrong cuts (S13).
 Built (2026-11-19, feature session): `rfpp` a3bc06b (identity 0a00424) from `r90b` ace64a7, parameter `epRFutP` (cp, compiled
