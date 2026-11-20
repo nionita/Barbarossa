@@ -96,6 +96,15 @@ are not reviewed here. The user's experience: negative history and squared bonus
      Run (user, 2026-11-20): only a check for crashes and time losses, no strength question: `dcap-r90c` on m3a, 200 games
      at 192+3.2 (= 60+1), 64 MB, chained after the cap batch b1 (`dcap` contains `mbsp`, `r90c` not: the score is no
      measure of the cap). Smoke on mini (16 games, 10+0.1, 64 MB) clean. Pass: no crash, no time loss, no illegal move.
+     Interim (user, 2026-11-20, 140 games): -39.9 +- 39.1. Looked at (155 games, sides from the FEN): no fault in the code
+     (path depth never read, LMR penalty and level unchanged in kind, history by ply); dcap passes depth 25 in 93 of 155
+     games, scores 0.446 there and 0.484 in the others; the losses with deep searches were already lost (16 of 18 below
+     -1.0 long before); game 32 (Kf1 at 0.00 after depth 27-30, then mated, R against B, 50-move counter 87): `r90c` plays
+     the same Kf1 at depth 25 (shared horizon). The run cannot separate the cap from `mbsp`.
+     Separating run (user, 2026-11-20): `dcap-r90d` on m3a, `dcap` against the new frozen base `r90d` (`rel090` 03be4eb:
+     same code as `dcap` with cap 25), 400 games fixed at 192+3.2 (= 60+1), 64 MB, openings from 21476, chained after
+     `dcap-r90c`, read once at the end. Prediction (before any game): +3, range -15 to +20 (the cap acts in 60% of the games,
+     mostly in endgames already decided; more depth there helps a little).
   Larger changes (time management change A, `improving`, singular extensions) wait for that decision.
 
 ## Methods
@@ -166,6 +175,7 @@ Frozen builds:
 | `r90a` | `rel090` cf00634 | 771f656 | `chcm` + floor f = 4 + `spdg` speed | `epLmrMax` 15, `epLmrFlr` 4, old TT rule (smallest move code; no `epTTRep`) | 11367370 |
 | `r90b` | `rel090` b00f14a | ace64a7 | `r90a` + TT replacement (`ttrp`, S64) | `epLmrMax` 15, `epLmrFlr` 4, `epTTRep` 2 | 11671539 (S64; 11367370 with `epTTRep=0` = `r90a`) |
 | `r90c` | `rel090` 55c9bac | b3a63d6 | `r90b` + PV node type after a fail low (`pvnt`, S67) | `epLmrMax` 15, `epLmrFlr` 4, `epTTRep` 2, `epPvsNt` 1 | 10251160 (11671539 with `epPvsNt=0` = `r90b`) |
+| `r90d` | `rel090` 03be4eb | c79e82b | `r90c` + mate bound fixes (`mbsp`, S70) | `epLmrMax` 15, `epLmrFlr` 4, `epTTRep` 2, `epPvsNt` 1 | 10251160 (11671538 with `epPvsNt=0`) |
 
 Player comparisons from 2026-11-19 (earlier ones: the log, by their S numbers):
 | Player A | Player B | Conditions | Result (A's side) | S |
