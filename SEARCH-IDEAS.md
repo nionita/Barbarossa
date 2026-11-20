@@ -72,6 +72,10 @@ are not reviewed here. The user's experience: negative history and squared bonus
      ply per game (19.4 against 18.0); 2-3-3. Found there: the depth cap of 25 plies (`md` in `doGo`) is reached often at
      60+1 (1858 info lines at depth 25; 86 ponder searches ended at the cap): a candidate fix for the release list (a
      higher cap), to check that a search at the cap does not just stop early in endgames where more depth would help.
+     User (2026-11-20): 25 may be too low now that the search is faster; an independent feature before the release.
+     Places that know 25 (read, not changed): `md` in `doGo` (`Main/Barbarossa.hs`), `drawPath` / `matedPath` with
+     `pathDepth = 25` (`Search/Core.hs`: their depth then means "exact at any draft", it must follow the cap), the null
+     move depth table index clamp `nmDMaxIx = 25` (clamped, safe), `maxDepthAtThisRate`; depth indexed tables (LMR) to check.
   Larger changes (time management change A, `improving`, singular extensions) wait for that decision.
 
 ## Methods
