@@ -51,7 +51,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
   sanity run at 60+1 clean (+3.5 +- 45.9, 100 games, no time losses or crashes; S57), merged into `rel090` (S57).
 - Plan for the LMR after the box runs: the branches A to D of 2026-11-15 in "LMR cap depending on the size of the search" (outcome C).
 - Road to 0.9.0 (user, 2026-11-20), in this order:
-  1. Settle the running questions: LMR cap 13 against 15 on `r90c` (MEMO + box batches, pooled) and the check extension limit
+  1. Settle the running questions: LMR cap 13 against 15 on `r90c` (MEMO + box batches, pooled; settled 2026-11-20, S72:
+     cap 15 stays) and the check extension limit
      (`chxd-k3`: SPRT [-5, 0] at 10+0.1, a long time control check). Their adopted settings go into a frozen base (with `mbsp`).
   2. The best one or two versions played by the user in the GUI (compiled settings, `-fast` builds: a GUI passes no options).
   3. Gauntlet at 60+1: release 0.8.0 and the best version against a pool of other engines (number of games open), to see
@@ -189,6 +190,7 @@ Frozen builds:
 Player comparisons from 2026-11-19 (earlier ones: the log, by their S numbers):
 | Player A | Player B | Conditions | Result (A's side) | S |
 |---|---|---|---|---|
+| `r90c-m13` | `r90c` | MEMO 60+1 1000 games, m3a and m3b 192+3.2 2 x 300, 64 MB, pooled | -3.0 +- 10.8, LOS 29.1% | S72 |
 | `r90b-m13` | `r90b` | m3a, m3b, 192+3.2 (= 60+1), 64 MB, 1400 games in 4 pooled batches | +8.2 +- 12.6, LOS 89.9% | S71 |
 
 Obsolete (2026-11-20: done, recorded in S71 as `r90b-m13` against `r90b`, pooled). Exception (2026-11-19, user; to correct, then mark obsolete): batch 1 of cap 13 against 15 on m3a (`rel090-m13-m15-b1`) was
@@ -732,6 +734,8 @@ and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEM
   can get a box): `r90c-m13-r90c-b<k>`, the same players, 192+3.2 (= 60+1), 64 MB, 300 games each (150 rounds), disjoint
   openings (b1 m3a from 20801, b2 m3b from 20951, chained after the `r90b` batches), pooled with the MEMO run and read once
   when the last one is done (same build and question, same prediction +7).
+  Result on `r90c` (2026-11-20, S72): -3.0 +- 10.8, LOS 29.1%, 1600 games pooled; prediction +7 right (in the range).
+  Decided for 0.9.0: cap 15 stays (no gain of 13 with the fixed TT, the floor and `pvnt`).
 - Lim 6000 apart: H0 (expected) ends the single ramp steps at 10+0.1; a pass keeps 6000 and checks it at the long time control with
   the cap. Result: neither, +1.86 +- 3.50 after 20000 games (S36): no more ramp steps at 10+0.1; Lim 6000 stays a candidate for step
   A3 (the ramp speed at the long time control with the new cap).

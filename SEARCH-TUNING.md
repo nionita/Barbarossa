@@ -1439,3 +1439,14 @@ Prediction right (in the range, 2 below the most likely value). Not decided: bel
 and the floor on both sides, cap 13 keeps a small edge, far below the +40.7 of S40 (old TT, no floor). The question goes on
 on `r90c` (with `pvnt`, 0.9 ply deeper): MEMO `r90c-m13-r90c-tc60` and box batches, pooled (not with this one: other base).
 Result in `C:\Learn\Data\results\boxes\r90b-m13-r90b-pooled` (the batches under `m3a`, `m3b`).
+
+**S72.** LMR cap 13 against 15 on `r90c` (with `pvnt`), MEMO and boxes pooled (2026-11-20). `r90c` b3a63d6 with `epLmrMax=13`
+(`r90c-m13`) against `r90c` (cap 15), 64 MB, fixed batches on disjoint openings, pooled and read once after the last: MEMO
+`r90c-m13-r90c-tc60` 60+1, 1000 games (from 10301); m3a b1 192+3.2 (= 60+1), 300 games (20801); m3b b2 300 games (20951).
+Prediction (register, before any game): -15 to +30, most likely +7.
+Result: -3.04 +- 10.80, LOS 29.1%, 1600 games, pentanomial [32, 204, 339, 196, 29] (MEMO +4.52 +- 13.98
+[21, 121, 202, 136, 20]; b1 [4, 44, 72, 26, 4]; b2 -10.43 +- 24.98 [7, 39, 65, 34, 5]); no time losses.
+Prediction right (in the range, 10 below the most likely value). Decided for 0.9.0: cap 15 stays. With the fixed TT, the
+floor and `pvnt`, cap 13 shows no gain (S71 on `r90b`: +8.2 +- 12.6, not decided; here -3.0 +- 10.8); the +40.7 of S40
+belonged to the old table and the missing floor.
+Result in `C:\Learn\Data\results\boxes\r90c-m13-r90c-pooled` (the runs under `memo`, `m3a`, `m3b`).
