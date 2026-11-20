@@ -88,6 +88,9 @@ are not reviewed here. The user's experience: negative history and squared bonus
      stores nothing); `nmDMaxIx` clamped; `lmrPenTable` 0..63; `maxDepthAtThisRate` has no bound at 25. Perf tests.fen
      depth 10: 10251160 (= `rel090`), perft right; 7 mate roots to depth 32: legal PVs, mate scores match; UCI
      `go infinite` KRK passes 25, `go depth 40` accepted, stop clean. Next: a fixed match at 60+1 (strength at the cap).
+     Run (user, 2026-11-20): only a check for crashes and time losses, no strength question: `dcap-r90c` on m3a, 200 games
+     at 192+3.2 (= 60+1), 64 MB, chained after the cap batch b1 (`dcap` contains `mbsp`, `r90c` not: the score is no
+     measure of the cap). Smoke on mini (16 games, 10+0.1, 64 MB) clean. Pass: no crash, no time loss, no illegal move.
   Larger changes (time management change A, `improving`, singular extensions) wait for that decision.
 
 ## Methods
