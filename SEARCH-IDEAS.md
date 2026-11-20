@@ -368,6 +368,8 @@ feature session (no conflicts: the KPK changes in `Eval/Core.hs` leave the clamp
 pass the `evalMax` clamp in `posEval`). Deterministic perf, tests.fen depth 10: 11671538 (`r90b` 11671539, -1 node);
 perft unchanged, no warnings. Ready for the further match against `r90b` (players `mbsp` against `r90b`, 60+1, 64 MB;
 size and slot by the user). Prediction unchanged: -1 to +1, most likely 0.
+Result (2026-11-20, S70): +4.5 +- 14.0, 1000 games at 60+1 against `r90b`, LOS 73.6%; prediction right (0 inside). No sign of a
+loss on the fixed base; the earlier -12.8 +- 26.2 (300 games, `r90a`) reads as noise. Merge decision with the user.
 
 ### Late move pruning (status: rejected in this form)
 Now: loses, more with depth, also on the new ordering and with the count for the LMR level. Without `improving` late moves are not reliably bad. 2026-11-11.

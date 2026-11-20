@@ -1415,3 +1415,13 @@ Prediction right (in the range, 1.4 below the most likely value; no decision, as
 The condition touches 2.7% of the RFP cuts; the games show no effect of it. Not excluded: a gain up to about +7 or a loss
 up to about -8. The no-cut form (P10000) was to follow only a positive P100: not played.
 Result in `C:\Learn\Data\results\memo\rfpp-p100-r90b-tc10`.
+
+**S70.** Mate bound fixes without the guards (`mbsp`, form 1 of the `mbnd` split) on the fixed base at 60+1 (2026-11-19/20).
+`mbsp` 2b28e1a (findings 7 and 4 with the `evalMax` clamp, merged onto `r90b` code; perf 11671538 against 11671539) against
+`r90b` ace64a7, MEMO, 60+1, 64 MB, 1000 games fixed (500 rounds, openings from 7801), read once at the end.
+Prediction (register, before any game): -1 to +1, most likely 0.
+Result: +4.52 +- 14.01, nElo +6.95 +- 21.53, LOS 73.6%, +228 -215 =557 (50.65%), pentanomial [18, 127, 203, 128, 24], 16.2 hours.
+Prediction right in its reading (0 inside the interval; a range of +-1 cannot be resolved by 1000 games). With S58/S61 (300 games
+against `r90a`, -12.8 +- 26.2, other base, not pooled): no sign of a loss; the node counts say the search is the same except in
+rare nodes. The fixes are correctness fixes (findings 7 and 4); merge decision with the user.
+Result in `C:\Learn\Data\results\memo\mbsp-r90b-tc60`.
