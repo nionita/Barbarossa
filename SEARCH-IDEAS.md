@@ -58,6 +58,11 @@ are not reviewed here. The user's experience: negative history and squared bonus
      where 0.9.0 stands and how much it gained over 0.8.0.
   4. Only then the release plan: a few features or fixes that need little testing, maybe ponder (today `go ponder` is
      ignored and `ponderhit` not implemented, `Main/Barbarossa.hs`). The size of the gain over 0.8.0 decides the scope.
+     First number for step 3 (user, 2026-11-20, before the gauntlet): `r90c-r080` on m3b, `r90c` against `r080` (frozen
+     base: tag `0.8.0` b3adcc4 with only the hash option fix 7bb0aee, so that both play with 64 MB; identity `r080`), 550
+     games fixed at 192+3.2 (= 60+1), 64 MB, openings from 21201, read once at the end. Self-play overstates the gap
+     against other engines; the gauntlet stays the measure. Prediction (before any game, rough: the adopted search
+     changes since 0.8.0 summed and discounted for self-play inflation and overlap): +60, range +25 to +110.
      Ponder built (2026-11-20, feature session, user): branch `pond` 9c05ae2 (identity 789fcfa) from `rel090` 0637ff7, not
      merged. Option `Ponder` (bestmove then carries the ponder move); `go ponder` searches without limit; at `ponderhit` the
      move's time starts, answer at once if the pondering already took the normal time of the move; a watchdog stops the
