@@ -64,6 +64,10 @@ are not reviewed here. The user's experience: negative history and squared bonus
      running iteration at the hard limit; a finished ponder search waits for `ponderhit` or `stop`. Perf unchanged (10251160).
      Local test (cutechess-cli 1.3.1, fastchess has no ponder; 10+0.1): 40 games ponder against no ponder, 8 ponder against
      ponder: no sequence errors, time losses or hangs; hit rate 63-70%. Strength not measured (needs cutechess on MEMO).
+     Depth check (2026-11-20): pondering buys depth, +1.29 +- 0.08 ply per game for the ponder side (40 games, 10+0.1, side
+     taken from the board: the EPD openings start with Black to move; a first count by ply parity had the sides swapped).
+     Fix `pond` ca8824a: an answer at once after `ponderhit` (or a watchdog stop) now repeats the last info line before
+     `bestmove`, so GUIs and PGNs get score and depth for it (527 moves had none). Perf unchanged; rerun clean, 21-5-14.
   Larger changes (time management change A, `improving`, singular extensions) wait for that decision.
 
 ## Methods
