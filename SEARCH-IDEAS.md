@@ -50,6 +50,15 @@ are not reviewed here. The user's experience: negative history and squared bonus
 - Eval (2026-11-18): `pegk` (`pawnEndGame` fix, KPK bitbase, lone king endings below the eval clamp, KBNK corner) adopted:
   sanity run at 60+1 clean (+3.5 +- 45.9, 100 games, no time losses or crashes; S57), merged into `rel090` (S57).
 - Plan for the LMR after the box runs: the branches A to D of 2026-11-15 in "LMR cap depending on the size of the search" (outcome C).
+- Road to 0.9.0 (user, 2026-11-20), in this order:
+  1. Settle the running questions: LMR cap 13 against 15 on `r90c` (MEMO + box batches, pooled) and the check extension limit
+     (`chxd-k3`: SPRT [-5, 0] at 10+0.1, a long time control check). Their adopted settings go into a frozen base (with `mbsp`).
+  2. The best one or two versions played by the user in the GUI (compiled settings, `-fast` builds: a GUI passes no options).
+  3. Gauntlet at 60+1: release 0.8.0 and the best version against a pool of other engines (number of games open), to see
+     where 0.9.0 stands and how much it gained over 0.8.0.
+  4. Only then the release plan: a few features or fixes that need little testing, maybe ponder (today `go ponder` is
+     ignored and `ponderhit` not implemented, `Main/Barbarossa.hs`). The size of the gain over 0.8.0 decides the scope.
+  Larger changes (time management change A, `improving`, singular extensions) wait for that decision.
 
 ## Methods
 
