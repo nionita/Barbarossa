@@ -83,7 +83,7 @@ parseUCIMess = P.choice $ map P.try [
         parseStop,
         parseSetOption,
         parsePosition,
-        -- parsePonderhit,
+        parsePonderhit,
         parseGo,
         parseQuit
     ]
@@ -100,7 +100,8 @@ parseIsReady = literal "isready" >> return IsReady
 parseStop :: Parser UCIMess
 parseStop = literal "stop" >> return Stop
 
--- parsePonderhit = literal "ponderhit" >> return Ponderhit
+parsePonderhit :: Parser UCIMess
+parsePonderhit = literal "ponderhit" >> return Ponderhit
 
 parseQuit :: Parser UCIMess
 parseQuit = literal "quit" >> return Quit

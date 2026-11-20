@@ -146,7 +146,8 @@ initContext opts = do
             forGui = Nothing,
             srchStrtMs = 0,
             myColor = White,
-            totBmCh = 0, lastChDr = 0, lmvScore = Nothing
+            totBmCh = 0, lastChDr = 0, lmvScore = Nothing,
+            ponderOpt = False, pondering = Nothing
          }
     ctxVar <- newMVar chg
     mud <- if optData opts
@@ -327,7 +328,10 @@ doSetOption opt = do
     if working chg
        then ctxLog LogWarning "GUI sent SetOption while I'm working..."
        else case on of
-                "Hash" -> setOptionHash ov
+                "Hash"   -> setOptionHash ov
+                "Ponder" -> do
+                    modifyChanging $ \c -> c { ponderOpt = ov == "true" }
+                    ctxLog LogInfo $ "Ponder: " ++ ov
                 _      -> ctxLog LogWarning
                               $ "Unknown option from engine: " ++ on ++ " with value " ++ ov
 
@@ -405,16 +409,14 @@ doGo cmds = do
     chg <- readChanging
     if working chg
         then ctxLog DebugUci "GUI sent Go while I'm working..."
-        else if Ponder `elem` cmds
-            then ctxLog DebugUci "Just ponder: ignored"
-            else do
-                let mvt  = max 0 $ fromMaybe 0 (findMoveTime cmds)    -- fixed time per move (ms), 0 = none
-                    (tim, tpm, mtg) | mvt > 0   = (0, 0, 0)  -- movetime replaces the clock
-                                    | otherwise = getUCITime cmds $ myColor chg
-                    rept = countRepetitions $ crtStatus chg
-                    md   = 25   -- max search depth
-                    dpt  = fromMaybe md (findDepth cmds)
-                startWorking tim tpm mtg mvt dpt rept
+        else do
+            let mvt  = max 0 $ fromMaybe 0 (findMoveTime cmds)    -- fixed time per move (ms), 0 = none
+                (tim, tpm, mtg) | mvt > 0   = (0, 0, 0)  -- movetime replaces the clock
+                                | otherwise = getUCITime cmds $ myColor chg
+                rept = countRepetitions $ crtStatus chg
+                md   = 25   -- max search depth
+                dpt  = fromMaybe md (findDepth cmds)
+            startWorking (Ponder `elem` cmds) tim tpm mtg mvt dpt rept
 
 data Agreg = Agreg {
          agrCumErr :: !Integer, -- accumulated error
@@ -515,18 +517,25 @@ newThread a = do
     ctx <- ask
     liftIO $ forkIO $ runReaderT a ctx
 
-startWorking :: Int -> Int -> Int -> Int -> Int -> Int -> CtxIO ()
-startWorking tim tpm mtg mvt dpt rept = do
+-- With ponder the search runs without time limit until ponderhit or stop; the clock values are kept
+-- for the time management after ponderhit
+startWorking :: Bool -> Int -> Int -> Int -> Int -> Int -> Int -> CtxIO ()
+startWorking pond tim tpm mtg mvt dpt rept = do
     ctx <- ask
     currms <- lift $ currMilli (strttm ctx)
     ctxLog DebugUci $ "Start at " ++ show currms
-        ++ " to search: " ++ show tim ++ " / " ++ show tpm ++ " / " ++ show mtg ++ " / movetime " ++ show mvt
+        ++ " to " ++ (if pond then "ponder" else "search") ++ ": "
+        ++ show tim ++ " / " ++ show tpm ++ " / " ++ show mtg ++ " / movetime " ++ show mvt
         ++ " - maximal " ++ show dpt ++ " plys"
+    let pinfo | pond      = Just PonderInfo { pdTim = tim, pdTpm = tpm, pdMtg = mtg, pdMvt = mvt,
+                                              pdRept = rept, pdGoMs = currms, pdScore = 0, pdDone = False }
+              | otherwise = Nothing
     tok <- beginSearch $ \c -> c {
             srchStrtMs = currms,
             totBmCh = 0,
             lastChDr = 0,
-            crtStatus = (posNewSearch (crtStatus c)) { lorig = Nothing }
+            crtStatus = (posNewSearch (crtStatus c)) { lorig = Nothing },
+            pondering = pinfo
         }
     tid <- newThread (startSearchThread tok tim tpm mtg mvt dpt rept)
     ok <- attachSearchThread tok tid
@@ -546,7 +555,7 @@ startSearchThread tok tim tpm mtg mvt dpt rept =
                             answer $ infos mes
                             msnap <- finishSearch tok
                             case msnap >>= forGui of
-                                Just ms -> reportBestMove (msnap >>= (Just . crtStatus)) Nothing ms
+                                Just ms -> reportBestMove True (msnap >>= (Just . crtStatus)) Nothing ms
                                 Nothing -> return ()
                             ctxLog LogError mes
                             lift $ collectError $ SomeException (SearchException mes)
@@ -577,12 +586,17 @@ searchTheTree tok draft mdraft timx1 timx tim tpm mtg mvt rept lsc lpv rmvs = do
     when (ch > 0) $
         ctxLog LogInfo $ "Changes in draft " ++ show draft ++ ": " ++ show ch ++ " / " ++ show totch
     ok <- publishSearchProgress tok $
-        \c -> c { crtStatus = stfin, totBmCh = totch, lastChDr = ldCh, forGui = Just path }
+        \c -> c { crtStatus = stfin, totBmCh = totch, lastChDr = ldCh, forGui = Just path,
+                  pondering = (\p -> p { pdScore = sc }) <$> pondering c }
     if not ok
        then return sc
        else do
+           -- pondering: no time limit; after ponderhit the time of the move starts at ponderhit
+           chp <- readChanging
            currms <- lift $ currMilli (strttm ctx)
-           let mbtime = compTime tim tpm mtg sc rept
+           let pond = isJust $ pondering chp
+               mvtp = if pond then 0 else mvt
+               mbtime = if pond then Nothing else compTime tim tpm mtg sc rept
                timed = isJust mbtime
                (ms, mx) = fromMaybe (0, 0) mbtime
                exte = maybe False id $ do
@@ -594,9 +608,9 @@ searchTheTree tok draft mdraft timx1 timx tim tpm mtg mvt rept lsc lpv rmvs = do
                           Just osc -> timeProlongation osc sc
                           _        -> 1
                redp  = reduceBegin $ realPly chg
-               start = srchStrtMs chg
+               start = srchStrtMs chp
                used  = currms - start
-               over  = timed && used >= mx || mvt > 0 && used >= mvt
+               over  = timed && used >= mx || mvtp > 0 && used >= mvtp
                onlyone = timed && length rmvsf == 1 && draft >= 4       -- only in normal play
                draftmax = draft >= mdraft       --  or maximal draft
                mes = "Draft " ++ show draft ++ " Score " ++ show sc ++ " path " ++ show path
@@ -617,13 +631,13 @@ searchTheTree tok draft mdraft timx1 timx tim tpm mtg mvt rept lsc lpv rmvs = do
                       ++ show justStop
                   -- Store last score for this move
                   void $ publishSearchProgress tok $ \c -> c { lmvScore = Just sc }
-                  giveBestMove tok sc path
+                  if pond then ponderFinished tok sc path else giveBestMove tok sc path
                   return sc
               else do
                   ctxLog LogInfo $ "searchTheTree finishes draft " ++ show draft
                   chg' <- readChanging
                   if working chg' && searchToken chg' == tok
-                      then if mvt > 0   -- fixed time per move: abort at its end, in every root move
+                      then if mvtp > 0  -- fixed time per move: abort at its end, in every root move
                               then do
                                   let mvte = start + mvt
                                   searchTheTree tok (draft+1) mdraft mvte mvte tim tpm mtg mvt rept (Just sc) path rmvsf
@@ -718,13 +732,17 @@ timeProlongation osc sc
           tpMargin = 8
           fm = fromIntegral tpMargin
 
-reportBestMove :: Maybe MyState -> Maybe Int -> [Move] -> CtxIO ()
-reportBestMove mstt msc mvs = do
+-- wdata: write the data line (option -d), not for a stopped ponder search (position not played)
+-- With the option Ponder the second move of the path is the ponder move
+reportBestMove :: Bool -> Maybe MyState -> Maybe Int -> [Move] -> CtxIO ()
+reportBestMove wdata mstt msc mvs = do
     case mvs of
         []  -> answer $ infos "empty pv"
-        m:_ -> do
-            dataSearch mstt msc m
-            answer $ bestMove m Nothing
+        m:mvs' -> do
+            when wdata $ dataSearch mstt msc m
+            pdo <- ponderOpt <$> readChanging
+            let mp = if pdo then listToMaybe mvs' else Nothing
+            answer $ bestMove m mp
     case mstt of
         Just st -> do
             ctxLog LogInfo $ "Search statistics:"
@@ -735,8 +753,21 @@ giveBestMove :: Int -> Int -> [Move] -> CtxIO ()
 giveBestMove tok sc mvs = do
     msnap <- finishSearch tok
     case msnap of
-        Just snap -> reportBestMove (Just $ crtStatus snap) (Just sc) mvs
+        Just snap -> reportBestMove True (Just $ crtStatus snap) (Just sc) mvs
         Nothing   -> return ()
+
+-- A ponder search reached its end (maximal draft): bestmove waits for ponderhit or stop, unless
+-- ponderhit came in the meantime
+ponderFinished :: Int -> Int -> [Move] -> CtxIO ()
+ponderFinished tok sc mvs = do
+    ctx <- ask
+    waits <- liftIO $ modifyMVar (change ctx) $ \c ->
+        case pondering c of
+            Just p | working c && searchToken c == tok -> return (c { pondering = Just p { pdDone = True } }, True)
+            _                                          -> return (c, False)
+    if waits
+       then ctxLog LogInfo "Ponder search finished: bestmove waits for ponderhit or stop"
+       else giveBestMove tok sc mvs
 
 -- Data collection in UCI mode (option -d), file <progLogName>-<start second>-<pid>.data in the
 -- current directory, one line per search (written before the bestmove):
@@ -813,21 +844,84 @@ beforeReadLoop = do
 beforeProgExit :: CtxIO ()
 beforeProgExit = return ()
 
+-- A stop right after go (frequent when pondering) waits for the first iteration, so that there is
+-- a best move to send
 doStop :: CtxIO ()
 doStop = do
+    waitFirstIteration (200 :: Int)
     mchg <- stopSearch
     case mchg of
         Just chg -> do
-            case compThread chg of
-                Just tid -> liftIO $ killThread tid
-                Nothing  -> return ()
-            case forGui chg of
-                Just ms -> reportBestMove (Just $ crtStatus chg) Nothing ms
-                Nothing -> return ()
+            let pond = isJust $ pondering chg
+            when pond $ ctxLog LogInfo "Stop while pondering"
+            endStopped (not pond) Nothing chg
         Nothing -> return ()
+    where waitFirstIteration n = when (n > 0) $ do
+              chg <- readChanging
+              when (working chg && isNothing (forGui chg)) $ do
+                  liftIO $ threadDelay 1000
+                  waitFirstIteration (n - 1)
 
+-- The search was taken out of work (working = False, by stopSearch or similar): end its thread and
+-- send the best move of the last finished iteration
+endStopped :: Bool -> Maybe Int -> Changing -> CtxIO ()
+endStopped wdata msc chg = do
+    case compThread chg of
+        Just tid -> liftIO $ killThread tid
+        Nothing  -> return ()
+    case forGui chg of
+        Just ms -> reportBestMove wdata (Just $ crtStatus chg) msc ms
+        Nothing -> answer $ infos "no best move yet"
+
+data PonderHit = PhIgnore
+               | PhAnswer Changing Int  -- stopped search and its last score
+               | PhGoOn Int Int         -- the search goes on: token and hard time limit (ms, 0 = none)
+
+-- Ponderhit: the ponder search becomes the normal search of the move, the time of the move starts now
+-- (with the clock values of go ponder); answer at once when the search already finished, or when it
+-- already ran (pondering) as long as the normal time of the move
+-- The iteration running at ponderhit has no time limit: a watchdog stops it at the hard limit of the
+-- move; the later iterations have the normal limits
 doPonderhit :: CtxIO ()
-doPonderhit = notImplemented "doPonderhit"
+doPonderhit = do
+    ctx <- ask
+    currms <- lift $ currMilli (strttm ctx)
+    r <- liftIO $ modifyMVar (change ctx) $ \c ->
+        case pondering c of
+            Just p | working c -> do
+                let budget | pdMvt p > 0 = Just (pdMvt p, pdMvt p)
+                           | otherwise   = compTime (pdTim p) (pdTpm p) (pdMtg p) (pdScore p) (pdRept p)
+                    deep = case budget of
+                               Just (ms, _) -> isJust (forGui c) && currms - pdGoMs p >= ms
+                               Nothing      -> False
+                if pdDone p || deep
+                   then return (c { working = False, compThread = Nothing, forGui = Nothing, pondering = Nothing },
+                                PhAnswer c (pdScore p))
+                   else return (c { pondering = Nothing, srchStrtMs = currms },
+                                PhGoOn (searchToken c) (maybe 0 snd budget))
+            _ -> return (c, PhIgnore)
+    case r of
+        PhIgnore -> ctxLog LogWarning "Ponderhit without ponder search: ignored"
+        PhAnswer chg sc -> do
+            ctxLog LogInfo "Ponderhit: answer at once"
+            endStopped True (Just sc) chg
+        PhGoOn tok mx -> do
+            ctxLog LogInfo $ "Ponderhit: search goes on, hard limit " ++ show mx
+            when (mx > 0) $ void $ newThread $ ponderWatch tok mx
+
+ponderWatch :: Int -> Int -> CtxIO ()
+ponderWatch tok mx = do
+    liftIO $ threadDelay $ mx * 1000
+    ctx <- ask
+    mchg <- liftIO $ modifyMVar (change ctx) $ \c ->
+        if working c && searchToken c == tok && isNothing (pondering c)
+           then return (c { working = False, compThread = Nothing, forGui = Nothing }, Just c)
+           else return (c, Nothing)
+    case mchg of
+        Just chg -> do
+            ctxLog LogInfo "Ponderhit: hard time limit reached, stop"
+            endStopped True Nothing chg
+        Nothing -> return ()
 
 -- Name of the log file
 progLogName :: String
@@ -850,7 +944,8 @@ data UciGUIOptionType = UGOTRange String String
 
 guiUciOptions :: [(String, String, String, UciGUIOptionType)]
 guiUciOptions = [
-        ("Hash", "spin", "4", UGOTRange "4" "1024")     -- hash size in MB (start: newCache 1 = 4 MB)
+        ("Hash", "spin", "4", UGOTRange "4" "1024"),    -- hash size in MB (start: newCache 1 = 4 MB)
+        ("Ponder", "check", "false", UGOTNone)
     ]
 
 sendOption :: (String, String, String, UciGUIOptionType) -> CtxIO ()
