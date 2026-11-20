@@ -58,6 +58,12 @@ are not reviewed here. The user's experience: negative history and squared bonus
      where 0.9.0 stands and how much it gained over 0.8.0.
   4. Only then the release plan: a few features or fixes that need little testing, maybe ponder (today `go ponder` is
      ignored and `ponderhit` not implemented, `Main/Barbarossa.hs`). The size of the gain over 0.8.0 decides the scope.
+     Ponder built (2026-11-20, feature session, user): branch `pond` 9c05ae2 (identity 789fcfa) from `rel090` 0637ff7, not
+     merged. Option `Ponder` (bestmove then carries the ponder move); `go ponder` searches without limit; at `ponderhit` the
+     move's time starts, answer at once if the pondering already took the normal time of the move; a watchdog stops the
+     running iteration at the hard limit; a finished ponder search waits for `ponderhit` or `stop`. Perf unchanged (10251160).
+     Local test (cutechess-cli 1.3.1, fastchess has no ponder; 10+0.1): 40 games ponder against no ponder, 8 ponder against
+     ponder: no sequence errors, time losses or hangs; hit rate 63-70%. Strength not measured (needs cutechess on MEMO).
   Larger changes (time management change A, `improving`, singular extensions) wait for that decision.
 
 ## Methods
