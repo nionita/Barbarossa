@@ -68,6 +68,10 @@ are not reviewed here. The user's experience: negative history and squared bonus
      taken from the board: the EPD openings start with Black to move; a first count by ply parity had the sides swapped).
      Fix `pond` ca8824a: an answer at once after `ponderhit` (or a watchdog stop) now repeats the last info line before
      `bestmove`, so GUIs and PGNs get score and depth for it (527 moves had none). Perf unchanged; rerun clean, 21-5-14.
+     60+1 (8 games, 2026-11-20): clean (no sequence errors, time losses, disconnects), hit rate 65%, ponder side +1.39 +- 0.20
+     ply per game (19.4 against 18.0); 2-3-3. Found there: the depth cap of 25 plies (`md` in `doGo`) is reached often at
+     60+1 (1858 info lines at depth 25; 86 ponder searches ended at the cap): a candidate fix for the release list (a
+     higher cap), to check that a search at the cap does not just stop early in endgames where more depth would help.
   Larger changes (time management change A, `improving`, singular extensions) wait for that decision.
 
 ## Methods
