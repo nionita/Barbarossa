@@ -101,6 +101,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
      games, scores 0.446 there and 0.484 in the others; the losses with deep searches were already lost (16 of 18 below
      -1.0 long before); game 32 (Kf1 at 0.00 after depth 27-30, then mated, R against B, 50-move counter 87): `r90c` plays
      the same Kf1 at depth 25 (shared horizon). The run cannot separate the cap from `mbsp`.
+     Result `dcap-r90c` (2026-11-20, 200 games, 4:54 h): crash check passed: all 200 games ended normally (no crash, no time
+     loss, no illegal move). Score -22.6 +- 30.9 (pentanomial [6, 27, 44, 20, 3]): no measure of the cap (`mbsp` differs).
      Separating run (user, 2026-11-20): `dcap-r90d` on m3a, `dcap` against the new frozen base `r90d` (`rel090` 03be4eb:
      same code as `dcap` with cap 25), 400 games fixed at 192+3.2 (= 60+1), 64 MB, openings from 21476, chained after
      `dcap-r90c`, read once at the end. Prediction (before any game): +3, range -15 to +20 (the cap acts in 60% of the games,
