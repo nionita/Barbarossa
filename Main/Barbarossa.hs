@@ -33,7 +33,7 @@ import Moves.Internal.Base
 import Moves.Notation (posToFen)
 import Moves.History
 import Search.CStateMonad (execCState)
-import Search.AlbetaTypes (formatStats)
+import Search.AlbetaTypes (formatStats, SStats(..))
 import Eval.FileParams (makeEvalState)
 import Eval.KPK (kpkInit)
 
@@ -147,7 +147,7 @@ initContext opts = do
             srchStrtMs = 0,
             myColor = White,
             totBmCh = 0, lastChDr = 0, lmvScore = Nothing,
-            ponderOpt = False, pondering = Nothing
+            ponderOpt = False, pondering = Nothing, lastIter = Nothing
          }
     ctxVar <- newMVar chg
     mud <- if optData opts
@@ -528,7 +528,7 @@ startWorking pond tim tpm mtg mvt dpt rept = do
         ++ show tim ++ " / " ++ show tpm ++ " / " ++ show mtg ++ " / movetime " ++ show mvt
         ++ " - maximal " ++ show dpt ++ " plys"
     let pinfo | pond      = Just PonderInfo { pdTim = tim, pdTpm = tpm, pdMtg = mtg, pdMvt = mvt,
-                                              pdRept = rept, pdGoMs = currms, pdScore = 0, pdDone = False }
+                                              pdRept = rept, pdGoMs = currms, pdDone = False }
               | otherwise = Nothing
     tok <- beginSearch $ \c -> c {
             srchStrtMs = currms,
@@ -587,7 +587,7 @@ searchTheTree tok draft mdraft timx1 timx tim tpm mtg mvt rept lsc lpv rmvs = do
         ctxLog LogInfo $ "Changes in draft " ++ show draft ++ ": " ++ show ch ++ " / " ++ show totch
     ok <- publishSearchProgress tok $
         \c -> c { crtStatus = stfin, totBmCh = totch, lastChDr = ldCh, forGui = Just path,
-                  pondering = (\p -> p { pdScore = sc }) <$> pondering c }
+                  lastIter = Just (draft, sc) }
     if not ok
        then return sc
        else do
@@ -854,7 +854,7 @@ doStop = do
         Just chg -> do
             let pond = isJust $ pondering chg
             when pond $ ctxLog LogInfo "Stop while pondering"
-            endStopped (not pond) Nothing chg
+            endStopped (not pond) False chg
         Nothing -> return ()
     where waitFirstIteration n = when (n > 0) $ do
               chg <- readChanging
@@ -864,17 +864,24 @@ doStop = do
 
 -- The search was taken out of work (working = False, by stopSearch or similar): end its thread and
 -- send the best move of the last finished iteration
-endStopped :: Bool -> Maybe Int -> Changing -> CtxIO ()
-endStopped wdata msc chg = do
+-- wdata: write the data line (option -d); hit: an answer after ponderhit, which repeats the info of the
+-- last finished iteration (sent while pondering, the GUI would have no score and depth for the move)
+endStopped :: Bool -> Bool -> Changing -> CtxIO ()
+endStopped wdata hit chg = do
     case compThread chg of
         Just tid -> liftIO $ killThread tid
         Nothing  -> return ()
     case forGui chg of
-        Just ms -> reportBestMove wdata (Just $ crtStatus chg) msc ms
+        Just ms -> do
+            let mli = if hit then lastIter chg else Nothing
+            case mli of
+                Just (d, sc) -> informGuiBM sc d d (sNodes $ mstats $ crtStatus chg) ms
+                Nothing      -> return ()
+            reportBestMove wdata (Just $ crtStatus chg) (snd <$> mli) ms
         Nothing -> answer $ infos "no best move yet"
 
 data PonderHit = PhIgnore
-               | PhAnswer Changing Int  -- stopped search and its last score
+               | PhAnswer Changing      -- the stopped search
                | PhGoOn Int Int         -- the search goes on: token and hard time limit (ms, 0 = none)
 
 -- Ponderhit: the ponder search becomes the normal search of the move, the time of the move starts now
@@ -890,21 +897,21 @@ doPonderhit = do
         case pondering c of
             Just p | working c -> do
                 let budget | pdMvt p > 0 = Just (pdMvt p, pdMvt p)
-                           | otherwise   = compTime (pdTim p) (pdTpm p) (pdMtg p) (pdScore p) (pdRept p)
+                           | otherwise   = compTime (pdTim p) (pdTpm p) (pdMtg p) (maybe 0 snd $ lastIter c) (pdRept p)
                     deep = case budget of
                                Just (ms, _) -> isJust (forGui c) && currms - pdGoMs p >= ms
                                Nothing      -> False
                 if pdDone p || deep
                    then return (c { working = False, compThread = Nothing, forGui = Nothing, pondering = Nothing },
-                                PhAnswer c (pdScore p))
+                                PhAnswer c)
                    else return (c { pondering = Nothing, srchStrtMs = currms },
                                 PhGoOn (searchToken c) (maybe 0 snd budget))
             _ -> return (c, PhIgnore)
     case r of
         PhIgnore -> ctxLog LogWarning "Ponderhit without ponder search: ignored"
-        PhAnswer chg sc -> do
+        PhAnswer chg -> do
             ctxLog LogInfo "Ponderhit: answer at once"
-            endStopped True (Just sc) chg
+            endStopped True True chg
         PhGoOn tok mx -> do
             ctxLog LogInfo $ "Ponderhit: search goes on, hard limit " ++ show mx
             when (mx > 0) $ void $ newThread $ ponderWatch tok mx
@@ -920,7 +927,7 @@ ponderWatch tok mx = do
     case mchg of
         Just chg -> do
             ctxLog LogInfo "Ponderhit: hard time limit reached, stop"
-            endStopped True Nothing chg
+            endStopped True True chg
         Nothing -> return ()
 
 -- Name of the log file

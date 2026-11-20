@@ -630,7 +630,7 @@ initContext opts = do
             srchStrtMs = 0,
             myColor = White,
             totBmCh = 0, lastChDr = 0, lmvScore = Nothing,
-            ponderOpt = False, pondering = Nothing
+            ponderOpt = False, pondering = Nothing, lastIter = Nothing
          }
     ctxVar <- newMVar chg
     let context = Ctx {
