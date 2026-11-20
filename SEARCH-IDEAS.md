@@ -841,7 +841,7 @@ conflicts only in the identity and the parameter list; perf tests.fen depth 10 1
 ### `improving` (status: open)
 Now: not built; `staticScore` two plies back is on `stack`, so cheap. 2026-10-31.
 
-### Check extension without a limit (status: open)
+### Check extension without a limit (status: running)
 Now: every check is extended by one ply (`exten`), with no limit by ply or count; repetition is the only stop. In queen endings this
 makes the explosions of the high LMR levels (S42): with the mate guards (S43) and no extension beyond ply 2 * draft position 362
 needs 8.9M nodes at level 19 instead of 252M; without the check extension 474k (S44). 2026-11-15.
@@ -861,6 +861,23 @@ contain the explosions).
 Test sets (2026-11-15): the 652 roots of the 4+1 log of S41 (BarbarossaTuning `log_roots.py`): all, the 206 with a final mate
 score (+-20000), the 184 of game 7 (won queen ending); `C:\Learn\Data\measurements\search\mbnd\roots-ics`.
 Next: after the LMR results; it also cleans the node statistics of the LMR scans.
+Built (2026-11-20, feature session): `chxd` 0250bfb (identity 675aa85) from `rel090` 55c9bac (= `r90c` code), two parameters
+compiled 0 = off: `epChkExK` = k (form D: a check is extended only while ply + d >= draft - k) and `epChkExP` = p (no
+extension into a child beyond ply p * draft; the review's backstop is p = 2). A check that also takes the last queen (or the
+last rook without queens) keeps its extension. Deterministic perf, tests.fen depth 10: off 10251160 (= `r90c`), K=2 10236014,
+K=3 10442532, P=2 10251160 (never reached; P=1 10685292), K=3 with P=2 10442532. Perft right.
+Mates (206 mate roots of the 4+1 log, depth 10, first depth with a mate score): off 182 found, K2 183, K3 184, K3+P2 183;
+none lost; total nodes within 2% (108.8M off, 110.7M K3).
+Finding (2026-11-20): on `r90c` the S44 explosion is gone (362 at level 19: 112k nodes off, S44 252M); the cause is `pvnt`:
+with `epPvsNt=0` 362 needs 225M (floor 0), 468M with `epTTRep=0` as well, and K=3 cuts the latter to 53.5k. Not the floor or
+the TT rule (50k each with only that one reverted). The mechanism stays, `pvnt` hides it in these positions; the limit
+removes it. Explosion positions on `r90c` (182/362/485, depth 12, levels 15 and 19): all below 200k, off or on.
+Run (2026-11-20, user's go): `chxd-k3-r90c-tc10`, `chxd` with `epChkExK=3` (`chxd-k3`) against `r90c`, MEMO, 10+0.1, 16 MB,
+SPRT [-5, 0] (non-regression: the aim is safety against the explosions, not Elo), cap 20000 games (10000 rounds, openings
+from 10801). Then, if it passes, a fixed match at 60+1. P stays off (it never acts at the drafts of these tests).
+Prediction (2026-11-20, before any game): -3 to +3, most likely 0; H1 (pass) more likely than H0. Reasons: on `r90c` the
+explosions do not occur in the test positions, so the limit removes little that costs time; the mates are not lost; the
+node totals move by 2%, within the chaos of the tree.
 
 ### Singular extensions (status: open)
 Now: not built, needs good ordering and TT first. 2026-10-31.
