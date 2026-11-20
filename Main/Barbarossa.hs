@@ -41,7 +41,7 @@ progName, progVersion, progVerSuff, progAuthor :: String
 progName    = "Barbarossa"
 progAuthor  = "Nicu Ionita"
 progVersion = "0.8.0"
-progVerSuff = ""
+progVerSuff = "r080"
 
 data Options = Options {
         optConfFile :: Maybe String,    -- config file
@@ -338,8 +338,10 @@ setOptionHash sval =
     case reads sval of
         [(val, "")] -> do
             chg <- readChanging
+            -- not working: the search thread is finished or killed, no snapshot holds the table,
+            -- so the old table can be freed (same number of entries: it is kept)
             let st = crtStatus chg
-            ha <- liftIO $ newCache val
+            ha <- liftIO $ resizeCache (hash st) val
             modifyChanging $ \c -> c { crtStatus = st { hash = ha }}
             ctxLog LogInfo $ "Cache was set on " ++ sval ++ " MB"
         _           -> ctxLog LogError $ "GUI: wrong number of MB for option Hash: " ++ sval
@@ -838,7 +840,7 @@ data UciGUIOptionType = UGOTRange String String
 
 guiUciOptions :: [(String, String, String, UciGUIOptionType)]
 guiUciOptions = [
-        ("Hash", "spin", "16", UGOTRange "16" "1024")   -- hash size in MB
+        ("Hash", "spin", "4", UGOTRange "4" "1024")     -- hash size in MB (start: newCache 1 = 4 MB)
     ]
 
 sendOption :: (String, String, String, UciGUIOptionType) -> CtxIO ()
