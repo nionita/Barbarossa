@@ -39,7 +39,9 @@ are not reviewed here. The user's experience: negative history and squared bonus
   2026-11-19 (user): new runs use a hash by the time control (16 MB at 10+0.1, 64 MB at 60+1, 256 MB at 5m+1s, about the
   table use of real games); 4 MB only for replays of 4 MB results.
 - PV node type after a fail low (S60, 2026-11-18): found while measuring aspiration (`aspw`); `epPvsNt=1` -12% to -16% nodes
-  at depth 10; `pvnt` at 10+0.1 +2.8 +- 11.1 (S62), at 60+1 +56.8 +- 13.7 (S67): adopted, merge on the user's request.
+  at depth 10; `pvnt` at 10+0.1 +2.8 +- 11.1 (S62), at 60+1 +56.8 +- 13.7 (S67): adopted, merged into `rel090` 2026-11-20
+  (55c9bac, user: before the box runs ended, which play the frozen `r90b`); new perf reference 10251160 (11671539 with
+  `epPvsNt=0`); frozen base `r90c`.
   Aspiration itself saves no nodes (parked).
 - Designs for later (2026-11-17, nothing built): `SPEED-IDEAS.md` (speed and simplification), `Search/TB-SYZYGY.md` (Syzygy probes),
   `Eval/KPK-BITBASE.md` (KPK bitbase); blocks below.
@@ -114,6 +116,7 @@ Frozen builds:
 |---|---|---|---|---|---|
 | `r90a` | `rel090` cf00634 | 771f656 | `chcm` + floor f = 4 + `spdg` speed | `epLmrMax` 15, `epLmrFlr` 4, old TT rule (smallest move code; no `epTTRep`) | 11367370 |
 | `r90b` | `rel090` b00f14a | ace64a7 | `r90a` + TT replacement (`ttrp`, S64) | `epLmrMax` 15, `epLmrFlr` 4, `epTTRep` 2 | 11671539 (S64; 11367370 with `epTTRep=0` = `r90a`) |
+| `r90c` | `rel090` 55c9bac | b3a63d6 | `r90b` + PV node type after a fail low (`pvnt`, S67) | `epLmrMax` 15, `epLmrFlr` 4, `epTTRep` 2, `epPvsNt` 1 | 10251160 (11671539 with `epPvsNt=0` = `r90b`) |
 
 Player comparisons from 2026-11-19 (earlier ones: the log, by their S numbers):
 | Player A | Player B | Conditions | Result (A's side) | S |
@@ -643,6 +646,13 @@ and lower looks better there. Running: Lim 6000 [0, 5] and cap 13 [-5, 0] on MEM
   Hash (2026-11-19, before any game; user's rule: hash by time control, 64 MB at 60+1): the batches and the MEMO run play
   with 64 MB, not 4 MB. Prediction kept (+10): with the fixed rule the 4 MB table at 60+1 loses less than before, so
   the larger table changes both sides little.
+  MEMO on the new base (2026-11-20, user's go for the merge): `r90c-m13-r90c-tc60`, `r90c` with `epLmrMax=13` (`r90c-m13`)
+  against `r90c` (cap 15), 60+1, 1000 games fixed (500 rounds, openings from 10301), 64 MB, read once at the end. It replaces
+  the queued `r90b-m13-r90b-tc60` and is not pooled with the box batches (other base: `pvnt` searches 0.9 ply deeper).
+  Prediction (2026-11-20, before any game and before the box batches are read): -15 to +30, most likely +7. Reasons: the +10
+  above; `pvnt` deepens the search (+0.9 ply at 60+1), so the 0.76 ply that cap 13 costs (S37) weighs a little less, and
+  part of the cost of deep reductions (fail low cascades after a re-search) is gone with it: a little smaller than on `r90b`.
+  1000 games +- about 15: a pass needs about +15.
 - Lim 6000 apart: H0 (expected) ends the single ramp steps at 10+0.1; a pass keeps 6000 and checks it at the long time control with
   the cap. Result: neither, +1.86 +- 3.50 after 20000 games (S36): no more ramp steps at 10+0.1; Lim 6000 stays a candidate for step
   A3 (the ramp speed at the long time control with the new cap).
@@ -825,6 +835,8 @@ searches only (S62 at 10+0.1: +2.8), like the TT fix: the cost of the PV cascade
 Adopted by the time control decision; merge into `rel090` on the user's request (then a new frozen base, `r90c` = `r90b` +
 `pvnt`). Depth at the same time (S67): +0.93 +- 0.05 ply, growing with the game (+0.33 to +1.19) and the |score| (up to +2.1):
 the mechanism confirmed. Merge (user, 2026-11-19): after the box runs (cap 13 against 15 on `r90b`), for the same comparisons.
+Merged 2026-11-20 (user, earlier: the box runs play the frozen `r90b`, a moving `rel090` does not touch them): `rel090` 55c9bac,
+conflicts only in the identity and the parameter list; perf tests.fen depth 10 10251160 (11671539 with `epPvsNt=0` = `r90b`).
 
 ### `improving` (status: open)
 Now: not built; `staticScore` two plies back is on `stack`, so cheap. 2026-10-31.
