@@ -80,6 +80,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
      (`Moves/History.hs`), by the ply from the root, not by the draft, clamped to 1 from ply 31; every caller passes `absdp`.
      A higher cap gives no ply a larger bonus and no new overflow (the only overflow is ply 0, bug 1, independent of the cap);
      it only adds more updates at deep plies with tiny weights. No damped update needed for the cap; games at 60+1 decide.
+     Feature session started (user, 2026-11-20): branch `dcap` from `rel090` d4365c6, cap 40 as one shared constant (also
+     the path depth); checks: tests.fen nodes = 10251160, perft, deep runs past 25 on the queen ending and mate roots.
   Larger changes (time management change A, `improving`, singular extensions) wait for that decision.
 
 ## Methods
