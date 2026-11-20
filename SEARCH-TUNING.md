@@ -1404,3 +1404,14 @@ Result: +16.34 +- 14.17, nElo +24.89 +- 21.53, LOS 98.8%, +250 -203 =547 (52.35%
 Prediction right (in the range, 10 above the most likely value: the regression expected from the selected S48 did not come).
 The floor holds on the fixed TT, with nearly the same size as S48 (+16.7); it passes the decision rule (LOS >= 95%) on its own.
 The floor stays compiled in. Result in `C:\Learn\Data\results\memo\ttrp-f4-f0-tc60`.
+
+**S69.** RFP margin with an opponent passer on its 6th or 7th rank, first games (2026-11-19/20). `rfpp` a3bc06b with
+`epRFutP=100` (`rfpp-p100`: the RFP margin grows by 100 cp when the base margin would cut and the opponent has such a passer)
+against `r90b` ace64a7 (off), MEMO, 10+0.1, 16 MB, SPRT [0, 5] with a cap of 4000 games (2000 rounds, openings from 8301).
+Prediction (register, before any game): -4 to +6, most likely +1; most likely no SPRT decision at 4000 games.
+Result: -0.43 +- 7.87, nElo -0.59 +- 10.77, LOS 45.7%, +1144 -1149 =1707 (49.94%), pentanomial [156, 446, 803, 437, 158],
+LLR -0.91 of (-2.94, 2.94), cap reached without a decision, 9.1 hours.
+Prediction right (in the range, 1.4 below the most likely value; no decision, as expected).
+The condition touches 2.7% of the RFP cuts; the games show no effect of it. Not excluded: a gain up to about +7 or a loss
+up to about -8. The no-cut form (P10000) was to follow only a positive P100: not played.
+Result in `C:\Learn\Data\results\memo\rfpp-p100-r90b-tc10`.

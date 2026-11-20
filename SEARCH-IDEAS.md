@@ -280,7 +280,9 @@ Evidence:
 2026-11-01: compiled in `fbas` on this evidence (user), without a passed SPRT.
 
 ### RFP: no cut with an opponent passer on rank 6/7 (status: open)
-Now: the sharpest signal of the shadow diagnostic, never played; wrong cuts can be cheap. 2026-10-31.
+Now: P100 played (S69): -0.4 +- 7.9 in 4000 games at 10+0.1, no effect shown; the strong diagnostic signal does not turn
+into Elo at this frequency (2.7% of the cuts). Proposal: park in this form; decision with the user. 2026-11-20.
+Before (2026-10-31): the sharpest signal of the shadow diagnostic, never played; wrong cuts can be cheap.
 Evidence: wrong rate 5.3x, 10.4x in endgames; gives up 10% of the decisions for 38% of the wrong cuts (S13).
 Built (2026-11-19, feature session): `rfpp` a3bc06b (identity 0a00424) from `r90b` ace64a7, parameter `epRFutP` (cp, compiled
 0 = off; 10000 = no RFP cut there): when the base margin would cut and the opponent has a passed pawn on its 6th or 7th rank
@@ -297,6 +299,9 @@ the estimate (+- about 7.5) and decide with the user. The no-cut form (P10000) o
 Prediction (2026-11-19, before any game): -4 to +6, most likely +1. Reasons: the condition is in 2.7% of the RFP cuts
 (census), far rarer than hanging pieces (41% of the correct cuts in S11), whose margin gave +4.8 +- 4.6 (S22); the S13 wrong
 rate was measured on an older engine; the extra nodes are few. Most likely outcome: no SPRT decision at 4000 games.
+Result (2026-11-20, S69): -0.43 +- 7.87, LOS 45.7%, LLR -0.91, cap of 4000 games without a decision; prediction right.
+P10000 not played (only after a positive P100). Review when: RFP margins are retuned, or deeper games show endgame losses
+to advanced passers.
 
 ### RFP: cut more when an opponent piece hangs (status: open)
 Now: wrong rate 0.3x (S13). User: only after the RFP SPRTs. 2026-10-31.
