@@ -64,6 +64,9 @@ are not reviewed here. The user's experience: negative history and squared bonus
      games fixed at 192+3.2 (= 60+1), 64 MB, openings from 21201, read once at the end. Self-play overstates the gap
      against other engines; the gauntlet stays the measure. Prediction (before any game, rough: the adopted search
      changes since 0.8.0 summed and discounted for self-play inflation and overlap): +60, range +25 to +110.
+     Result (2026-11-21, S74): +139.0 +- 20.9, 550 games, 69.0%, pentanomial [3, 13, 88, 114, 57], all games normal.
+     Prediction wrong (above the range): the gain over 0.8.0 in self-play is about twice the estimate. Self-play
+     inflates it; the gauntlet (step 3) says where 0.9.0 stands against other engines.
      Ponder built (2026-11-20, feature session, user): branch `pond` 9c05ae2 (identity 789fcfa) from `rel090` 0637ff7, not
      merged. Option `Ponder` (bestmove then carries the ponder move); `go ponder` searches without limit; at `ponderhit` the
      move's time starts, answer at once if the pondering already took the normal time of the move; a watchdog stops the

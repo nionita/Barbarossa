@@ -1461,3 +1461,14 @@ those games, 0.476 in the others (no separate measure, the split follows the kin
 Prediction right (in the range, 3 below the most likely value). The -22.6 of `dcap-r90c` (200 games) belonged to the
 noise or to `mbsp` against `r90c`, not to the cap. Not excluded: a gain or loss up to about 20.
 Result in `C:\Learn\Data\results\m3a\dcap-r90d`.
+
+**S74.** `r90c` against release 0.8.0 at 60+1, first number for the gain (2026-11-20/21). `r90c` b3a63d6 against `r080`
+b3adcc4 (frozen base: tag `0.8.0` with only the hash option fix 7bb0aee, so that both play with 64 MB), m3b, 192+3.2
+(= 60+1), 64 MB, concurrency 8, 550 games fixed (275 rounds, openings from 21201), read once at the end.
+Prediction (register, before any game, rough): +25 to +110, most likely +60.
+Result: +138.99 +- 20.91, nElo +214.6 +- 29.0, LOS 100%, +250 -41 =259 (69.0%), pentanomial [3, 13, 88, 114, 57],
+14.2 hours; all games ended normally.
+Prediction wrong (above the range, 79 above the most likely value): summing the adopted changes and discounting
+for overlap underrated them (`pvnt` alone +56.8 at 60+1, S67; the fixed TT, the floor, the eval rounds). Self-play
+against an ancestor inflates the gap; the gauntlet at 60+1 against other engines is the measure for 0.9.0.
+Result in `C:\Learn\Data\results\m3b\r90c-r080`.
