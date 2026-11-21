@@ -10,131 +10,41 @@ the idea. Elo from the candidate's side with 95% error bars. "Adopted" means in 
 Older branches (before 0.8.0, e.g. `lmrfix`, `lmrfix14`, `hlmr`, `slmr`, `ttlmr`, `hiss`, `mpru`) hold earlier tries of some of these ideas; they
 are not reviewed here. The user's experience: negative history and squared bonuses lost Elo each time.
 
-## Now (2026-11-17, last added 2026-11-19)
+## Now (2026-11-21)
 
-- Base: `chcm` (S26) = `fbas` + counter moves + continuation history, +22.5 +- 8.0 against `expo` (S27, 4000 games). `fbas` (S24) = `expo`
-  (`nmlm` with cleanups, +13.0 vs `hprf`) + filter + T100. At 60+1 `chcm` against `dev090` +82.5 +- 16.0, 1000 games (S46): the short
-  screening gains arrive at the long time control.
-- LMR, the main line (blocks "Retune of the adaptive LMR" and "LMR cap depending on the size of the search"): at 192+3.2 (boxes, = 60+1)
-  against cap 15: cap 13 +40.7 +- 10.9, cap 17 -23.5 +- 11.0 (2000 games each), cap 19 about -74 (283 games, stopped) (S40). Cap 13 at
-  10+0.1: -9.1, H0 [-5, 0]. Depth floor f = 4 at cap 15 (`lmfl`): +16.7 +- 15.5, LOS 98.3% at 60+1 (S48); at 10+0.1 +1.2 +- 3.5
-  after 20000 games (S52): it costs nothing in short games. Adopted: `lmfl` merged into `rel090`, `epLmrFlr = 4` compiled in
-  (S53; new perf reference 11367370 nodes on tests.fen depth 10, 12086912 with `epLmrFlr=0`). `r90a` (frozen `rel090` cf00634)
-  against `chcm` at 60+1: +11.8 +- 22.8, 500 games; pooled with S48 +15.1 +- 12.8, LOS 98.9% (S56).
-  Box runs on the old TT (2026-11-19): floor on cap 13 against cap 13 +5.2 +- 10.3 (S65), cap 12 against 13 +6.4 +- 10.3 (S66),
-  neither shown. Running: cap 13 against 15 on the fixed TT, `r90b`, 64 MB, batches of 400 games on the boxes.
-  Then the decision: keep cap 15 with the floor (now compiled), or cap 13 with or without it, by the time control rule (Methods).
-- Mate bounds, stalemate after pruning, eval clamp (`mbnd`): -5.5 +- 4.4 at 10+0.1, H0 of [-5, 0] (S54); not merged. Next: split
-  (stalemate test, clamp and finding 7 without the mate guards).
-- Rejected in this form at 10+0.1: late move pruning D3 M1 C1 -7.6 (S28); root overflow fixes (S29); history in the LMR (S32); LMR level
-  carried over -25.0 (S33); less LMR in three forms near -7 (S34); table growth 1.1 -0.35 (S35). Lim 6000 +1.86 +- 3.50 after 20000
-  games, no decision (S36).
-- Hash: every match so far played with 4 MB, not 16; the engine fix of its hash option is in `rel090` (merged 2026-11-17,
-  S50); `-Hash` only for builds that contain it, older branches (e.g. `lmfl`) leak (block "Hash option of the engine").
-- TT replacement bug (block "TT replacement"): `ttrp` +12.0 +- 11.0 at 10+0.1 (2000 games, S59), +121.1 +- 15.6 at 60+1
-  (1000 games, S63), 1.65 ply deeper at the same time: merged into `rel090` (S64, new perf reference 11671539).
-  Plan (user, 2026-11-18), after the 10+0.1 run decides: every earlier match is judged on whether the crippled table could have
-  favoured or hurt one setup (e.g. the LMR caps, the floor, the long time control results): a replay or just a sanity check on
-  the fixed base. Matches stay at 4 MB with the right rule; larger hashes as a further check.
-  2026-11-19 (user): new runs use a hash by the time control (16 MB at 10+0.1, 64 MB at 60+1, 256 MB at 5m+1s, about the
-  table use of real games); 4 MB only for replays of 4 MB results.
-- PV node type after a fail low (S60, 2026-11-18): found while measuring aspiration (`aspw`); `epPvsNt=1` -12% to -16% nodes
-  at depth 10; `pvnt` at 10+0.1 +2.8 +- 11.1 (S62), at 60+1 +56.8 +- 13.7 (S67): adopted, merged into `rel090` 2026-11-20
-  (55c9bac, user: before the box runs ended, which play the frozen `r90b`); new perf reference 10251160 (11671539 with
-  `epPvsNt=0`); frozen base `r90c`.
-- Mate bound fixes without the guards (`mbsp`, findings 7 and 4 with the `evalMax` clamp): +4.5 +- 14.0 at 60+1 (S70), merged
-  into `rel090` 2026-11-20 (user); perf reference unchanged (10251160). Not in `r90c`; the next base has it.
-  Aspiration itself saves no nodes (parked).
-- Depth cap 40 (`dcap`, `maxSearchDepth`): 0.0 +- 20.6 at 60+1 against cap 25 (S73), merged into `rel090` 2026-11-21
-  (user, 9271a47); perf reference unchanged (10251160). The next frozen base has it.
-- UCI pondering (`pond`): +82.3 +- 22.7 against no ponder at 60+1 (S76), merged into `rel090` 2026-11-21 (user, 51c3117);
-  perf unchanged. Not in `r90e`; the next frozen base has it.
-- Designs for later (2026-11-17, nothing built): `SPEED-IDEAS.md` (speed and simplification), `Search/TB-SYZYGY.md` (Syzygy probes),
-  `Eval/KPK-BITBASE.md` (KPK bitbase); blocks below.
-- Eval (2026-11-18): `pegk` (`pawnEndGame` fix, KPK bitbase, lone king endings below the eval clamp, KBNK corner) adopted:
-  sanity run at 60+1 clean (+3.5 +- 45.9, 100 games, no time losses or crashes; S57), merged into `rel090` (S57).
-- Plan for the LMR after the box runs: the branches A to D of 2026-11-15 in "LMR cap depending on the size of the search" (outcome C).
+- Base: `rel090` 8134523. The frozen base `r90e` (`rel090` 9271a47) has the 0.9.0 search so far: LMR cap 15 with the floor 4,
+  the TT replacement fix, the PV node type after a fail low (`pvnt`), the mate bound fixes (`mbsp`), the depth cap 40
+  (`dcap`); `rel090` has in addition UCI pondering (`pond`, merged after the cut) and the skill `game-analysis`. Perf reference
+  10251160 nodes (tests.fen, depth 10, deterministic perf build). Bases and players: table "Match builds and players".
+- Decided 2026-11-20/21: LMR cap 15 stays (S72, block "LMR cap depending on the size of the search"); depth cap 40 (S73,
+  block "Search depth cap"); no check extension limit (S75, form D k=3 H0); pondering +82.3 +- 22.7 against no ponder at
+  60+1 (S76, block "UCI pondering"): for online tournaments, a GUI build with ponder is made when needed (user).
+- Strength: `r90c` against release 0.8.0 (`r080`) +139.0 +- 20.9 at 60+1 in self-play (S74); self-play inflates the gap,
+  the gauntlet decides. The user in the GUI (2026-11-21): `r90e` plays very nicely and strong; time management much better
+  at 60+1, good at 4m+2, maybe not aggressive enough there (block "Time management at long time controls": observation,
+  for later, unless bad behaviour shows again).
+- Running: nothing. MEMO both slots free; the boxes m3a, m3b are off since 2026-11-21 (lab `AVAILABILITY.md`, `RUNS.md`).
 - Road to 0.9.0 (user, 2026-11-20), in this order:
-  1. Settle the running questions: LMR cap 13 against 15 on `r90c` (MEMO + box batches, pooled; settled 2026-11-20, S72:
-     cap 15 stays) and the check extension limit
-     (`chxd-k3`: SPRT [-5, 0] at 10+0.1, a long time control check; settled 2026-11-21, S75: H0, -7.4 +- 5.6, no limit
-     in 0.9.0). Their adopted settings go into a frozen base (with `mbsp`).
-  2. The best one or two versions played by the user in the GUI (compiled settings, `-fast` builds: a GUI passes no options).
-  3. Gauntlet at 60+1: release 0.8.0 and the best version against a pool of other engines (number of games open), to see
-     where 0.9.0 stands and how much it gained over 0.8.0.
-  4. Only then the release plan: a few features or fixes that need little testing, maybe ponder (today `go ponder` is
-     ignored and `ponderhit` not implemented, `Main/Barbarossa.hs`). The size of the gain over 0.8.0 decides the scope.
-     First number for step 3 (user, 2026-11-20, before the gauntlet): `r90c-r080` on m3b, `r90c` against `r080` (frozen
-     base: tag `0.8.0` b3adcc4 with only the hash option fix 7bb0aee, so that both play with 64 MB; identity `r080`), 550
-     games fixed at 192+3.2 (= 60+1), 64 MB, openings from 21201, read once at the end. Self-play overstates the gap
-     against other engines; the gauntlet stays the measure. Prediction (before any game, rough: the adopted search
-     changes since 0.8.0 summed and discounted for self-play inflation and overlap): +60, range +25 to +110.
-     Result (2026-11-21, S74): +139.0 +- 20.9, 550 games, 69.0%, pentanomial [3, 13, 88, 114, 57], all games normal.
-     Prediction wrong (above the range): the gain over 0.8.0 in self-play is about twice the estimate. Self-play
-     inflates it; the gauntlet (step 3) says where 0.9.0 stands against other engines.
-     Ponder built (2026-11-20, feature session, user): branch `pond` 9c05ae2 (identity 789fcfa) from `rel090` 0637ff7, not
-     merged. Option `Ponder` (bestmove then carries the ponder move); `go ponder` searches without limit; at `ponderhit` the
-     move's time starts, answer at once if the pondering already took the normal time of the move; a watchdog stops the
-     running iteration at the hard limit; a finished ponder search waits for `ponderhit` or `stop`. Perf unchanged (10251160).
-     Local test (cutechess-cli 1.3.1, fastchess has no ponder; 10+0.1): 40 games ponder against no ponder, 8 ponder against
-     ponder: no sequence errors, time losses or hangs; hit rate 63-70%. Strength not measured (needs cutechess on MEMO).
-     Depth check (2026-11-20): pondering buys depth, +1.29 +- 0.08 ply per game for the ponder side (40 games, 10+0.1, side
-     taken from the board: the EPD openings start with Black to move; a first count by ply parity had the sides swapped).
-     Fix `pond` ca8824a: an answer at once after `ponderhit` (or a watchdog stop) now repeats the last info line before
-     `bestmove`, so GUIs and PGNs get score and depth for it (527 moves had none). Perf unchanged; rerun clean, 21-5-14.
-     60+1 (8 games, 2026-11-20): clean (no sequence errors, time losses, disconnects), hit rate 65%, ponder side +1.39 +- 0.20
-     ply per game (19.4 against 18.0); 2-3-3. Found there: the depth cap of 25 plies (`md` in `doGo`) is reached often at
-     60+1 (1858 info lines at depth 25; 86 ponder searches ended at the cap): a candidate fix for the release list (a
-     higher cap), to check that a search at the cap does not just stop early in endgames where more depth would help.
-     Strength run prepared (user, 2026-11-20) for MEMO slot 1 after the cap run: `pond-P-N-tc60`, `pond` ca8824a with ponder
-     (`pond-P`) against the same build without (`pond-N`), cutechess-cli 1.3.1 (lab `run_ponder.ps1`), 60+1, 64 MB, 400 games
-     fixed (200 rounds), concurrency 2 (a pondering game busies 2 threads; user: concurrency 4 would exceed MEMO's 8 threads
-     next to the other slot), openings from 21676, read once at the end.
-     It measures what pondering is worth against an engine that does not ponder (the opponent loses its thinking time),
-     not a change of the search. Smoke (4 games, 10+0.1) clean; a debug game: 55 `go ponder`, 41 `ponderhit`.
-     Prediction (before any game): +35, range +15 to +60 (+1.3 to +1.4 ply measured; a doubling of time is worth more).
-     Result (2026-11-21, S76): +82.3 +- 22.7, +137 -44 =219 (61.6%), 400 games; White 0.632, Black 0.600; no time
-     losses, all games ended by mate or draw rule. Prediction wrong (above the range). Pondering against an engine that
-     does not ponder is worth about +80 at 60+1 in self-play; against pondering engines the gain is smaller. A candidate
-     for the 0.9.0 release list (road step 4): merge of `pond` is the user's decision.
-     Merged (user, 2026-11-21): `rel090` 51c3117 (conflict in `doGo`: the ponder flag with the depth cap 40); perf 10251160,
-     perft right, no warnings; smoke 8 games at 10+0.1 with ponder against `r90e` (cutechess): clean, 6-0-2.
-     User (2026-11-20): 25 may be too low now that the search is faster; an independent feature before the release.
-     Places that know 25 (read, not changed): `md` in `doGo` (`Main/Barbarossa.hs`), `drawPath` / `matedPath` with
-     `pathDepth = 25` (`Search/Core.hs`: their depth then means "exact at any draft", it must follow the cap), the null
-     move depth table index clamp `nmDMaxIx = 25` (clamped, safe), `maxDepthAtThisRate`; depth indexed tables (LMR) to check.
-     History (checked 2026-11-20 after the user's concern about 2^d and Int32): the bonus is `histw ply = 2^(31 - ply)`
-     (`Moves/History.hs`), by the ply from the root, not by the draft, clamped to 1 from ply 31; every caller passes `absdp`.
-     A higher cap gives no ply a larger bonus and no new overflow (the only overflow is ply 0, bug 1, independent of the cap);
-     it only adds more updates at deep plies with tiny weights. No damped update needed for the cap; games at 60+1 decide.
-     Feature session started (user, 2026-11-20): branch `dcap` from `rel090` d4365c6, cap 40 as one shared constant (also
-     the path depth); checks: tests.fen nodes = 10251160, perft, deep runs past 25 on the queen ending and mate roots.
-     Built (2026-11-20): `dcap` dee182e (identity 362f04e), `maxSearchDepth = 40` in `Search.AlbetaTypes`, used by `doGo`
-     and the path depth (written, never read: no search decision changes). Unchanged and safe: TT depth field 6 bits,
-     `ttStore` already clamps `min 40` (every stored draft is 1 .. root draft: extensions 0/1 with `d + ext - 1`, qsearch
-     stores nothing); `nmDMaxIx` clamped; `lmrPenTable` 0..63; `maxDepthAtThisRate` has no bound at 25. Perf tests.fen
-     depth 10: 10251160 (= `rel090`), perft right; 7 mate roots to depth 32: legal PVs, mate scores match; UCI
-     `go infinite` KRK passes 25, `go depth 40` accepted, stop clean. Next: a fixed match at 60+1 (strength at the cap).
-     Run (user, 2026-11-20): only a check for crashes and time losses, no strength question: `dcap-r90c` on m3a, 200 games
-     at 192+3.2 (= 60+1), 64 MB, chained after the cap batch b1 (`dcap` contains `mbsp`, `r90c` not: the score is no
-     measure of the cap). Smoke on mini (16 games, 10+0.1, 64 MB) clean. Pass: no crash, no time loss, no illegal move.
-     Interim (user, 2026-11-20, 140 games): -39.9 +- 39.1. Looked at (155 games, sides from the FEN): no fault in the code
-     (path depth never read, LMR penalty and level unchanged in kind, history by ply); dcap passes depth 25 in 93 of 155
-     games, scores 0.446 there and 0.484 in the others; the losses with deep searches were already lost (16 of 18 below
-     -1.0 long before); game 32 (Kf1 at 0.00 after depth 27-30, then mated, R against B, 50-move counter 87): `r90c` plays
-     the same Kf1 at depth 25 (shared horizon). The run cannot separate the cap from `mbsp`.
-     Result `dcap-r90c` (2026-11-20, 200 games, 4:54 h): crash check passed: all 200 games ended normally (no crash, no time
-     loss, no illegal move). Score -22.6 +- 30.9 (pentanomial [6, 27, 44, 20, 3]): no measure of the cap (`mbsp` differs).
-     Separating run (user, 2026-11-20): `dcap-r90d` on m3a, `dcap` against the new frozen base `r90d` (`rel090` 03be4eb:
-     same code as `dcap` with cap 25), 400 games fixed at 192+3.2 (= 60+1), 64 MB, openings from 21476, chained after
-     `dcap-r90c`, read once at the end. Prediction (before any game): +3, range -15 to +20 (the cap acts in 60% of the games,
-     mostly in endgames already decided; more depth there helps a little).
-     Result `dcap-r90d` (2026-11-21, S73): 0.0 +- 20.6, 400 games, pentanomial [8, 45, 90, 53, 4]; all 400 games ended
-     normally (no time loss, crash or illegal move), dcap searched past 25 in 274 games (2954 moves, up to 40). Prediction
-     right (in the range). Cap 40 costs nothing measurable and lifts the limit seen at 60+1 and with ponder; a gain is not
-     shown (+-20). Merge into `rel090` is the user's decision (low risk: crash checks passed twice, 600 games at 60+1).
-     Merged (user, 2026-11-21): `rel090` 9271a47, identity `rel090`; perf 10251160, perft right.
-  Larger changes (time management change A, `improving`, singular extensions) wait for that decision.
+  1. Settle the running questions: done 2026-11-21 (cap 15, depth cap 40, no check extension limit; base `r90e`).
+  2. The best version played by the user in the GUI (compiled settings, `-fast` builds: a GUI passes no options): `r90e`,
+     in progress (Windows exe and a Linux build on m3a given to the user 2026-11-21).
+  3. Gauntlet at 60+1: release 0.8.0 and the best version against a pool of other engines (pool and number of games
+     open), to see where 0.9.0 stands and how much it gained over 0.8.0. Next.
+  4. Only then the release plan: features or fixes that need little testing; the size of the gain decides the scope.
+     Pondering is merged already.
+- Lost games: first look (2026-11-21) at a 60+1 match against `chilo` (user's engine, Linux, 16 games, `r90e` 12/16): one
+  tactical miss after 0.9 s at depth 12, one slow misjudged king attack (block "Mistakes in lost games"). Tools: skill
+  `game-analysis` (BarbarossaTuning `game_stats.py`, `time_log.py`, `bad_moves.py`).
+- Rejected or parked in this form: late move pruning D3 M1 (S28), root overflow fixes (S29), history in the LMR (S32), LMR
+  level carried over (S33), less LMR (S34), Lim 6000 (S36, no decision), mate guards `mbnd` (S54), aspiration (parked), RFP
+  passer guard (parked), check extension limit k=3 (S75).
+- Designs and ideas for later (nothing built): `SPEED-IDEAS.md`, `Search/TB-SYZYGY.md`, time management changes A and B,
+  `improving`, singular extensions, LMR mate escape, threat features in the HCE; blocks below.
+- Hash by time control (user, 2026-11-19): 16 MB at 10+0.1, 64 MB at 60+1, 256 MB at 5m+1s; 4 MB only for replays of 4 MB
+  results.
+- The history of this section (bases `expo`, `fbas`, `chcm`, the LMR and TT findings of 2026-11-14 to 2026-11-20): the
+  log `SEARCH-TUNING.md` (S24 to S76) and the blocks below; the section as it was: git history of this file before
+  2026-11-21.
 
 ## Methods
 
@@ -579,7 +489,9 @@ Prediction (2026-11-14, before the results): cap 17 -45 to -5, most likely -25; 
 S39: in games the endgame runs at lower levels at equal draft (10+0.1, d13+: 10.0 against 12-13), not in searches from scratch: the phase
 reaches the level through the iteration size (TT, time), not by itself. A depth ramp would need the phase or the move count to keep it.
 
-### LMR cap depending on the size of the search (status: running)
+### LMR cap depending on the size of the search (status: decided: cap 15 for 0.9.0)
+2026-11-21: status from running to decided: the runs ended; cap 13 against 15 on `r90c` -3.0 +- 10.8 (S72), cap 15
+stays with the floor 4. The "running" lines below are history. Open for later: cap 11, Lim at long time controls.
 Idea (user, 2026-11-14): the mechanism of the adaptive LMR: every iteration starts at level 8 and collects the important moves
 (history), then the level rises and the less promising moves are searched less hard (corrected only by re-searches). Two
 questions: how high (the cap) and how fast (Lim). The time control acts together with the LMR, so the cap may need a measure of
@@ -941,6 +853,78 @@ the mechanism confirmed. Merge (user, 2026-11-19): after the box runs (cap 13 ag
 Merged 2026-11-20 (user, earlier: the box runs play the frozen `r90b`, a moving `rel090` does not touch them): `rel090` 55c9bac,
 conflicts only in the identity and the parameter list; perf tests.fen depth 10 10251160 (11671539 with `epPvsNt=0` = `r90b`).
 
+### UCI pondering (status: adopted)
+Now: merged into `rel090` 2026-11-21 (51c3117): +82.3 +- 22.7 against the same build without ponder at 60+1 (S76);
+not in `r90e`. Useful in online tournaments; the user does not use ponder in normal GUI games. 2026-11-21.
+History (moved here from the "Now" section 2026-11-21):
+Ponder built (2026-11-20, feature session, user): branch `pond` 9c05ae2 (identity 789fcfa) from `rel090` 0637ff7, not
+merged. Option `Ponder` (bestmove then carries the ponder move); `go ponder` searches without limit; at `ponderhit` the
+move's time starts, answer at once if the pondering already took the normal time of the move; a watchdog stops the
+running iteration at the hard limit; a finished ponder search waits for `ponderhit` or `stop`. Perf unchanged (10251160).
+Local test (cutechess-cli 1.3.1, fastchess has no ponder; 10+0.1): 40 games ponder against no ponder, 8 ponder against
+ponder: no sequence errors, time losses or hangs; hit rate 63-70%. Strength not measured (needs cutechess on MEMO).
+Depth check (2026-11-20): pondering buys depth, +1.29 +- 0.08 ply per game for the ponder side (40 games, 10+0.1, side
+taken from the board: the EPD openings start with Black to move; a first count by ply parity had the sides swapped).
+Fix `pond` ca8824a: an answer at once after `ponderhit` (or a watchdog stop) now repeats the last info line before
+`bestmove`, so GUIs and PGNs get score and depth for it (527 moves had none). Perf unchanged; rerun clean, 21-5-14.
+60+1 (8 games, 2026-11-20): clean (no sequence errors, time losses, disconnects), hit rate 65%, ponder side +1.39 +- 0.20
+ply per game (19.4 against 18.0); 2-3-3. Found there: the depth cap of 25 plies (`md` in `doGo`) is reached often at
+60+1 (1858 info lines at depth 25; 86 ponder searches ended at the cap): a candidate fix for the release list (a
+higher cap), to check that a search at the cap does not just stop early in endgames where more depth would help.
+Strength run prepared (user, 2026-11-20) for MEMO slot 1 after the cap run: `pond-P-N-tc60`, `pond` ca8824a with ponder
+(`pond-P`) against the same build without (`pond-N`), cutechess-cli 1.3.1 (lab `run_ponder.ps1`), 60+1, 64 MB, 400 games
+fixed (200 rounds), concurrency 2 (a pondering game busies 2 threads; user: concurrency 4 would exceed MEMO's 8 threads
+next to the other slot), openings from 21676, read once at the end.
+It measures what pondering is worth against an engine that does not ponder (the opponent loses its thinking time),
+not a change of the search. Smoke (4 games, 10+0.1) clean; a debug game: 55 `go ponder`, 41 `ponderhit`.
+Prediction (before any game): +35, range +15 to +60 (+1.3 to +1.4 ply measured; a doubling of time is worth more).
+Result (2026-11-21, S76): +82.3 +- 22.7, +137 -44 =219 (61.6%), 400 games; White 0.632, Black 0.600; no time
+losses, all games ended by mate or draw rule. Prediction wrong (above the range). Pondering against an engine that
+does not ponder is worth about +80 at 60+1 in self-play; against pondering engines the gain is smaller. A candidate
+for the 0.9.0 release list (road step 4): merge of `pond` is the user's decision.
+Merged (user, 2026-11-21): `rel090` 51c3117 (conflict in `doGo`: the ponder flag with the depth cap 40); perf 10251160,
+perft right, no warnings; smoke 8 games at 10+0.1 with ponder against `r90e` (cutechess): clean, 6-0-2.
+
+### Search depth cap (status: adopted)
+Now: `maxSearchDepth = 40` (was 25), merged into `rel090` 2026-11-21 (9271a47), in `r90e`: 0.0 +- 20.6 at 60+1 against
+cap 25 (S73), no crash or time loss in 600 games; removes the limit reached at 60+1 and with ponder. 2026-11-21.
+History (moved here from the "Now" section 2026-11-21):
+User (2026-11-20): 25 may be too low now that the search is faster; an independent feature before the release.
+Places that know 25 (read, not changed): `md` in `doGo` (`Main/Barbarossa.hs`), `drawPath` / `matedPath` with
+`pathDepth = 25` (`Search/Core.hs`: their depth then means "exact at any draft", it must follow the cap), the null
+move depth table index clamp `nmDMaxIx = 25` (clamped, safe), `maxDepthAtThisRate`; depth indexed tables (LMR) to check.
+History (checked 2026-11-20 after the user's concern about 2^d and Int32): the bonus is `histw ply = 2^(31 - ply)`
+(`Moves/History.hs`), by the ply from the root, not by the draft, clamped to 1 from ply 31; every caller passes `absdp`.
+A higher cap gives no ply a larger bonus and no new overflow (the only overflow is ply 0, bug 1, independent of the cap);
+it only adds more updates at deep plies with tiny weights. No damped update needed for the cap; games at 60+1 decide.
+Feature session started (user, 2026-11-20): branch `dcap` from `rel090` d4365c6, cap 40 as one shared constant (also
+the path depth); checks: tests.fen nodes = 10251160, perft, deep runs past 25 on the queen ending and mate roots.
+Built (2026-11-20): `dcap` dee182e (identity 362f04e), `maxSearchDepth = 40` in `Search.AlbetaTypes`, used by `doGo`
+and the path depth (written, never read: no search decision changes). Unchanged and safe: TT depth field 6 bits,
+`ttStore` already clamps `min 40` (every stored draft is 1 .. root draft: extensions 0/1 with `d + ext - 1`, qsearch
+stores nothing); `nmDMaxIx` clamped; `lmrPenTable` 0..63; `maxDepthAtThisRate` has no bound at 25. Perf tests.fen
+depth 10: 10251160 (= `rel090`), perft right; 7 mate roots to depth 32: legal PVs, mate scores match; UCI
+`go infinite` KRK passes 25, `go depth 40` accepted, stop clean. Next: a fixed match at 60+1 (strength at the cap).
+Run (user, 2026-11-20): only a check for crashes and time losses, no strength question: `dcap-r90c` on m3a, 200 games
+at 192+3.2 (= 60+1), 64 MB, chained after the cap batch b1 (`dcap` contains `mbsp`, `r90c` not: the score is no
+measure of the cap). Smoke on mini (16 games, 10+0.1, 64 MB) clean. Pass: no crash, no time loss, no illegal move.
+Interim (user, 2026-11-20, 140 games): -39.9 +- 39.1. Looked at (155 games, sides from the FEN): no fault in the code
+(path depth never read, LMR penalty and level unchanged in kind, history by ply); dcap passes depth 25 in 93 of 155
+games, scores 0.446 there and 0.484 in the others; the losses with deep searches were already lost (16 of 18 below
+-1.0 long before); game 32 (Kf1 at 0.00 after depth 27-30, then mated, R against B, 50-move counter 87): `r90c` plays
+the same Kf1 at depth 25 (shared horizon). The run cannot separate the cap from `mbsp`.
+Result `dcap-r90c` (2026-11-20, 200 games, 4:54 h): crash check passed: all 200 games ended normally (no crash, no time
+loss, no illegal move). Score -22.6 +- 30.9 (pentanomial [6, 27, 44, 20, 3]): no measure of the cap (`mbsp` differs).
+Separating run (user, 2026-11-20): `dcap-r90d` on m3a, `dcap` against the new frozen base `r90d` (`rel090` 03be4eb:
+same code as `dcap` with cap 25), 400 games fixed at 192+3.2 (= 60+1), 64 MB, openings from 21476, chained after
+`dcap-r90c`, read once at the end. Prediction (before any game): +3, range -15 to +20 (the cap acts in 60% of the games,
+mostly in endgames already decided; more depth there helps a little).
+Result `dcap-r90d` (2026-11-21, S73): 0.0 +- 20.6, 400 games, pentanomial [8, 45, 90, 53, 4]; all 400 games ended
+normally (no time loss, crash or illegal move), dcap searched past 25 in 274 games (2954 moves, up to 40). Prediction
+right (in the range). Cap 40 costs nothing measurable and lifts the limit seen at 60+1 and with ponder; a gain is not
+shown (+-20). Merge into `rel090` is the user's decision (low risk: crash checks passed twice, 600 games at 60+1).
+Merged (user, 2026-11-21): `rel090` 9271a47, identity `rel090`; perf 10251160, perft right.
+
 ### `improving` (status: open)
 Now: not built; `staticScore` two plies back is on `stack`, so cheap. 2026-10-31.
 
@@ -1061,6 +1045,11 @@ PST sums), no slash written, python-chess accepts all; a SelfPlay `--data` file 
 read by python-chess without a reject. Not a search change. Merged into `rel090` 2026-11-17.
 
 ### Mistakes in lost games: tracing the refutation through the tree (status: open)
+2026-11-21: first use of the simple form (eval drops in Barbarossa's lost games, suspect positions replayed with
+Barbarossa at 15 s; skill `game-analysis`): `r90e` against `chilo` at 60+1, 16 games, 2 lost: game 15 27...Nb7 after
+0.9 s at depth 12 (+0.60), refuted by 28.Rxg6 Kxg6 29.Qd3+ Rf5 30.Re5, 31.g4 (seen at depth 22: -2.7 to -3.0; Rf5 or
+Qc8 about +0.6); game 5 a slow kingside collapse after 21.f4, 24.g4 (25...h5 and 29...Nh7 cost 0.3 to 0.6 each), our
+eval far milder than `chilo`'s all the way (eval, not tactics). No reference engine stronger than Barbarossa used.
 Now: an idea and a method, nothing built. 2026-11-16 (user's idea, method discussed in the session).
 Idea: learn from games lost against (much) stronger engines. Two extreme trajectories, mixed in real games: an equal game that
 turns at one move (a clear critical position), and a slow loss with ever harder positions (no single move). The first is the one
