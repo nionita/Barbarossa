@@ -45,6 +45,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
 - Mate bound fixes without the guards (`mbsp`, findings 7 and 4 with the `evalMax` clamp): +4.5 +- 14.0 at 60+1 (S70), merged
   into `rel090` 2026-11-20 (user); perf reference unchanged (10251160). Not in `r90c`; the next base has it.
   Aspiration itself saves no nodes (parked).
+- Depth cap 40 (`dcap`, `maxSearchDepth`): 0.0 +- 20.6 at 60+1 against cap 25 (S73), merged into `rel090` 2026-11-21
+  (user, 9271a47); perf reference unchanged (10251160). The next frozen base has it.
 - Designs for later (2026-11-17, nothing built): `SPEED-IDEAS.md` (speed and simplification), `Search/TB-SYZYGY.md` (Syzygy probes),
   `Eval/KPK-BITBASE.md` (KPK bitbase); blocks below.
 - Eval (2026-11-18): `pegk` (`pawnEndGame` fix, KPK bitbase, lone king endings below the eval clamp, KBNK corner) adopted:
@@ -122,6 +124,7 @@ are not reviewed here. The user's experience: negative history and squared bonus
      normally (no time loss, crash or illegal move), dcap searched past 25 in 274 games (2954 moves, up to 40). Prediction
      right (in the range). Cap 40 costs nothing measurable and lifts the limit seen at 60+1 and with ponder; a gain is not
      shown (+-20). Merge into `rel090` is the user's decision (low risk: crash checks passed twice, 600 games at 60+1).
+     Merged (user, 2026-11-21): `rel090` 9271a47, identity `rel090`; perf 10251160, perft right.
   Larger changes (time management change A, `improving`, singular extensions) wait for that decision.
 
 ## Methods
