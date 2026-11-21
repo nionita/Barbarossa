@@ -47,6 +47,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
   Aspiration itself saves no nodes (parked).
 - Depth cap 40 (`dcap`, `maxSearchDepth`): 0.0 +- 20.6 at 60+1 against cap 25 (S73), merged into `rel090` 2026-11-21
   (user, 9271a47); perf reference unchanged (10251160). The next frozen base has it.
+- UCI pondering (`pond`): +82.3 +- 22.7 against no ponder at 60+1 (S76), merged into `rel090` 2026-11-21 (user, 51c3117);
+  perf unchanged. Not in `r90e`; the next frozen base has it.
 - Designs for later (2026-11-17, nothing built): `SPEED-IDEAS.md` (speed and simplification), `Search/TB-SYZYGY.md` (Syzygy probes),
   `Eval/KPK-BITBASE.md` (KPK bitbase); blocks below.
 - Eval (2026-11-18): `pegk` (`pawnEndGame` fix, KPK bitbase, lone king endings below the eval clamp, KBNK corner) adopted:
@@ -95,6 +97,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
      losses, all games ended by mate or draw rule. Prediction wrong (above the range). Pondering against an engine that
      does not ponder is worth about +80 at 60+1 in self-play; against pondering engines the gain is smaller. A candidate
      for the 0.9.0 release list (road step 4): merge of `pond` is the user's decision.
+     Merged (user, 2026-11-21): `rel090` 51c3117 (conflict in `doGo`: the ponder flag with the depth cap 40); perf 10251160,
+     perft right, no warnings; smoke 8 games at 10+0.1 with ponder against `r90e` (cutechess): clean, 6-0-2.
      User (2026-11-20): 25 may be too low now that the search is faster; an independent feature before the release.
      Places that know 25 (read, not changed): `md` in `doGo` (`Main/Barbarossa.hs`), `drawPath` / `matedPath` with
      `pathDepth = 25` (`Search/Core.hs`: their depth then means "exact at any draft", it must follow the cap), the null
