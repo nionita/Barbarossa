@@ -1017,6 +1017,13 @@ repetition; 4+1 maximum at the start 16.0 s instead of 43.0 s, 5+3 37.8 s instea
 increments) was not identical at 60+1 for scores of a pawn or more (user's check, corrected). Change B, only if needed after A: the
 losing side divides only the first 60 increments by the short moves to go. Test: asymmetric self-play at 60+1 (constraint: capped
 moves about zero), 4+1 (main, fixed games), 5+3; then a gauntlet at 4+1 against other engines.
+Observation (2026-11-21, `r90e` in the user's GUI at 4m+2, 4 games, log only, no change): the user finds the time
+management much better at 60+1 and good at 4m+2, maybe not aggressive enough there; to decide much later, unless bad
+behaviour shows again. Log: games of 45, 96, 99, 125 moves ended with 81, 50, 12, 77 s on the clock (no time trouble).
+Each game has one or two moves of 30 to 40 s between moves 11 and 26 (about 18% of the clock), each stopped by the
+hard limit `mx` with the time factor 3.0 (score falling over the drafts); in one of them (game 4 move 19) the best move
+never changed from draft 10 to 24. In long games the endgame is played below the increment (1.3 to 2 s per move with
++2 s), the clock grows again (game 3: 60 to 74 s); 50 to 77 s stay unused. Both are points for change A / B above.
 Next: after the search experiments (user).
 Interpretation history: 2026-11-14: first seen in the tournament log of 0.8.0; the same evening confirmed for `chcm` at 4+1,
 not seen at 60+1: a long time control effect of `compTime`, not of the LMR explosion.
