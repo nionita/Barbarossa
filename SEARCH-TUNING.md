@@ -1483,3 +1483,15 @@ Prediction wrong (below the range, H0). The limit cuts checks that pay: on `r90c
 against no longer occur in the test positions (register), so it removes useful extensions and little waste. No limit
 in 0.9.0; the planned 60+1 match is dropped.
 Result in `C:\Learn\Data\results\memo\chxd-k3-r90c-tc10`.
+
+**S76.** Ponder against no ponder at 60+1 (2026-11-20/21). `pond` ca8824a with ponder (`pond-P`, cutechess `ponder`) against
+the same build without (`pond-N`), MEMO, cutechess-cli 1.3.1 (fastchess has no ponder), 60+1, 64 MB, 400 games fixed (200
+rounds, openings from 21676), concurrency 2 (a pondering game busies 2 threads), read once at the end.
+Prediction (register, before any game): +15 to +60, most likely +35.
+Result: +82.3 +- 22.7, LOS 100%, +137 -44 =219 (61.6%); pond-P as White 0.632, as Black 0.600; no time losses (all games
+ended by mate or a draw rule). cutechess prints no pentanomial; the PGN stays on MEMO.
+Prediction wrong (above the range, 47 above the most likely value): the measured +1.3 to +1.4 ply per game undercounts
+the gain; with a ponder hit rate of about 65% the pondering side gets close to twice the thinking time on those moves,
+and the opponent loses its own thinking time. It measures pondering against an engine that does not ponder, not a
+change of the search; against pondering opponents the gain is smaller.
+Result in `C:\Learn\Data\results\memo\pond-P-N-tc60`.

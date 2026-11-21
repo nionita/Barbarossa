@@ -91,6 +91,10 @@ are not reviewed here. The user's experience: negative history and squared bonus
      It measures what pondering is worth against an engine that does not ponder (the opponent loses its thinking time),
      not a change of the search. Smoke (4 games, 10+0.1) clean; a debug game: 55 `go ponder`, 41 `ponderhit`.
      Prediction (before any game): +35, range +15 to +60 (+1.3 to +1.4 ply measured; a doubling of time is worth more).
+     Result (2026-11-21, S76): +82.3 +- 22.7, +137 -44 =219 (61.6%), 400 games; White 0.632, Black 0.600; no time
+     losses, all games ended by mate or draw rule. Prediction wrong (above the range). Pondering against an engine that
+     does not ponder is worth about +80 at 60+1 in self-play; against pondering engines the gain is smaller. A candidate
+     for the 0.9.0 release list (road step 4): merge of `pond` is the user's decision.
      User (2026-11-20): 25 may be too low now that the search is faster; an independent feature before the release.
      Places that know 25 (read, not changed): `md` in `doGo` (`Main/Barbarossa.hs`), `drawPath` / `matedPath` with
      `pathDepth = 25` (`Search/Core.hs`: their depth then means "exact at any draft", it must follow the cap), the null
