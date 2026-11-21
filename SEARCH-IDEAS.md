@@ -1024,6 +1024,8 @@ Each game has one or two moves of 30 to 40 s between moves 11 and 26 (about 18% 
 hard limit `mx` with the time factor 3.0 (score falling over the drafts); in one of them (game 4 move 19) the best move
 never changed from draft 10 to 24. In long games the endgame is played below the increment (1.3 to 2 s per move with
 +2 s), the clock grows again (game 3: 60 to 74 s); 50 to 77 s stay unused. Both are points for change A / B above.
+Correction (2026-11-21, `glan` `time_log.py` on the same log): the long moves had time factors 2.39 to 3.01 (only game 4
+move 19 at 3.0), not 3.0 each; all hit `mx` as it stood at the end of the search (`mx` changes during a search).
 Next: after the search experiments (user).
 Interpretation history: 2026-11-14: first seen in the tournament log of 0.8.0; the same evening confirmed for `chcm` at 4+1,
 not seen at 60+1: a long time control effect of `compTime`, not of the LMR explosion.
