@@ -55,7 +55,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
 - Road to 0.9.0 (user, 2026-11-20), in this order:
   1. Settle the running questions: LMR cap 13 against 15 on `r90c` (MEMO + box batches, pooled; settled 2026-11-20, S72:
      cap 15 stays) and the check extension limit
-     (`chxd-k3`: SPRT [-5, 0] at 10+0.1, a long time control check). Their adopted settings go into a frozen base (with `mbsp`).
+     (`chxd-k3`: SPRT [-5, 0] at 10+0.1, a long time control check; settled 2026-11-21, S75: H0, -7.4 +- 5.6, no limit
+     in 0.9.0). Their adopted settings go into a frozen base (with `mbsp`).
   2. The best one or two versions played by the user in the GUI (compiled settings, `-fast` builds: a GUI passes no options).
   3. Gauntlet at 60+1: release 0.8.0 and the best version against a pool of other engines (number of games open), to see
      where 0.9.0 stands and how much it gained over 0.8.0.
@@ -934,7 +935,7 @@ conflicts only in the identity and the parameter list; perf tests.fen depth 10 1
 ### `improving` (status: open)
 Now: not built; `staticScore` two plies back is on `stack`, so cheap. 2026-10-31.
 
-### Check extension without a limit (status: running)
+### Check extension without a limit (status: open; form D k=3 rejected in this form)
 Now: every check is extended by one ply (`exten`), with no limit by ply or count; repetition is the only stop. In queen endings this
 makes the explosions of the high LMR levels (S42): with the mate guards (S43) and no extension beyond ply 2 * draft position 362
 needs 8.9M nodes at level 19 instead of 252M; without the check extension 474k (S44). 2026-11-15.
@@ -971,6 +972,12 @@ from 10801). Then, if it passes, a fixed match at 60+1. P stays off (it never ac
 Prediction (2026-11-20, before any game): -3 to +3, most likely 0; H1 (pass) more likely than H0. Reasons: on `r90c` the
 explosions do not occur in the test positions, so the limit removes little that costs time; the mates are not lost; the
 node totals move by 2%, within the chaos of the tree.
+Result (2026-11-21, S75): H0 accepted after 7554 games, -7.36 +- 5.60, LOS 0.5%, pentanomial [263, 980, 1427, 868, 239],
+1 time loss of `chxd-k3`. Prediction wrong (below the range, and H0 instead of H1). Form D with k=3 costs about 7 Elo at
+10+0.1: the extended checks in lines far below the draft find something the shallower search misses, more than the
+explosions cost now that `pvnt` hides them. Not in 0.9.0; the 60+1 match is not played.
+Review when: `pvnt` changes or the explosions come back (S44 positions on a new base), or for a softer form (k=4 or more, or
+only the backstop P); a limit acting only in queen endings.
 
 ### Singular extensions (status: open)
 Now: not built, needs good ordering and TT first. 2026-10-31.

@@ -1472,3 +1472,14 @@ Prediction wrong (above the range, 79 above the most likely value): summing the 
 for overlap underrated them (`pvnt` alone +56.8 at 60+1, S67; the fixed TT, the floor, the eval rounds). Self-play
 against an ancestor inflates the gap; the gauntlet at 60+1 against other engines is the measure for 0.9.0.
 Result in `C:\Learn\Data\results\m3b\r90c-r080`.
+
+**S75.** Check extension limit, form D k=3, non-regression at 10+0.1 (2026-11-20/21). `chxd` 0250bfb with `epChkExK=3`
+(`chxd-k3`: a check is extended only while ply + d >= draft - 3) against `r90c` b3a63d6, MEMO, 10+0.1, 16 MB, SPRT [-5, 0],
+cap 20000 games (openings from 10801).
+Prediction (register, before any game): -3 to +3, most likely 0; H1 more likely.
+Result: H0 accepted, -7.36 +- 5.60, nElo -10.31 +- 7.83, LOS 0.5%, LLR -2.98, +1990 -2150 =3414 (48.94%), 7554 games,
+pentanomial [263, 980, 1427, 868, 239], 16.9 hours; 1 time loss of `chxd-k3`, no crash.
+Prediction wrong (below the range, H0). The limit cuts checks that pay: on `r90c` (`pvnt`) the explosions it was built
+against no longer occur in the test positions (register), so it removes useful extensions and little waste. No limit
+in 0.9.0; the planned 60+1 match is dropped.
+Result in `C:\Learn\Data\results\memo\chxd-k3-r90c-tc10`.
