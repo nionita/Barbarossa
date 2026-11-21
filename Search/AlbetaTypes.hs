@@ -5,12 +5,18 @@ module Search.AlbetaTypes (
     ABControl(..),
     SStats(..),
     ssts0, formatStats, addStats,
-    nulDebug
+    nulDebug,
+    maxSearchDepth
 ) where
 
 import Data.Int
 import qualified Data.IntMap.Strict as IM
 import Struct.Struct
+
+-- The maximum iteration depth (draft) of a search: the default of UCI go without depth and the depth of the
+-- draw and mated paths (exact at any draft below it); the TT stores depths up to 40 (Moves.Internal.Base.ttStore)
+maxSearchDepth :: Int
+maxSearchDepth = 40
 
 data AbortPolicy
     = AbortByTime {

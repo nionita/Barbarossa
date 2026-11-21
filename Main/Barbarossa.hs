@@ -33,7 +33,7 @@ import Moves.Internal.Base
 import Moves.Notation (posToFen)
 import Moves.History
 import Search.CStateMonad (execCState)
-import Search.AlbetaTypes (formatStats)
+import Search.AlbetaTypes (formatStats, maxSearchDepth)
 import Eval.FileParams (makeEvalState)
 import Eval.KPK (kpkInit)
 
@@ -412,8 +412,7 @@ doGo cmds = do
                     (tim, tpm, mtg) | mvt > 0   = (0, 0, 0)  -- movetime replaces the clock
                                     | otherwise = getUCITime cmds $ myColor chg
                     rept = countRepetitions $ crtStatus chg
-                    md   = 25   -- max search depth
-                    dpt  = fromMaybe md (findDepth cmds)
+                    dpt  = fromMaybe maxSearchDepth (findDepth cmds)
                 startWorking tim tpm mtg mvt dpt rept
 
 data Agreg = Agreg {

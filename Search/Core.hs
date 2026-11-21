@@ -231,8 +231,8 @@ data Path
 mated :: Int
 mated = - mateScore
 drawPath, matedPath :: Path
-drawPath  = Path { pathScore = 0, pathDepth = 25, pathMoves = Seq [], pathMPos = Nothing }
-matedPath = Path { pathScore = mated, pathDepth = 25, pathMoves = Seq [], pathMPos = Nothing }
+drawPath  = Path { pathScore = 0, pathDepth = maxSearchDepth, pathMoves = Seq [], pathMPos = Nothing }
+matedPath = Path { pathScore = mated, pathDepth = maxSearchDepth, pathMoves = Seq [], pathMPos = Nothing }
 
 alpha0, beta0 :: Int
 alpha0 = mated - 1
