@@ -197,6 +197,7 @@ Frozen builds:
 | `r90b` | `rel090` b00f14a | ace64a7 | `r90a` + TT replacement (`ttrp`, S64) | `epLmrMax` 15, `epLmrFlr` 4, `epTTRep` 2 | 11671539 (S64; 11367370 with `epTTRep=0` = `r90a`) |
 | `r90c` | `rel090` 55c9bac | b3a63d6 | `r90b` + PV node type after a fail low (`pvnt`, S67) | `epLmrMax` 15, `epLmrFlr` 4, `epTTRep` 2, `epPvsNt` 1 | 10251160 (11671539 with `epPvsNt=0` = `r90b`) |
 | `r90d` | `rel090` 03be4eb | c79e82b | `r90c` + mate bound fixes (`mbsp`, S70) | `epLmrMax` 15, `epLmrFlr` 4, `epTTRep` 2, `epPvsNt` 1 | 10251160 (11671538 with `epPvsNt=0`) |
+| `r90e` | `rel090` 9271a47 | 565c94f | `r90d` + depth cap 40 (`dcap`, S73); no check extension limit (S75); the 0.9.0 candidate after road step 1 | `epLmrMax` 15, `epLmrFlr` 4, `epTTRep` 2, `epPvsNt` 1, `maxSearchDepth` 40 | 10251160 (measured on `rel090` 9271a47) |
 
 Player comparisons from 2026-11-19 (earlier ones: the log, by their S numbers):
 | Player A | Player B | Conditions | Result (A's side) | S |
