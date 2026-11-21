@@ -1450,3 +1450,14 @@ Prediction right (in the range, 10 below the most likely value). Decided for 0.9
 floor and `pvnt`, cap 13 shows no gain (S71 on `r90b`: +8.2 +- 12.6, not decided; here -3.0 +- 10.8); the +40.7 of S40
 belonged to the old table and the missing floor.
 Result in `C:\Learn\Data\results\boxes\r90c-m13-r90c-pooled` (the runs under `memo`, `m3a`, `m3b`).
+
+**S73.** Depth cap 40 against 25 (`dcap` against `r90d`, same code otherwise) at 60+1 (2026-11-20/21). `dcap` dee182e
+(`maxSearchDepth = 40`, `mbsp` included) against `r90d` c79e82b (`rel090` 03be4eb, cap 25), m3a, 192+3.2 (= 60+1), 64 MB,
+concurrency 8, 400 games fixed (200 rounds, openings from 21476), read once at the end.
+Prediction (register, before any game): -15 to +20, most likely +3.
+Result: -0.00 +- 20.59, LOS 50.0%, +78 -78 =244, pentanomial [8, 45, 90, 53, 4], 9.9 hours. All 400 games ended normally
+(no time loss, crash, illegal move). `dcap` searched past depth 25 in 274 games (2954 moves, maximum 40); score 0.511 in
+those games, 0.476 in the others (no separate measure, the split follows the kind of game).
+Prediction right (in the range, 3 below the most likely value). The -22.6 of `dcap-r90c` (200 games) belonged to the
+noise or to `mbsp` against `r90c`, not to the cap. Not excluded: a gain or loss up to about 20.
+Result in `C:\Learn\Data\results\m3a\dcap-r90d`.

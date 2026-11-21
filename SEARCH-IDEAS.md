@@ -115,6 +115,10 @@ are not reviewed here. The user's experience: negative history and squared bonus
      same code as `dcap` with cap 25), 400 games fixed at 192+3.2 (= 60+1), 64 MB, openings from 21476, chained after
      `dcap-r90c`, read once at the end. Prediction (before any game): +3, range -15 to +20 (the cap acts in 60% of the games,
      mostly in endgames already decided; more depth there helps a little).
+     Result `dcap-r90d` (2026-11-21, S73): 0.0 +- 20.6, 400 games, pentanomial [8, 45, 90, 53, 4]; all 400 games ended
+     normally (no time loss, crash or illegal move), dcap searched past 25 in 274 games (2954 moves, up to 40). Prediction
+     right (in the range). Cap 40 costs nothing measurable and lifts the limit seen at 60+1 and with ponder; a gain is not
+     shown (+-20). Merge into `rel090` is the user's decision (low risk: crash checks passed twice, 600 games at 60+1).
   Larger changes (time management change A, `improving`, singular extensions) wait for that decision.
 
 ## Methods
