@@ -23,13 +23,14 @@ are not reviewed here. The user's experience: negative history and squared bonus
   the gauntlet decides. The user in the GUI (2026-11-21): `r90e` plays very nicely and strong; time management much better
   at 60+1, good at 4m+2, maybe not aggressive enough there (block "Time management at long time controls": observation,
   for later, unless bad behaviour shows again).
-- Running: nothing. MEMO both slots free; the boxes m3a, m3b are off since 2026-11-21 (lab `AVAILABILITY.md`, `RUNS.md`).
+- Running: the gauntlet `gaunt-r90e-tc60` on MEMO (road step 3, from 2026-11-22, about 14 hours); the boxes m3a, m3b are
+  off since 2026-11-21 (lab `AVAILABILITY.md`, `RUNS.md`).
 - Road to 0.9.0 (user, 2026-11-20), in this order:
   1. Settle the running questions: done 2026-11-21 (cap 15, depth cap 40, no check extension limit; base `r90e`).
   2. The best version played by the user in the GUI (compiled settings, `-fast` builds: a GUI passes no options): `r90e`,
      in progress (Windows exe and a Linux build on m3a given to the user 2026-11-21).
-  3. Gauntlet at 60+1: release 0.8.0 and the best version against a pool of other engines (pool and number of games
-     open), to see where 0.9.0 stands and how much it gained over 0.8.0. Next.
+  3. Gauntlet at 60+1: the best version against a pool of other engines, to see where 0.9.0 stands and how much it
+     gained over 0.8.0. Running (block "Gauntlet at 60+1 against other engines").
   4. Only then the release plan: features or fixes that need little testing; the size of the gain decides the scope.
      Pondering is merged already.
 - Lost games: first look (2026-11-21) at a 60+1 match against `chilo` (user's engine, Linux, 16 games, `r90e` 12/16): one
@@ -1077,6 +1078,27 @@ Method:
    test set (solve rate at fixed nodes, like mate206). A diagnostic, not adoption evidence: a fix from it still passes the SPRT
    and the long match, and a solve rate is not Elo.
 Next: after the LMR decisions. First the probe (3); then 3 or 4 lost games through 1 to 3, to see what kind of positions come out.
+
+### Gauntlet at 60+1 against other engines (status: running)
+Road step 3 (register "Now"). Question: where does 0.9.0 stand against other engines, and how much did it gain over 0.8.0?
+Self-play said +139.0 +- 20.9 against 0.8.0 (S74), inflated against an ancestor.
+Pool (user, 2026-11-22), with CCRL Blitz of 2026-11-21 (2'+1 on an i7-4770K; Barbarossa 0.8.0 is 2621 there): GreKo
+2021.12 (2759), Javelin 3.0.0 (2774), CT800 1.46 (2707), Donna 4.1 (2703), Fatalii 0.10.1 (about 2700), Supernova 2.4
+(2679), Zevra 2.5 (2646); mean about 2710. The anchor holds: the gauntlet ug-d at 10+0.1 (October, `w5`, the 0.8.0 eval)
+put GreKo, Supernova, Weiawaga 4.0, Tantabus at 2741, 2670, 2576, 2568 with 0.8.0 = 2621; CCRL has 2759, 2679, 2527,
+2553 (within the errors). Out of earlier pools: Luna 2.0.0 (an illegal move), Zurichess (illegal promotions), the weak
+ones (Admete 1.5.0, Odonata 0.5.1, Weiawaga 4.0, Tantabus) now about 100 to 200 below `r90e`.
+Trials on MEMO (2026-11-22, behaviour only): 56 games at 10+0.1 and 14 at 60+1, no crash, no illegal move; Donna lost one
+game on time at 10+0.1 (none at 60+1); Javelin sends mate scores with the wrong sign (its centipawn signs are right). At
+10+0.1 `r90e` scored 34.8% (-109 +- 70): Barbarossa does worse against other engines at short time controls, and
+against GreKo, Supernova, Zevra it scored about what `w5` scored in ug-d (about 40%); at 60+1 60.7% of 14 games.
+Run `gaunt-r90e-tc60`: `r90e` only (no 0.8.0 side: the gain is read by the CCRL anchor, user), 60+1, 64 MB, 100 rounds =
+200 games per opponent, 1400 games (about +-18 Elo overall), openings 21881-21980, concurrency 8, adjudication
+(resign two-sided 1000 cp x 5 moves, draw from move 40 within 10 cp x 8 moves; at 10+0.1 about 9% less time for about 1%
+changed results; two-sided, so Javelin's mate signs only block it). Pool score from `r90e`'s side.
+Prediction (2026-11-22, before the start): 46% to 60%, most likely 52%, i.e. `r90e` about 2690 to 2780 on the CCRL scale,
+most likely 2725 (+105 over 0.8.0, 0.75 of the self-play gap). Below 46%: the gain does not reach other engines; above 60%:
+the pool is too weak for the next version. Per opponent: lowest against Javelin and GreKo, highest against Zevra.
 
 ### Syzygy tablebase probes (status: open)
 Now: design only (2026-11-17, `Search/TB-SYZYGY.md`): WDL in the tree, DTZ at the root; Fathom (C, MIT) by FFI recommended over a Haskell
