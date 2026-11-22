@@ -1095,7 +1095,8 @@ against GreKo, Supernova, Zevra it scored about what `w5` scored in ug-d (about 
 Run `gaunt-r90e-tc60`: `r90e` only (no 0.8.0 side: the gain is read by the CCRL anchor, user), 60+1, 64 MB, 100 rounds =
 200 games per opponent, 1400 games (about +-18 Elo overall), openings 21881-21980, concurrency 8, adjudication
 (resign two-sided 1000 cp x 5 moves, draw from move 40 within 10 cp x 8 moves; at 10+0.1 about 9% less time for about 1%
-changed results; two-sided, so Javelin's mate signs only block it). Pool score from `r90e`'s side.
+changed results; two-sided, so Javelin's mate signs only block it). All engines search with one thread (GreKo, Supernova: Threads=1 sent; CT800, Fatalii, Donna, Javelin,
+Zevra: no Threads option, checked with uci). Pool score from `r90e`'s side.
 Prediction (2026-11-22, before the start): 46% to 60%, most likely 52%, i.e. `r90e` about 2690 to 2780 on the CCRL scale,
 most likely 2725 (+105 over 0.8.0, 0.75 of the self-play gap). Below 46%: the gain does not reach other engines; above 60%:
 the pool is too weak for the next version. Per opponent: lowest against Javelin and GreKo, highest against Zevra.
