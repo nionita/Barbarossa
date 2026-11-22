@@ -1099,6 +1099,8 @@ changed results; two-sided, so Javelin's mate signs only block it). Pool score f
 Prediction (2026-11-22, before the start): 46% to 60%, most likely 52%, i.e. `r90e` about 2690 to 2780 on the CCRL scale,
 most likely 2725 (+105 over 0.8.0, 0.75 of the self-play gap). Below 46%: the gain does not reach other engines; above 60%:
 the pool is too weak for the next version. Per opponent: lowest against Javelin and GreKo, highest against Zevra.
+Next gauntlet (next release, user 2026-11-22): without Supernova 2.4 (it plays on past a threefold repetition, which
+scrambles the fastchess output); check the default thread count of every engine before the run.
 
 ### Syzygy tablebase probes (status: open)
 Now: design only (2026-11-17, `Search/TB-SYZYGY.md`): WDL in the tree, DTZ at the root; Fathom (C, MIT) by FFI recommended over a Haskell
