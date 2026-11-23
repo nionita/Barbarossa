@@ -34,7 +34,8 @@ are not reviewed here. The user's experience: negative history and squared bonus
      other engines").
   4. Only then the release plan: features or fixes that need little testing; the size of the gain decides the scope.
      Pondering is merged already. Decided 2026-11-23 (user): release `rel090` as it is (`r90e` + pondering, off unless
-     the GUI sets `Ponder`, perf nodes identical), no speed pass; the gauntlet (S77) is the final strength measurement.
+     the GUI sets `Ponder`, perf nodes identical), no speed pass; the gauntlet (S77) is the final strength measurement. Default hash 64 MB instead of 4 (user; search unchanged, the
+     matches set the hash).
      Then the checklist of `AGENTS.md` "Cutting a Release"; the open ideas (time management, Syzygy, singular extensions,
      `improving`, speed candidates) go to the next version.
 - Lost games: first look (2026-11-21) at a 60+1 match against `chilo` (user's engine, Linux, 16 games, `r90e` 12/16): one

@@ -131,7 +131,7 @@ initContext opts = do
     let llev = optLogging opts
     lchan <- newChan
     wchan  <- newChan
-    ha <- newCache 1    -- it will take the minimum number of entries
+    ha <- newCache 64   -- the default of the Hash option
     hi <- newHist
     let paramList
             | null $ optParams opts = []
@@ -950,7 +950,7 @@ data UciGUIOptionType = UGOTRange String String
 
 guiUciOptions :: [(String, String, String, UciGUIOptionType)]
 guiUciOptions = [
-        ("Hash", "spin", "4", UGOTRange "4" "1024"),    -- hash size in MB (start: newCache 1 = 4 MB)
+        ("Hash", "spin", "64", UGOTRange "4" "1024"),   -- hash size in MB (start: newCache 64)
         ("Ponder", "check", "false", UGOTNone)
     ]
 

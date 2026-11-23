@@ -33,7 +33,8 @@ Blitz list, which puts 0.9.0 near 2730 there. The gain comes from the search.
 
 - Pondering (option `Ponder`).
 - `go movetime`.
-- Changing the hash size frees the old table (before, every change kept the old one in memory).
+- Default hash size 64 MB (before 4 MB); changing the size frees the old table (before, every change kept the old
+  one in memory).
 - FEN strings in the log are standard.
 
 ### Speed
