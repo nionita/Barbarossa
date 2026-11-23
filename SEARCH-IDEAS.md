@@ -36,6 +36,9 @@ are not reviewed here. The user's experience: negative history and squared bonus
      Pondering is merged already. Decided 2026-11-23 (user): release `rel090` as it is (`r90e` + pondering, off unless
      the GUI sets `Ponder`, perf nodes identical), no speed pass; the gauntlet (S77) is the final strength measurement. Default hash 64 MB instead of 4 (user; search unchanged, the
      matches set the hash).
+     Released 2026-11-23: tag `0.9.0` (master ba3b0ed, a merge of `rel090` d2ee758: master had c289e0e, in `rel090` as
+     9a8f26b, so no fast forward), pushed; Windows engine built (`dist/Barbarossa-0.9.0.exe`). Open: the GitHub release
+     with the exe, the Linux build (boxes off), the next development branch (raised version, suffix).
      Then the checklist of `AGENTS.md` "Cutting a Release"; the open ideas (time management, Syzygy, singular extensions,
      `improving`, speed candidates) go to the next version.
 - Lost games: first look (2026-11-21) at a 60+1 match against `chilo` (user's engine, Linux, 16 games, `r90e` 12/16): one
