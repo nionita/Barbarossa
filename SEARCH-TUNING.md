@@ -1495,3 +1495,19 @@ the gain; with a ponder hit rate of about 65% the pondering side gets close to t
 and the opponent loses its own thinking time. It measures pondering against an engine that does not ponder, not a
 change of the search; against pondering opponents the gain is smaller.
 Result in `C:\Learn\Data\results\memo\pond-P-N-tc60`.
+
+**S77.** Gauntlet of `r90e` against other engines at 60+1 (2026-11-22/23). `r90e` (frozen `rel090` 9271a47) against
+GreKo 2021.12, Javelin 3.0.0, CT800 1.46, Donna 4.1, Fatalii 0.10.1, Supernova 2.4, Zevra 2.5 (all one thread), MEMO,
+fastchess gauntlet, 60+1, 64 MB (Donna 32), 200 games per opponent (100 rounds, openings from 21881), concurrency 8,
+adjudication (resign two-sided 1000 cp x 5 moves, draw from move 40 within 10 cp x 8 moves), 11.1 hours.
+Prediction (register, before any game): 46% to 60%, most likely 52% (about 2725 on the CCRL Blitz scale); per opponent
+lowest against Javelin and GreKo, highest against Zevra.
+Result: 54.8%, +33.4 +- 15.8, pentanomial [70, 135, 207, 167, 121], 1400 games. Donna lost 82 games on time and 2 by a
+crash (no other engine lost on time): its games do not count. Without Donna, 1200 games: 53.0%, +20.9 +- 16.9.
+Per opponent (score of `r90e`, implied CCRL value of `r90e`, +-40 each): Fatalii 49.3% (2695), CT800 51.8% (2719), GreKo
+52.8% (2778), Javelin 52.8% (2793), Zevra 54.2% (2676), Supernova 57.2% (2730); Donna 65.5% (time forfeits).
+Prediction right overall (53.0% against most likely 52%): `r90e` about 2730 +- 17 on the CCRL Blitz scale (mean of the
+six about 2711), about +110 over 0.8.0 (2621), 0.8 of the self-play gap (S74, +139). Per opponent wrong: Javelin and
+GreKo were not the hardest (Fatalii and CT800 were), Zevra not the easiest (Supernova); all within the errors of 200
+games. The CCRL scale (2'+1, i7-4770K) is only an anchor for 60+1 on MEMO.
+Result in `C:\Learn\Data\results\memo\gaunt-r90e-tc60`.

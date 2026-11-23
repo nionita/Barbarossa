@@ -20,17 +20,18 @@ are not reviewed here. The user's experience: negative history and squared bonus
   block "Search depth cap"); no check extension limit (S75, form D k=3 H0); pondering +82.3 +- 22.7 against no ponder at
   60+1 (S76, block "UCI pondering"): for online tournaments, a GUI build with ponder is made when needed (user).
 - Strength: `r90c` against release 0.8.0 (`r080`) +139.0 +- 20.9 at 60+1 in self-play (S74); self-play inflates the gap,
-  the gauntlet decides. The user in the GUI (2026-11-21): `r90e` plays very nicely and strong; time management much better
-  at 60+1, good at 4m+2, maybe not aggressive enough there (block "Time management at long time controls": observation,
+  the gauntlet (S77): about 2730 on CCRL Blitz, +110 over 0.8.0. The user in the GUI (2026-11-21): `r90e` plays very
+  nicely and strong; time management much better at 60+1, good at 4m+2, maybe not aggressive enough there (block "Time management at long time controls": observation,
   for later, unless bad behaviour shows again).
-- Running: the gauntlet `gaunt-r90e-tc60` on MEMO (road step 3, from 2026-11-22, about 14 hours); the boxes m3a, m3b are
-  off since 2026-11-21 (lab `AVAILABILITY.md`, `RUNS.md`).
+- Running: nothing; the gauntlet `gaunt-r90e-tc60` ended 2026-11-23 (S77); the boxes m3a, m3b are off since 2026-11-21
+  (lab `AVAILABILITY.md`, `RUNS.md`).
 - Road to 0.9.0 (user, 2026-11-20), in this order:
   1. Settle the running questions: done 2026-11-21 (cap 15, depth cap 40, no check extension limit; base `r90e`).
   2. The best version played by the user in the GUI (compiled settings, `-fast` builds: a GUI passes no options): `r90e`,
      in progress (Windows exe and a Linux build on m3a given to the user 2026-11-21).
   3. Gauntlet at 60+1: the best version against a pool of other engines, to see where 0.9.0 stands and how much it
-     gained over 0.8.0. Running (block "Gauntlet at 60+1 against other engines").
+     gained over 0.8.0. Done 2026-11-23 (S77): about 2730 on CCRL Blitz, +110 over 0.8.0 (block "Gauntlet at 60+1 against
+     other engines").
   4. Only then the release plan: features or fixes that need little testing; the size of the gain decides the scope.
      Pondering is merged already.
 - Lost games: first look (2026-11-21) at a 60+1 match against `chilo` (user's engine, Linux, 16 games, `r90e` 12/16): one
@@ -1079,7 +1080,10 @@ Method:
    and the long match, and a solve rate is not Elo.
 Next: after the LMR decisions. First the probe (3); then 3 or 4 lost games through 1 to 3, to see what kind of positions come out.
 
-### Gauntlet at 60+1 against other engines (status: running)
+### Gauntlet at 60+1 against other engines (status: done)
+Now (2026-11-23, S77): `r90e` 53.0%, +20.9 +- 16.9 against six engines (Donna lost 82 of 200 games on time and does
+not count; with it 54.8%), about 2730 on the CCRL Blitz scale, about +110 over 0.8.0; prediction right (most likely 52%).
+Next pool: without Donna 4.1 (time forfeits at 60+1) and Supernova 2.4.
 Road step 3 (register "Now"). Question: where does 0.9.0 stand against other engines, and how much did it gain over 0.8.0?
 Self-play said +139.0 +- 20.9 against 0.8.0 (S74), inflated against an ancestor.
 Pool (user, 2026-11-22), with CCRL Blitz of 2026-11-21 (2'+1 on an i7-4770K; Barbarossa 0.8.0 is 2621 there): GreKo
