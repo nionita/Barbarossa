@@ -3,10 +3,10 @@ module Struct.Context (
     Context(..),
     CtxIO,
     LogLevel(..),
-    Changing(..),
+    Changing(..), PonderInfo(..),
     UciData(..), UciSink(..),
     IterResult,
-    levToPrf, readChanging, modifyChanging,
+    readChanging, modifyChanging,
     beginSearch, attachSearchThread, publishSearchProgress,
     finishSearch, stopSearch, ctxLog, logging,
     getMyTime, formatMyTime, startSecond, currMilli,
@@ -76,7 +76,22 @@ data Changing = Chg {
         myColor    :: Color,            -- our play color
         totBmCh    :: Int,		-- all BM changes in this search
         lastChDr   :: Int,		-- last draft which changed root BM
-        lmvScore   :: Maybe Int		-- last move score
+        lmvScore   :: Maybe Int,	-- last move score
+        ponderOpt  :: Bool,		-- UCI option Ponder: bestmove carries a ponder move
+        pondering  :: Maybe PonderInfo,	-- the search ponders (go ponder, no ponderhit yet)
+        lastIter   :: Maybe (Int, Int)	-- draft and score of the last finished iteration of the search
+    }
+
+-- A ponder search runs without time limit; at ponderhit the time management starts with the clock
+-- values of the go ponder command
+data PonderInfo = PonderInfo {
+        pdTim   :: Int,		-- remaining time, increment, moves to go, movetime (ms) of go ponder
+        pdTpm   :: Int,
+        pdMtg   :: Int,
+        pdMvt   :: Int,
+        pdRept  :: Int,		-- repetitions in the root position
+        pdGoMs  :: Int,		-- start of the ponder search (ms)
+        pdDone  :: Bool		-- the search finished: bestmove waits for ponderhit or stop
     }
 
 type CtxIO = ReaderT Context IO
@@ -103,7 +118,8 @@ beginSearch f = do
                     searchToken = tok,
                     working = True,
                     compThread = Nothing,
-                    forGui = Nothing
+                    forGui = Nothing,
+                    lastIter = Nothing
                  }
         return (c', tok)
 
@@ -133,7 +149,7 @@ finishSearch tok = do
     liftIO $ modifyMVar (change ctx) $ \c ->
         if working c && searchToken c == tok
            then do
-               let c' = c { working = False, compThread = Nothing, forGui = Nothing }
+               let c' = c { working = False, compThread = Nothing, forGui = Nothing, pondering = Nothing }
                return (c', Just c)
            else return (c, Nothing)
 
@@ -143,7 +159,7 @@ stopSearch = do
     liftIO $ modifyMVar (change ctx) $ \c ->
         if working c
            then do
-               let c' = c { working = False, compThread = Nothing, forGui = Nothing }
+               let c' = c { working = False, compThread = Nothing, forGui = Nothing, pondering = Nothing }
                return (c', Just c)
            else return (c, Nothing)
 

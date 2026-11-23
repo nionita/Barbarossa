@@ -34,6 +34,58 @@ params = [
         ("epFutil4",          192),
         ("epFutil5",          384),
         ("epFutil6",          768),
+        -- history init of a new search (Moves.History.initHist), bits: 1 = from the compiled PST in the phase
+        -- of the root position, shifted by epHistPstSh (left, or right when negative), 2 = piece order of
+        -- the move generation; 0 = zero
+        ("epHistPst",           3),
+        ("epHistPstSh",        -4),
+        -- counter move (1 = on): the quiet move which last cut after a given move is tried after the killers
+        ("epCMov",              1),
+        -- continuation history, bits (0 = off): 1 = by the move before (opponent), 2 = by the own move before; the sort
+        -- value of a quiet move is its history plus epCHistW / 4 times these
+        ("epCHist",             3),
+        ("epCHistW",            2),
+        -- sort of the quiet moves (Moves.Internal.Base.quietSort), bits: 1 = moves of a piece to a square
+        -- attacked by a cheaper enemy piece last, 2 = moves of a piece away from such a square first;
+        -- 0 = by history only
+        ("epQThr",              2),
+        -- reverse futility pruning (Search.Core.isRevFutil): zero window nodes of a remaining depth up to
+        -- epRFutD (0 = off) fail high when the static score is over beta by epRFutA + epRFutM * depth (cp),
+        -- plus epRFutT (cp, 0 = off) when own pieces hang (Search.Core.ownHanging)
+        ("epRFutD",             6),
+        ("epRFutA",             0),
+        ("epRFutM",            50),
+        ("epRFutT",           100),
+        -- late move reduction: fixed level (0 = least reductions .. 15 = most), -1 = adaptive (Search.Core.moreLMR)
+        ("epLmrFix",           -1),
+        -- late move reduction: start of the adaptive LMR in every iteration (Search.Core.alphaBeta): level and node limit
+        -- to raise the level (as before: 8, 8500)
+        ("epLmrIni",            8),
+        ("epLmrLim",         8500),
+        -- late move reduction: reduce so many plies less for the late moves of PV nodes (0 = as before)
+        ("epLmrPV",             0),
+        -- late move reduction, the hard coded constants before (Search.Core): growth of the reduction table with the
+        -- move number in hundredths (120 = factor 1.2), base of the re-search penalty 2^d in tenths (20), no LMR up to
+        -- this depth (1)
+        ("epLmrGrw",          120),
+        ("epLmrPen",           20),
+        ("epLmrNoD",            1),
+        -- late move reduction: highest level the adaptive LMR climbs to (0 .. 19, as before 15; a level 15 + k reduces the
+        -- moves level 15 reduces by k plies more)
+        ("epLmrMax",           15),
+        -- late move reduction: floor of the reduced depth in eighths of the remaining depth, d' >= max 1 (d * f / 8)
+        -- (0 = off: d' >= 1; Search/LMR-DEPTH-BOUND.md); 4 since 2026-11-17 (SEARCH-TUNING S48, S52)
+        ("epLmrFlr",            4),
+        -- replacement rule of the transposition table in a full cell (Hash.TransTab.writeCache), fixed in the table
+        -- by posToState: 0 = as before (by mistake the entry with the smallest move code), 1 = generation > type >
+        -- depth > nodes (the move masked away), 2 = the smallest (depth - 4 * age, type, nodes), age = generations
+        -- since the store (SEARCH-REVIEW-BUGS finding 3); compiled 2 since 2026-11-19 (SEARCH-TUNING S59, S63)
+        ("epTTRep",             2),
+        -- PV nodes (Search.Core.checkFailOrPVLoop, checkFailOrPVRoot): 1 = the moves after the first one are searched
+        -- with zero window also when the first one failed low; 0 = before 2026-11-18: only after a move raised alpha, so
+        -- a PV node whose first move fails low (a PV re-search after a zero window fail high, or an aspiration window)
+        -- searches its moves as PV nodes until one raises alpha (Search/ASPIRATION.md on aspw)
+        ("epPvsNt",             1),
         -- drawishness scale of the whole eval (Eval.Core.normalParts), instead of the heuristic rules of
         -- scaleFactor when epScaleNew = 1 (default: compiled in, scale-c-lin, TUNING-HISTORY finding 37;
         -- epScaleNew = 0 is the old scaling); factors in 1/64 (64 = 1), fitted by hv_scale.py --constrained

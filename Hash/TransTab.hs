@@ -3,7 +3,7 @@
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE CPP #-}
 module Hash.TransTab (
-    Cache, newCache, freeCache, retrieveEntry, readCache, writeCache, newGener,
+    Cache, newCache, freeCache, resizeCache, retrieveEntry, readCache, writeCache, newGener, setReplRule,
     -- checkProp
     ) where
 
@@ -43,7 +43,8 @@ data Cache
           mem 	 :: Ptr Cell,	-- the cache line aligned byte array for the data
           lomask, mimask,
           zemask :: !Mask,	-- masks depending on the size (in entries) of the table
-          gener  :: !Word64	-- the generation of the current search
+          gener  :: !Word64,	-- the generation of the current search
+          repru  :: !Int	-- the replacement rule (parameter epTTRep, see scoreReplaceLow)
       }
 
 data PCacheEn = PCacheEn { hi, lo :: {-# UNPACK #-} !Word64 }	-- a packed TT entry
@@ -97,22 +98,41 @@ part3Mask = 0x03 :: Mask	-- the cell has 4 entries (other option: 8)
 minEntries :: Int
 minEntries = 0x40000	-- 2 ^ 18
 
+-- Number of entries of a table with the given (integral) number of MB:
+-- a power of 2 (rounded down), at least minEntries (sizes below 1 MB count as 1 MB)
+cacheEntries :: Int -> Int
+cacheEntries mb = max minEntries $ nextPowOf2 $ max 1 mb * 1024 * 1024 `div` pCacheEnSize
+
 -- Create a new transposition table with a number of entries
 -- corresponding to the given (integral) number of MB
--- The number of entries will be rounded up to the next power of 2
+-- The memory is zeroed, so that the content does not depend on memory reuse
 newCache :: Int -> IO Cache
 newCache mb = do
-    let c = mb * 1024 * 1024 `div` pCacheEnSize
-        nentries = max minEntries $ nextPowOf2 c
+    let nentries = cacheEntries mb
         ncells   = nentries `div` 4	-- 4 entries per cell
         lom      = fromIntegral $ nentries - 1
         mim      = lom .&. cellMask
-    memc <- mallocArray ncells
-    return Cache { mem = memc, lomask = lom, mimask = mim, zemask = complement mim, gener = 0 }
+    memc <- callocArray ncells
+    return Cache { mem = memc, lomask = lom, mimask = mim, zemask = complement mim, gener = 0, repru = 0 }
     where cellMask = complement part3Mask	-- for speed we keep both masks
 
 freeCache :: Cache -> IO ()
 freeCache = free . mem
+
+-- Table for a new size in MB: the same table when the number of entries does not change,
+-- otherwise the old table is freed and a new one allocated
+-- The old table must not be used any more by anyone when the size changes
+-- The replacement rule is kept
+resizeCache :: Cache -> Int -> IO Cache
+resizeCache tt mb
+    | cacheEntries mb == fromIntegral (lomask tt) + 1 = return tt
+    | otherwise = do
+        freeCache tt
+        setReplRule (repru tt) <$> newCache mb
+
+-- Set the replacement rule of the table (0, 1 or 2, see scoreReplaceLow; other values act as 2)
+setReplRule :: Int -> Cache -> Cache
+setReplRule r c = c { repru = r }
 
 generInc, generMsk :: Word64
 generInc = 0x0100000000000000	-- 1 in first byte
@@ -208,38 +228,79 @@ writeCache !tt !zkey !depth !tp !score !move !nodes = do
         pCE   = quintToCacheEn tt zkey depth tp score move nodes
         mkey  = zkey .&. zemask tt
         lasta = bas `plusPtr` lastaAmount
-    store gen (zemask tt) mkey pCE lasta bas bas maxBound
-    where store !gen !mmask !mkey !pCE !lasta = go
+    case repru tt of
+        0 -> store scoreReplaceLow  gen (zemask tt) mkey pCE lasta bas bas maxBound
+        1 -> store scoreReplaceLow1 gen (zemask tt) mkey pCE lasta bas bas maxBound
+        _ -> store scoreReplaceLow2 gen (zemask tt) mkey pCE lasta bas bas maxBound
+    where store srl !gen !mmask !mkey !pCE !lasta = go
               where go !crt0 !rep0 !sco0
                        = if isSameKey mmask mkey crt0
                             then poke (castPtr crt0) pCE	 -- here we found the same entry: just update (but depth?)
                             else do
                                 lowc <- peek (crt0 `plusPtr` 8)	-- take the low word
-                                scoreReplaceLow gen lowc crt0 rep0 sco0
+                                srl gen lowc crt0 rep0 sco0
                                     (\r -> poke (castPtr r) pCE)
                                     (\r s -> if crt0 >= lasta
                                                 then poke (castPtr r) pCE
                                                 else go (crt0 `plusPtr` pCacheEnSize) r s)
+          {-# INLINE store #-}
 
 lastaAmount :: Int
 lastaAmount = 3 * pCacheEnSize	-- for computation of the last address in the cell
 
--- Here we implement the logic which decides which entry is weaker
--- the low word is the score (when the move is masked away):
--- generation (when > curr gen: whole score is 0)
--- type (2 - exact - only few entries, PV, 1 - lower bound: have good moves, 0 - upper bound)
--- depth
--- nodes
-scoreReplaceLow :: Word64 -> Word64 -> Ptr Word64 -> Ptr Word64 -> Word64
+-- Here we implement the logic which decides which entry is weaker: in a full cell the entry
+-- with the smallest replacement score is replaced
+-- The low word of an entry (quintToCacheEn), bit positions:
+--   63 .. 56  generation (8 bits, the current one is in gener, it wraps)
+--   55 .. 54  type (2 - exact - only few entries, PV, 1 - lower bound: have good moves, 0 - upper bound)
+--   53 .. 48  depth (6 bits, stored up to 40)
+--   47 .. 16  nodes (32 bits)
+--   15 ..  0  move
+-- Rule 0 (epTTRep = 0, as before): by mistake the mask keeps the move and drops the rest: the entry
+-- with the smallest move code is replaced (generation only by the wrap test)
+-- Rule 1: the move masked away: generation (when > curr gen: replaced at once), type, depth, nodes
+-- Rule 2: the smallest (depth - 4 * age, type, nodes), age = (gen - generation) mod 256 (0 .. 255),
+-- no special case for the wrap
+type ScoreReplace = Word64 -> Word64 -> Ptr Word64 -> Ptr Word64 -> Word64
     -> (Ptr Word64 -> IO ())		-- terminating function
     -> (Ptr Word64 -> Word64 -> IO ())	-- continue function
     -> IO ()
+
+scoreReplaceLow :: ScoreReplace
 scoreReplaceLow gen lowc crt rep sco term cont
     | generation > gen = term crt
     | lowm < sco = cont crt lowm
     | otherwise  = cont rep sco
     where generation = lowc .&. generMsk
-          lowm = lowc .&. 0xFFFF	-- mask the move
+          lowm = lowc .&. 0xFFFF	-- meant to mask the move away, keeps only the move (rule 0)
+{-# INLINE scoreReplaceLow #-}
+
+scoreReplaceLow1 :: ScoreReplace
+scoreReplaceLow1 gen lowc crt rep sco term cont
+    | generation > gen = term crt
+    | lowm < sco = cont crt lowm
+    | otherwise  = cont rep sco
+    where generation = lowc .&. generMsk
+          lowm = lowc .&. complement 0xFFFF	-- mask the move
+{-# INLINE scoreReplaceLow1 #-}
+
+scoreReplaceLow2 :: ScoreReplace
+scoreReplaceLow2 gen lowc crt rep sco _ cont
+    | key < sco = cont crt key
+    | otherwise = cont rep sco
+    where key = replaceKey2 gen lowc
+{-# INLINE scoreReplaceLow2 #-}
+
+-- Replacement score of rule 2: (1024 + depth - 4 * age) in bits 34 and up (always > 0),
+-- type in bits 33 .. 32, nodes in 31 .. 0
+replaceKey2 :: Word64 -> Word64 -> Word64
+replaceKey2 gen lowc = (val `unsafeShiftL` 34) .|. (typ `unsafeShiftL` 32) .|. nodes
+    where age   = (gen - (lowc .&. generMsk)) `unsafeShiftR` 56	-- 0 .. 255
+          depth = (lowc `unsafeShiftR` 48) .&. 0x3F
+          typ   = (lowc `unsafeShiftR` 54) .&. 0x3
+          nodes = (lowc `unsafeShiftR` 16) .&. 0xFFFFFFFF
+          val   = 1024 + depth - 4 * age
+{-# INLINE replaceKey2 #-}
 
 quintToCacheEn :: Cache -> ZKey -> Int -> Int -> Int -> Move -> Int64 -> PCacheEn
 quintToCacheEn !tt !zkey !depth !tp !score !(Move move) !nodes = pCE
@@ -248,7 +309,7 @@ quintToCacheEn !tt !zkey !depth !tp !score !(Move move) !nodes = pCE
           w2 = gener tt
              .|. (fromIntegral tp    `unsafeShiftL` 54)
              .|. (fromIntegral depth `unsafeShiftL` 48)
-             .|. (fromIntegral nodes `unsafeShiftL` 16)
+             .|. (fromIntegral (min 0xFFFFFFFF nodes) `unsafeShiftL` 16)	-- 32 bits, not into depth and type
              .|. (fromIntegral move)
           !pCE = PCacheEn { hi = w1, lo = w2 }
 

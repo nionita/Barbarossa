@@ -5,11 +5,18 @@ module Search.AlbetaTypes (
     ABControl(..),
     SStats(..),
     ssts0, formatStats, addStats,
-    nulDebug
+    nulDebug,
+    maxSearchDepth
 ) where
 
 import Data.Int
+import qualified Data.IntMap.Strict as IM
 import Struct.Struct
+
+-- The maximum iteration depth (draft) of a search: the default of UCI go without depth and the depth of the
+-- draw and mated paths (exact at any draft below it); the TT stores depths up to 40 (Moves.Internal.Base.ttStore)
+maxSearchDepth :: Int
+maxSearchDepth = 40
 
 data AbortPolicy
     = AbortByTime {
@@ -45,14 +52,15 @@ data Comm = LogMes String
 data SStats = SStats {
         sNodes, sNodesQS,
         sRetr, sRFnd, sRFal, sRSuc, sBeta, sBM1, sBM2, sBM3, sBM4p,
-        sRedu, sReMi, sReBe, sReSe, sReNo :: !Int64
+        sRedu, sReMi, sReBe, sReSe, sReNo :: !Int64,
+        sLmrC :: !(IM.IntMap Int64)	-- LMR census (build flag lmrcensus), key: see Search.Core.censusKey
     } deriving Show
 
 ssts0 :: SStats
 ssts0 = SStats { sNodes = 0, sNodesQS = 0,
                  sRetr = 0, sRFnd = 0, sRFal = 0, sRSuc = 0,
                  sBeta = 0, sBM1 = 0, sBM2 = 0, sBM3 = 0, sBM4p = 0,
-                 sRedu = 0, sReMi = 0, sReBe = 0, sReSe = 0, sReNo = 0 }
+                 sRedu = 0, sReMi = 0, sReBe = 0, sReSe = 0, sReNo = 0, sLmrC = IM.empty }
 
 addStats :: SStats -> SStats -> SStats
 addStats a b = SStats {
@@ -62,7 +70,8 @@ addStats a b = SStats {
     sBeta = sBeta a + sBeta b, sBM1 = sBM1 a + sBM1 b, sBM2 = sBM2 a + sBM2 b,
     sBM3  = sBM3 a + sBM3 b, sBM4p = sBM4p a + sBM4p b,
     sRedu = sRedu a + sRedu b, sReMi = sReMi a + sReMi b, sReBe = sReBe a + sReBe b,
-    sReSe = sReSe a + sReSe b, sReNo = sReNo a + sReNo b
+    sReSe = sReSe a + sReSe b, sReNo = sReNo a + sReNo b,
+    sLmrC = IM.unionWith (+) (sLmrC a) (sLmrC b)
     }
 
 nulDebug :: Bool

@@ -5,11 +5,10 @@
 
 module Eval.Core (
     initEvalState,
-    posEval,
+    posEval, evalMax,
     posExactEval,
     gamePhase,
     evalTermSum,
-    evalEndScale,
     evalScales,
     evalFullSum,
     evalPstSum,
@@ -20,10 +19,9 @@ module Eval.Core (
 import Data.Array.Base (unsafeAt)
 import Data.Bits
 import Data.Char (ord)
-import Data.List (elemIndex, minimumBy, stripPrefix)
+import Data.List (elemIndex, stripPrefix)
 import Data.Maybe (mapMaybe)
 import Data.Array.Unboxed
-import Data.Ord (comparing)
 import Data.Int
 
 import Struct.Struct
@@ -31,6 +29,7 @@ import Struct.Status
 import Struct.Config
 import Struct.MidEnd
 import Moves.Core
+import Eval.KPK (kpkProbe)
 
 ------------------------------------------------------------------
 -- Parameters of this module ------------
@@ -108,8 +107,11 @@ pstTerm p (Just tab) = \acc -> MidEnd (mid acc + side 0) (end acc + side 384)
           side o = sum [ unsafeAt tab (o + t * 64 + own sq) | (t, bb) <- pcs, sq <- bbToSquares (bb .&. me p) ]
                  - sum [ unsafeAt tab (o + t * 64 + opp sq) | (t, bb) <- pcs, sq <- bbToSquares (bb .&. yo p) ]
 
-matesc :: Int
-matesc = 20000 - 255	-- warning, this is also defined in Base.hs!!
+-- The static eval stays within +-evalMax: an eval score, never a mate score (nearmate in Moves.Internal.Base
+-- starts above it); 20000 is mateScore there. A multiple of the grain, so the rounding keeps it (as the old
+-- clamp at 20000 - 255, which the rounding brought to the same value)
+evalMax :: Int
+evalMax = 20000 - 256
 
 useSpecials :: Bool
 useSpecials = True
@@ -119,7 +121,7 @@ posEval :: MyPos -> EvalState -> Int
 posEval p !sti = scc
     where !sce | useSpecials = evalDispatch          p sti
                | otherwise   = normalEval NotMatched p sti
-          !scl = min matesc $ max (-matesc) sce
+          !scl = min evalMax $ max (-evalMax) sce
           !scc = if granCoarse > 0 then (scl + granCoarse2) .&. granCoarseM else scl
 
 -- Don't use specials for tuning
@@ -144,7 +146,8 @@ specialsOf p = enp ++ peg
           enp  | pawns p == 0 = [evalNoPawns]
                | otherwise    = []
           -- Pawns end game
-          peg  | kings p .|. pawns p == occup p = [pawnEndGame]
+          -- KPK first: the bitbase is exact, the race is not
+          peg  | kings p .|. pawns p == occup p = [kpkEval | popCount (pawns p) == 1] ++ [pawnEndGame]
                | otherwise    = []
 
 -- The score of a special eval, when one applies (then posEval returns it instead of the normal eval)
@@ -289,19 +292,6 @@ evalPstSum p
     | moving p == White = MidEnd (pstMid p) (pstEnd p)
     | otherwise         = MidEnd (negate (pstMid p)) (negate (pstEnd p))
 
--- The end game scale factor of the normal evaluation (no special eval matched), given the
--- end game part of the term sum: 64 means not reduced
-evalEndScale :: MyPos -> Int -> Int
-evalEndScale p eg = scaleFactor p eg NotMatched
-
-gamePhase :: MyPos -> Int
-gamePhase p = g
-    where qs = popCount $ queens p
-          rs = popCount $ rooks p
-          bs = popCount $ bishops p
-          ns = popCount $ knights p
-          !g = qs * 39 + rs * 20 + (bs + ns) * 12	-- opening: 254, end: 0
-
 -- For specific material configurations which reduce the chance of winning
 -- Not reduced: 64
 scaleFactor :: MyPos -> Int -> SpecialResult -> Int
@@ -406,8 +396,14 @@ kingAlone mywin p
           minorcnt = popCount $ bishops p .|. knights p
           majorcnt = popCount $ queens  p .|. rooks   p
 
-winBonus :: Int
-winBonus = 1200	-- known win
+-- Won endings against the lone king (scoreToMate): base, material compressed into [0, lkMatMax), progress
+-- The total stays below the clamp of the static eval for any material:
+-- lkBase + lkMatMax + lkProg * 80 = 19650 < 19744
+lkBase, lkMatMax, lkMatC, lkProg :: Int
+lkBase   = 10000	-- known win
+lkMatMax = 9250		-- the material part tends to this (but stays below)
+lkMatC   = 2000		-- material (2^shift2Cp units per cp) at half of lkMatMax
+lkProg   = 5		-- per unit of edge^2 - kingdist^2
 
 mateKBBK :: Bool -> SpecialEval
 mateKBBK = scoreToMate pushToEdge
@@ -434,10 +430,12 @@ scoreToMate f mywin p = Score msc
           !ky = kingSquare (kings p) (yo p)
           !distk = squareDistance km ky	-- distance between kings - drive to low
           !distc = f kweak	-- driving function: drive to high
-          !sc  = (winBonus + distc * distc - distk * distk) * 10
-          !mtr = if moving p == White then materWhite p else - materWhite p
-          !wsc = if mywin then sc else -sc
-          !msc = (mtr `unsafeShiftL` shift2Cp) + wsc	-- here the score is in centipawns
+          -- The material of the strong side, compressed: strictly increasing, below lkMatMax
+          -- (a plain cap would make the loss of a piece free when both ends are capped)
+          !mat = abs (materWhite p) `unsafeShiftL` shift2Cp
+          !mtc = lkMatMax * mat `quot` (mat + lkMatC)
+          !sc  = lkBase + mtc + lkProg * (distc * distc - distk * distk)
+          !msc = if mywin then sc else -sc	-- here the score is in centipawns
 
 {-
 squareDistArr :: UArray Int Int32
@@ -473,7 +471,7 @@ pushToEdge sq = 9 - md * md
           fd = edgeDistance f
           md = min rd fd
 
--- pushToLightCorner: for KBNK end games with light color bishop
+-- pushToDarkCorner: for KBNK end games with dark color bishop
 -- push the weak king to A1 or H8
 -- Values: 0 (on diagonale A8H1) to 7 (on A1 or H8)
 pushToDarkCorner :: Square -> Int
@@ -1167,6 +1165,24 @@ advPawns p !ew = mad (ewAdvPawn6 ew) ap6 .
           !ap5  = map5 - yap5
           !ap6  = map6 - yap6
 
+-- King and pawn against king: the bitbase decides; a win scores the win bonus plus a term for the
+-- relative rank of the pawn (progress), anything else is a draw
+kpkEval :: SpecialEval
+kpkEval p
+    | kpkProbe pwhite smoves sk wk psq = Score (if smoves then sc else -sc)
+    | otherwise                        = Score 0
+    where !psq    = firstOne (pawns p)
+          !smoves = pawns p .&. me p /= 0               -- the side with the pawn moves
+          !pwhite = smoves == (moving p == White)
+          !sk     = kingSquare (kings p) (if smoves then me p else yo p)
+          !wk     = kingSquare (kings p) (if smoves then yo p else me p)
+          !rrank  | pwhite    = psq `unsafeShiftR` 3
+                  | otherwise = 7 - psq `unsafeShiftR` 3
+          !sc     = kpkWinScore + 10 * rrank
+
+kpkWinScore :: Int
+kpkWinScore = 1000
+
 -- Pawn end games are treated specially
 -- We consider escaped passed pawns in 2 situations:
 -- pawn race: when both colors have at least one escaped pp
@@ -1201,8 +1217,8 @@ pawnEndGame p
               | mim > miy + 1 = yorace
               | otherwise     = withQueens     -- Here: this is more complex, e.g. if check while promoting
                                                -- or direct after promotion + queen capture?
-          mim = fst $ minimumBy (comparing snd) mescds      -- who is promoting first?
-          miy = fst $ minimumBy (comparing snd) yescds
+          mim = minimum $ map snd mescds      -- who is promoting first? (the distance)
+          miy = minimum $ map snd yescds
           myrace =  promoBonus - distMalus mim
           yorace = -promoBonus + distMalus miy
           promoBonus = 1000     -- i.e. almost a queen (here the unit is 1 cp)

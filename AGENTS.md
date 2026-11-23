@@ -20,6 +20,8 @@
 
 ## Post-Build Deployment
 
+- Match builds are different: a fast build for timed matches is installed with the user's `install_fast.ps1` (skill
+  `match-runs`), not with `deploy_exes.py`; feature sessions do not deploy at all, the integration session does.
 - After a successful build, deploy executables with:
   - `python scripts/deploy_exes.py`
 - The script renames and copies:
@@ -69,6 +71,21 @@ Refactorings of the eval, the search or the position state must not change the e
   `S|ply|start|root fen|root score|leaf score|leaf fen|best move` (leaf as SelfPlay `--data` takes it) and `N` at
   every ucinewgame into `barbarossa-<version>-<branch>-<start second>-<pid>.data` in the working directory;
   BarbarossaTuning `uci_data.py` joins it with the fastchess PGN.
+
+## Branches and Pushing
+
+- Feature and experiment branches stay local: commit there, do not push them. `rel090` (the 0.9.0 record and
+  integration branch) is the one that gets pushed.
+- Exception: a branch that plays on a Linux box (m3a, m3b, ...) is pushed before the run, because the boxes build
+  from GitHub. MEMO gets packed binaries and needs no push.
+- Merging into `rel090` only on the user's request, after the branch's tests passed; then reset `progVerSuff` to
+  `rel090` (the merged branch brings its own identity), commit, and push `rel090`.
+- Frozen match bases `r<version><letters>` (`r90a`, `r90b`, ...): copies of `rel090` at a named commit with their own
+  identity, the builds that matches are played and named with (never `rel090` itself, it changes with every merge).
+  Pushed when they play on a box, never deleted; listed in `SEARCH-IDEAS.md` "Match builds and players"; how to
+  reuse or cut one: the user's `match-runs` skill, "Frozen base".
+- A rejected experiment branch is not deleted while `SEARCH-IDEAS.md` or `SEARCH-TUNING.md` cite its commits (a local
+  branch has no other copy; the history bundle is only refreshed now and then).
 
 ## Cutting a Release
 

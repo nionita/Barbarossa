@@ -3,7 +3,7 @@
 module Uci.UCI (
          UCIMess(..), Option(..), Pos(..), GoCmds(..),
          parseUciStr,
-         findDepth, findTInc, findTime, findMovesToGo
+         findDepth, findTInc, findTime, findMovesToGo, findMoveTime
     ) where
 
 import Data.Char
@@ -83,7 +83,7 @@ parseUCIMess = P.choice $ map P.try [
         parseStop,
         parseSetOption,
         parsePosition,
-        -- parsePonderhit,
+        parsePonderhit,
         parseGo,
         parseQuit
     ]
@@ -100,7 +100,8 @@ parseIsReady = literal "isready" >> return IsReady
 parseStop :: Parser UCIMess
 parseStop = literal "stop" >> return Stop
 
--- parsePonderhit = literal "ponderhit" >> return Ponderhit
+parsePonderhit :: Parser UCIMess
+parsePonderhit = literal "ponderhit" >> return Ponderhit
 
 parseQuit :: Parser UCIMess
 parseQuit = literal "quit" >> return Quit
@@ -322,3 +323,8 @@ findMovesToGo :: [GoCmds] -> Maybe Int
 findMovesToGo [] = Nothing
 findMovesToGo (MovesToGo m : _) = Just m
 findMovesToGo (_ : cms) = findMovesToGo cms
+
+findMoveTime :: [GoCmds] -> Maybe Int
+findMoveTime [] = Nothing
+findMoveTime (MoveTime ms : _) = Just ms
+findMoveTime (_ : cms) = findMoveTime cms

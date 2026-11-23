@@ -1,5 +1,5 @@
 Name:                Barbarossa
-Version:             0.8.0
+Version:             0.9.0
 Synopsis:            UCI chess engine written in Haskell
 License:             BSD3
 License-file:        LICENSE
@@ -22,6 +22,10 @@ Flag reproselfplay
   Description:  SelfPlay-only reproducible history init (newHist = 0)
   Default:      False
 
+Flag lmrcensus
+  Description:  SelfPlay-only LMR census (counters in zeroWithLMR, search unchanged; -P prints them)
+  Default:      False
+
 Executable Barbarossa
   Main-is:	Main/Barbarossa.hs
   Build-depends:
@@ -42,6 +46,7 @@ Executable Barbarossa
       template-haskell
   Other-modules:
       Eval.Core,
+      Eval.KPK,
       Eval.FileParams,
       Hash.TransTab,
       Hash.Zobrist,
@@ -80,7 +85,7 @@ Executable Barbarossa
                -fno-warn-tabs
                -msse4.2
                -optl-s
-  CPP-Options: -DSMSTRICT
+  CPP-Options: -DSMSTRICT -DNO_SEARCH_STATS
   if flag(qscollect)
     CPP-Options: -DQS_COLLECT
   if flag(ddump)
@@ -110,6 +115,7 @@ Executable SelfPlay
   Other-modules:
       SelfPlay.SPRT,
       Eval.Core,
+      Eval.KPK,
       Eval.FileParams,
       Hash.TransTab,
       Hash.Zobrist,
@@ -153,6 +159,8 @@ Executable SelfPlay
     CPP-Options: -DQS_COLLECT
   if flag(reproselfplay)
     CPP-Options: -DREPRO_HIST
+  if flag(lmrcensus)
+    CPP-Options: -DLMR_CENSUS
   if flag(ddump)
     GHC-Options: -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques
                  -ddump-opt-cmm -ddump-asm
@@ -181,6 +189,7 @@ Executable TuneSGD
       Tune.EvalAccum,
       Tune.Utils,
       Eval.Core,
+      Eval.KPK,
       Eval.FileParams,
       Hash.TransTab,
       Hash.Zobrist,

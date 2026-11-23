@@ -4,12 +4,17 @@
 {-# LANGUAGE PatternGuards #-}
 {-# OPTIONS_GHC -Wno-incomplete-uni-patterns -Wno-x-partial #-}
 module Moves.Core (
-    module Moves.Core,
+    Attacks(..), castKingRookOk, castQueenRookOk, checkOk, doFromToMove, gamePhase, genMoveCaptWL,
+    genMoveCast, genMoveFCheck, genMoveNCapt, genMoveNCaptToCheck, genMovePromo, hasLegalMove, inCheck, initPos,
+    isCheck, legalMove, legalPrefix, matPiece, matPiece1, materWhite, moveChecks, moveGenAscendent,
+    moveIsCapture, movePassed, posFromFen, pstRecompute, reverseMoving, startFen,
     module Moves.Internal.BitBoard,
     module Moves.Internal.Pattern,
     module Moves.Internal.Moves
 ) where
-import Data.Array.Base (unsafeAt)
+import Control.Monad.ST (ST, runST)
+import Data.Array.Base (unsafeAt, unsafeRead, unsafeWrite)
+import Data.Array.ST (STUArray, newArray_)
 import qualified Data.Array.Unboxed as A
 import Data.Bits
 import Data.Char
@@ -24,12 +29,14 @@ import Moves.Internal.BitBoard
 import Moves.Internal.Pattern
 import Moves.Internal.Moves
 
+-- Piece values in cp for SEE, delta pruning in QS and the material classes of the special evals:
+-- the PST means over squares and phases (rounded, knight = bishop: the special evals need them equal)
 matPiece1 :: Piece -> Int
-matPiece1 Pawn   = 100
-matPiece1 Knight = 360
-matPiece1 Bishop = 360
-matPiece1 Rook   = 565
-matPiece1 Queen  = 1100
+matPiece1 Pawn   = 125
+matPiece1 Knight = 390
+matPiece1 Bishop = 390
+matPiece1 Rook   = 615
+matPiece1 Queen  = 1200
 matPiece1 King   = 20000
 
 fun :: Color -> Int -> Int
@@ -85,13 +92,19 @@ pstRecompute :: MyPos -> (Int, Int)
 pstRecompute p = foldl' add (0, 0) [ (c, f, sq) | sq <- [0 .. 63], Busy c f <- [tabla p sq] ]
     where add (!m, !e) (c, f, sq) = (m + pstMidPiece c f sq, e + pstEndPiece c f sq)
 
+-- The game phase for the mix of mid and end game values (eval, history init)
+{-# INLINE gamePhase #-}
+gamePhase :: MyPos -> Int
+gamePhase p = g
+    where qs = popCount $ queens p
+          rs = popCount $ rooks p
+          bs = popCount $ bishops p
+          ns = popCount $ knights p
+          !g = qs * 39 + rs * 20 + (bs + ns) * 12       -- opening: 254, end: 0
+
+{-# INLINE seeValue #-}
 seeValue :: Piece -> Int
-seeValue Pawn   = 1
-seeValue Knight = 3
-seeValue Bishop = 3
-seeValue Rook   = 5
-seeValue Queen  = 10
-seeValue King   = 200
+seeValue = matPiece1
 
 -- Is color c in check in position p?
 {-# INLINE isCheck #-}
@@ -118,47 +131,92 @@ moveGenAscendent = True
 genMoveNCapt :: MyPos -> [Move]
 genMoveNCapt !p
     | moveGenAscendent
-      = map (moveAddColor c) $ nGenNC ++ bGenNC ++ rGenNC ++ qGenNC ++ pGenNC ++ kGenNC
+      = nGenNC $ bGenNC $ rGenNC $ qGenNC $ pGenNC $ kGenNC []
     | otherwise
-      = map (moveAddColor c) $ qGenNC ++ rGenNC ++ bGenNC ++ nGenNC ++ pGenNC ++ kGenNC
-    where pGenNC = map (moveAddPiece Pawn . uncurry moveFromTo)
-                      $ targetPawnMoves c (pawns p .&. me p) (occup p) regPawnsBB
-          nGenNC = map (moveAddPiece Knight . uncurry moveFromTo)
-                      $ concatMap (srcDests (ncapt . nAttacs))
-                      $ bbToSquares $ knights p .&. me p
-          bGenNC = map (moveAddPiece Bishop . uncurry moveFromTo)
-                      $ concatMap (srcDests (ncapt . bAttacs (occup p)))
-                      $ bbToSquares $ bishops p .&. me p
-          rGenNC = map (moveAddPiece Rook   . uncurry moveFromTo)
-                      $ concatMap (srcDests (ncapt . rAttacs (occup p)))
-                      $ bbToSquares $ rooks p .&. me p
-          qGenNC = map (moveAddPiece Queen  . uncurry moveFromTo)
-                      $ concatMap (srcDests (ncapt . qAttacs (occup p)))
-                      $ bbToSquares $ queens p .&. me p
-          kGenNC = map (moveAddPiece King   . uncurry moveFromTo)
-                      $            srcDests (ncapt . legal . kAttacs)
-                      $ firstOne $ kings p .&. me p
+      = qGenNC $ rGenNC $ bGenNC $ nGenNC $ pGenNC $ kGenNC []
+    where pGenNC = pawnTargetMoves (moveTag c Pawn) c (pawns p .&. me p) (occup p) regPawnsBB
+          nGenNC = pieceMoves (moveTag c Knight) (ncapt . nAttacs)           $ knights p .&. me p
+          bGenNC = pieceMoves (moveTag c Bishop) (ncapt . bAttacs (occup p)) $ bishops p .&. me p
+          rGenNC = pieceMoves (moveTag c Rook)   (ncapt . rAttacs (occup p)) $ rooks p .&. me p
+          qGenNC = pieceMoves (moveTag c Queen)  (ncapt . qAttacs (occup p)) $ queens p .&. me p
+          kGenNC = pieceMoves (moveTag c King)   (ncapt . legal . kAttacs)   $ kings p .&. me p
           !noccup = complement (occup p)
           ncapt = ((.&.) noccup)
           !nyoa = complement $ yoAttacs p
           legal = ((.&.) nyoa)
           c = moving p
 
+-- The colour and piece bits of a normal move (the move coding is in Struct.Struct)
+{-# INLINE moveTag #-}
+moveTag :: Color -> Piece -> Word16
+moveTag White f = fromIntegral (fromEnum f) `unsafeShiftL` 12
+moveTag Black f = 0x8000 .|. (fromIntegral (fromEnum f) `unsafeShiftL` 12)
+
+-- The moves of the pieces on the squares of srcs (tag: colour and piece) to the squares given by dests,
+-- built in one step from the bitboards and put in front of rest: from squares ascending, for every from square
+-- the to squares ascending (the order of bbToSquares)
+{-# INLINE pieceMoves #-}
+pieceMoves :: Word16 -> (Square -> BBoard) -> BBoard -> [Move] -> [Move]
+pieceMoves tag = pieceMovesFilt tag (\_ _ -> True)
+
+-- The same, only the moves (from, to) for which ok is true
+{-# INLINE pieceMovesFilt #-}
+pieceMovesFilt :: Word16 -> (Square -> Square -> Bool) -> (Square -> BBoard) -> BBoard -> [Move] -> [Move]
+pieceMovesFilt !tag ok dests = goF
+    where goF !srcs rest
+              | srcs == 0 = rest
+              | otherwise = let !f  = firstOne srcs
+                                !tf = tag .|. (fromIntegral f `unsafeShiftL` 6)
+                            in goT f tf (dests f) (goF (srcs `xor` uBit f) rest)
+          goT !f !tf !ds rest
+              | ds == 0   = rest
+              | ok f t    = let !m = Move (tf .|. fromIntegral t) in m : rest'
+              | otherwise = rest'
+              where !t    = firstOne ds
+                    rest' = goT f tf (ds `xor` uBit t) rest
+
+-- Moves of pawns to the squares of the target bitboard, in front of rest, in the order of targetPawnMoves:
+-- the one step moves, then the two step moves, each ascending by the to square
+{-# INLINE pawnTargetMoves #-}
+pawnTargetMoves :: Word16 -> Color -> BBoard -> BBoard -> BBoard -> [Move] -> [Move]
+pawnTargetMoves !tag White !pws !occ !bb rest
+    = pawnDestMoves tag 8 ((pws .&. bb1) `unsafeShiftL` 8)
+    $ pawnDestMoves tag 16 ((pws .&. bb2) `unsafeShiftL` 16) rest
+    where !bb1 = (bb `less` occ) `unsafeShiftR` 8
+          !bb2 = ((bb1 `less` occ) `unsafeShiftR` 8) .&. row2
+pawnTargetMoves !tag Black !pws !occ !bb rest
+    = pawnDestMoves tag (-8) ((pws .&. bb1) `unsafeShiftR` 8)
+    $ pawnDestMoves tag (-16) ((pws .&. bb2) `unsafeShiftR` 16) rest
+    where !bb1 = (bb `less` occ) `unsafeShiftL` 8
+          !bb2 = ((bb1 `less` occ) `unsafeShiftL` 8) .&. row7
+
+-- Pawn moves to the squares of ds (ascending), from the square to - delta
+{-# INLINE pawnDestMoves #-}
+pawnDestMoves :: Word16 -> Int -> BBoard -> [Move] -> [Move]
+pawnDestMoves !tag !delta = go
+    where go !ds rest
+              | ds == 0   = rest
+              | otherwise = let !t = firstOne ds
+                                !m = Move (tag .|. (fromIntegral (t - delta) `unsafeShiftL` 6) .|. fromIntegral t)
+                            in m : go (ds `xor` uBit t) rest
+
 -- Generate only non capture promotions
 -- The promotion captures are generated together with the other captures
+-- Nearly always no pawn can promote: a quick test first (a pawn on the 7th rank with a free square in front)
 genMovePromo :: MyPos -> ([Move], [Move])
-genMovePromo !p = (toQueen, toRook ++ toBishop ++ toKnight)
-    where toQueen  = map (uncurry (makePromo Queen))  ftlist
+genMovePromo !p
+    | canPromo  = (toQueen, toRook ++ toBishop ++ toKnight)
+    | otherwise = ([], [])
+    where !mypws = pawns p .&. me p
+          !canPromo | moving p == White = (mypws .&. row7) `unsafeShiftL` 8 .&. complement (occup p) /= 0
+                    | otherwise         = (mypws .&. row2) `unsafeShiftR` 8 .&. complement (occup p) /= 0
+          toQueen  = map (uncurry (makePromo Queen))  ftlist
           toRook   = map (uncurry (makePromo Rook))   ftlist
           toBishop = map (uncurry (makePromo Bishop)) ftlist
           toKnight = map (uncurry (makePromo Knight)) ftlist
-          ftlist   = targetPawnMoves (moving p) (pawns p .&. me p) (occup p) promoline
+          ftlist   = targetPawnMoves (moving p) mypws (occup p) promoline
           !promoline | moving p == White = row8
                      | otherwise         = row1
-
-{-# INLINE srcDests #-}
-srcDests :: (Square -> BBoard) -> Square -> [(Square, Square)]
-srcDests f = \s -> zip (repeat s) $ bbToSquares $ f s
 
 -- This one should be called only for normal moves
 {-# INLINE moveChecksDirect #-}
@@ -393,9 +451,7 @@ genMoveFCheck !p
     | null $ tail chklist = r1 ++ kGen ++ r2    -- simple check
     | otherwise           = kGen                -- double check, only king moves help
     where chklist = findChecking p
-          kGen = map (moveAddColor (moving p) . moveAddPiece King . uncurry moveFromTo)
-                     $ srcDests (legal . kAttacs) ksq
-          !ksq = firstOne kbb
+          kGen = pieceMoves (moveTag (moving p) King) (legal . kAttacs) kbb []
           !kbb = kings p .&. me p
           !ocp1 = occup p `less` kbb
           !call = complement $ me p .|. yoAttacs p .|. excl
@@ -415,20 +471,13 @@ genMoveFCheck !p
 -- Generate moves ending on a given square (used to defend a check by capture or blocking)
 -- This part is only for queens, rooks, bishops and knights (no pawns and, of course, no kings)
 defendAt :: MyPos -> BBoard -> [Move]
-defendAt p !bb = map (moveAddColor $ moving p) $ nGenC ++ bGenC ++ rGenC ++ qGenC
-    where nGenC = map (moveAddPiece Knight . uncurry moveFromTo)
-                     $ concatMap (srcDests (target . nAttacs))
-                     $ bbToSquares $ knights p .&. me p
-          bGenC = map (moveAddPiece Bishop . uncurry moveFromTo)
-                     $ concatMap (srcDests (target . bAttacs (occup p)))
-                     $ bbToSquares $ bishops p .&. me p
-          rGenC = map (moveAddPiece Rook   . uncurry moveFromTo)
-                     $ concatMap (srcDests (target . rAttacs (occup p)))
-                     $ bbToSquares $ rooks p .&. me p
-          qGenC = map (moveAddPiece Queen  . uncurry moveFromTo)
-                     $ concatMap (srcDests (target . qAttacs (occup p)))
-                     $ bbToSquares $ queens p .&. me p
+defendAt p !bb = nGenC $ bGenC $ rGenC $ qGenC []
+    where nGenC = pieceMoves (moveTag c Knight) (target . nAttacs)           $ knights p .&. me p
+          bGenC = pieceMoves (moveTag c Bishop) (target . bAttacs (occup p)) $ bishops p .&. me p
+          rGenC = pieceMoves (moveTag c Rook)   (target . rAttacs (occup p)) $ rooks p .&. me p
+          qGenC = pieceMoves (moveTag c Queen)  (target . qAttacs (occup p)) $ queens p .&. me p
           target = (.&. bb)
+          c = moving p
 
 -- Generate capture pawn moves ending on a given square (used to defend a check by capture)
 -- The bitboard represents the piece which checks (only 1 bit set)
@@ -440,7 +489,7 @@ pawnBeatAt !p !bb
         ++ map (uncurry (makePromo Rook))   ftlist
         ++ map (uncurry (makePromo Bishop)) ftlist
         ++ map (uncurry (makePromo Knight)) ftlist
-    | otherwise = map (moveAddColor (moving p) . moveAddPiece Pawn . uncurry moveFromTo) ftlist
+    | otherwise = pieceMoves (moveTag (moving p) Pawn) (const bb) attpwbb []
     where lastline | moving p == White = row8
                    | otherwise         = row1
           checksq = firstOne bb
@@ -460,7 +509,7 @@ pawnBlockAt p !bb
         ++ map (uncurry (makePromo Rook))   ftlist
         ++ map (uncurry (makePromo Bishop)) ftlist
         ++ map (uncurry (makePromo Knight)) ftlist
-    | otherwise = map (moveAddColor (moving p) . moveAddPiece Pawn . uncurry moveFromTo) ftlist
+    | otherwise = pawnTargetMoves (moveTag (moving p) Pawn) (moving p) (pawns p .&. me p) (occup p) bb []
     where lastline | moving p == White = row8
                    | otherwise         = row1
           ftlist = targetPawnMoves (moving p) (pawns p .&. me p) (occup p) bb
@@ -490,22 +539,16 @@ genMoveNCaptToCheck p = genMoveNCaptDirCheck p ++ genMoveNCaptIndirCheck p
 genMoveNCaptDirCheck :: MyPos -> [Move]
 genMoveNCaptDirCheck p
     | moveGenAscendent
-      = map (moveAddColor $ moving p) $ nGenC ++ bGenC ++ rGenC ++ qGenC
+      = nGenC $ bGenC $ rGenC $ qGenC []
     | otherwise
-      = map (moveAddColor $ moving p) $ qGenC ++ rGenC ++ bGenC ++ nGenC
-    where nGenC = map (moveAddPiece Knight . uncurry moveFromTo)
-                      $ filtQPSEE p Knight $ concatMap (srcDests (target nTar . nAttacs))
-                      $ bbToSquares  $ knights p .&. me p
-          bGenC = map (moveAddPiece Bishop . uncurry moveFromTo)
-                      $ filtQPSEE p Bishop $ concatMap (srcDests (target bTar . bAttacs (occup p)))
-                      $ bbToSquares  $ bishops p .&. me p
-          rGenC = map (moveAddPiece Rook   . uncurry moveFromTo)
-                      $ filtQPSEE p Rook   $ concatMap (srcDests (target rTar . rAttacs (occup p)))
-                      $ bbToSquares  $ rooks p .&. me p
-          qGenC = map (moveAddPiece Queen  . uncurry moveFromTo)
-                      $ filtQPSEE p Queen  $ concatMap (srcDests (target qTar . qAttacs (occup p)))
-                      $ bbToSquares  $ queens p .&. me p
+      = qGenC $ rGenC $ bGenC $ nGenC []
+    where nGenC = gen Knight (target nTar . nAttacs)           $ knights p .&. me p
+          bGenC = gen Bishop (target bTar . bAttacs (occup p)) $ bishops p .&. me p
+          rGenC = gen Rook   (target rTar . rAttacs (occup p)) $ rooks p .&. me p
+          qGenC = gen Queen  (target qTar . qAttacs (occup p)) $ queens p .&. me p
+          gen f = pieceMovesFilt (moveTag c f) (quietPositiveSEE p (seeValue f))
           target b = (.&. b)
+          c = moving p
           !nocp = complement $ occup p
           !ksq  = firstOne $ yo p .&. kings p
           !nTar = fAttacs ksq Knight (occup p) .&. nocp
@@ -642,15 +685,14 @@ clearingCast sdcas cas = (cascl, zobcl)
           bqrb = 0x0100000000000000     -- black queen rook
           bkrb = 0x8000000000000000     -- black king rook
 
--- Just for a dumb debug: a quick check if two consecutive moves
--- can be part of a move sequence
-alternateMoves :: MyPos -> Move -> Move -> Bool
-alternateMoves p m1 m2
-    | Busy c1 _ <- tabla p src1,
-      Busy c2 _ <- tabla p src2 = c1 /= c2
-    | otherwise = True  -- means: we cannot say...
-    where src1 = fromSquare m1
-          src2 = fromSquare m2
+-- Has the side to move any legal move? For the rare nodes where all moves were pruned or illegal
+-- (stalemate test), not for the move loop
+hasLegalMove :: MyPos -> Bool
+hasLegalMove p = any (\m -> checkOk (doFromToMove m p)) ms
+    where ms | inCheck p = genMoveFCheck p
+             | otherwise = genMoveNCapt p ++ cw ++ cl ++ pq ++ pr ++ genMoveCast p
+          (cw, cl) = genMoveCaptWL p
+          (pq, pr) = genMovePromo p
 
 -- This is used to filter the illegal moves coming from killers or hash table
 -- but we must treat special moves (en-passant, castle and promotion) differently,
@@ -1003,7 +1045,7 @@ seeMoveValue !pos !attacks !sqfirstmv !sqto !gain0 = v
 
 -- This function can produce illegal captures with the king!
 genMoveCaptWL :: MyPos -> ([Move], [Move])
-genMoveCaptWL !pos = (map f $ sort ws, map f $ sort ls)
+genMoveCaptWL !pos = (sortLMoves f ws, sortLMoves f ls)
     where !capts = myAttacs pos .&. yo pos
           epcs  = genEPCapts pos
           c     = moving pos
@@ -1012,6 +1054,41 @@ genMoveCaptWL !pos = (map f $ sort ws, map f $ sort ls)
           f = moveAddColor c . lmoveToMove
 
 type LMove = Word32
+
+-- Ascending sort of the (few) capture keys by insertion into an unboxed buffer, f applied to every element of
+-- the result: the same list as map f . sort (the keys contain the move, equal keys are equal moves)
+sortLMoves :: (LMove -> Move) -> [LMove] -> [Move]
+sortLMoves _ []  = []
+sortLMoves f [x] = [f x]
+sortLMoves f xs  = runST $ do
+    let !n = length xs
+    arr <- newArray_ (0, n - 1)
+    insLMoves arr 0 xs
+    outLMoves f arr (n - 1) []
+
+-- Insert the keys one by one into the sorted prefix of the buffer (i: its length)
+insLMoves :: STUArray s Int LMove -> Int -> [LMove] -> ST s ()
+insLMoves _   !_ []     = return ()
+insLMoves arr !i (y:ys) = placeLMove arr y i >> insLMoves arr (i + 1) ys
+
+-- Shift the greater keys of the prefix up by one and put y in the gap (j: the first free index)
+placeLMove :: STUArray s Int LMove -> LMove -> Int -> ST s ()
+placeLMove arr !y !j
+    | j > 0 = do
+        z <- unsafeRead arr (j - 1)
+        if z > y
+           then unsafeWrite arr j z >> placeLMove arr y (j - 1)
+           else unsafeWrite arr j y
+    | otherwise = unsafeWrite arr 0 y
+
+-- The moves of the buffer up to index i, in ascending order, in front of acc
+outLMoves :: (LMove -> Move) -> STUArray s Int LMove -> Int -> [Move] -> ST s [Move]
+outLMoves f arr !i acc
+    | i < 0     = return acc
+    | otherwise = do
+        z <- unsafeRead arr i
+        let !m = f z
+        outLMoves f arr (i - 1) (m : acc)
 
 -- We want to sort MVVLVA, which means first victim, then attacker
 -- Victim is "negate" so that the normal sort will pick higher victims first
@@ -1096,12 +1173,8 @@ addHangingP :: Piece -> Square -> Square -> ([LMove], [LMove]) -> ([LMove], [LMo
 addHangingP vict to from (wsqs, lsqs) = (map (moveToLMove Pawn vict) promos ++ wsqs, lsqs)
     where promos = map (\p -> makePromo p from to) [Queen, Rook, Bishop, Knight]
 
-filtQPSEE :: MyPos -> Piece -> [(Square, Square)] -> [(Square, Square)]
-filtQPSEE !pos piece = filter (quietPositiveSEE pos v0)
-    where v0 = seeValue piece
-
-quietPositiveSEE :: MyPos -> Int -> (Square, Square) -> Bool
-quietPositiveSEE !pos !v0 (!sqfa, !sq) = adv <= 0
+quietPositiveSEE :: MyPos -> Int -> Square -> Square -> Bool
+quietPositiveSEE !pos !v0 !sqfa !sq = adv <= 0
     where !allAttRec = theAttacs pos sq
           adv = seeMoveValue pos allAttRec sqfa sq v0
 

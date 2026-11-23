@@ -28,7 +28,7 @@ module Tune.LogScan
     ) where
 
 import Data.Char (isDigit)
-import Data.List (find, groupBy, intercalate, isPrefixOf, stripPrefix)
+import Data.List (dropWhileEnd, find, groupBy, intercalate, isPrefixOf, stripPrefix)
 import Data.Maybe (fromMaybe, listToMaybe)
 import Control.Applicative ((<|>))
 import Text.Read (readMaybe)
@@ -918,7 +918,12 @@ applyMoveUci currentFen moveUci = do
     pure (posToFen (doFromToMove move (posFromFen currentFen)))
 
 sameReplayFen :: String -> String -> Bool
-sameReplayFen fen1 fen2 = take 3 (words fen1) == take 3 (words fen2)
+sameReplayFen fen1 fen2 = key fen1 == key fen2
+  where
+    -- old logs end the board with '/', posToFen no longer does
+    key fen = case take 3 (words fen) of
+        (board:rest) -> dropWhileEnd (== '/') board : rest
+        []           -> []
 
 legalMovesForPosition :: MyPos -> [Move]
 legalMovesForPosition pos
